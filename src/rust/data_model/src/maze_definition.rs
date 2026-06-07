@@ -786,6 +786,9 @@ impl MazeDefinition {
             row.resize(new_col_count, ' ');
         }
         self.grid.resize(new_row_count, vec![' '; new_col_count]);
+        // Drop overrides on cells the shrink removed; survivors keep their coords.
+        self.cell_entities
+            .retain(|&(row, col), _| row < new_row_count && col < new_col_count);
         self
     }
     /// Returns the number of rows associated with the definition instance
@@ -1066,6 +1069,16 @@ impl MazeDefinition {
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
         }
+        // Drop overrides in the deleted columns; shift those to the right back by `count`.
+        self.remap_cell_entities(|row, col| {
+            if col >= start_col && col < start_col + count {
+                None
+            } else if col >= start_col + count {
+                Some((row, col - count))
+            } else {
+                Some((row, col))
+            }
+        });
         Ok(())
     }
     /// Inserts one or more empty columns into the definition instance
@@ -1105,6 +1118,12 @@ impl MazeDefinition {
         }
         for row in &mut self.grid {
             row.splice(start_col..start_col, vec![' '; count]);
+        }
+        // Shift overrides at/after the insert point right by `count`.
+        if count > 0 {
+            self.remap_cell_entities(|row, col| {
+                Some((row, if col >= start_col { col + count } else { col }))
+            });
         }
         Ok(())
     }
@@ -1151,6 +1170,16 @@ impl MazeDefinition {
             )));
         }
         self.grid.drain(start_row..(start_row + count));
+        // Drop overrides in the deleted rows; shift those below back by `count`.
+        self.remap_cell_entities(|row, col| {
+            if row >= start_row && row < start_row + count {
+                None
+            } else if row >= start_row + count {
+                Some((row - count, col))
+            } else {
+                Some((row, col))
+            }
+        });
         Ok(())
     }
     /// Inserts one or more empty rows into the definition instance
@@ -1191,6 +1220,10 @@ impl MazeDefinition {
         if count > 0 {
             let empty_rows = Self::alloc_empty_rows(count, self.col_count());
             self.grid.splice(start_row..start_row, empty_rows);
+            // Shift overrides at/after the insert point down by `count`.
+            self.remap_cell_entities(|row, col| {
+                Some((if row >= start_row { row + count } else { row }, col))
+            });
         }
         Ok(())
     }
@@ -1349,6 +1382,11 @@ impl MazeDefinition {
                         self.grid[row_idx][col_idx] = value;
                     }
                 }
+                // A rewritten cell loses any override it carried (the new character
+                // may not even accept the old entity, e.g. an 'E' override on a 'W').
+                self.cell_entities.retain(|&(row, col), _| {
+                    !(row >= top_row && row <= bottom_row && col >= left_col && col <= right_col)
+                });
             }
             _ => return Err(Error::MazeValidation(format!("invalid 'value' ('{value}')"))),
         }
@@ -1404,6 +1442,24 @@ impl MazeDefinition {
         vec![vec![' '; col_count]; row_count]
     }
 
+    /// Rebuilds [`Self::cell_entities`], mapping each `(row, col)` key through
+    /// `remap`; a `None` result drops that entry. Used by the structural editors
+    /// (`insert_*` / `delete_*`) to keep per-cell overrides aligned with the grid
+    /// after rows/columns shift. A no-op when there are no overrides.
+    fn remap_cell_entities<F>(&mut self, remap: F)
+    where
+        F: Fn(usize, usize) -> Option<(usize, usize)>,
+    {
+        if self.cell_entities.is_empty() {
+            return;
+        }
+        self.cell_entities = self
+            .cell_entities
+            .drain()
+            .filter_map(|((row, col), entities)| remap(row, col).map(|key| (key, entities)))
+            .collect();
+    }
+
     fn find_first_char(&self, target: char) -> Option<MazePoint> {
         for (i, row) in self.grid.iter().enumerate() {
             for (j, &ch) in row.iter().enumerate() {
@@ -1432,6 +1488,7 @@ impl MazeDefinition {
                 self.grid[current_pt.row][current_pt.col] = ' ';
             }
             self.grid[new_pt.row][new_pt.col] = ch;
+            self.cell_entities.remove(&(new_pt.row, new_pt.col));
         } else if let Some(current_pt) = self.get_start() {
             self.grid[current_pt.row][current_pt.col] = ' ';
         }
@@ -2568,5 +2625,105 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ── Per-cell overrides stay aligned with structural edits ──
+
+    /// An enemy override carrying `damage` as a unique marker, so a test can
+    /// track which override lands where after rows/columns shift.
+    fn marked(damage: u32) -> Vec<CellEntity> {
+        vec![CellEntity::Enemy(EnemyOverride {
+            enemy_type: None,
+            damage: Some(damage),
+            move_period_ms: None,
+        })]
+    }
+
+    /// The `damage` marker on the override at `(row, col)`, or `None` if absent.
+    fn marker_at(d: &MazeDefinition, row: usize, col: usize) -> Option<u32> {
+        match d.cell_entities.get(&(row, col)).and_then(|v| v.first()) {
+            Some(CellEntity::Enemy(e)) => e.damage,
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn insert_rows_shifts_overrides_below_the_insert_point() {
+        let mut d = MazeDefinition::new(4, 2);
+        d.cell_entities.insert((0, 0), marked(1)); // above the insert point
+        d.cell_entities.insert((2, 1), marked(2)); // at/below it
+        d.insert_rows(1, 2).expect("insert_rows() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1), "override above the point stays put");
+        assert_eq!(marker_at(&d, 4, 1), Some(2), "override at/below shifts down by count");
+        assert_eq!(d.cell_entities.len(), 2);
+    }
+
+    #[test]
+    fn delete_rows_drops_the_band_and_shifts_the_rest_up() {
+        let mut d = MazeDefinition::new(5, 2);
+        d.cell_entities.insert((0, 0), marked(1)); // above the band
+        d.cell_entities.insert((1, 0), marked(2)); // in deleted band [1, 3)
+        d.cell_entities.insert((2, 1), marked(3)); // in deleted band
+        d.cell_entities.insert((4, 1), marked(4)); // below the band
+        d.delete_rows(1, 2).expect("delete_rows() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(marker_at(&d, 2, 1), Some(4), "below the band shifts up by count");
+        assert_eq!(d.cell_entities.len(), 2, "the two in the deleted band are dropped");
+    }
+
+    #[test]
+    fn insert_cols_shifts_overrides_right_of_the_insert_point() {
+        let mut d = MazeDefinition::new(2, 4);
+        d.cell_entities.insert((0, 0), marked(1)); // left of the insert point
+        d.cell_entities.insert((1, 2), marked(2)); // at/right of it
+        d.insert_cols(1, 2).expect("insert_cols() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(marker_at(&d, 1, 4), Some(2), "override at/right shifts by count");
+        assert_eq!(d.cell_entities.len(), 2);
+    }
+
+    #[test]
+    fn delete_cols_drops_the_band_and_shifts_the_rest_left() {
+        let mut d = MazeDefinition::new(2, 5);
+        d.cell_entities.insert((0, 0), marked(1)); // left of the band
+        d.cell_entities.insert((0, 1), marked(2)); // in deleted band [1, 3)
+        d.cell_entities.insert((1, 2), marked(3)); // in deleted band
+        d.cell_entities.insert((1, 4), marked(4)); // right of the band
+        d.delete_cols(1, 2).expect("delete_cols() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(marker_at(&d, 1, 2), Some(4), "right of the band shifts left by count");
+        assert_eq!(d.cell_entities.len(), 2);
+    }
+
+    #[test]
+    fn resize_drops_overrides_outside_the_new_bounds() {
+        let mut d = MazeDefinition::new(4, 4);
+        d.cell_entities.insert((0, 0), marked(1)); // inside the shrunk bounds
+        d.cell_entities.insert((3, 1), marked(2)); // row falls outside after shrink
+        d.cell_entities.insert((1, 3), marked(3)); // col falls outside after shrink
+        d.resize(2, 2);
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(d.cell_entities.len(), 1, "out-of-bounds overrides are dropped");
+    }
+
+    #[test]
+    fn set_value_drops_overrides_on_rewritten_cells_only() {
+        let mut d = MazeDefinition::new(4, 4);
+        d.cell_entities.insert((1, 1), marked(1)); // inside the rewritten rect
+        d.cell_entities.insert((0, 0), marked(2)); // outside it
+        d.set_value(MazePoint { row: 1, col: 1 }, MazePoint { row: 2, col: 2 }, 'W')
+            .expect("set_value() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(2), "override outside the rect survives");
+        assert_eq!(d.cell_entities.len(), 1, "the rewritten cell's override is dropped");
+    }
+
+    #[test]
+    fn set_start_drops_any_override_on_the_new_start_cell() {
+        let mut d = MazeDefinition::new(3, 3);
+        d.cell_entities.insert((1, 1), marked(1));
+        d.set_start(Some(MazePoint { row: 1, col: 1 }))
+            .expect("set_start() failed");
+        assert_eq!(d.grid[1][1], 'S');
+        assert!(d.cell_entities.is_empty(), "S is not overridable, so its override is dropped");
     }
 }
