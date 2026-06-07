@@ -1272,6 +1272,44 @@ mod tests {
     }
 
     #[test]
+    fn no_wall_decorations_at_open_edges_without_perimeter_walls() {
+        // An all-passable open-sky maze with perimeter walls off has no wall panels
+        // at all, so no wall decorations spawn — otherwise they'd float in mid-air
+        // at the boundary where the wall would have been.
+        let json = r#"{"grid":[["S"," "," "," "," ","F"]]}"#;
+        let config = GameConfig {
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_maze_and_config(json, config);
+        let count = app.world_mut().query::<&WallDecoration>().iter(app.world()).count();
+        assert_eq!(count, 0, "open edges (no panel) must carry no floating decorations");
+    }
+
+    #[test]
+    fn perimeter_walls_restore_edge_decorations() {
+        // Walling the perimeter makes those grid-edge panels (and so their
+        // decorations) appear again. The 1/10 placement hash makes any single seed
+        // unreliable, so find one that decorates with the perimeter walled, then
+        // confirm the same seed places none when the perimeter is open.
+        let json = r#"{"grid":[["S"," "," "," "," ","F"]]}"#;
+        let decorations = |seed: u64, perimeter_walls: bool| {
+            let config = GameConfig {
+                seed,
+                perimeter_walls,
+                ..GameConfig::default()
+            };
+            let mut app = make_playing_app_with_maze_and_config(json, config);
+            app.world_mut().query::<&WallDecoration>().iter(app.world()).count()
+        };
+        let seed = (0u64..256)
+            .find(|&s| decorations(s, true) > 0)
+            .expect("some seed decorates the walled edges");
+        assert!(decorations(seed, true) > 0);
+        assert_eq!(decorations(seed, false), 0, "same seed: open edges carry none");
+    }
+
+    #[test]
     fn pool_rim_walls_the_maze_edge() {
         // A water cell at the top-right corner: two of its edges are the grid
         // boundary and two face open cells. All four are rimmed (the maze perimeter

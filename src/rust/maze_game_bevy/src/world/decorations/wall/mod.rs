@@ -130,15 +130,19 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     let seed = config.seed;
 
     // A decoration sits on a panel, so it's drawn only where a solid panel is —
-    // against a solid `'W'` wall or the grid edge. A non-occluding neighbour
-    // (water / lava / iron fence) has its panel suppressed, so it gets no
-    // decoration (otherwise the decoration would float over the pool / fence).
+    // against a solid `'W'` wall, or at the grid edge when the perimeter is walled.
+    // A non-occluding neighbour (water / lava / iron fence) has its panel
+    // suppressed; so does an open-sky grid edge with perimeter walls off — either
+    // way no panel, so no decoration (otherwise it would float in mid-air).
     let solid_wall = |nr: usize, nc: usize| {
         grid[nr][nc] == 'W' && !is_non_occluding_wall(grid, cell_entities, config, nr, nc)
     };
+    // The grid edge carries a panel only when the maze is walled in there:
+    // always under an enclosed sky, otherwise per `GameConfig::perimeter_walls`.
+    let walled_edge = config.sky_type.is_enclosed() || config.perimeter_walls;
 
     // North face
-    if r == 0 || solid_wall(r - 1, c) {
+    if (r == 0 && walled_edge) || (r > 0 && solid_wall(r - 1, c)) {
         spawn_decoration(
             commands,
             assets,
@@ -151,7 +155,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
         );
     }
     // South face
-    if r + 1 >= rows || solid_wall(r + 1, c) {
+    if (r + 1 >= rows && walled_edge) || (r + 1 < rows && solid_wall(r + 1, c)) {
         spawn_decoration(
             commands,
             assets,
@@ -164,7 +168,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
         );
     }
     // East face
-    if c + 1 >= cols || solid_wall(r, c + 1) {
+    if (c + 1 >= cols && walled_edge) || (c + 1 < cols && solid_wall(r, c + 1)) {
         spawn_decoration(
             commands,
             assets,
@@ -177,7 +181,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
         );
     }
     // West face
-    if c == 0 || solid_wall(r, c - 1) {
+    if (c == 0 && walled_edge) || (c > 0 && solid_wall(r, c - 1)) {
         spawn_decoration(
             commands,
             assets,
