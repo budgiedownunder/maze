@@ -302,7 +302,10 @@ namespace Maze.Maui.App.ViewModels
             suppressApply = false;
         }
 
-        /// <summary>Clears the cell's override and resets every field to its default.</summary>
+        /// <summary>
+        /// Resets every field to its default and clears the override on every cell in the
+        /// selection (just the one cell for a single-cell selection).
+        /// </summary>
         [RelayCommand]
         private void Reset()
         {
@@ -318,8 +321,14 @@ namespace Maze.Maui.App.ViewModels
             WallTexture = null;
             suppressApply = false;
 
-            editor.ClearCellOverride(Row, Column);
-            editor.RefreshCellContent(Row, Column);
+            for (int r = Row; r <= rectBottom; r++)
+            {
+                for (int c = Column; c <= rectRight; c++)
+                {
+                    editor.ClearCellOverride(r, c);
+                    editor.RefreshCellContent(r, c);
+                }
+            }
         }
 
         /// <summary>

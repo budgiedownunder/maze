@@ -267,5 +267,14 @@ namespace Maze.Maui.App.Tests.ViewModels
             vm.ApplyToAllCommand.Execute(null);
             editor.Verify(e => e.ClearCellOverride(It.IsAny<int>(), It.IsAny<int>()), Times.Exactly(3));
         }
+
+        [Fact]
+        public void Reset_clears_the_override_on_every_cell_in_the_selection()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build(new WallCellEntity { WallType = WallType.Lava });
+            vm.LoadCell(1, 1, 2, 2, CellType.Wall); // a 2x2 block
+            vm.ResetCommand.Execute(null);
+            editor.Verify(e => e.ClearCellOverride(It.IsAny<int>(), It.IsAny<int>()), Times.Exactly(4));
+        }
     }
 }
