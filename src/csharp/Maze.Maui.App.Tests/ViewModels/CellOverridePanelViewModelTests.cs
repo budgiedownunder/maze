@@ -228,5 +228,44 @@ namespace Maze.Maui.App.Tests.ViewModels
             vm.SpecialWallType = WallType.Water;
             Assert.Equal("water.png", vm.WallPreviewImage);
         }
+
+        [Fact]
+        public void A_single_cell_is_not_multi_cell()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(3, 4, CellType.Enemy);
+            Assert.Equal(1, vm.SelectionCount);
+            Assert.False(vm.IsMultiCell);
+        }
+
+        [Fact]
+        public void A_rectangular_selection_reports_its_count_and_title()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, 1, 3, CellType.Wall); // a 1x3 block
+            Assert.Equal(3, vm.SelectionCount);
+            Assert.True(vm.IsMultiCell);
+            Assert.Equal("Apply to all 3 cells", vm.ApplyToAllText);
+            Assert.Contains("+2 more", vm.Title);
+        }
+
+        [Fact]
+        public void Apply_to_all_stamps_the_top_left_override_across_the_block()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build(new WallCellEntity { WallType = WallType.Lava });
+            vm.LoadCell(1, 1, 2, 2, CellType.Wall); // a 2x2 block (top-left already carries the override)
+            vm.ApplyToAllCommand.Execute(null);
+            editor.Verify(e => e.SetCellOverride(It.IsAny<int>(), It.IsAny<int>(),
+                It.Is<WallCellEntity>(x => x.WallType == WallType.Lava)), Times.Exactly(3));
+        }
+
+        [Fact]
+        public void Apply_to_all_clears_the_block_when_the_top_left_has_no_override()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build(); // no override
+            vm.LoadCell(1, 1, 2, 2, CellType.Wall);
+            vm.ApplyToAllCommand.Execute(null);
+            editor.Verify(e => e.ClearCellOverride(It.IsAny<int>(), It.IsAny<int>()), Times.Exactly(3));
+        }
     }
 }

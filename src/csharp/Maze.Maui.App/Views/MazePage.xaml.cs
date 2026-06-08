@@ -860,20 +860,42 @@ namespace Maze.Maui.App.Views
                 return;
             }
             CellRange? selection = MazeGrid.CurrentSelection;
-            CellStatus status = MazeGrid.GetCurrentSelectionStatus();
-            if (selection is not null && status.IsSingleCell && !IsSolutionDisplayed && !_isWalking)
+            // Show the panel for a single feature cell or a rectangular selection whose
+            // cells are all the same overridable type (e.g. a block of walls). LoadCell
+            // seeds from the top-left cell and hides the panel for start/finish/empty
+            // selections. When the panel becomes visible it shrinks the grid;
+            // OnMazeGridSizeChanged then scrolls the cell back into view.
+            if (selection is not null && !IsSolutionDisplayed && !_isWalking
+                && IsUniformSelection(selection, out Maze.CellType type))
             {
-                int row = selection.Top, column = selection.Left;
-                // LoadCell shows the panel for overridable feature types and hides it
-                // for start/finish/empty cells. When the panel becomes visible it shrinks
-                // the grid; OnOverridePanelSizeChanged then scrolls the cell back into
-                // view once the layout has settled.
-                _overridePanelViewModel.LoadCell(row, column, MazeGrid.GetCellType(row, column));
+                _overridePanelViewModel.LoadCell(selection.Top, selection.Left, selection.Bottom, selection.Right, type);
             }
             else
             {
                 _overridePanelViewModel.IsVisible = false;
             }
+        }
+        /// <summary>
+        /// Whether every cell in the selection is the same type, and if so what that type
+        /// is. A mixed selection returns false (the override panel hides for it).
+        /// </summary>
+        /// <param name="selection">The current selection (one-based bounds)</param>
+        /// <param name="type">The shared cell type, when uniform</param>
+        /// <returns>True when the selection's cells are all the same type</returns>
+        private bool IsUniformSelection(CellRange selection, out Maze.CellType type)
+        {
+            type = MazeGrid.GetCellType(selection.Top, selection.Left);
+            for (int row = selection.Top; row <= selection.Bottom; row++)
+            {
+                for (int column = selection.Left; column <= selection.Right; column++)
+                {
+                    if (MazeGrid.GetCellType(row, column) != type)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
         /// <summary>
         /// Keeps the override panel filling the width up to a maximum (so it spans the

@@ -58,6 +58,23 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool isVisible;
 
+        // Bottom-right of the selection (one-based); the target cell (Row/Column) is its
+        // top-left. Equal to the target for a single cell.
+        private int rectBottom;
+        private int rectRight;
+
+        /// <summary>Number of cells in the selection (1 for a single cell).</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsMultiCell))]
+        [NotifyPropertyChangedFor(nameof(ApplyToAllText))]
+        [NotifyPropertyChangedFor(nameof(Title))]
+        private int selectionCount = 1;
+
+        /// <summary>Whether more than one cell is selected (enables "Apply to all").</summary>
+        public bool IsMultiCell => SelectionCount > 1;
+        /// <summary>Label for the "Apply to all" button.</summary>
+        public string ApplyToAllText => $"Apply to all {SelectionCount} cells";
+
         // ── Enemy ──
         /// <summary>Enemy rig override, or null to inherit the default.</summary>
         [ObservableProperty]
@@ -133,7 +150,8 @@ namespace Maze.Maui.App.ViewModels
             CellSprite.VariantImageName(new WallCellEntity { WallType = EffectiveWallType(SpecialWallType, WallTexture) }) ?? "wall.png";
 
         /// <summary>The panel heading: the cell type and its one-based coordinates.</summary>
-        public string Title => $"{TypeLabel(CellType)} [{Row},{Column}]";
+        public string Title =>
+            $"{TypeLabel(CellType)} [{Row},{Column}]{(IsMultiCell ? $" +{SelectionCount - 1} more" : "")}";
 
         // ── Picker bindings ──
         // MAUI Pickers bind to an options list + a SelectedIndex; each index maps to the
@@ -211,22 +229,37 @@ namespace Maze.Maui.App.ViewModels
         partial void OnWallTextureChanged(WallType? value) => ApplyCurrent();
 
         /// <summary>
-        /// Seeds the panel for a cell: shows it for an overridable feature type and
-        /// populates the fields from the cell's current override (or defaults). Hidden
-        /// for start/finish/empty cells.
+        /// Seeds the panel for a single cell — shorthand for a one-cell selection.
         /// </summary>
         /// <param name="cellRow">Row index (one-based)</param>
         /// <param name="cellColumn">Column index (one-based)</param>
         /// <param name="type">The cell's type</param>
-        public void LoadCell(int cellRow, int cellColumn, CellType type)
+        public void LoadCell(int cellRow, int cellColumn, CellType type) =>
+            LoadCell(cellRow, cellColumn, cellRow, cellColumn, type);
+
+        /// <summary>
+        /// Seeds the panel for a rectangular selection whose cells are all the same type:
+        /// shows it for an overridable feature type, targets and seeds from the top-left
+        /// cell, and tracks the cell count so "Apply to all" can stamp the block. Hidden
+        /// for start/finish/empty selections.
+        /// </summary>
+        /// <param name="top">Top row of the selection (one-based)</param>
+        /// <param name="left">Left column of the selection (one-based)</param>
+        /// <param name="bottom">Bottom row of the selection (one-based)</param>
+        /// <param name="right">Right column of the selection (one-based)</param>
+        /// <param name="type">The selection's (uniform) cell type</param>
+        public void LoadCell(int top, int left, int bottom, int right, CellType type)
         {
             suppressApply = true;
-            Row = cellRow;
-            Column = cellColumn;
+            Row = top;
+            Column = left;
+            rectBottom = bottom;
+            rectRight = right;
+            SelectionCount = (bottom - top + 1) * (right - left + 1);
             CellType = type;
             IsVisible = IsOverridable(type);
 
-            // Reset every field, then seed from the existing override.
+            // Reset every field, then seed from the top-left cell's existing override.
             EnemyTypeValue = null;
             DamageText = "";
             MovePeriodMsText = "";
@@ -237,7 +270,7 @@ namespace Maze.Maui.App.ViewModels
             SpecialWallType = null;
             WallTexture = null;
 
-            CellEntityInfo? current = IsVisible ? editor.GetCellOverride(cellRow, cellColumn) : null;
+            CellEntityInfo? current = IsVisible ? editor.GetCellOverride(top, left) : null;
             switch (current)
             {
                 case EnemyCellEntity e:
@@ -287,6 +320,37 @@ namespace Maze.Maui.App.ViewModels
 
             editor.ClearCellOverride(Row, Column);
             editor.RefreshCellContent(Row, Column);
+        }
+
+        /// <summary>
+        /// Stamps the top-left cell's current override across every cell in the selection
+        /// (or clears them all when it has reverted to default), honouring the same
+        /// clear-on-default rule. The entity is shared by reference — overrides are
+        /// replaced, never mutated, so the cells stay independent.
+        /// </summary>
+        [RelayCommand]
+        private void ApplyToAll()
+        {
+            CellEntityInfo? current = editor.GetCellOverride(Row, Column);
+            for (int r = Row; r <= rectBottom; r++)
+            {
+                for (int c = Column; c <= rectRight; c++)
+                {
+                    if (r == Row && c == Column)
+                    {
+                        continue; // the top-left cell already carries it
+                    }
+                    if (current is not null)
+                    {
+                        editor.SetCellOverride(r, c, current);
+                    }
+                    else
+                    {
+                        editor.ClearCellOverride(r, c);
+                    }
+                    editor.RefreshCellContent(r, c);
+                }
+            }
         }
 
         /// <summary>Steps the enemy damage override up by one.</summary>

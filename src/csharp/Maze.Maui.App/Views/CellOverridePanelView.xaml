@@ -73,6 +73,7 @@
                 <Picker ItemsSource="{Binding WallTextureOptions}" SelectedIndex="{Binding WallTextureIndex}" IsVisible="{Binding IsWallTextureVisible}" />
             </VerticalStackLayout>
 
+            <Button Text="{Binding ApplyToAllText}" Command="{Binding ApplyToAllCommand}" IsVisible="{Binding IsMultiCell}" HorizontalOptions="Start" Margin="0,4,0,0" />
             <Button Text="Reset to defaults" Command="{Binding ResetCommand}" HorizontalOptions="Start" Margin="0,4,0,0" />
         </VerticalStackLayout>
     </Border>
