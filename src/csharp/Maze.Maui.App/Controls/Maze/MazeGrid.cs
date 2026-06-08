@@ -20,6 +20,11 @@ namespace Maze.Maui.App
         // Logical cell state (independent of the visual tree — required for virtualization)
         private CellType[,] _cellTypes = new CellType[0, 0];
         private MazeCellContent.PathDirection[,] _solutionDirections = new MazeCellContent.PathDirection[0, 0];
+        // Per-cell editor overrides (non-default characteristics layered on a cell),
+        // held alongside _cellTypes and kept aligned with it: structural edits remap
+        // the keys, a rewritten cell drops its override, and the survivors are stamped
+        // onto the maze in ToMaze().
+        private readonly CellOverrides _overrides = new();
         // Game-mode runtime overrides for key/door cells (consulted by CreateCellContent /
         // UpdateCellContent so virtualized recycling re-applies the latest state).
         // _keyCollected[r,c] == true → the key at (r,c) has been picked up; hide its icon.
@@ -146,6 +151,29 @@ namespace Maze.Maui.App
                     _cellTypes[r, c] = GetMazeItemCellType(r, c);
                     if (_cellTypes[r, c] == CellType.Start) { _startRow = r + 1; _startCol = c + 1; }
                     else if (_cellTypes[r, c] == CellType.Finish) { _finishRow = r + 1; _finishCol = c + 1; }
+                }
+            }
+
+            // Load any per-cell overrides off the source definition. Only overridable
+            // cell types can carry one, so the rest are skipped without an FFI hop.
+            _overrides.Clear();
+            Api.Maze? definition = this.mazeItem?.Definition;
+            if (definition is not null)
+            {
+                for (int r = 0; r < RowCount; r++)
+                {
+                    for (int c = 0; c < ColumnCount; c++)
+                    {
+                        if (!IsOverridableType(_cellTypes[r, c]))
+                        {
+                            continue;
+                        }
+                        CellEntityInfo? entity = definition.GetCellEntity((uint)r, (uint)c);
+                        if (entity is not null)
+                        {
+                            _overrides.Set(r, c, entity);
+                        }
+                    }
                 }
             }
 
@@ -541,6 +569,9 @@ namespace Maze.Maui.App
 
             _cellTypes = newTypes;
             _solutionDirections = newDirs;
+            // Keep overrides aligned with the same row shift the cells just took.
+            if (insert) { _overrides.InsertRows(insertIdx, count); }
+            else { _overrides.DeleteRows(insertIdx, count); }
             // Game-mode runtime arrays only matter for an active game session, which
             // never enters this editor-only resize path. Reset to fresh defaults so
             // the next Initialize() / game start sees a clean slate at the new size.
@@ -571,6 +602,9 @@ namespace Maze.Maui.App
 
             _cellTypes = newTypes;
             _solutionDirections = newDirs;
+            // Keep overrides aligned with the same column shift the cells just took.
+            if (insert) { _overrides.InsertCols(insertIdx, count); }
+            else { _overrides.DeleteCols(insertIdx, count); }
             // See ResizeLogicalArrayRows: game-mode arrays reset to defaults here.
             _keyCollected = new bool[RowCount, newColCount];
             _doorRuntimeState = new DoorState[RowCount, newColCount];
@@ -728,6 +762,9 @@ namespace Maze.Maui.App
             if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
             {
                 _cellTypes[row - 1, column - 1] = cellType;
+                // A rewritten cell loses any override it carried (the new character may
+                // not even accept the old entity, e.g. an enemy override on a wall).
+                _overrides.Remove(row - 1, column - 1);
                 if (cellType == CellType.Start) { _startRow = row; _startCol = column; }
                 else if (cellType == CellType.Finish) { _finishRow = row; _finishCol = column; }
                 else if (_startRow == row && _startCol == column) _startRow = _startCol = -1;
@@ -738,6 +775,43 @@ namespace Maze.Maui.App
                 Controls.InteractiveGrid.Grid.SetCellContent(cellFrame, new MazeCellContent(cellType));
             return cellFrame;
         }
+        /// <summary>
+        /// Gets the per-cell override on a cell (its non-default characteristics), or
+        /// null when the cell carries none.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        /// <returns>The cell's override, or null</returns>
+        public CellEntityInfo? GetCellOverride(int row, int column) => _overrides.Get(row - 1, column - 1);
+        /// <summary>
+        /// Sets the per-cell override on a cell. The caller is responsible for the
+        /// entity type matching the cell's current type.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        /// <param name="entity">The override to apply</param>
+        public void SetCellOverride(int row, int column, CellEntityInfo entity) => _overrides.Set(row - 1, column - 1, entity);
+        /// <summary>
+        /// Clears the per-cell override on a cell, if any.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        public void ClearCellOverride(int row, int column) => _overrides.Remove(row - 1, column - 1);
+        /// <summary>
+        /// Whether a cell carries a per-cell override.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        /// <returns>True when the cell has an override</returns>
+        public bool HasCellOverride(int row, int column) => _overrides.Has(row - 1, column - 1);
+        /// <summary>
+        /// Whether a cell of the given type can carry a per-cell override (S/F and
+        /// empty cells cannot).
+        /// </summary>
+        /// <param name="type">Cell type</param>
+        /// <returns>True for overridable cell types</returns>
+        private static bool IsOverridableType(CellType type) =>
+            type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health;
         /// <summary>
         /// Converts the maze grid content to a `Maze` object
         /// </summary>
@@ -761,6 +835,14 @@ namespace Maze.Maui.App
                         case CellType.Health: maze.SetHealthCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                     }
                 }
+            }
+
+            // Stamp the per-cell overrides on top of the now-populated characters.
+            // Every override sits on a cell whose character matches its entity type
+            // (rewriting a cell drops its override), so the maze accepts each one.
+            foreach (KeyValuePair<(int Row, int Col), CellEntityInfo> entry in _overrides.Entries)
+            {
+                maze.SetCellEntity((uint)entry.Key.Row, (uint)entry.Key.Col, entry.Value);
             }
 
             return maze;
