@@ -1152,6 +1152,19 @@ describe('MazePage per-cell override panel', () => {
     expect(screen.getAllByLabelText('Has override')).toHaveLength(3)
   })
 
+  it('Reset clears the override on every cell in the selection', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    fireEvent.click(screen.getByLabelText('Cell 1,4'), { shiftKey: true })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'ghost')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to all 3 cells' }))
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(3)
+    // Reset clears the override across the whole selection, not just the top-left.
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }))
+    expect(screen.queryAllByLabelText('Has override')).toHaveLength(0)
+  })
+
   it('hides the panel for a mixed-type selection', async () => {
     renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
     await screen.findByLabelText('Cell 1,2')

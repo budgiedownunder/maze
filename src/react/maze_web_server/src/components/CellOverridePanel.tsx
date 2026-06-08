@@ -45,6 +45,9 @@ interface Props {
   onApply: (entity: CellEntity) => void
   /** Remove the cell's override (all fields back to default). */
   onClear: () => void
+  /** Clear the override on every cell in a multi-cell selection (the Reset button's
+   * action for a block). Omitted for a single cell, where Reset uses `onClear`. */
+  onResetAll?: () => void
   /** When editing the top-left of a multi-cell selection, propagate the (live-applied)
    * override to every selected cell. Omitted for a single cell. */
   onApplyToAll?: () => void
@@ -87,6 +90,7 @@ export function CellOverridePanel({
   override,
   onApply,
   onClear,
+  onResetAll,
   onApplyToAll,
   selectionCount,
 }: Props) {
@@ -194,7 +198,8 @@ export function CellOverridePanel({
     setDoorStyle('')
     setWallKind('wall')
     setWallTexture('')
-    onClear()
+    // For a block, clear every cell in the selection; for a single cell, just it.
+    ;(onResetAll ?? onClear)()
   }
 
   return (

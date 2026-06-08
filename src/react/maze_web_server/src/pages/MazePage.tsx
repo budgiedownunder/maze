@@ -154,6 +154,19 @@ export function MazePage() {
     [getOverride, setOverride, clearOverride],
   )
 
+  // Clears the override on every cell in the selection — the Reset button's action for
+  // a block (a single cell just clears itself).
+  const clearOverridesInSelection = useCallback(
+    (t: NonNullable<typeof overridePanelTarget>) => {
+      for (let r = t.minRow; r <= t.maxRow; r++) {
+        for (let c = t.minCol; c <= t.maxCol; c++) {
+          clearOverride(r, c)
+        }
+      }
+    },
+    [clearOverride],
+  )
+
   useEffect(() => {
     if (isBusy) document.body.classList.add('is-busy')
     else document.body.classList.remove('is-busy')
@@ -849,6 +862,11 @@ export function MazePage() {
                 override={getOverride(overridePanelTarget.row, overridePanelTarget.col)}
                 onApply={entity => setOverride(overridePanelTarget.row, overridePanelTarget.col, entity)}
                 onClear={() => clearOverride(overridePanelTarget.row, overridePanelTarget.col)}
+                onResetAll={
+                  overridePanelTarget.count > 1
+                    ? () => clearOverridesInSelection(overridePanelTarget)
+                    : undefined
+                }
                 selectionCount={overridePanelTarget.count > 1 ? overridePanelTarget.count : undefined}
                 onApplyToAll={
                   overridePanelTarget.count > 1

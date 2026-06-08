@@ -82,6 +82,26 @@ describe('CellOverridePanel', () => {
     expect(onClear).toHaveBeenCalled()
   })
 
+  it('Reset clears the whole selection via onResetAll when provided', async () => {
+    const onClear = vi.fn()
+    const onResetAll = vi.fn()
+    render(
+      <CellOverridePanel
+        cellType="W"
+        row={1}
+        col={2}
+        override={{ type: 'W', wallType: 'lava' }}
+        onApply={vi.fn()}
+        onClear={onClear}
+        onResetAll={onResetAll}
+        selectionCount={4}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }))
+    expect(onResetAll).toHaveBeenCalledTimes(1)
+    expect(onClear).not.toHaveBeenCalled()
+  })
+
   it('shows no Apply-to-all link for a single cell', () => {
     setup('W')
     expect(screen.queryByRole('button', { name: /apply to all/i })).not.toBeInTheDocument()
