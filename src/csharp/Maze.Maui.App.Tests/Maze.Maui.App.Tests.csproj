@@ -99,6 +99,8 @@
              Link="LinkedSource\Api\CellEntityInfo.cs" />
     <Compile Include="..\Maze.Maui.App\Controls\Maze\CellOverrides.cs"
              Link="LinkedSource\Controls\CellOverrides.cs" />
+    <Compile Include="..\Maze.Maui.App\Controls\Maze\CellSprite.cs"
+             Link="LinkedSource\Controls\CellSprite.cs" />
   </ItemGroup>
 
 </Project>

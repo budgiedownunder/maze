@@ -291,7 +291,8 @@ namespace Maze.Maui.App
         public override ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
         {
             // Logical model is already populated in Initialize() before InitializeContent() runs
-            var content = new MazeCellContent(gridInitializing ? _cellTypes[row, column] : CellType.Empty);
+            CellType type = gridInitializing ? _cellTypes[row, column] : CellType.Empty;
+            var content = new MazeCellContent(type, OverrideForRender(type, row, column));
             ApplyGameRuntimeState(content, row, column);
             return content;
         }
@@ -328,21 +329,34 @@ namespace Maze.Maui.App
         {
             var type = _cellTypes[row, column];
             var direction = _solutionDirections[row, column];
+            CellEntityInfo? entity = OverrideForRender(type, row, column);
             MazeCellContent content;
             if (frame.Content is MazeCellContent existing)
             {
-                existing.Update(type, direction);
+                existing.Update(type, direction, entity);
                 content = existing;
             }
             else
             {
-                content = new MazeCellContent(type);
+                content = new MazeCellContent(type, entity);
                 if (direction != MazeCellContent.PathDirection.None)
                     content.SetSolutionPath(direction);
                 frame.Content = content;
             }
             ApplyGameRuntimeState(content, row, column);
         }
+        /// <summary>
+        /// The override to render for a cell, or null. Overrides drive the editor's
+        /// variant sprite + badge; in game mode they're suppressed (the game resolves
+        /// its own live variants and never shows the authoring badge). Row and column
+        /// are 0-based.
+        /// </summary>
+        /// <param name="type">The cell's type</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="column">Column index (zero-based)</param>
+        /// <returns>The cell's override, or null</returns>
+        private CellEntityInfo? OverrideForRender(CellType type, int row, int column) =>
+            _gameMode || !IsOverridableType(type) ? null : GetCellOverride(row + 1, column + 1);
         /// <summary>
         /// Re-applies any active game-mode runtime state (collected key, door
         /// state) to a cell's content. Called from <see cref="CreateCellContent"/>
@@ -804,6 +818,24 @@ namespace Maze.Maui.App
         /// <param name="column">Column index (one-based)</param>
         /// <returns>True when the cell has an override</returns>
         public bool HasCellOverride(int row, int column) => _overrides.Has(row - 1, column - 1);
+        /// <summary>
+        /// Re-renders a cell from the current model (its type and override) so a change
+        /// to its override shows immediately. A no-op when the cell is off-screen — it
+        /// re-renders from the model when it next scrolls into view.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        public void RefreshCellContent(int row, int column)
+        {
+            if (row < 1 || row > RowCount || column < 1 || column > ColumnCount)
+            {
+                return;
+            }
+            if (GetCell(row, column) is CellFrame frame)
+            {
+                UpdateCellContent(frame, row - 1, column - 1);
+            }
+        }
         /// <summary>
         /// Whether a cell of the given type can carry a per-cell override (S/F and
         /// empty cells cannot).
@@ -1517,9 +1549,15 @@ namespace Maze.Maui.App
         private static readonly Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         private static readonly Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
         private static readonly Color GAME_VISITED_CELL_HIGHLIGHT_COLOR = Colors.White;
+        // Corner dot marking an editor cell that carries a per-cell override, mirroring
+        // the web editor's override badge.
+        private static readonly Microsoft.Maui.Controls.Brush OVERRIDE_BADGE_BRUSH =
+            new Microsoft.Maui.Controls.SolidColorBrush(Color.FromArgb("#512BD4"));
 
         CellType cellType = CellType.Empty;
         PathDirection solutionPathDirection = PathDirection.None;
+        // The cell's per-cell override (drives the variant sprite + badge), or null.
+        CellEntityInfo? cellOverride = null;
 
         /// <summary>
         /// The solution path direction associated with the cell (if any)
@@ -1580,10 +1618,11 @@ namespace Maze.Maui.App
         /// Constructor
         /// </summary>
         /// <param name="cellType">Cell type</param>
-        /// <returns>Boolean</returns>
-        public MazeCellContent(CellType cellType)
+        /// <param name="cellOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
+        public MazeCellContent(CellType cellType, CellEntityInfo? cellOverride = null)
         {
             this.cellType = cellType;
+            this.cellOverride = cellOverride;
             switch (cellType)
             {
                 case CellType.Start:
@@ -1593,13 +1632,7 @@ namespace Maze.Maui.App
                 case CellType.Door:
                 case CellType.Enemy:
                 case CellType.Health:
-                    Content = new Image
-                    {
-                        Source = GetImageName(true),
-                        Aspect = Aspect.AspectFit,
-                        HorizontalOptions = LayoutOptions.Fill,
-                        VerticalOptions = LayoutOptions.Fill
-                    };
+                    Content = BuildIconContent();
                     break;
                 case CellType.Empty:
                 default:
@@ -1608,12 +1641,53 @@ namespace Maze.Maui.App
             }
         }
         /// <summary>
-        /// Gets the name of the image to display for the cell
+        /// Builds the cell icon: a single image, or — when the cell carries an
+        /// override — that image with a small corner badge overlaid.
+        /// </summary>
+        /// <returns>The cell content view</returns>
+        private View BuildIconContent()
+        {
+            Image image = new()
+            {
+                Source = GetImageName(true),
+                Aspect = Aspect.AspectFit,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill
+            };
+            if (cellOverride is null)
+            {
+                return image;
+            }
+            return new Microsoft.Maui.Controls.Grid { image, BuildOverrideBadge() };
+        }
+        /// <summary>
+        /// A small corner dot marking a cell that carries a per-cell override.
+        /// </summary>
+        /// <returns>The badge view</returns>
+        private static Microsoft.Maui.Controls.Shapes.Ellipse BuildOverrideBadge() => new Microsoft.Maui.Controls.Shapes.Ellipse
+        {
+            Fill = OVERRIDE_BADGE_BRUSH,
+            WidthRequest = 7,
+            HeightRequest = 7,
+            HorizontalOptions = LayoutOptions.End,
+            VerticalOptions = LayoutOptions.Start,
+            Margin = new Thickness(0, 1, 1, 0),
+            InputTransparent = true
+        };
+        /// <summary>
+        /// Gets the name of the image to display for the cell, preferring a variant
+        /// sprite when the cell's override selects one (ghost / potion / water / lava /
+        /// iron fence) and otherwise the base sprite for the cell type.
         /// </summary>
         /// <param name="preferFlag">If the cell is a start or finish cell, returned a flag image (otherwise return a sign image)</param>
         /// <returns>Image name</returns>
         private string GetImageName(bool preferFlag)
         {
+            string? variant = CellSprite.VariantImageName(cellOverride);
+            if (variant is not null)
+            {
+                return variant;
+            }
             switch (cellType)
             {
                 case CellType.Start:
@@ -1639,18 +1713,33 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="newCellType">New cell type</param>
         /// <param name="newDirection">New solution path direction</param>
-        public void Update(CellType newCellType, PathDirection newDirection)
+        /// <param name="newOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
+        public void Update(CellType newCellType, PathDirection newDirection, CellEntityInfo? newOverride = null)
         {
             cellType = newCellType;
             solutionPathDirection = newDirection;
+            cellOverride = newOverride;
 
             bool needsImage = cellType != CellType.Empty || solutionPathDirection != PathDirection.None;
-            string? source = needsImage
-                ? (cellType == CellType.Empty ? GetSolutionPathImage() : GetImageName(true))
-                : null;
 
-            if (needsImage)
+            if (!needsImage)
             {
+                if (Content is not Label)
+                    Content = new Label();
+                Content.BackgroundColor = Colors.Transparent;
+                return;
+            }
+
+            if (cellType != CellType.Empty && cellOverride is not null)
+            {
+                // Override cell: rebuild as the variant sprite plus the corner badge.
+                Content = BuildIconContent();
+            }
+            else
+            {
+                // Plain icon (or an empty cell's solution footstep) — reuse the Image
+                // to avoid a reload cycle on pool-recycled frames.
+                string source = cellType == CellType.Empty ? GetSolutionPathImage() : GetImageName(true);
                 if (Content is Image img)
                     img.Source = source;
                 else
@@ -1661,14 +1750,8 @@ namespace Maze.Maui.App
                         HorizontalOptions = LayoutOptions.Fill,
                         VerticalOptions = LayoutOptions.Fill
                     };
-                Content.BackgroundColor = GetSolutionPathHighlightColor();
             }
-            else
-            {
-                if (Content is not Label)
-                    Content = new Label();
-                Content.BackgroundColor = Colors.Transparent;
-            }
+            Content.BackgroundColor = GetSolutionPathHighlightColor();
         }
         /// <summary>
         /// Sets the opacity of this cell's icon image. Used by game mode to
