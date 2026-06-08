@@ -10,7 +10,7 @@ namespace Maze.Maui.App
     /// <summary>
     /// The `MazeGrid` class represents an interactive maze grid
     /// </summary>
-    public class MazeGrid : Controls.InteractiveGrid.Grid, IMazeGridView
+    public class MazeGrid : Controls.InteractiveGrid.Grid, IMazeGridView, ICellOverrideEditor
     {
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;

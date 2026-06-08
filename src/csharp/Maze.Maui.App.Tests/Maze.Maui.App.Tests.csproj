@@ -101,6 +101,10 @@
              Link="LinkedSource\Controls\CellOverrides.cs" />
     <Compile Include="..\Maze.Maui.App\Controls\Maze\CellSprite.cs"
              Link="LinkedSource\Controls\CellSprite.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\ICellOverrideEditor.cs"
+             Link="LinkedSource\Services\ICellOverrideEditor.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\CellOverridePanelViewModel.cs"
+             Link="LinkedSource\ViewModels\CellOverridePanelViewModel.cs" />
   </ItemGroup>
 
 </Project>
