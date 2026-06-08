@@ -148,5 +148,85 @@ namespace Maze.Maui.App.Tests.ViewModels
             editor.Verify(e => e.SetCellOverride(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CellEntityInfo>()), Times.Never);
             editor.Verify(e => e.ClearCellOverride(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
         }
+
+        [Fact]
+        public void Enemy_type_index_round_trips_through_the_value()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Enemy);
+            Assert.Equal(0, vm.EnemyTypeIndex); // Default
+            vm.EnemyTypeIndex = 2; // [Default, Goblin, Ghost] → Ghost
+            Assert.Equal(EnemyType.Ghost, vm.EnemyTypeValue);
+        }
+
+        [Fact]
+        public void Wall_type_index_maps_special_types()
+        {
+            (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.Lava });
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal(2, vm.WallTypeIndex); // [Wall, Water, Lava, Iron Fence] → Lava
+            vm.WallTypeIndex = 1; // Water
+            Assert.Equal(WallType.Water, vm.SpecialWallType);
+        }
+
+        [Fact]
+        public void Wall_texture_index_maps_solid_textures()
+        {
+            (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.DressedStone });
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal(2, vm.WallTextureIndex); // [Default, Brick, Dressed Stone, ...] → Dressed Stone
+            vm.WallTextureIndex = 1; // Brick
+            Assert.Equal(WallType.Brick, vm.WallTexture);
+        }
+
+        [Fact]
+        public void Increment_damage_from_blank_sets_one_and_applies()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build();
+            vm.LoadCell(1, 1, CellType.Enemy);
+            vm.IncrementDamageCommand.Execute(null);
+            Assert.Equal("1", vm.DamageText);
+            editor.Verify(e => e.SetCellOverride(1, 1, It.Is<EnemyCellEntity>(x => x.Damage == 1)), Times.Once);
+        }
+
+        [Fact]
+        public void Decrement_damage_clamps_at_zero()
+        {
+            (CellOverridePanelViewModel vm, _) = Build(new EnemyCellEntity { Damage = 1 });
+            vm.LoadCell(1, 1, CellType.Enemy);
+            vm.DecrementDamageCommand.Execute(null);
+            Assert.Equal("0", vm.DamageText);
+            vm.DecrementDamageCommand.Execute(null);
+            Assert.Equal("0", vm.DamageText); // clamped at zero
+        }
+
+        [Fact]
+        public void Decrement_a_blank_field_keeps_it_blank()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Health);
+            vm.DecrementHealAmountCommand.Execute(null);
+            Assert.Equal("", vm.HealAmountText);
+        }
+
+        [Fact]
+        public void Enemy_preview_reflects_the_selected_rig()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Enemy);
+            Assert.Equal("enemy.png", vm.EnemyPreviewImage); // default goblin
+            vm.EnemyTypeValue = EnemyType.Ghost;
+            Assert.Equal("ghost.png", vm.EnemyPreviewImage);
+        }
+
+        [Fact]
+        public void Wall_preview_reflects_the_special_type()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal("wall.png", vm.WallPreviewImage); // default / solid
+            vm.SpecialWallType = WallType.Water;
+            Assert.Equal("water.png", vm.WallPreviewImage);
+        }
     }
 }

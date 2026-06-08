@@ -1871,6 +1871,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
             double scrollViewWidth = _dataScrollView.Width;
             double scrollViewHeight = _dataScrollView.Height;
 
+            // The scroll view has no usable size until the grid is laid out. Scrolling a
+            // zero-sized viewport mis-computes the jump as a large (non-animated) one and
+            // awaits a scroll that never completes, so the busy cursor it sets is never
+            // cleared. Skip until the viewport has a size.
+            if (scrollViewWidth <= 0 || scrollViewHeight <= 0)
+                return;
+
             // If the cell is already fully visible, there is no need to scroll
             if (cellLeftX >= currentScrollX && cellRightX <= currentScrollX + scrollViewWidth &&
                 cellTopY >= currentScrollY && cellBottomY <= currentScrollY + scrollViewHeight)

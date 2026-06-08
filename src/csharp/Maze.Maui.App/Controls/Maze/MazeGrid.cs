@@ -837,6 +837,21 @@ namespace Maze.Maui.App
             }
         }
         /// <summary>
+        /// Scrolls the grid so the given cell is within the visible viewport — used to
+        /// keep a selected cell visible after the override panel shrinks the grid. A
+        /// no-op until the grid is laid out (scrolling a zero-sized viewport mis-computes
+        /// the jump and can leave the busy cursor set).
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        public void EnsureCellVisible(int row, int column)
+        {
+            if (Width > 0 && Height > 0)
+            {
+                ScrollCellIntoView(row, column);
+            }
+        }
+        /// <summary>
         /// Whether a cell of the given type can carry a per-cell override (S/F and
         /// empty cells cannot).
         /// </summary>

@@ -63,6 +63,8 @@ namespace Maze.Maui.App.Views
         readonly IDialogService _dialogService;
         readonly IDeviceTypeService _deviceTypeService;
         readonly IAppFeaturesService _appFeaturesService;
+        // Drives the inline per-cell override panel; wired to the live grid in Initialize().
+        CellOverridePanelViewModel? _overridePanelViewModel;
         uint? _lastMinSolutionLength;
         CancellationTokenSource? _fallbackInitCts;
         CancellationTokenSource? _walkCts;
@@ -178,6 +180,16 @@ namespace Maze.Maui.App.Views
             MazeGrid.CellDoubleTapped += OnMazeGridCellDoubleTapped;
             MazeGrid.KeyDown += OnMazeGridKeyDown;
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
+
+            // The override panel reads/writes overrides on the live grid (which
+            // implements ICellOverrideEditor) and seeds from the current selection.
+            _overridePanelViewModel = new CellOverridePanelViewModel(MazeGrid);
+            OverridePanel.BindingContext = _overridePanelViewModel;
+            // Size the panel responsively (fills up to a max, always left-aligned), and
+            // once the panel appears and shrinks the grid, keep the selected cell in view.
+            SizeChanged += OnPageSizeChanged;
+            MazeGrid.SizeChanged += OnMazeGridSizeChanged;
+            UpdateOverridePanelWidth();
 
             MazeGrid.ActivateCell(1, 1, false);
 
@@ -834,6 +846,81 @@ namespace Maze.Maui.App.Views
                 ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
                 ShowSolveButtons();
                 ShowGenerateButton();
+            }
+            RefreshOverridePanel();
+        }
+        /// <summary>
+        /// Seeds the inline override panel from the current selection — shown for a
+        /// single feature cell (W/K/D/E/H) while the editor is idle, hidden otherwise.
+        /// </summary>
+        private void RefreshOverridePanel()
+        {
+            if (_overridePanelViewModel is null)
+            {
+                return;
+            }
+            CellRange? selection = MazeGrid.CurrentSelection;
+            CellStatus status = MazeGrid.GetCurrentSelectionStatus();
+            if (selection is not null && status.IsSingleCell && !IsSolutionDisplayed && !_isWalking)
+            {
+                int row = selection.Top, column = selection.Left;
+                // LoadCell shows the panel for overridable feature types and hides it
+                // for start/finish/empty cells. When the panel becomes visible it shrinks
+                // the grid; OnOverridePanelSizeChanged then scrolls the cell back into
+                // view once the layout has settled.
+                _overridePanelViewModel.LoadCell(row, column, MazeGrid.GetCellType(row, column));
+            }
+            else
+            {
+                _overridePanelViewModel.IsVisible = false;
+            }
+        }
+        /// <summary>
+        /// Keeps the override panel filling the width up to a maximum (so it spans the
+        /// width on mobile but isn't excessively wide on desktop), always left-aligned.
+        /// </summary>
+        private void OnPageSizeChanged(object? sender, EventArgs e) => UpdateOverridePanelWidth();
+        /// <summary>
+        /// Sets the override panel's width to the available page width (less its margin),
+        /// capped at a maximum.
+        /// </summary>
+        private void UpdateOverridePanelWidth()
+        {
+            const double maxWidth = 480;
+            const double margin = 12;
+            if (Width <= 0)
+            {
+                return;
+            }
+            double target = Math.Max(0, Math.Min(Width - margin, maxWidth));
+            // Only assign when it actually changes — re-setting the same width would
+            // invalidate the layout needlessly (costly on a large grid).
+            if (Math.Abs(OverridePanel.WidthRequest - target) > 0.5)
+            {
+                OverridePanel.WidthRequest = target;
+            }
+        }
+        /// <summary>
+        /// When the grid resizes — e.g. because the override panel appeared below it and
+        /// shrank its viewport — scrolls the selected cell back into view. Fires after the
+        /// grid has its new size, so the scroll is a small animated adjustment (and the
+        /// <see cref="MazeGrid.EnsureCellVisible"/> guard skips it until the grid is laid out).
+        /// </summary>
+        private void OnMazeGridSizeChanged(object? sender, EventArgs e)
+        {
+            if (_overridePanelViewModel?.IsVisible != true)
+            {
+                return;
+            }
+            CellRange? selection = MazeGrid.CurrentSelection;
+            if (selection is not null && selection.IsSingleCell)
+            {
+                int row = selection.Top, column = selection.Left;
+                // Defer one tick: when SizeChanged fires, the grid's inner scroll view may
+                // not have taken its new (smaller) size yet, so scrolling now would read the
+                // old viewport and conclude the cell is still visible. Next tick it has
+                // settled. The EnsureCellVisible guard makes a still-unsized view a no-op.
+                Dispatcher.Dispatch(() => MazeGrid.EnsureCellVisible(row, column));
             }
         }
         /// <summary>

@@ -4,6 +4,9 @@ using Maze.Api;
 using Maze.Maui.App.Services;
 using CellType = Maze.Api.Maze.CellType;
 
+// CellSprite lives in the parent Maze.Maui.App namespace.
+using Maze.Maui.App;
+
 namespace Maze.Maui.App.ViewModels
 {
     /// <summary>
@@ -58,6 +61,8 @@ namespace Maze.Maui.App.ViewModels
         // ── Enemy ──
         /// <summary>Enemy rig override, or null to inherit the default.</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(EnemyTypeIndex))]
+        [NotifyPropertyChangedFor(nameof(EnemyPreviewImage))]
         private EnemyType? enemyTypeValue;
         /// <summary>Enemy damage override (numeric text; blank = inherit).</summary>
         [ObservableProperty]
@@ -69,6 +74,8 @@ namespace Maze.Maui.App.ViewModels
         // ── Health ──
         /// <summary>Health rig override, or null to inherit.</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HealthStyleIndex))]
+        [NotifyPropertyChangedFor(nameof(HealthPreviewImage))]
         private HealthStyle? healthStyleValue;
         /// <summary>Heal-amount override (numeric text; blank = inherit).</summary>
         [ObservableProperty]
@@ -77,11 +84,13 @@ namespace Maze.Maui.App.ViewModels
         // ── Key ──
         /// <summary>Key-holder rig override, or null to inherit.</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(KeyHolderIndex))]
         private KeyHolderStyle? keyHolderValue;
 
         // ── Door ──
         /// <summary>Door rig override, or null to inherit.</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(DoorStyleIndex))]
         private DoorStyle? doorStyleValue;
 
         // ── Wall (two-tier) ──
@@ -89,10 +98,14 @@ namespace Maze.Maui.App.ViewModels
         /// (a solid texture chosen via <see cref="WallTexture"/>).</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsWallTextureVisible))]
+        [NotifyPropertyChangedFor(nameof(WallTypeIndex))]
+        [NotifyPropertyChangedFor(nameof(WallPreviewImage))]
         private WallType? specialWallType;
         /// <summary>The solid wall texture (shown only under "Wall"), or null for the
         /// varied default.</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(WallTextureIndex))]
+        [NotifyPropertyChangedFor(nameof(WallPreviewImage))]
         private WallType? wallTexture;
 
         /// <summary>Whether the selected cell is an enemy cell.</summary>
@@ -108,8 +121,84 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Whether the solid-texture picker is shown (only under "Wall").</summary>
         public bool IsWallTextureVisible => IsWall && SpecialWallType is null;
 
+        /// <summary>Sprite previewing the selected enemy rig (goblin / ghost).</summary>
+        public string EnemyPreviewImage =>
+            CellSprite.VariantImageName(new EnemyCellEntity { EnemyType = EnemyTypeValue }) ?? "enemy.png";
+        /// <summary>Sprite previewing the selected health rig (heart / potion).</summary>
+        public string HealthPreviewImage =>
+            CellSprite.VariantImageName(new HealthCellEntity { HealthStyle = HealthStyleValue }) ?? "health.png";
+        /// <summary>Sprite previewing the selected wall type (water / lava / iron-fence,
+        /// else the generic wall for solid textures and the default).</summary>
+        public string WallPreviewImage =>
+            CellSprite.VariantImageName(new WallCellEntity { WallType = EffectiveWallType(SpecialWallType, WallTexture) }) ?? "wall.png";
+
         /// <summary>The panel heading: the cell type and its one-based coordinates.</summary>
         public string Title => $"{TypeLabel(CellType)} [{Row},{Column}]";
+
+        // ── Picker bindings ──
+        // MAUI Pickers bind to an options list + a SelectedIndex; each index maps to the
+        // nullable-enum field above, with index 0 being the inherit option ("Default", or
+        // "Wall" for the wall type tier).
+
+        /// <summary>Enemy rig picker options.</summary>
+        public IReadOnlyList<string> EnemyTypeOptions { get; } = new[] { "Default", "Goblin", "Ghost" };
+        /// <summary>Selected index of the enemy rig picker.</summary>
+        public int EnemyTypeIndex
+        {
+            get => EnemyTypeValue is null ? 0 : (int)EnemyTypeValue.Value + 1;
+            set => EnemyTypeValue = value <= 0 ? null : (EnemyType)(value - 1);
+        }
+
+        /// <summary>Health rig picker options.</summary>
+        public IReadOnlyList<string> HealthStyleOptions { get; } = new[] { "Default", "Heart", "Potion" };
+        /// <summary>Selected index of the health rig picker.</summary>
+        public int HealthStyleIndex
+        {
+            get => HealthStyleValue is null ? 0 : (int)HealthStyleValue.Value + 1;
+            set => HealthStyleValue = value <= 0 ? null : (HealthStyle)(value - 1);
+        }
+
+        /// <summary>Key-holder picker options.</summary>
+        public IReadOnlyList<string> KeyHolderOptions { get; } = new[] { "Default", "Pedestal", "Chest", "Floating Key" };
+        /// <summary>Selected index of the key-holder picker.</summary>
+        public int KeyHolderIndex
+        {
+            get => KeyHolderValue is null ? 0 : (int)KeyHolderValue.Value + 1;
+            set => KeyHolderValue = value <= 0 ? null : (KeyHolderStyle)(value - 1);
+        }
+
+        /// <summary>Door rig picker options.</summary>
+        public IReadOnlyList<string> DoorStyleOptions { get; } = new[] { "Default", "Swing", "Slide", "Portcullis", "Dissolve" };
+        /// <summary>Selected index of the door rig picker.</summary>
+        public int DoorStyleIndex
+        {
+            get => DoorStyleValue is null ? 0 : (int)DoorStyleValue.Value + 1;
+            set => DoorStyleValue = value <= 0 ? null : (DoorStyle)(value - 1);
+        }
+
+        // Tier 1 of the wall type: "Wall" (a solid texture chosen below) or a special type.
+        private static readonly WallType?[] WallTypeTier1 = { null, WallType.Water, WallType.Lava, WallType.IronFence };
+        /// <summary>Wall type (tier 1) picker options.</summary>
+        public IReadOnlyList<string> WallTypeOptions { get; } = new[] { "Wall", "Water", "Lava", "Iron Fence" };
+        /// <summary>Selected index of the wall type (tier 1) picker.</summary>
+        public int WallTypeIndex
+        {
+            get
+            {
+                int index = Array.IndexOf(WallTypeTier1, SpecialWallType);
+                return index < 0 ? 0 : index;
+            }
+            set => SpecialWallType = value >= 0 && value < WallTypeTier1.Length ? WallTypeTier1[value] : null;
+        }
+
+        /// <summary>Wall texture (tier 2) picker options.</summary>
+        public IReadOnlyList<string> WallTextureOptions { get; } = new[] { "Default", "Brick", "Dressed Stone", "Wood", "Cobblestone" };
+        /// <summary>Selected index of the wall texture (tier 2) picker.</summary>
+        public int WallTextureIndex
+        {
+            get => WallTexture is null ? 0 : (int)WallTexture.Value + 1;
+            set => WallTexture = value <= 0 ? null : (WallType)(value - 1);
+        }
 
         partial void OnEnemyTypeValueChanged(EnemyType? value) => ApplyCurrent();
         partial void OnDamageTextChanged(string value) => ApplyCurrent();
@@ -198,6 +287,49 @@ namespace Maze.Maui.App.ViewModels
 
             editor.ClearCellOverride(Row, Column);
             editor.RefreshCellContent(Row, Column);
+        }
+
+        /// <summary>Steps the enemy damage override up by one.</summary>
+        [RelayCommand]
+        private void IncrementDamage() => DamageText = StepInt(DamageText, 1);
+        /// <summary>Steps the enemy damage override down by one.</summary>
+        [RelayCommand]
+        private void DecrementDamage() => DamageText = StepInt(DamageText, -1);
+        /// <summary>Steps the enemy move-interval override up by one.</summary>
+        [RelayCommand]
+        private void IncrementMovePeriod() => MovePeriodMsText = StepFloat(MovePeriodMsText, 1);
+        /// <summary>Steps the enemy move-interval override down by one.</summary>
+        [RelayCommand]
+        private void DecrementMovePeriod() => MovePeriodMsText = StepFloat(MovePeriodMsText, -1);
+        /// <summary>Steps the heal-amount override up by one.</summary>
+        [RelayCommand]
+        private void IncrementHealAmount() => HealAmountText = StepInt(HealAmountText, 1);
+        /// <summary>Steps the heal-amount override down by one.</summary>
+        [RelayCommand]
+        private void DecrementHealAmount() => HealAmountText = StepInt(HealAmountText, -1);
+
+        // A blank field steps up to 1 and stays blank on a step-down; a value steps by
+        // `delta`, clamped at 0. Assigning the text live-applies via its change handler.
+        private static string StepInt(string text, int delta)
+        {
+            uint? current = ParseNonNegInt(text);
+            if (current is null)
+            {
+                return delta > 0 ? "1" : "";
+            }
+            long next = (long)current.Value + delta;
+            return next < 0 ? "0" : next.ToString();
+        }
+
+        private static string StepFloat(string text, float delta)
+        {
+            float? current = ParseNonNegFloat(text);
+            if (current is null)
+            {
+                return delta > 0 ? "1" : "";
+            }
+            float next = current.Value + delta;
+            return next < 0 ? "0" : next.ToString();
         }
 
         // Builds the entity from the current fields and applies it — or clears the
