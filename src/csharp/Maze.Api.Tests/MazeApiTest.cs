@@ -1640,6 +1640,35 @@ namespace Maze.Api.Tests
         }
 
         /// <summary>
+        /// Per-cell overrides survive a save → reload round-trip: serialising a maze that
+        /// carries overrides to JSON and parsing it back into a fresh maze preserves every
+        /// override (the editor's save / load path).
+        /// </summary>
+        [Fact]
+        public void Maze_CellEntity_RoundTripsThroughToJsonAndBack()
+        {
+            string json;
+            using (Maze maze = new Maze(2, 2))
+            {
+                maze.SetStartCell(0, 0);
+                maze.SetEnemyCells(0, 1, 0, 1);
+                maze.SetWallCells(1, 0, 1, 0);
+                maze.SetFinishCell(1, 1);
+                maze.SetCellEntity(0, 1, new EnemyCellEntity { EnemyType = EnemyType.Ghost, Damage = 2 });
+                maze.SetCellEntity(1, 0, new WallCellEntity { WallType = WallType.Lava });
+                json = maze.ToJson();
+            }
+
+            using Maze reloaded = new Maze(1, 1);
+            reloaded.FromJson(json);
+
+            EnemyCellEntity enemy = Assert.IsType<EnemyCellEntity>(reloaded.GetCellEntity(0, 1));
+            Assert.Equal(EnemyType.Ghost, enemy.EnemyType);
+            Assert.Equal(2u, enemy.Damage);
+            Assert.Equal(WallType.Lava, Assert.IsType<WallCellEntity>(reloaded.GetCellEntity(1, 0)).WallType);
+        }
+
+        /// <summary>
         /// A maze carrying a per-cell override survives a JSON load -> save round-trip through
         /// the FFI (the Rust serde handles the char-or-array grid form; C# passes it opaquely).
         /// </summary>
