@@ -292,7 +292,7 @@ namespace Maze.Maui.App
         {
             // Logical model is already populated in Initialize() before InitializeContent() runs
             CellType type = gridInitializing ? _cellTypes[row, column] : CellType.Empty;
-            var content = new MazeCellContent(type, OverrideForRender(type, row, column));
+            var content = new MazeCellContent(type, OverrideForRender(type, row, column), showBadge: !_gameMode);
             ApplyGameRuntimeState(content, row, column);
             return content;
         }
@@ -333,12 +333,12 @@ namespace Maze.Maui.App
             MazeCellContent content;
             if (frame.Content is MazeCellContent existing)
             {
-                existing.Update(type, direction, entity);
+                existing.Update(type, direction, entity, showBadge: !_gameMode);
                 content = existing;
             }
             else
             {
-                content = new MazeCellContent(type, entity);
+                content = new MazeCellContent(type, entity, showBadge: !_gameMode);
                 if (direction != MazeCellContent.PathDirection.None)
                     content.SetSolutionPath(direction);
                 frame.Content = content;
@@ -346,17 +346,28 @@ namespace Maze.Maui.App
             ApplyGameRuntimeState(content, row, column);
         }
         /// <summary>
-        /// The override to render for a cell, or null. Overrides drive the editor's
-        /// variant sprite + badge; in game mode they're suppressed (the game resolves
-        /// its own live variants and never shows the authoring badge). Row and column
-        /// are 0-based.
+        /// The override to render for a cell, or null. Overrides drive the variant sprite
+        /// (and, in the editor only, the authoring badge). In game mode only the static
+        /// wall (water/lava/iron_fence) and health (potion) variants are surfaced — enemies
+        /// are live moving overlays and keys/doors have no 2D variant — so their overrides
+        /// are suppressed. Row and column are 0-based.
         /// </summary>
         /// <param name="type">The cell's type</param>
         /// <param name="row">Row index (zero-based)</param>
         /// <param name="column">Column index (zero-based)</param>
         /// <returns>The cell's override, or null</returns>
-        private CellEntityInfo? OverrideForRender(CellType type, int row, int column) =>
-            _gameMode || !IsOverridableType(type) ? null : GetCellOverride(row + 1, column + 1);
+        private CellEntityInfo? OverrideForRender(CellType type, int row, int column)
+        {
+            if (!IsOverridableType(type))
+            {
+                return null;
+            }
+            if (_gameMode && type != CellType.Wall && type != CellType.Health)
+            {
+                return null;
+            }
+            return GetCellOverride(row + 1, column + 1);
+        }
         /// <summary>
         /// Re-applies any active game-mode runtime state (collected key, door
         /// state) to a cell's content. Called from <see cref="CreateCellContent"/>
@@ -423,6 +434,14 @@ namespace Maze.Maui.App
                     if (_cellTypes[r, c] == CellType.Enemy)
                         _enemyAt[r, c] = 1;
                 }
+            }
+            // Initialize rendered the cells in editor mode before the flag flipped, so
+            // re-render the ones already on screen to pick up game-mode rendering (variant
+            // walls/health without the authoring badge, suppressed spawn markers). Cells
+            // that scroll in later already render in game mode.
+            foreach (KeyValuePair<(int row, int col), CellFrame> entry in GetActiveCells())
+            {
+                UpdateCellContent(entry.Value, entry.Key.row, entry.Key.col);
             }
         }
         /// <summary>
@@ -1573,6 +1592,10 @@ namespace Maze.Maui.App
         PathDirection solutionPathDirection = PathDirection.None;
         // The cell's per-cell override (drives the variant sprite + badge), or null.
         CellEntityInfo? cellOverride = null;
+        // Whether to overlay the authoring badge on an override cell. The variant sprite
+        // always renders from the override; the badge is an editor affordance only and is
+        // suppressed during play (matching the web editor, which hides it in-game).
+        bool showOverrideBadge = true;
 
         /// <summary>
         /// The solution path direction associated with the cell (if any)
@@ -1634,10 +1657,12 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="cellType">Cell type</param>
         /// <param name="cellOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
-        public MazeCellContent(CellType cellType, CellEntityInfo? cellOverride = null)
+        /// <param name="showBadge">Whether to overlay the authoring badge on an override cell (editor only)</param>
+        public MazeCellContent(CellType cellType, CellEntityInfo? cellOverride = null, bool showBadge = true)
         {
             this.cellType = cellType;
             this.cellOverride = cellOverride;
+            this.showOverrideBadge = showBadge;
             switch (cellType)
             {
                 case CellType.Start:
@@ -1669,7 +1694,7 @@ namespace Maze.Maui.App
                 HorizontalOptions = LayoutOptions.Fill,
                 VerticalOptions = LayoutOptions.Fill
             };
-            if (cellOverride is null)
+            if (cellOverride is null || !showOverrideBadge)
             {
                 return image;
             }
@@ -1729,11 +1754,13 @@ namespace Maze.Maui.App
         /// <param name="newCellType">New cell type</param>
         /// <param name="newDirection">New solution path direction</param>
         /// <param name="newOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
-        public void Update(CellType newCellType, PathDirection newDirection, CellEntityInfo? newOverride = null)
+        /// <param name="showBadge">Whether to overlay the authoring badge on an override cell (editor only)</param>
+        public void Update(CellType newCellType, PathDirection newDirection, CellEntityInfo? newOverride = null, bool showBadge = true)
         {
             cellType = newCellType;
             solutionPathDirection = newDirection;
             cellOverride = newOverride;
+            showOverrideBadge = showBadge;
 
             bool needsImage = cellType != CellType.Empty || solutionPathDirection != PathDirection.None;
 
