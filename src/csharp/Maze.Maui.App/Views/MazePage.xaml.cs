@@ -413,36 +413,38 @@ namespace Maze.Maui.App.Views
             ExitSelectionModeAndUpdateControls();
         }
         /// <summary>
-        /// Deletes the selected rows
+        /// Deletes the selected rows. The grid keeps (and remaps) the row selection across
+        /// the edit, so the marching-ants selection is retained for repeated edits — unlike
+        /// a cell stamp, this does not exit selection mode.
         /// </summary>
         private void DeleteRows()
         {
-            MazeGrid.DeleteSelectedRows(); ;
-            ExitSelectionModeAndUpdateControls();
+            MazeGrid.DeleteSelectedRows();
+            UpdateControls();
         }
         /// <summary>
-        /// Deletes the selected columns
+        /// Deletes the selected columns, retaining the column selection (see <see cref="DeleteRows"/>).
         /// </summary>
         private void DeleteColumns()
         {
             MazeGrid.DeleteSelectedColumns();
-            ExitSelectionModeAndUpdateControls();
+            UpdateControls();
         }
         /// <summary>
-        /// Inserts rows at the current row selection
+        /// Inserts rows at the current row selection, retaining the selection (see <see cref="DeleteRows"/>).
         /// </summary>
         private void InsertRows()
         {
-            MazeGrid.InsertSelectedRows(); ;
-            ExitSelectionModeAndUpdateControls();
+            MazeGrid.InsertSelectedRows();
+            UpdateControls();
         }
         /// <summary>
-        /// Inserts columns at the current column selection
+        /// Inserts columns at the current column selection, retaining the selection (see <see cref="DeleteRows"/>).
         /// </summary>
         private void InsertColumns()
         {
-            MazeGrid.InsertSelectedColumns(); ;
-            ExitSelectionModeAndUpdateControls();
+            MazeGrid.InsertSelectedColumns();
+            UpdateControls();
         }
         /// <summary>
         /// Attempts to solve the maze. If successful, the solution is displayed. If not, an error message is displayed.

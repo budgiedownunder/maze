@@ -2032,6 +2032,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 BorderGripDiameter = SelectionFrameBorderGripDiameter
             };
             selectionFrame.AddToGrid();
+            if (IsExtendedSelectionMode)
+                selectionFrame.EnableDashAnimation(true);
         }
         /// <summary>
         /// Removes the selection frame
