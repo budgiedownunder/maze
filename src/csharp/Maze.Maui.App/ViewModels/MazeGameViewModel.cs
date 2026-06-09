@@ -30,6 +30,9 @@ namespace Maze.Maui.App.ViewModels
         // Tracks each enemy's last-known cell by id so EnemyMoved events (which carry
         // only the new cell) can tell the grid which cell to vacate.
         private readonly Dictionary<uint, (int row, int col)> _enemyCells = new();
+        // Each enemy's fixed visual rig by id, so a move passes the enemy's own rig — a
+        // cell shared by differing enemies (or a neighbour swap) keeps each sprite correct.
+        private readonly Dictionary<uint, EnemyType?> _enemyTypes = new();
 
         /// <summary>
         /// Constructor
@@ -170,6 +173,7 @@ namespace Maze.Maui.App.ViewModels
             IsPaused = false;
             LoseReason = LoseReason.None;
             _enemyCells.Clear();
+            _enemyTypes.Clear();
 
             if (_mazeItem?.Definition is null)
             {
@@ -190,7 +194,10 @@ namespace Maze.Maui.App.ViewModels
                 MaxHp = _game.MaxHp;
                 gameGrid.BeginGameRuntime();
                 foreach (var enemy in _game.Enemies)
+                {
                     _enemyCells[enemy.Id] = ((int)enemy.Row, (int)enemy.Column);
+                    _enemyTypes[enemy.Id] = enemy.EnemyType;
+                }
                 gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
                 // Enemies move on a fixed cadence — run the tick loop continuously
                 // while any exist (the page's timer keeps firing while Tick() returns true).
@@ -352,7 +359,7 @@ namespace Maze.Maui.App.ViewModels
                     case GameEventKind.EnemyMoved:
                         uint id = evt.Payload;
                         (int oldRow, int oldCol) = _enemyCells.TryGetValue(id, out var pos) ? pos : (-1, -1);
-                        _gameGrid.SetEnemyCell(oldRow, oldCol, (int)evt.Row, (int)evt.Column, id);
+                        _gameGrid.SetEnemyCell(oldRow, oldCol, (int)evt.Row, (int)evt.Column, id, _enemyTypes.GetValueOrDefault(id));
                         _enemyCells[id] = ((int)evt.Row, (int)evt.Column);
                         break;
                     case GameEventKind.PlayerDamaged:

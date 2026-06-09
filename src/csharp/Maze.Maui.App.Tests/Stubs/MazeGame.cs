@@ -66,7 +66,7 @@ namespace Maze.Api
 
     public readonly record struct KeyInfo(uint Row, uint Column, uint Id);
 
-    public readonly record struct EnemyInfo(uint Row, uint Column, uint Id);
+    public readonly record struct EnemyInfo(uint Row, uint Column, uint Id, EnemyType? EnemyType = null);
 
     public readonly record struct HealthPickupInfo(uint Row, uint Column);
 

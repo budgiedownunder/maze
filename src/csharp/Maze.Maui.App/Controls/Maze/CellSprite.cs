@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Maze.Api;
 
 namespace Maze.Maui.App
@@ -28,5 +29,25 @@ namespace Maze.Maui.App
             WallCellEntity { WallType: WallType.IronFence } => "iron_fence.png",
             _ => null
         };
+
+        /// <summary>
+        /// The rig to display for a cell shared by multiple enemies: a rig with a distinct
+        /// sprite (e.g. ghost) takes priority over the default goblin, so a mixed stack
+        /// surfaces the special enemy; otherwise the first enemy's rig. Null for an empty
+        /// stack.
+        /// </summary>
+        /// <param name="rigs">The rigs of the enemies on the cell, in order.</param>
+        /// <returns>The rig whose sprite the stack should show, or null.</returns>
+        public static EnemyType? DominantEnemyRig(IReadOnlyList<EnemyType?> rigs)
+        {
+            foreach (EnemyType? rig in rigs)
+            {
+                if (VariantImageName(new EnemyCellEntity { EnemyType = rig }) is not null)
+                {
+                    return rig;
+                }
+            }
+            return rigs.Count > 0 ? rigs[0] : null;
+        }
     }
 }

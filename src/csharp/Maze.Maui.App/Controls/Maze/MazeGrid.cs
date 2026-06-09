@@ -38,6 +38,11 @@ namespace Maze.Maui.App
         // _healthCollected[r,c] == true → the pickup was consumed; hide its icon.
         private bool _gameMode;
         private int[,] _enemyAt = new int[0, 0];
+        // The visual rigs (ghost vs the default goblin) of the enemies on each cell. A list
+        // (not a single value) so a cell shared by enemies of different types resolves each
+        // one's sprite correctly when they separate; the first entry is the rig shown for a
+        // stack. Seeded from spawn overrides; each enemy carries its own rig as it moves.
+        private List<EnemyType?>?[,] _enemyRigsAt = new List<EnemyType?>?[0, 0];
         private bool[,] _healthCollected = new bool[0, 0];
         // 1-based positions of start/finish cells (-1 = not set)
         private int _startRow = -1, _startCol = -1;
@@ -140,6 +145,7 @@ namespace Maze.Maui.App
             _keyCollected = new bool[RowCount, ColumnCount];
             _doorRuntimeState = new DoorState[RowCount, ColumnCount];
             _enemyAt = new int[RowCount, ColumnCount];
+            _enemyRigsAt = new List<EnemyType?>?[RowCount, ColumnCount];
             _healthCollected = new bool[RowCount, ColumnCount];
             _gameMode = false;
             _startRow = _startCol = _finishRow = _finishCol = -1;
@@ -377,15 +383,10 @@ namespace Maze.Maui.App
         private void ApplyGameRuntimeState(MazeCellContent content, int row, int column)
         {
             if (_keyCollected.GetLength(0) <= row || _keyCollected.GetLength(1) <= column) return;
-            // A live enemy on the cell is rendered over whatever static content the
-            // cell holds. When the player shares the cell the walker is drawn on top
-            // and the enemy dimmed behind it; two or more enemies add a count chip.
-            if (_gameMode && _enemyAt[row, column] > 0)
-            {
-                bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
-                content.SetEnemyStack(_enemyAt[row, column], playerHere ? _walkerImage : null);
-                return;
-            }
+            // Resolve the static base first (collected key/health and spawn markers reduce
+            // to an empty passage; doors carry an opacity), then layer any live enemy and
+            // the player walker on top — so the underlying cell (e.g. a potion the enemy is
+            // standing on) still shows through and reappears once they leave.
             if (_cellTypes[row, column] == CellType.Key && _keyCollected[row, column])
             {
                 // Collected key renders as an empty passage so the visited-dot
@@ -417,6 +418,12 @@ namespace Maze.Maui.App
                 // auto-consumes the cell but the static grid char never changes.
                 content.Update(CellType.Empty, content.SolutionPathDirection);
             }
+
+            bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
+            if (_gameMode && (_enemyAt[row, column] > 0 || playerHere))
+            {
+                content.SetEntityOverlay(_enemyAt[row, column], playerHere ? _walkerImage : null, StackEnemyRig(row, column));
+            }
         }
         /// <summary>
         /// Enters game-runtime mode: enemy / health cells thereafter follow live
@@ -432,7 +439,10 @@ namespace Maze.Maui.App
                 for (int c = 0; c < ColumnCount; c++)
                 {
                     if (_cellTypes[r, c] == CellType.Enemy)
+                    {
                         _enemyAt[r, c] = 1;
+                        (_enemyRigsAt[r, c] ??= new List<EnemyType?>()).Add((GetCellOverride(r + 1, c + 1) as EnemyCellEntity)?.EnemyType);
+                    }
                 }
             }
             // Initialize rendered the cells in editor mode before the flag flipped, so
@@ -456,21 +466,34 @@ namespace Maze.Maui.App
         /// <param name="newRow">New row (0-based).</param>
         /// <param name="newCol">New column (0-based).</param>
         /// <param name="id">Stable enemy id (unused by the count-based model; kept for caller clarity).</param>
-        public void SetEnemyCell(int oldRow, int oldCol, int newRow, int newCol, uint id)
+        /// <param name="enemyType">This enemy's own visual rig (ghost vs the default goblin), or null.</param>
+        public void SetEnemyCell(int oldRow, int oldCol, int newRow, int newCol, uint id, EnemyType? enemyType)
         {
             _ = id;
             if (!_gameMode) return;
             if (oldRow >= 0 && oldCol >= 0 && oldRow < RowCount && oldCol < ColumnCount && _enemyAt[oldRow, oldCol] > 0)
             {
+                // Remove this enemy's own rig from the old cell — so a cell shared by
+                // differing enemies keeps the remaining one's rig, and a swap with a
+                // neighbour can't carry the wrong rig.
                 _enemyAt[oldRow, oldCol]--;
+                _enemyRigsAt[oldRow, oldCol]?.Remove(enemyType);
                 RefreshCellRuntime(oldRow, oldCol);
             }
             if (newRow >= 0 && newCol >= 0 && newRow < RowCount && newCol < ColumnCount)
             {
                 _enemyAt[newRow, newCol]++;
+                (_enemyRigsAt[newRow, newCol] ??= new List<EnemyType?>()).Add(enemyType);
                 RefreshCellRuntime(newRow, newCol);
             }
         }
+        /// <summary>
+        /// The rig shown for a (possibly stacked) enemy cell — a distinctive rig (ghost)
+        /// takes priority over the default goblin so a mixed stack surfaces the special
+        /// enemy (see <see cref="CellSprite.DominantEnemyRig"/>).
+        /// </summary>
+        private EnemyType? StackEnemyRig(int row, int col) =>
+            _enemyRigsAt[row, col] is { Count: > 0 } list ? CellSprite.DominantEnemyRig(list) : null;
         /// <summary>
         /// Marks the health pickup at the given 0-based cell as consumed — the icon
         /// disappears (mirrors <see cref="MarkKeyCollected"/> for <c>'H'</c> cells).
@@ -482,28 +505,16 @@ namespace Maze.Maui.App
             RefreshCellRuntime(row, col);
         }
         /// <summary>
-        /// Rebuilds a cell's content from its static type plus the current game
-        /// runtime state. Skips cells the player walker currently occupies — its
-        /// content is the walker sprite, which must not be clobbered.
+        /// Rebuilds a cell's content from its static type (and per-cell override) plus the
+        /// current game runtime state — the base cell is restored, then any live enemy and
+        /// the player walker are layered back over it by <see cref="ApplyGameRuntimeState"/>.
         /// </summary>
         private void RefreshCellRuntime(int row, int col)
         {
             MazeCellContent? content = GetCellContent(row + 1, col + 1);
             if (content is null) return;
-            bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == col;
-            if (_gameMode && _enemyAt[row, col] > 0)
-            {
-                // Enemy occupancy (with the player layered on top when present).
-                content.SetEnemyStack(_enemyAt[row, col], playerHere ? _walkerImage : null);
-                return;
-            }
-            if (playerHere)
-            {
-                // Player owns the cell and no enemies remain — keep the walker.
-                content.SetWalker(_walkerImage);
-                return;
-            }
-            content.Update(_cellTypes[row, col], _solutionDirections[row, col]);
+            content.Update(_cellTypes[row, col], _solutionDirections[row, col],
+                OverrideForRender(_cellTypes[row, col], row, col), showBadge: !_gameMode);
             ApplyGameRuntimeState(content, row, col);
         }
         /// <summary>
@@ -515,15 +526,10 @@ namespace Maze.Maui.App
         {
             if (row < 0 || col < 0 || row >= _keyCollected.GetLength(0) || col >= _keyCollected.GetLength(1)) return;
             _keyCollected[row, col] = true;
-            // Skip the in-place mutation when the walker is currently rendered
-            // on this cell — its Content is the walker GIF, and replacing it
-            // would hide the player. The next SetWalkerCell call (when the
-            // player moves off) rebuilds this cell via Update +
-            // ApplyGameRuntimeState, which honours the now-true _keyCollected
-            // and renders the cell as an empty passage.
-            if (_walkerRow - 1 == row && _walkerCol - 1 == col) return;
-            MazeCellContent? content = GetCellContent(row + 1, col + 1);
-            content?.Update(CellType.Empty, content.SolutionPathDirection);
+            // Rebuild the cell now (as with a collected health pickup) so the key
+            // disappears immediately. The player walker is layered back over the empty
+            // passage by ApplyGameRuntimeState, so refreshing no longer hides the player.
+            RefreshCellRuntime(row, col);
         }
         /// <summary>
         /// Updates the runtime visual state for the door at the given 0-based cell.
@@ -1166,14 +1172,9 @@ namespace Maze.Maui.App
             if (prevRow > 0 && (prevRow != row || prevCol != col))
                 RefreshCellRuntime(prevRow - 1, prevCol - 1);
 
-            // Render the new cell: an enemy-occupied cell layers the walker over the
-            // dimmed enemy (plus a count chip for a stack); otherwise just the walker.
-            MazeCellContent? content = GetCellContent(row, col);
-            if (content is null) return;
-            if (_gameMode && _enemyAt[row - 1, col - 1] > 0)
-                content.SetEnemyStack(_enemyAt[row - 1, col - 1], walkerImage);
-            else
-                content.SetWalker(walkerImage);
+            // Render the new cell: the walker is layered over the cell's base content
+            // (and any live enemy already standing on it).
+            RefreshCellRuntime(row - 1, col - 1);
         }
         /// <summary>
         /// Clears the walker visual and restores the cell to its normal state
@@ -1182,14 +1183,12 @@ namespace Maze.Maui.App
         {
             if (_walkerRow > 0)
             {
-                MazeCellContent? content = GetCellContent(_walkerRow, _walkerCol);
-                if (content != null)
-                {
-                    content.Update(_cellTypes[_walkerRow - 1, _walkerCol - 1], _solutionDirections[_walkerRow - 1, _walkerCol - 1]);
-                    ApplyGameRuntimeState(content, _walkerRow - 1, _walkerCol - 1);
-                }
+                int row = _walkerRow, col = _walkerCol;
+                // Clear the player position first so the cell rebuilds as "player no longer
+                // here"; RefreshCellRuntime then restores its base content (and override).
                 _walkerRow = -1;
                 _walkerCol = -1;
+                RefreshCellRuntime(row - 1, col - 1);
             }
         }
         /// <summary>
@@ -1810,50 +1809,31 @@ namespace Maze.Maui.App
             }
         }
         /// <summary>
-        /// Displays a walker GIF in this cell, overriding the normal cell content
+        /// Renders the live game entities over the cell's static base content: the base
+        /// cell sprite (e.g. a potion the enemy is standing on) shows through underneath,
+        /// then the live enemy sprite, then the player walker when the player shares the
+        /// cell (enemy dimmed behind it), and a dark-green count chip in the top-right
+        /// corner when two or more enemies occupy the cell. Mirrors the React 2D game,
+        /// which overlays entities on the cell rather than replacing it. The current
+        /// <c>cellType</c>/override already reflect the resolved game-mode base (spawn
+        /// markers and collected pickups have been reduced to an empty passage).
         /// </summary>
-        /// <param name="source">Image filename (e.g. "walker_down.gif")</param>
-        public void SetWalker(string source)
-        {
-            if (Content is Image img)
-            {
-                img.Source = source;
-                // Walker is always rendered at full opacity even if the cell's
-                // game-mode runtime state had dimmed/hidden its prior icon
-                // (a collected key or an opening/open door). Without this, the
-                // walker inherits the hidden K / open D cell's Opacity=0 and
-                // becomes invisible.
-                img.Opacity = 1.0;
-                img.IsAnimationPlaying = true;
-            }
-            else
-                Content = new Image
-                {
-                    Source = source,
-                    Aspect = Aspect.AspectFit,
-                    HorizontalOptions = LayoutOptions.Fill,
-                    VerticalOptions = LayoutOptions.Fill,
-                    IsAnimationPlaying = true
-                };
-            Content.BackgroundColor = Colors.Transparent;
-        }
-        /// <summary>
-        /// Renders a stacked game cell: the live enemy sprite, the player walker on
-        /// top when the player shares the cell (enemy dimmed behind it), and a
-        /// dark-green count chip in the top-right corner when two or more enemies
-        /// occupy the cell. Mirrors the React 2D game's enemy-stack rendering.
-        /// </summary>
-        /// <param name="enemyCount">Number of enemies on the cell (assumed &gt;= 1).</param>
+        /// <param name="enemyCount">Number of enemies on the cell.</param>
         /// <param name="walkerImage">Player walker GIF source when the player is here; otherwise null.</param>
-        public void SetEnemyStack(int enemyCount, string? walkerImage)
+        /// <param name="enemyType">The enemy's visual rig (ghost vs the default goblin), or null.</param>
+        public void SetEntityOverlay(int enemyCount, string? walkerImage, EnemyType? enemyType = null)
         {
-            cellType = CellType.Enemy;
             var layers = new Microsoft.Maui.Controls.Grid { BackgroundColor = Colors.Transparent };
+            // Base cell sprite underneath the entities (an empty passage adds no layer).
+            if (cellType != CellType.Empty)
+            {
+                layers.Add(BuildIconContent());
+            }
             if (enemyCount > 0)
             {
                 layers.Add(new Image
                 {
-                    Source = "enemy.png",
+                    Source = CellSprite.VariantImageName(new EnemyCellEntity { EnemyType = enemyType }) ?? "enemy.png",
                     Aspect = Aspect.AspectFit,
                     HorizontalOptions = LayoutOptions.Fill,
                     VerticalOptions = LayoutOptions.Fill,

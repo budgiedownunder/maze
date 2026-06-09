@@ -429,8 +429,35 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             bool keepTicking = vm.Tick(1500.0);
 
-            grid.Verify(g => g.SetEnemyCell(0, 1, 0, 0, 0), Times.Once);
+            grid.Verify(g => g.SetEnemyCell(0, 1, 0, 0, 0, It.IsAny<EnemyType?>()), Times.Once);
             Assert.True(keepTicking); // an enemy still exists → keep ticking
+        }
+
+        [Fact]
+        public void Tick_EnemyMovedEvents_PassEachEnemysOwnRig()
+        {
+            var (vm, _, grid) = BuildVm();
+            MazeGame stub = InstallGamePreconfigured(vm, grid.Object, ItemWithDefinition(), s =>
+            {
+                s.Hp = 3;
+                s.MaxHp = 3;
+                s.Enemies = new List<EnemyInfo>
+                {
+                    new EnemyInfo(0, 1, 0, EnemyType.Ghost),
+                    new EnemyInfo(0, 2, 1), // default rig
+                };
+            });
+            // Both enemies advance — each must report its own rig regardless of the others.
+            stub.NextTickEvents = new[]
+            {
+                new GameEvent(GameEventKind.EnemyMoved, 0, 0, 0),
+                new GameEvent(GameEventKind.EnemyMoved, 0, 3, 1),
+            };
+
+            vm.Tick(1500.0);
+
+            grid.Verify(g => g.SetEnemyCell(0, 1, 0, 0, 0, EnemyType.Ghost), Times.Once);
+            grid.Verify(g => g.SetEnemyCell(0, 2, 0, 3, 1, null), Times.Once);
         }
 
         [Fact]

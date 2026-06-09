@@ -49,5 +49,17 @@ namespace Maze.Maui.App.Tests.Controls
             Assert.Null(CellSprite.VariantImageName(new KeyCellEntity { KeyHolder = KeyHolderStyle.Chest }));
             Assert.Null(CellSprite.VariantImageName(new DoorCellEntity { DoorStyle = DoorStyle.Portcullis }));
         }
+
+        [Fact]
+        public void Dominant_rig_prefers_a_distinctive_sprite_over_the_default()
+        {
+            // A ghost in the stack wins regardless of order; an all-default stack keeps the
+            // first rig; an empty stack has no rig.
+            Assert.Equal(EnemyType.Ghost, CellSprite.DominantEnemyRig(new EnemyType?[] { EnemyType.Goblin, EnemyType.Ghost }));
+            Assert.Equal(EnemyType.Ghost, CellSprite.DominantEnemyRig(new EnemyType?[] { EnemyType.Ghost, EnemyType.Goblin }));
+            Assert.Equal(EnemyType.Ghost, CellSprite.DominantEnemyRig(new EnemyType?[] { null, EnemyType.Ghost }));
+            Assert.Equal(EnemyType.Goblin, CellSprite.DominantEnemyRig(new EnemyType?[] { EnemyType.Goblin, EnemyType.Goblin }));
+            Assert.Null(CellSprite.DominantEnemyRig([]));
+        }
     }
 }
