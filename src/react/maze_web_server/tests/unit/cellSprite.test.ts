@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cellSprite } from '../../src/utils/cellSprite'
+import { cellSprite, enemyRigHasSprite } from '../../src/utils/cellSprite'
 
 describe('cellSprite', () => {
   it('returns null for an empty or unknown cell', () => {
@@ -52,5 +52,13 @@ describe('cellSprite', () => {
   it('returns the generic wall for a solid-texture override (texture is a 3D concern)', () => {
     expect(cellSprite('W', { type: 'W', wallType: 'brick' })?.src).toBe('/images/maze/wall.png')
     expect(cellSprite('W', { type: 'W', wallType: 'cobblestone' })?.src).toBe('/images/maze/wall.png')
+  })
+})
+
+describe('enemyRigHasSprite', () => {
+  it('is true only for a rig with a distinct 2D sprite (ghost)', () => {
+    expect(enemyRigHasSprite('ghost')).toBe(true)
+    expect(enemyRigHasSprite('goblin')).toBe(false)
+    expect(enemyRigHasSprite(undefined)).toBe(false)
   })
 })

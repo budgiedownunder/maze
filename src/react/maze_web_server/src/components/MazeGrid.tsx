@@ -3,7 +3,7 @@ import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
 import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
-import { cellSprite } from '../utils/cellSprite'
+import { cellSprite, enemyRigHasSprite } from '../utils/cellSprite'
 import type { CellEntity, EnemyType } from '../types/cellEntities'
 
 export const CELL_SIZE = 32
@@ -178,14 +178,18 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Per-cell live enemy rig, so the overlay sprite reflects a `enemyType` override
-    // (e.g. ghost). First enemy wins on a shared cell; `undefined` = default rig. The
-    // override rides the live enemy (it moves), not the static spawn cell.
+    // (e.g. ghost). On a cell shared by differing rigs, a distinctive rig (ghost) takes
+    // priority over the default goblin so the special enemy is surfaced; otherwise the
+    // first enemy wins. `undefined` = default rig. The override rides the live enemy (it
+    // moves), not the static spawn cell.
     const enemyTypeByCell = useMemo(() => {
       if (!game) return null
       const types = new Map<string, EnemyType | undefined>()
       for (const e of getEnemies(game)) {
         const key = `${e.row},${e.col}`
-        if (!types.has(key)) types.set(key, e.enemyType)
+        if (!types.has(key) || (enemyRigHasSprite(e.enemyType) && !enemyRigHasSprite(types.get(key)))) {
+          types.set(key, e.enemyType)
+        }
       }
       return types
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps

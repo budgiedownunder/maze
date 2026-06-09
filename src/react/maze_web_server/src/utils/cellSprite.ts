@@ -59,3 +59,12 @@ export function cellSprite(char: string, entity?: CellEntity): CellImage | null 
   }
   return base
 }
+
+/**
+ * Whether an enemy rig has a distinct 2D sprite (e.g. ghost) rather than rendering the
+ * default goblin. Used so a cell shared by enemies of differing rigs surfaces the
+ * distinctive one.
+ */
+export function enemyRigHasSprite(enemyType: EnemyType | undefined): boolean {
+  return enemyType !== undefined && ENEMY_VARIANT_SPRITES[enemyType] !== undefined
+}
