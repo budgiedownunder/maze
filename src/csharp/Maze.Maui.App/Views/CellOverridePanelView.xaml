@@ -5,7 +5,8 @@
              x:Class="Maze.Maui.App.Views.CellOverridePanelView"
              x:DataType="viewmodel:CellOverridePanelViewModel"
              IsVisible="{Binding IsVisible}">
-    <Border Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+    <ScrollView x:Name="PanelScroll" VerticalOptions="Fill">
+        <Border Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
             StrokeShape="RoundRectangle 8"
             Padding="12"
             Margin="6"
@@ -76,5 +77,6 @@
             <Button Text="{Binding ApplyToAllText}" Command="{Binding ApplyToAllCommand}" IsVisible="{Binding IsMultiCell}" HorizontalOptions="Start" Margin="0,4,0,0" />
             <Button Text="Reset to defaults" Command="{Binding ResetCommand}" HorizontalOptions="Start" Margin="0,4,0,0" />
         </VerticalStackLayout>
-    </Border>
+        </Border>
+    </ScrollView>
 </ContentView>

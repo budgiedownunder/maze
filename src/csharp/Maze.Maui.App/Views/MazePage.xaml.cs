@@ -185,11 +185,12 @@ namespace Maze.Maui.App.Views
             // implements ICellOverrideEditor) and seeds from the current selection.
             _overridePanelViewModel = new CellOverridePanelViewModel(MazeGrid);
             OverridePanel.BindingContext = _overridePanelViewModel;
-            // Size the panel responsively (fills up to a max, always left-aligned), and
-            // once the panel appears and shrinks the grid, keep the selected cell in view.
+            // Size the panel to the device (capped + left-aligned on desktop, full-width +
+            // height-capped/scrollable on phone/tablet), and once the panel appears and
+            // shrinks the grid, keep the selected cell in view.
             SizeChanged += OnPageSizeChanged;
             MazeGrid.SizeChanged += OnMazeGridSizeChanged;
-            UpdateOverridePanelWidth();
+            UpdateOverridePanelLayout();
 
             MazeGrid.ActivateCell(1, 1, false);
 
@@ -903,25 +904,33 @@ namespace Maze.Maui.App.Views
         /// Keeps the override panel filling the width up to a maximum (so it spans the
         /// width on mobile but isn't excessively wide on desktop), always left-aligned.
         /// </summary>
-        private void OnPageSizeChanged(object? sender, EventArgs e) => UpdateOverridePanelWidth();
+        private void OnPageSizeChanged(object? sender, EventArgs e) => UpdateOverridePanelLayout();
         /// <summary>
-        /// Sets the override panel's width to the available page width (less its margin),
-        /// capped at a maximum.
+        /// Sizes the override panel for the current device: desktop is capped + left-aligned;
+        /// phone/tablet fills the width. The height is capped (full page height on desktop so
+        /// it never scrolls; half the screen on mobile) — the panel sizes to content under the
+        /// cap and its content (in a ScrollView) scrolls once it exceeds it, e.g. in landscape.
         /// </summary>
-        private void UpdateOverridePanelWidth()
+        private void UpdateOverridePanelLayout()
         {
             const double maxWidth = 480;
-            const double margin = 12;
-            if (Width <= 0)
+            if (Width <= 0 || Height <= 0)
             {
                 return;
             }
-            double target = Math.Max(0, Math.Min(Width - margin, maxWidth));
-            // Only assign when it actually changes — re-setting the same width would
-            // invalidate the layout needlessly (costly on a large grid).
-            if (Math.Abs(OverridePanel.WidthRequest - target) > 0.5)
+            // The discriminator is the device class, not the width — a landscape phone is
+            // wide but short, so a width breakpoint would wrongly treat it as desktop.
+            if (DeviceInfo.Idiom == DeviceIdiom.Desktop)
             {
-                OverridePanel.WidthRequest = target;
+                OverridePanel.HorizontalOptions = LayoutOptions.Start;
+                OverridePanel.WidthRequest = Math.Min(Width, maxWidth);
+                OverridePanel.MaximumHeightRequest = Height;
+            }
+            else
+            {
+                OverridePanel.HorizontalOptions = LayoutOptions.Fill;
+                OverridePanel.WidthRequest = -1;
+                OverridePanel.MaximumHeightRequest = Height * 0.4;
             }
         }
         /// <summary>
