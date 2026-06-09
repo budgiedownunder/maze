@@ -12,10 +12,11 @@ At the moment, it allows the user to:
 - Change or set their password (set-initial flow for OAuth-only users)
 - Delete their account
 - Load, edit, delete, rename and duplicate mazes
-- Construct mazes containing start, finish and wall cells
+- Construct mazes containing start, finish, wall, enemy, health, door and key cells
+- Tune individual cell characteristics via a per-cell override panel — an enemy's type/damage/move interval, a health pickup's style/heal amount, a key holder or door style, or a wall's type (a solid texture or a water / lava / iron-fence skin)
 - Generate mazes automatically using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly, with configurable dimensions, start/finish positions and minimum spine length
 - Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
-- Play mazes and animate walk throughs (2D)
+- Play mazes and animate walk throughs (2D), with variant sprites for overridden cells (ghost enemies, potion pickups, water/lava/iron-fence walls)
 - Play mazes in first-person **3D**, powered by a [`Bevy`](https://bevyengine.org/) WebAssembly game ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md)) embedded in a `WebView`
 
 It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  

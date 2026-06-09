@@ -7,6 +7,7 @@ The `Maze.Api` .NET assembly is written in `C#` and provides clean .NET classes 
 The assembly supports:
 
 - Creating and editing mazes (cells, walls, start/finish positions, row/column insertion and deletion)
+- Reading and writing per-cell override characteristics for an enemy (type / damage / move interval), a health pickup (style / heal amount), a key holder, a door style, or a wall type (a solid texture or a water / lava / iron-fence skin)
 - Generating mazes automatically via `Maze.Generate()` with configurable dimensions, seed, start/finish positions, minimum spine length, and generation algorithm
 - Solving mazes via `Maze.Solve()`
 - Serialising and deserialising mazes to/from JSON
