@@ -80,7 +80,7 @@ pub struct GeneratorOptions {
     /// substrate. Each enemy lands on a cell that is currently `' '` (so
     /// never on `S` / `F` / `K` / `D` / another enemy / a health pickup) and
     /// at Manhattan distance > 1 from `S` (so the player has at least one
-    /// safe step away from start). Clamped to [`MAX_ENEMY_COUNT`] and to the
+    /// safe step away from start). Clamped to `MAX_ENEMY_COUNT` and to the
     /// available eligible cells. `None` or `Some(0)` (the default) places
     /// none.
     #[serde(default)]
@@ -88,7 +88,7 @@ pub struct GeneratorOptions {
     /// Number of **health pickups** (`'H'` cells) to auto-place on passable
     /// cells of the generated maze. Same placement rules and exclusions as
     /// [`Self::enemy_count`] — placed in a separate pass after enemies, so
-    /// the two never collide. Clamped to [`MAX_HEALTH_COUNT`] and to the
+    /// the two never collide. Clamped to `MAX_HEALTH_COUNT` and to the
     /// available eligible cells. `None` or `Some(0)` (the default) places
     /// none.
     #[serde(default)]
