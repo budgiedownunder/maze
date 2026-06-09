@@ -46,6 +46,12 @@ namespace Maze.Maui.App.Views
         private static readonly string[] HealthStyleLabels = { "Heart", "Potion" };
         private static readonly string[] HealthStyleValues = { "heart", "potion" };
 
+        // The user's perimeter-walls preference. Enclosed skies (dungeon / chamber) always
+        // wall the perimeter, so the checkbox is forced on + disabled for them while this
+        // preference is preserved and re-applied when an open sky is chosen again — matching
+        // the React modal, which forces the box visually but still emits the stored value.
+        private bool _perimeterWallsPreference = true;
+
         /// <summary>
         /// Constructor. Pre-fills the form from the previously-saved settings.
         /// </summary>
@@ -80,11 +86,19 @@ namespace Maze.Maui.App.Views
             DeadEndObjectsCheck.IsChecked = settings.DeadEndObjects;
             WallDecorationsCheck.IsChecked = settings.WallDecorations;
             FloorAccentsCheck.IsChecked = settings.FloorAccents;
+            _perimeterWallsPreference = settings.PerimeterWalls;
             TimerEntry.Text = settings.TimerSeconds.ToString(CultureInfo.InvariantCulture);
 
             // Apply the initial enabled/disabled state for wall texture +
             // wall tint based on the quadrant-variation checkbox.
             UpdateWallControlsEnabled();
+
+            // Couple perimeter walls to the sky (enclosed skies force it on). Wired after
+            // the prefill above so the initial picker/preference assignments don't fire the
+            // handlers; then apply the initial perimeter-walls state.
+            SkyPicker.SelectedIndexChanged += OnSkyTypeChanged;
+            PerimeterWallsCheck.CheckedChanged += OnPerimeterWallsChanged;
+            UpdatePerimeterWallsState();
 
             // Start on the Scene tab (its panel is visible in XAML; this sets
             // the matching tab-button highlight).
@@ -248,6 +262,36 @@ namespace Maze.Maui.App.Views
         }
 
         /// <summary>
+        /// Fires when the Sky picker changes — re-applies the perimeter-walls coupling
+        /// (enclosed skies always wall the perimeter).
+        /// </summary>
+        private void OnSkyTypeChanged(object? sender, EventArgs e) => UpdatePerimeterWallsState();
+
+        /// <summary>
+        /// Captures a genuine user toggle of the perimeter-walls checkbox. The control is
+        /// disabled (and its checked state forced) under an enclosed sky, so we only record
+        /// the preference when it's enabled — keeping it across sky changes.
+        /// </summary>
+        private void OnPerimeterWallsChanged(object sender, CheckedChangedEventArgs e)
+        {
+            if (PerimeterWallsCheck.IsEnabled)
+            {
+                _perimeterWallsPreference = PerimeterWallsCheck.IsChecked;
+            }
+        }
+
+        private void UpdatePerimeterWallsState()
+        {
+            bool skyEnclosed = SkyPicker.SelectedIndex >= 0
+                && SkyTypeValues[SkyPicker.SelectedIndex] is "dungeon" or "chamber";
+            // Set Enabled before Checked so OnPerimeterWallsChanged sees the right state.
+            PerimeterWallsCheck.IsEnabled = !skyEnclosed;
+            // Enclosed skies always wall the perimeter — show it on; otherwise reflect the
+            // stored preference.
+            PerimeterWallsCheck.IsChecked = skyEnclosed || _perimeterWallsPreference;
+        }
+
+        /// <summary>
         /// Handles the Play button click. Validates the time limit (must be
         /// &gt; 0) and on success closes the popup with the chosen settings,
         /// having also persisted them via
@@ -273,6 +317,9 @@ namespace Maze.Maui.App.Views
             {
                 SkyType = sky,
                 WallType = wall,
+                // Emit the stored preference, not the (possibly sky-forced) checkbox — the
+                // game walls an enclosed-sky perimeter regardless, matching the React modal.
+                PerimeterWalls = _perimeterWallsPreference,
                 DoorStyle = doorStyle,
                 KeyHolder = keyHolder,
                 EnemyType = enemyType,

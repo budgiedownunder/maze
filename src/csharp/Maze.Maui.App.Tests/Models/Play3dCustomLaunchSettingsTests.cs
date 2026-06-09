@@ -20,6 +20,7 @@ namespace Maze.Maui.App.Tests.Models
             var s = new Play3dCustomLaunchSettings();
             Assert.Equal("night", s.SkyType);
             Assert.Equal("brick", s.WallType);
+            Assert.True(s.PerimeterWalls);
             Assert.Equal("swing", s.DoorStyle);
             Assert.Equal("pedestal", s.KeyHolder);
             Assert.Equal("goblin", s.EnemyType);
@@ -39,6 +40,7 @@ namespace Maze.Maui.App.Tests.Models
             {
                 SkyType = "day",
                 WallType = "dressed_stone",
+                PerimeterWalls = false,
                 DoorStyle = "portcullis",
                 KeyHolder = "chest",
                 EnemyType = "ghost",
@@ -59,6 +61,7 @@ namespace Maze.Maui.App.Tests.Models
             Assert.Contains("healthStyle=potion", q);
             Assert.Contains("skyType=day", q);
             Assert.Contains("wallType=dressed_stone", q);
+            Assert.Contains("perimeterWalls=0", q);
             Assert.Contains("wallTint=1", q);
             Assert.Contains("wallMaterialVariation=0", q);
             Assert.Contains("deadEndObjects=0", q);

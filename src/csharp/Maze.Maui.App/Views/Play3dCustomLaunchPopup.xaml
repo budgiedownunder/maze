@@ -136,6 +136,12 @@
                     <CheckBox x:Name="WallTintCheck"/>
                     <Label x:Name="WallTintLabel" Text="Varied wall tints" VerticalOptions="Center"/>
                 </HorizontalStackLayout>
+
+                <!-- Perimeter walls (forced on for enclosed skies) -->
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox x:Name="PerimeterWallsCheck"/>
+                    <Label Text="Perimeter walls" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
             </VerticalStackLayout>
 
             <!-- Objects tab: object styles. Inactive tabs stay measured (Opacity 0

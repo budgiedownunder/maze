@@ -28,6 +28,10 @@ namespace Maze.Maui.App.Models
         /// <summary>Wall texture wire token (lowercase / snake_case).</summary>
         public string WallType { get; set; } = "brick";
 
+        /// <summary>Whether the maze perimeter is walled at the grid edge under an open
+        /// sky. Enclosed skies (dungeon / chamber) always wall it regardless.</summary>
+        public bool PerimeterWalls { get; set; } = true;
+
         /// <summary>Door style wire token (lowercase / snake_case) — selects the
         /// 3D door rig (swing / slide / portcullis / dissolve).</summary>
         public string DoorStyle { get; set; } = "swing";
@@ -77,6 +81,7 @@ namespace Maze.Maui.App.Models
             {
                 "skyType=" + Uri.EscapeDataString(SkyType),
                 "wallType=" + Uri.EscapeDataString(WallType),
+                "perimeterWalls=" + (PerimeterWalls ? "1" : "0"),
                 "doorStyle=" + Uri.EscapeDataString(DoorStyle),
                 "keyHolder=" + Uri.EscapeDataString(KeyHolder),
                 "enemyType=" + Uri.EscapeDataString(EnemyType),
