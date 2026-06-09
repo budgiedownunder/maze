@@ -588,14 +588,6 @@ namespace Maze.Api
             return json;
         }
 
-        // Omit unset (null) override fields on write so the emitted entity matches
-        // the canonical wire form (e.g. {"type":"E","damage":2}); the Rust side
-        // round-trips it. Enum wire strings are mapped by the per-enum converters
-        // on CellEntityInfo.
-        private static readonly System.Text.Json.JsonSerializerOptions _cellEntityJsonOptions = new()
-        {
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        };
         /// <summary>
         /// Returns the per-cell entity override at the given location, or <c>null</c> when the cell carries none.
         /// </summary>
@@ -607,7 +599,7 @@ namespace Maze.Api
             string? json = Interop.MazeGetCellEntity(_mazePtr, row, col);
             return json == null
                 ? null
-                : System.Text.Json.JsonSerializer.Deserialize<CellEntityInfo>(json, _cellEntityJsonOptions);
+                : System.Text.Json.JsonSerializer.Deserialize(json, CellEntityJsonContext.Default.CellEntityInfo);
         }
         /// <summary>
         /// Sets the per-cell entity override at the given location, replacing any existing one.
@@ -619,7 +611,7 @@ namespace Maze.Api
         /// <param name="entity">The entity override to set</param>
         public void SetCellEntity(uint row, uint col, CellEntityInfo entity)
         {
-            string json = System.Text.Json.JsonSerializer.Serialize(entity, _cellEntityJsonOptions);
+            string json = System.Text.Json.JsonSerializer.Serialize(entity, CellEntityJsonContext.Default.CellEntityInfo);
             Interop.MazeSetCellEntity(_mazePtr, row, col, json);
         }
         /// <summary>

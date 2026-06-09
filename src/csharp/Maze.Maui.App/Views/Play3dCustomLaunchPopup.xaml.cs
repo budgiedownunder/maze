@@ -272,7 +272,7 @@ namespace Maze.Maui.App.Views
         /// disabled (and its checked state forced) under an enclosed sky, so we only record
         /// the preference when it's enabled — keeping it across sky changes.
         /// </summary>
-        private void OnPerimeterWallsChanged(object sender, CheckedChangedEventArgs e)
+        private void OnPerimeterWallsChanged(object? sender, CheckedChangedEventArgs e)
         {
             if (PerimeterWallsCheck.IsEnabled)
             {

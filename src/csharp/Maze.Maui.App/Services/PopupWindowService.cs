@@ -49,9 +49,10 @@ namespace Maze.Maui.App.Services
             return result.Result;
         }
         /// <summary>
-        /// Displays a prompt to the user as a popup window with the intent to capture a single string value, together with `accept` and `cancel` buttons
+        /// Displays the game result (win or loss) to the user as a popup window.
         /// </summary>
-        /// <param name="message">Message</param>
+        /// <param name="message">Result message</param>
+        /// <param name="won">Whether the player won</param>
         /// <returns>A task that completes when the popup is dismissed</returns>
         public async Task<bool> ShowGameResult(string message, bool won)
         {

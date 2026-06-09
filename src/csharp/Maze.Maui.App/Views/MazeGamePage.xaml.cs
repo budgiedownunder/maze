@@ -218,7 +218,7 @@ namespace Maze.Maui.App.Views
         {
             DamageFlashOverlay.CancelAnimations();
             DamageFlashOverlay.Opacity = 0.4;
-            DamageFlashOverlay.FadeTo(0, 300);
+            _ = DamageFlashOverlay.FadeToAsync(0, 300);
         }
 
         private IDispatcherTimer CreateTickTimer()
