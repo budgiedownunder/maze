@@ -391,9 +391,10 @@ export function MazePage() {
   }
 
   function handlePlayClick(gameType: GameType) {
-    if (mazeId && !isDirty) {
+    const hasUnsavedEdits = isDirty || gameSettingsDirty
+    if (mazeId && !hasUnsavedEdits) {
       void playMaze({ id: mazeId, name: mazeName, definition: { grid } }, gameType)
-    } else if (mazeId && isDirty) {
+    } else if (mazeId && hasUnsavedEdits) {
       setPendingPlayGameType(gameType)
       setShowPlayDirtyConfirm(true)
     } else {
@@ -630,7 +631,7 @@ export function MazePage() {
         <MazeGameSettingsModal
           mazeName={mazeName}
           title={mazeName ? `Game settings — ${mazeName}` : 'Game settings'}
-          submitLabel="Save"
+          submitLabel="Apply"
           initialSettings={normalizeMazeGameSettings(gameSettings ?? {})}
           onCancel={() => setShowSettingsModal(false)}
           onSubmit={s => { setGameSettings(s); setGameSettingsDirty(true); setShowSettingsModal(false) }}

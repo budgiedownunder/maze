@@ -1225,9 +1225,9 @@ test('editing game settings marks the maze dirty and the maze save succeeds', as
   const dialog = page.getByRole('dialog', { name: /game settings/i })
   await expect(dialog).toBeVisible()
 
-  // Change a value and save the settings — the modal closes.
+  // Change a value and apply the settings — the modal closes.
   await dialog.getByLabel(/sky/i).selectOption('day')
-  await dialog.getByRole('button', { name: 'Save' }).click()
+  await dialog.getByRole('button', { name: 'Apply' }).click()
   await expect(dialog).toBeHidden()
 
   // The settings edit marked the maze dirty → the toolbar Save is now enabled,

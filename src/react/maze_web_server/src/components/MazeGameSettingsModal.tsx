@@ -28,8 +28,8 @@ interface Props {
   // built-in defaults when omitted.
   initialSettings?: MazeGameSettings
   // Dialog heading and submit-button label, so the same modal serves both the
-  // per-maze settings editor ("Save") and the one-off Custom Run launch
-  // ("Play", the default).
+  // per-maze settings editor ("Apply" — the maze's own Save persists it) and
+  // the one-off Custom Run launch ("Play", the default).
   title?: string
   submitLabel?: string
   onSubmit: (settings: MazeGameSettings) => void

@@ -228,13 +228,13 @@ describe('MazeGameSettingsModal', () => {
       <MazeGameSettingsModal
         mazeName="My Maze"
         title="Game settings — My Maze"
-        submitLabel="Save"
+        submitLabel="Apply"
         onCancel={() => {}}
         onSubmit={() => {}}
       />,
     )
     expect(screen.getByRole('heading', { name: /game settings — my maze/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /apply/i })).toBeInTheDocument()
     // The default "Play" label is absent in editor mode.
     expect(screen.queryByRole('button', { name: /^play$/i })).toBeNull()
   })

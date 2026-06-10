@@ -1036,6 +1036,18 @@ describe('MazePage play', () => {
     expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toHaveTextContent('Save and play?')
   })
 
+  it('settings-only change prompts to save before playing (grid unchanged)', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Edit the game settings (not the grid) via the Settings toolbar button.
+    await userEvent.click(screen.getByRole('button', { name: 'Game settings' }))
+    const settings = await screen.findByRole('dialog', { name: /game settings/i })
+    await userEvent.selectOptions(within(settings).getByLabelText(/sky/i), 'day')
+    await userEvent.click(within(settings).getByRole('button', { name: 'Apply' }))
+    // The grid is unchanged, but the settings edit is unsaved → Play prompts.
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument()
+  })
+
   it('dirty maze: Cancel on confirm modal closes it without navigating', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByLabelText('Cell 1,1'))
