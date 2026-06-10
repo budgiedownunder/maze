@@ -4,12 +4,14 @@ import { HamburgerMenu } from '../components/HamburgerMenu'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
+import { Play3dLaunchChooser } from '../components/Play3dLaunchChooser'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
 import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
+import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
 import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
 
@@ -36,7 +38,10 @@ export function MazesPage() {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [isDuplicating, setIsDuplicating] = useState(false)
 
+  // Play-3D launch chooser (Run / Custom Run / Cancel); `maze3dCustom` is the
+  // one-off Custom-Run settings modal, reached from the chooser.
   const [maze3dLaunch, setMaze3dLaunch] = useState<Maze | null>(null)
+  const [maze3dCustom, setMaze3dCustom] = useState<Maze | null>(null)
 
   const { play, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
     usePlayMaze({ onLaunch3d: setMaze3dLaunch })
@@ -166,10 +171,27 @@ export function MazesPage() {
         />
       )}
       {maze3dLaunch && (
-        <MazeGameSettingsModal
+        <Play3dLaunchChooser
           mazeName={maze3dLaunch.name}
+          onRun={() => {
+            const m = maze3dLaunch
+            setMaze3dLaunch(null)
+            launchPlay3dWithSettings(m.id, normalizeMazeGameSettings(m.game_settings ?? {}))
+          }}
+          onCustomRun={() => { setMaze3dCustom(maze3dLaunch); setMaze3dLaunch(null) }}
           onCancel={() => setMaze3dLaunch(null)}
-          onSubmit={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
+        />
+      )}
+      {maze3dCustom && (
+        <MazeGameSettingsModal
+          mazeName={maze3dCustom.name}
+          initialSettings={normalizeMazeGameSettings(maze3dCustom.game_settings ?? {})}
+          onCancel={() => { setMaze3dLaunch(maze3dCustom); setMaze3dCustom(null) }}
+          onSubmit={settings => {
+            const id = maze3dCustom.id
+            setMaze3dCustom(null)
+            launchPlay3dWithSettings(id, settings)
+          }}
         />
       )}
       <header className="app-header">

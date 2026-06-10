@@ -5,7 +5,7 @@ import { MazeGameSettingsModal } from './MazeGameSettingsModal'
 import {
   MAZE_GAME_SETTINGS_STORAGE_KEY,
   MAZE_GAME_SETTINGS_DEFAULTS,
-  loadMazeGameSettings,
+  normalizeMazeGameSettings,
   saveMazeGameSettings,
   type MazeGameSettings,
 } from '../utils/mazeGameSettings'
@@ -144,7 +144,7 @@ describe('MazeGameSettingsModal', () => {
     expect(screen.getByRole('button', { name: /play/i })).toBeVisible()
   })
 
-  it('pre-fills from localStorage when settings have been saved before', () => {
+  it('pre-fills all fields from initialSettings', () => {
     const stored: MazeGameSettings = {
       skyType: 'day',
       wallType: 'wood',
@@ -160,8 +160,14 @@ describe('MazeGameSettingsModal', () => {
       floorAccents: true,
       timerSeconds: 180,
     }
-    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify(stored))
-    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onSubmit={() => {}} />)
+    render(
+      <MazeGameSettingsModal
+        mazeName="My Maze"
+        initialSettings={stored}
+        onCancel={() => {}}
+        onSubmit={() => {}}
+      />,
+    )
     expect((screen.getByLabelText(/sky/i) as HTMLSelectElement).value).toBe('day')
     expect((screen.getByLabelText(/wall texture/i) as HTMLSelectElement).value).toBe('wood')
     // Open sky (day) + stored false → the perimeter-walls box reflects it.
@@ -217,32 +223,6 @@ describe('MazeGameSettingsModal', () => {
     expect(settings.healthStyle).toBe('potion')
   })
 
-  it('seeds from initialSettings (the maze’s saved settings) over localStorage', () => {
-    // localStorage holds one value; an explicit initialSettings must win — this
-    // is how the editor seeds the modal from the maze rather than the device.
-    localStorage.setItem(
-      MAZE_GAME_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ ...MAZE_GAME_SETTINGS_DEFAULTS, skyType: 'day' }),
-    )
-    const initialSettings: MazeGameSettings = {
-      ...MAZE_GAME_SETTINGS_DEFAULTS,
-      skyType: 'sunset',
-      wallType: 'wood',
-      timerSeconds: 200,
-    }
-    render(
-      <MazeGameSettingsModal
-        mazeName="My Maze"
-        initialSettings={initialSettings}
-        onCancel={() => {}}
-        onSubmit={() => {}}
-      />,
-    )
-    expect((screen.getByLabelText(/sky/i) as HTMLSelectElement).value).toBe('sunset')
-    expect((screen.getByLabelText(/wall texture/i) as HTMLSelectElement).value).toBe('wood')
-    expect((screen.getByLabelText(/time limit/i) as HTMLInputElement).value).toBe('200')
-  })
-
   it('renders a custom title and submit label (settings-editor mode)', () => {
     render(
       <MazeGameSettingsModal
@@ -260,41 +240,65 @@ describe('MazeGameSettingsModal', () => {
   })
 })
 
-describe('loadMazeGameSettings', () => {
-  beforeEach(() => {
-    localStorage.clear()
+describe('normalizeMazeGameSettings', () => {
+  // Casts an untrusted/partial bag (as if from a persisted maze or storage)
+  // into the Partial the validator accepts, without TypeScript narrowing the
+  // deliberately-invalid values away.
+  const partial = (o: Record<string, unknown>): Partial<MazeGameSettings> =>
+    o as Partial<MazeGameSettings>
+
+  it('returns the defaults for an empty object', () => {
+    expect(normalizeMazeGameSettings({})).toEqual(MAZE_GAME_SETTINGS_DEFAULTS)
   })
 
-  it('returns the defaults when no setting is stored', () => {
-    expect(loadMazeGameSettings()).toEqual(MAZE_GAME_SETTINGS_DEFAULTS)
+  it('falls back to default skyType when the value is unknown', () => {
+    expect(normalizeMazeGameSettings(partial({ skyType: 'banana' })).skyType).toBe(
+      MAZE_GAME_SETTINGS_DEFAULTS.skyType,
+    )
   })
 
-  it('returns the defaults when stored value is malformed JSON', () => {
-    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, '{not json')
-    expect(loadMazeGameSettings()).toEqual(MAZE_GAME_SETTINGS_DEFAULTS)
+  it('falls back to default timerSeconds when the value is non-positive', () => {
+    expect(normalizeMazeGameSettings({ timerSeconds: -5 }).timerSeconds).toBe(
+      MAZE_GAME_SETTINGS_DEFAULTS.timerSeconds,
+    )
   })
 
-  it('falls back to default skyType when stored value is unknown', () => {
-    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ skyType: 'banana' }))
-    expect(loadMazeGameSettings().skyType).toBe(MAZE_GAME_SETTINGS_DEFAULTS.skyType)
+  it('falls back to default enemyType when the value is unknown', () => {
+    expect(normalizeMazeGameSettings(partial({ enemyType: 'dragon' })).enemyType).toBe(
+      MAZE_GAME_SETTINGS_DEFAULTS.enemyType,
+    )
   })
 
-  it('falls back to default timerSeconds when stored value is non-positive', () => {
-    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ timerSeconds: -5 }))
-    expect(loadMazeGameSettings().timerSeconds).toBe(MAZE_GAME_SETTINGS_DEFAULTS.timerSeconds)
+  it('falls back to default healthStyle when the value is unknown', () => {
+    expect(normalizeMazeGameSettings(partial({ healthStyle: 'shield' })).healthStyle).toBe(
+      MAZE_GAME_SETTINGS_DEFAULTS.healthStyle,
+    )
   })
 
-  it('falls back to default enemyType when stored value is unknown', () => {
-    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ enemyType: 'dragon' }))
-    expect(loadMazeGameSettings().enemyType).toBe(MAZE_GAME_SETTINGS_DEFAULTS.enemyType)
+  it('returns a complete valid object unchanged', () => {
+    const settings: MazeGameSettings = {
+      skyType: 'sunset',
+      wallType: 'cobblestone',
+      perimeterWalls: false,
+      doorStyle: 'slide',
+      keyHolder: 'chest',
+      enemyType: 'ghost',
+      healthStyle: 'potion',
+      wallTint: true,
+      wallMaterialVariation: true,
+      deadEndObjects: true,
+      wallDecorations: false,
+      floorAccents: true,
+      timerSeconds: 240,
+    }
+    expect(normalizeMazeGameSettings(settings)).toEqual(settings)
   })
+})
 
-  it('falls back to default healthStyle when stored value is unknown', () => {
-    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ healthStyle: 'shield' }))
-    expect(loadMazeGameSettings().healthStyle).toBe(MAZE_GAME_SETTINGS_DEFAULTS.healthStyle)
-  })
+describe('saveMazeGameSettings', () => {
+  beforeEach(() => localStorage.clear())
 
-  it('round-trips a save+load', () => {
+  it('writes the settings to localStorage as the launch handoff', () => {
     const settings: MazeGameSettings = {
       skyType: 'sunset',
       wallType: 'cobblestone',
@@ -311,6 +315,6 @@ describe('loadMazeGameSettings', () => {
       timerSeconds: 240,
     }
     saveMazeGameSettings(settings)
-    expect(loadMazeGameSettings()).toEqual(settings)
+    expect(JSON.parse(localStorage.getItem(MAZE_GAME_SETTINGS_STORAGE_KEY)!)).toEqual(settings)
   })
 })

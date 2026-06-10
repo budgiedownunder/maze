@@ -15,7 +15,7 @@ import type {
 import {
   SKY_TYPES,
   WALL_TYPES,
-  loadMazeGameSettings,
+  MAZE_GAME_SETTINGS_DEFAULTS,
   type MazeGameSettings,
   type SkyType,
   type WallType,
@@ -23,19 +23,20 @@ import {
 
 interface Props {
   mazeName: string
-  // Seed values for the form. Falls back to the user's last-used localStorage
-  // settings when omitted (the Play-3D launch path); the editor passes the maze's
-  // saved settings here.
+  // Seed values for the form — the maze's saved settings, passed by both the
+  // Settings editor and the launch chooser's "Custom Run". Falls back to the
+  // built-in defaults when omitted.
   initialSettings?: MazeGameSettings
   // Dialog heading and submit-button label, so the same modal serves both the
-  // Play-3D launch ("Play") and the per-maze settings editor ("Save").
+  // per-maze settings editor ("Save") and the one-off Custom Run launch
+  // ("Play", the default).
   title?: string
   submitLabel?: string
   onSubmit: (settings: MazeGameSettings) => void
   onCancel: () => void
 }
 
-// Tab identifiers for the launch settings, grouping the style/scene fields so
+// Tab identifiers for the game settings, grouping the style/scene fields so
 // the dialog reads as a few short panels rather than one long scrolling list.
 // The time limit, validation error and action buttons stay pinned below the
 // panels so a timer error is never hidden on an inactive tab.
@@ -48,7 +49,7 @@ const TAB_LABELS: Record<LaunchTab, string> = {
 }
 
 export function MazeGameSettingsModal({ mazeName, initialSettings, title, submitLabel, onSubmit, onCancel }: Props) {
-  const initial = initialSettings ?? loadMazeGameSettings()
+  const initial = initialSettings ?? MAZE_GAME_SETTINGS_DEFAULTS
   const dialogTitle = title ?? `Play 3D — ${mazeName}`
   const [activeTab, setActiveTab] = useState<LaunchTab>('scene')
   const [skyType, setSkyType] = useState<SkyType>(initial.skyType)

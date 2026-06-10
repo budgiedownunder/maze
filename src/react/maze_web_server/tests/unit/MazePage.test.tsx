@@ -1069,7 +1069,7 @@ describe('MazePage play', () => {
     expect(screen.getByRole('button', { name: 'Play in 3D' })).toBeInTheDocument()
   })
 
-  it('clean maze: Play in 3D opens the custom-launch modal, then Play navigates to /game/?id=...', async () => {
+  it('clean maze: Play in 3D opens the launch chooser, then Run navigates to /game/?id=...', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
 
     const locationStub = { href: '' }
@@ -1077,19 +1077,45 @@ describe('MazePage play', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
 
-    // Modal opens after the solvability check; no navigation yet.
+    // The launch chooser opens after the solvability check; no navigation yet.
     await waitFor(() =>
-      expect(screen.getByRole('dialog', { name: /Play 3D — customise launch/i })).toBeInTheDocument(),
+      expect(screen.getByRole('dialog', { name: /Play 3D —/i })).toBeInTheDocument(),
     )
     expect(mockSolveMaze).toHaveBeenCalled()
     expect(locationStub.href).toBe('')
 
-    // Clicking Play inside the modal triggers the navigation. Scope
-    // the query to the dialog so "Play" doesn't collide with the
-    // toolbar's "Play in 2D" / "Play in 3D" buttons.
-    const dialog = screen.getByRole('dialog', { name: /Play 3D — customise launch/i })
+    // Run launches with the maze's saved settings.
+    await userEvent.click(screen.getByRole('button', { name: /^Run$/ }))
+    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+  })
+
+  it('clean maze: Custom Run opens the settings modal, then Play navigates', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
+    await userEvent.click(await screen.findByRole('button', { name: /custom run/i }))
+
+    // The settings modal opens (play mode); clicking Play launches a one-off.
+    const dialog = await screen.findByRole('dialog', { name: /customise launch/i })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Play' }))
     await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+  })
+
+  it('Custom Run then Cancel returns to the launch chooser', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
+    await userEvent.click(await screen.findByRole('button', { name: /custom run/i }))
+
+    // Cancelling the settings modal returns to the chooser (Run is back),
+    // not to the editor.
+    const dialog = await screen.findByRole('dialog', { name: /customise launch/i })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('button', { name: /^Run$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /customise launch/i })).toBeNull()
   })
 
   it('dirty maze: Play in 3D opens Unsaved Changes confirm modal', async () => {

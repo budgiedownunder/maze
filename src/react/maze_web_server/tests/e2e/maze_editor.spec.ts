@@ -1255,6 +1255,30 @@ test('a maze with persisted game settings seeds the settings editor', async ({ p
   await expect(dialog.getByLabel(/time limit/i)).toHaveValue('222')
 })
 
+test('Play 3D opens the launch chooser; Custom Run opens settings and Cancel returns to the chooser', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page) // Alpha — solvable
+
+  // Play 3D opens the Run / Custom Run / Cancel chooser (after the solve check).
+  await page.getByRole('button', { name: 'Play in 3D' }).click()
+  const chooser = page.getByRole('dialog', { name: /Play 3D —/i })
+  await expect(chooser).toBeVisible()
+  await expect(chooser.getByRole('button', { name: 'Run', exact: true })).toBeVisible()
+
+  // Custom Run opens the settings modal (one-off).
+  await chooser.getByRole('button', { name: /custom run/i }).click()
+  const settings = page.getByRole('dialog', { name: /customise launch/i })
+  await expect(settings).toBeVisible()
+
+  // Cancel from the settings modal returns to the chooser (not the editor).
+  await settings.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('dialog', { name: /Play 3D —/i }).getByRole('button', { name: 'Run', exact: true })).toBeVisible()
+
+  // Cancel from the chooser dismisses to the editor.
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
 test('Apply to all stamps a block of wall cells with one override', async ({ page }) => {
   await login(page)
   await openFirstMaze(page) // Alpha — a 3x3 grid

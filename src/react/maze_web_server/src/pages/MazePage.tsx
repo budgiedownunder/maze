@@ -8,6 +8,7 @@ import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
 import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
+import { Play3dLaunchChooser } from '../components/Play3dLaunchChooser'
 import { AlertModal } from '../components/AlertModal'
 import { generateMaze, solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
 import type { GenerateOptions, SaveMazeRequest } from '../types/api'
@@ -23,7 +24,7 @@ import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
-import { MAZE_GAME_SETTINGS_DEFAULTS, type MazeGameSettings } from '../utils/mazeGameSettings'
+import { normalizeMazeGameSettings, type MazeGameSettings } from '../utils/mazeGameSettings'
 import { countKeysAndDoors, exceedsKeyDoorCap, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
@@ -94,7 +95,11 @@ export function MazePage() {
   const [solveError, setSolveError] = useState<string | null>(null)
 
   // Play state
+  // The Play-3D launch chooser (Run / Custom Run / Cancel). Opened after the
+  // solvability check; `maze3dCustom` is the one-off Custom-Run settings modal,
+  // reached from the chooser and returning to it on Cancel.
   const [maze3dLaunch, setMaze3dLaunch] = useState<{ id: string; name: string } | null>(null)
+  const [maze3dCustom, setMaze3dCustom] = useState<{ id: string; name: string } | null>(null)
   const { play: playMaze, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
     usePlayMaze({ onLaunch3d: m => setMaze3dLaunch({ id: m.id, name: m.name }) })
   const [showPlayDirtyConfirm, setShowPlayDirtyConfirm] = useState(false)
@@ -598,10 +603,27 @@ export function MazePage() {
         />
       )}
       {maze3dLaunch && (
-        <MazeGameSettingsModal
+        <Play3dLaunchChooser
           mazeName={maze3dLaunch.name}
+          onRun={() => {
+            const id = maze3dLaunch.id
+            setMaze3dLaunch(null)
+            launchPlay3dWithSettings(id, normalizeMazeGameSettings(gameSettings ?? {}))
+          }}
+          onCustomRun={() => { setMaze3dCustom(maze3dLaunch); setMaze3dLaunch(null) }}
           onCancel={() => setMaze3dLaunch(null)}
-          onSubmit={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
+        />
+      )}
+      {maze3dCustom && (
+        <MazeGameSettingsModal
+          mazeName={maze3dCustom.name}
+          initialSettings={normalizeMazeGameSettings(gameSettings ?? {})}
+          onCancel={() => { setMaze3dLaunch(maze3dCustom); setMaze3dCustom(null) }}
+          onSubmit={settings => {
+            const id = maze3dCustom.id
+            setMaze3dCustom(null)
+            launchPlay3dWithSettings(id, settings)
+          }}
         />
       )}
       {showSettingsModal && (
@@ -609,7 +631,7 @@ export function MazePage() {
           mazeName={mazeName}
           title={mazeName ? `Game settings — ${mazeName}` : 'Game settings'}
           submitLabel="Save"
-          initialSettings={gameSettings ?? MAZE_GAME_SETTINGS_DEFAULTS}
+          initialSettings={normalizeMazeGameSettings(gameSettings ?? {})}
           onCancel={() => setShowSettingsModal(false)}
           onSubmit={s => { setGameSettings(s); setGameSettingsDirty(true); setShowSettingsModal(false) }}
         />

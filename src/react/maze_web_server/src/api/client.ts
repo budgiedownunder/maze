@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -174,14 +174,16 @@ export async function getMazes(token: string, includeDefinitions: boolean): Prom
     headers: authHeaders(token),
   })
   return items
-    .map(item => ({
-      id: item.id,
-      name: item.name,
-      // definition is the full Maze JSON string: {id, name, definition: {grid:[...]}}
-      definition: item.definition
-        ? (JSON.parse(item.definition) as { definition: MazeDefinition }).definition
-        : { grid: [] },
-    }))
+    .map(item => {
+      // definition is the full Maze JSON string: {id, name, definition:{grid}, game_settings?}
+      const parsed = item.definition ? (JSON.parse(item.definition) as Maze) : null
+      return {
+        id: item.id,
+        name: item.name,
+        definition: parsed?.definition ?? { grid: [] },
+        game_settings: parsed?.game_settings,
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 

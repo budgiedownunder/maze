@@ -427,13 +427,12 @@
     const mazeId = params.get('id');
 
     if (mazeId) {
-      // /game/?id=<mazeId> — a specific user-edited maze. The React
-      // MazeGameSettingsModal writes the user's last-chosen launch
-      // settings to localStorage under MODE_STORAGE_KEY before
-      // navigating here; we read them back and build the StartConfig.
-      // If no settings are stored (e.g. the user opened /game/?id=…
-      // directly via URL), fall back to the same clean-look defaults
-      // the modal itself uses.
+      // /game/?id=<mazeId> — a specific user-edited maze. The React app
+      // writes the maze's effective launch settings to localStorage under
+      // MODE_STORAGE_KEY before navigating here; we read them back and build
+      // the StartConfig. If no settings are stored (e.g. the user opened
+      // /game/?id=… directly via URL), fall back to the same clean-look
+      // defaults the settings form uses.
       const MODE_STORAGE_KEY = 'mazeGameSettings';
       // Max maze-name length passed as the in-game status-bar `mode`
       // label. The status bar is a fixed-width container (~140 px at
@@ -458,8 +457,8 @@
       };
       function loadLaunchSettings() {
         // Two channels write the per-launch settings:
-        //   - React SPA → localStorage (the MazeGameSettingsModal
-        //     writes to MODE_STORAGE_KEY before navigating).
+        //   - React SPA → localStorage (the React app writes the effective
+        //     settings to MODE_STORAGE_KEY before navigating).
         //   - MAUI native popup → URL query params (each WebView has
         //     its own isolated storage, so MAUI can't share the SPA's
         //     localStorage — it serialises the settings into the URL

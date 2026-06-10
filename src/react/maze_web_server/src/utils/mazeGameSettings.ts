@@ -1,8 +1,9 @@
-// Per-launch customisation values for the Play 3D button on user-edited
-// mazes. The modal at `components/MazeGameSettingsModal.tsx` writes
-// the user's chosen values to localStorage on Play; the host page at
-// `public/game/index.html` reads the same key to build the StartConfig
-// it sends to the wasm boundary.
+// The 3D game settings for a user-edited maze (sky, walls, rig styles,
+// landmarks, timer). Persisted per-maze (carried on `Maze.game_settings`) and
+// edited via `components/MazeGameSettingsModal.tsx`. On launch,
+// `saveMazeGameSettings` stashes the effective settings in localStorage and the
+// host page at `public/game/index.html` reads the same key to build the
+// StartConfig it sends to the wasm boundary.
 
 import {
   DOOR_STYLES,
@@ -17,7 +18,7 @@ import type {
   KeyHolderStyle,
 } from '../types/cellEntities'
 
-// Sky and wall textures are 3D-scene decor specific to the Play 3D launch; the
+// Sky and wall textures are 3D-scene decor specific to the 3D game; the
 // entity rig styles (door / key-holder / enemy / health) are the shared cell-entity
 // vocabulary and live in `cellEntities.ts`.
 export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset', 'dungeon', 'chamber'] as const
@@ -71,7 +72,7 @@ export const MAZE_GAME_SETTINGS_DEFAULTS: MazeGameSettings = {
   // Match the prior hard-coded "clean look" overrides for user-edited
   // mazes — `wall_tint` and `wall_material_variation` off so the user's
   // layout is the visual focus by default. The user can still flip
-  // them on per-launch.
+  // them on in the maze's settings.
   wallTint: false,
   wallMaterialVariation: false,
   // Other landmarks default on, matching `Landmarks::default()` in the
@@ -85,57 +86,50 @@ export const MAZE_GAME_SETTINGS_DEFAULTS: MazeGameSettings = {
 
 export const MAZE_GAME_SETTINGS_STORAGE_KEY = 'mazeGameSettings'
 
-/// Loads the user's last-used custom launch settings from localStorage,
-/// or returns the defaults if nothing is stored or the stored value is
-/// invalid. Validates enums; falls back to the default value for any
-/// stored field that doesn't match the current schema.
-export function loadMazeGameSettings(): MazeGameSettings {
-  try {
-    const raw = localStorage.getItem(MAZE_GAME_SETTINGS_STORAGE_KEY)
-    if (!raw) return MAZE_GAME_SETTINGS_DEFAULTS
-    const parsed = JSON.parse(raw) as Partial<MazeGameSettings>
-    const skyType: SkyType = (SKY_TYPES as readonly string[]).includes(parsed.skyType ?? '')
-      ? (parsed.skyType as SkyType)
-      : MAZE_GAME_SETTINGS_DEFAULTS.skyType
-    const wallType: WallType = (WALL_TYPES as readonly string[]).includes(parsed.wallType ?? '')
-      ? (parsed.wallType as WallType)
-      : MAZE_GAME_SETTINGS_DEFAULTS.wallType
-    const doorStyle: DoorStyle = (DOOR_STYLES as readonly string[]).includes(parsed.doorStyle ?? '')
-      ? (parsed.doorStyle as DoorStyle)
-      : MAZE_GAME_SETTINGS_DEFAULTS.doorStyle
-    const keyHolder: KeyHolderStyle = (KEY_HOLDER_STYLES as readonly string[]).includes(
-      parsed.keyHolder ?? '',
-    )
-      ? (parsed.keyHolder as KeyHolderStyle)
-      : MAZE_GAME_SETTINGS_DEFAULTS.keyHolder
-    const enemyType: EnemyType = (ENEMY_TYPES as readonly string[]).includes(parsed.enemyType ?? '')
-      ? (parsed.enemyType as EnemyType)
-      : MAZE_GAME_SETTINGS_DEFAULTS.enemyType
-    const healthStyle: HealthStyle = (HEALTH_STYLES as readonly string[]).includes(
-      parsed.healthStyle ?? '',
-    )
-      ? (parsed.healthStyle as HealthStyle)
-      : MAZE_GAME_SETTINGS_DEFAULTS.healthStyle
-    const timer = Number(parsed.timerSeconds)
-    return {
-      skyType,
-      wallType,
-      perimeterWalls: parsed.perimeterWalls ?? MAZE_GAME_SETTINGS_DEFAULTS.perimeterWalls,
-      doorStyle,
-      keyHolder,
-      enemyType,
-      healthStyle,
-      wallTint: parsed.wallTint ?? MAZE_GAME_SETTINGS_DEFAULTS.wallTint,
-      wallMaterialVariation:
-        parsed.wallMaterialVariation ?? MAZE_GAME_SETTINGS_DEFAULTS.wallMaterialVariation,
-      deadEndObjects: parsed.deadEndObjects ?? MAZE_GAME_SETTINGS_DEFAULTS.deadEndObjects,
-      wallDecorations: parsed.wallDecorations ?? MAZE_GAME_SETTINGS_DEFAULTS.wallDecorations,
-      floorAccents: parsed.floorAccents ?? MAZE_GAME_SETTINGS_DEFAULTS.floorAccents,
-      timerSeconds:
-        Number.isFinite(timer) && timer > 0 ? timer : MAZE_GAME_SETTINGS_DEFAULTS.timerSeconds,
-    }
-  } catch {
-    return MAZE_GAME_SETTINGS_DEFAULTS
+/// Validates + fills a partial settings object against the current schema,
+/// substituting the default for any field that is missing or doesn't match.
+/// The single source of truth for turning untrusted/partial settings (from
+/// localStorage or a persisted maze) into a complete, valid object.
+export function normalizeMazeGameSettings(parsed: Partial<MazeGameSettings>): MazeGameSettings {
+  const skyType: SkyType = (SKY_TYPES as readonly string[]).includes(parsed.skyType ?? '')
+    ? (parsed.skyType as SkyType)
+    : MAZE_GAME_SETTINGS_DEFAULTS.skyType
+  const wallType: WallType = (WALL_TYPES as readonly string[]).includes(parsed.wallType ?? '')
+    ? (parsed.wallType as WallType)
+    : MAZE_GAME_SETTINGS_DEFAULTS.wallType
+  const doorStyle: DoorStyle = (DOOR_STYLES as readonly string[]).includes(parsed.doorStyle ?? '')
+    ? (parsed.doorStyle as DoorStyle)
+    : MAZE_GAME_SETTINGS_DEFAULTS.doorStyle
+  const keyHolder: KeyHolderStyle = (KEY_HOLDER_STYLES as readonly string[]).includes(
+    parsed.keyHolder ?? '',
+  )
+    ? (parsed.keyHolder as KeyHolderStyle)
+    : MAZE_GAME_SETTINGS_DEFAULTS.keyHolder
+  const enemyType: EnemyType = (ENEMY_TYPES as readonly string[]).includes(parsed.enemyType ?? '')
+    ? (parsed.enemyType as EnemyType)
+    : MAZE_GAME_SETTINGS_DEFAULTS.enemyType
+  const healthStyle: HealthStyle = (HEALTH_STYLES as readonly string[]).includes(
+    parsed.healthStyle ?? '',
+  )
+    ? (parsed.healthStyle as HealthStyle)
+    : MAZE_GAME_SETTINGS_DEFAULTS.healthStyle
+  const timer = Number(parsed.timerSeconds)
+  return {
+    skyType,
+    wallType,
+    perimeterWalls: parsed.perimeterWalls ?? MAZE_GAME_SETTINGS_DEFAULTS.perimeterWalls,
+    doorStyle,
+    keyHolder,
+    enemyType,
+    healthStyle,
+    wallTint: parsed.wallTint ?? MAZE_GAME_SETTINGS_DEFAULTS.wallTint,
+    wallMaterialVariation:
+      parsed.wallMaterialVariation ?? MAZE_GAME_SETTINGS_DEFAULTS.wallMaterialVariation,
+    deadEndObjects: parsed.deadEndObjects ?? MAZE_GAME_SETTINGS_DEFAULTS.deadEndObjects,
+    wallDecorations: parsed.wallDecorations ?? MAZE_GAME_SETTINGS_DEFAULTS.wallDecorations,
+    floorAccents: parsed.floorAccents ?? MAZE_GAME_SETTINGS_DEFAULTS.floorAccents,
+    timerSeconds:
+      Number.isFinite(timer) && timer > 0 ? timer : MAZE_GAME_SETTINGS_DEFAULTS.timerSeconds,
   }
 }
 
