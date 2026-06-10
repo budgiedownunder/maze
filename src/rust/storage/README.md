@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 117 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 117 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 118 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 118 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -160,7 +160,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 | `user_emails` | Email addresses attached to a user — `email`, `is_primary`, `verified`, `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
-| `mazes` | Maze definitions (JSON), FK to owner `users` |
+| `mazes` | Maze definitions (JSON), FK to owner `users`. The `definition` column holds the whole serialised `Maze`, which may carry an optional `game_settings` object. |
 | `one_time_tokens` | Single-use, time-bounded tokens for password-reset / invite / email-verification flows (added in `0005_one_time_tokens.sql`). FK to `users` with `ON DELETE CASCADE`. Single-use enforcement is application-driven via `UPDATE ... WHERE consumed_at IS NULL`. |
 | `email_audit_log` | Append-only log of every email send attempt (added in `0006_email_audit_log.sql`). Two FKs to `users` — `recipient_user_id` and `triggered_by_user_id` — both `ON DELETE SET NULL` so the audit history survives a hard-delete (`purge_user`) without re-identifying the user. Soft-delete leaves the FK untouched. |
 
@@ -220,7 +220,7 @@ Each `MazeStore` impl reports the maximum number of cells (`rows × cols`) it wi
 | `SqlStore`    | `Some(3_600)`      | Bound by the `mazes.definition VARCHAR(16000)` column in [`migrations/0001_initial.sql`](./migrations/0001_initial.sql). With the existing JSON serialisation (`4·N·M + 2·N + 10` chars for an N-row × M-col grid) the 16,000-char column maxes out around 62×62 cells; 60×60 = 3,600 sits inside that with a margin. The same cap applies across SQLite, PostgreSQL, and MySQL — SQLite would ignore the column length declaration, but enforcing the cap uniformly avoids dev-vs-prod divergence when the same data set is later loaded under MySQL or PostgreSQL. |
 | trait default | `None`             | Suits stub implementations and any future store with no practical size limit. Production stores override. |
 
-The cell-count cap assumes plain single-character cells. Per-cell **entity overrides** (an enemy/health/key/door cell serialised as `[{"type":"E",…}]` rather than the bare `"E"`) can inflate individual cells well beyond that, so a maze can sit under the cell-count cap yet still overflow the column. `SqlStore` therefore also enforces an authoritative **byte cap** — `SqlStore::MAX_MAZE_DEFINITION_BYTES = 16_000`, matching the `mazes.definition VARCHAR(16000)` column — on the exact serialised string about to be written. An over-cap maze is refused with `Error::MazeDefinitionTooLarge { bytes, max }` (surfaced by the server as HTTP 422) before the database sees it, rather than being silently truncated. `FileStore` keeps only the cell-count cap (its JSON files have no column-width limit).
+The cell-count cap assumes plain single-character cells. Per-cell **entity overrides** (an enemy/health/key/door cell serialised as `[{"type":"E",…}]` rather than the bare `"E"`) can inflate individual cells well beyond that, so a maze can sit under the cell-count cap yet still overflow the column. `SqlStore` therefore also enforces an authoritative **byte cap** — `SqlStore::MAX_MAZE_DEFINITION_BYTES = 16_000`, matching the `mazes.definition VARCHAR(16000)` column — on the exact serialised string about to be written. An over-cap maze is refused with `Error::MazeDefinitionTooLarge { bytes, max }` (surfaced by the server as HTTP 422) before the database sees it, rather than being silently truncated. `FileStore` keeps only the cell-count cap (its JSON files have no column-width limit). An optional per-maze `game_settings` object (the 3D launch environment) rides the same serialised `Maze` blob, so it likewise counts toward this byte cap — negligible in practice, being a small fixed object relative to the grid.
 
 
 ## Architecture note: one impl over `AnyPool`

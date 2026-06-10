@@ -2884,6 +2884,27 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn can_create_maze_with_game_settings_that_round_trips() {
+        let mut maze = new_solvable_maze("", "settings_maze");
+        maze.game_settings = Some(serde_json::json!({
+            "skyType": "dungeon",
+            "wallType": "lava",
+            "timerSeconds": 90
+        }));
+        // run_create_maze_test asserts the POST response maze equals the input
+        // (Maze equality compares full JSON), proving game_settings survives
+        // the create handler's deserialize → store → response-serialize path.
+        run_create_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            maze,
+            StatusCode::CREATED,
+        )
+        .await;
+    }
+
+    #[actix_web::test]
     async fn cannot_create_maze_that_exceeds_feature_cap() {
         // 9 keys + 8 doors = 17 > maze::MAX_TOTAL_FEATURES (16). The
         // store-level validate_maze_feature_count rejects, the handler maps

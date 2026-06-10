@@ -949,6 +949,39 @@ pub async fn update_maze_persists_changes(store: &mut Box<dyn Store>) {
     assert_eq!(loaded.name, "renamed");
 }
 
+pub async fn create_maze_round_trips_game_settings(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+
+    // A maze carrying opaque game settings round-trips them unchanged.
+    let mut with_settings = make_maze("with-settings");
+    with_settings.game_settings = Some(serde_json::json!({
+        "skyType": "dungeon",
+        "wallType": "lava",
+        "timerSeconds": 90
+    }));
+    store
+        .create_maze(&alice, &mut with_settings)
+        .await
+        .expect("create_maze with settings");
+    let loaded = store
+        .get_maze(&alice, &with_settings.id)
+        .await
+        .expect("get_maze with settings");
+    assert_eq!(loaded.game_settings, with_settings.game_settings);
+
+    // A maze with no settings round-trips as None.
+    let mut without = make_maze("no-settings");
+    store
+        .create_maze(&alice, &mut without)
+        .await
+        .expect("create_maze no settings");
+    let loaded_without = store
+        .get_maze(&alice, &without.id)
+        .await
+        .expect("get_maze no settings");
+    assert!(loaded_without.game_settings.is_none());
+}
+
 pub async fn get_maze_is_scoped_to_owner(store: &mut Box<dyn Store>) {
     let (alice, bob) = fixture_two_users(store).await;
     let mut alice_maze = make_maze("private");

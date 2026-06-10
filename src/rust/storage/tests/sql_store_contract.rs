@@ -419,6 +419,12 @@ async fn update_maze_persists_changes() {
 }
 
 #[tokio::test]
+async fn create_maze_round_trips_game_settings() {
+    let mut s = fresh_store().await;
+    contract::create_maze_round_trips_game_settings(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_maze_returns_not_found_for_unknown_id() {
     let mut s = fresh_store().await;
     contract::update_maze_returns_not_found_for_unknown_id(&mut s).await;
