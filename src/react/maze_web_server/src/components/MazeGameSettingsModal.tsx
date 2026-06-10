@@ -23,7 +23,15 @@ import {
 
 interface Props {
   mazeName: string
-  onPlay: (settings: MazeGameSettings) => void
+  // Seed values for the form. Falls back to the user's last-used localStorage
+  // settings when omitted (the Play-3D launch path); the editor passes the maze's
+  // saved settings here.
+  initialSettings?: MazeGameSettings
+  // Dialog heading and submit-button label, so the same modal serves both the
+  // Play-3D launch ("Play") and the per-maze settings editor ("Save").
+  title?: string
+  submitLabel?: string
+  onSubmit: (settings: MazeGameSettings) => void
   onCancel: () => void
 }
 
@@ -39,8 +47,9 @@ const TAB_LABELS: Record<LaunchTab, string> = {
   decor: 'Decor',
 }
 
-export function MazeGameSettingsModal({ mazeName, onPlay, onCancel }: Props) {
-  const initial = loadMazeGameSettings()
+export function MazeGameSettingsModal({ mazeName, initialSettings, title, submitLabel, onSubmit, onCancel }: Props) {
+  const initial = initialSettings ?? loadMazeGameSettings()
+  const dialogTitle = title ?? `Play 3D — ${mazeName}`
   const [activeTab, setActiveTab] = useState<LaunchTab>('scene')
   const [skyType, setSkyType] = useState<SkyType>(initial.skyType)
   const [wallType, setWallType] = useState<WallType>(initial.wallType)
@@ -84,7 +93,7 @@ export function MazeGameSettingsModal({ mazeName, onPlay, onCancel }: Props) {
       return
     }
     setValidationError(null)
-    onPlay({
+    onSubmit({
       skyType,
       wallType,
       perimeterWalls,
@@ -105,12 +114,12 @@ export function MazeGameSettingsModal({ mazeName, onPlay, onCancel }: Props) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Play 3D — customise launch"
+      aria-label={title ?? 'Play 3D — customise launch'}
       className="modal-overlay"
       style={{ zIndex: 1200 }}
     >
       <div className="modal modal-sm modal-with-scroll-body">
-        <h2 className="modal-title">Play 3D — {mazeName}</h2>
+        <h2 className="modal-title">{dialogTitle}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <div className="modal-tabs" role="tablist" aria-label="Launch settings">
             {TABS.map((tab, index) => (
@@ -318,7 +327,7 @@ export function MazeGameSettingsModal({ mazeName, onPlay, onCancel }: Props) {
 
           <div className="modal-actions-row">
             <button type="button" onClick={onCancel} className="btn-gray">Cancel</button>
-            <button type="submit" className="btn-primary">Play</button>
+            <button type="submit" className="btn-primary">{submitLabel ?? 'Play'}</button>
           </div>
         </form>
       </div>

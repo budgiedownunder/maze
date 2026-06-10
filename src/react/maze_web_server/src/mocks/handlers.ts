@@ -130,6 +130,30 @@ export const mockMazeOverrideStatic: Maze = {
   } as unknown as Maze['definition'],
 }
 
+// A maze persisted WITH per-maze 3D game settings. Used to verify the editor
+// seeds the settings modal from the maze's saved settings (not localStorage).
+// Kept out of `mockMazes`, served by id directly.
+export const mockMazeWithSettings: Maze = {
+  id: 'maze-settings',
+  name: 'WithSettings',
+  definition: { grid: [['S', ' ', 'F']] },
+  game_settings: {
+    skyType: 'day',
+    wallType: 'wood',
+    perimeterWalls: true,
+    doorStyle: 'swing',
+    keyHolder: 'pedestal',
+    enemyType: 'goblin',
+    healthStyle: 'heart',
+    wallTint: false,
+    wallMaterialVariation: false,
+    deadEndObjects: true,
+    wallDecorations: true,
+    floorAccents: true,
+    timerSeconds: 222,
+  },
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -327,6 +351,7 @@ export const handlers = [
       ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
       ?? (params.id === mockMazeOverride.id ? mockMazeOverride : undefined)
       ?? (params.id === mockMazeOverrideStatic.id ? mockMazeOverrideStatic : undefined)
+      ?? (params.id === mockMazeWithSettings.id ? mockMazeWithSettings : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

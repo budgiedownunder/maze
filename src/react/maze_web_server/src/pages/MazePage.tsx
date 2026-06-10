@@ -10,7 +10,7 @@ import { GenerateMazeModal } from '../components/GenerateMazeModal'
 import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
 import { AlertModal } from '../components/AlertModal'
 import { generateMaze, solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
-import type { GenerateOptions } from '../types/api'
+import type { GenerateOptions, SaveMazeRequest } from '../types/api'
 import type { FeatureChar } from '../types/cellEntities'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { useToken } from '../context/AuthContext'
@@ -23,6 +23,7 @@ import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
+import { MAZE_GAME_SETTINGS_DEFAULTS, type MazeGameSettings } from '../utils/mazeGameSettings'
 import { countKeysAndDoors, exceedsKeyDoorCap, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
@@ -99,6 +100,14 @@ export function MazePage() {
   const [showPlayDirtyConfirm, setShowPlayDirtyConfirm] = useState(false)
   const [pendingPlayGameType, setPendingPlayGameType] = useState<GameType>(GameType.TwoD)
 
+  // Per-maze 3D game settings (the launch environment), edited via the Settings
+  // toolbar button and persisted with the maze on Save. `undefined` until the
+  // maze loads or the user opens the editor; `gameSettingsDirty` feeds the
+  // unsaved-changes guard so a settings edit enables Save like any grid edit.
+  const [gameSettings, setGameSettings] = useState<MazeGameSettings | undefined>(undefined)
+  const [gameSettingsDirty, setGameSettingsDirty] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+
   // Walk speed (persisted to localStorage)
   const { speedRef, speedIndex, setSpeedIndex } = useWalkSpeed()
 
@@ -107,7 +116,7 @@ export function MazePage() {
   const isWalkInProgress = walkState !== null && !walkState.isComplete
 
   const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalkInProgress || isCheckingPlay
-  const hasUnsavedWork = isDirty || (isNew && mazeId === null)
+  const hasUnsavedWork = isDirty || gameSettingsDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
 
@@ -179,6 +188,8 @@ export function MazePage() {
   useEffect(() => {
     if (isNew) {
       initFromDefinition(null, '', { grid: BLANK_GRID })
+      setGameSettings(undefined)
+      setGameSettingsDirty(false)
       return
     }
     if (!token) return
@@ -191,6 +202,8 @@ export function MazePage() {
         // plus per-cell overrides via the WASM codec — JS never parses the wire form.
         const { grid, overrides } = await splitDefinition(JSON.stringify(maze))
         initFromDefinition(maze.id, maze.name, { grid }, overrides)
+        setGameSettings(maze.game_settings)
+        setGameSettingsDirty(false)
       })
       .catch(err => {
         const status = (err as { status?: number }).status
@@ -219,6 +232,13 @@ export function MazePage() {
     return buildDefinitionWithOverrides(grid, getOverridesList())
   }
 
+  // The full save payload: the canonical definition plus the per-maze game
+  // settings (omitted when the maze has none). Used by every save path so
+  // settings round-trip alongside the grid + overrides.
+  async function buildSaveRequest(name: string): Promise<SaveMazeRequest> {
+    return { name, definition: await buildDefinition(), game_settings: gameSettings }
+  }
+
   async function handleSaveNew(name: string) {
     if (!token) return
     if (exceedsKeyDoorCap(grid)) {
@@ -228,10 +248,11 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createMaze(token, { name, definition: await buildDefinition() })
+      const saved = await createMaze(token, await buildSaveRequest(name))
       flushSync(() => {
         setShowSaveNameModal(false)
         markSaved(saved.id, saved.name)
+        setGameSettingsDirty(false)
       })
       navigate(`/mazes/${encodeURIComponent(saved.id)}`, { replace: true })
     } catch (ex: unknown) {
@@ -250,8 +271,9 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: await buildDefinition() })
+      await updateMaze(token, mazeId, await buildSaveRequest(mazeName))
       markSaved(mazeId, mazeName)
+      setGameSettingsDirty(false)
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
     } finally {
@@ -282,8 +304,9 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: await buildDefinition() })
+      await updateMaze(token, mazeId, await buildSaveRequest(mazeName))
       markSaved(mazeId, mazeName)
+      setGameSettingsDirty(false)
       blocker.proceed?.()
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
@@ -297,10 +320,11 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createMaze(token, { name, definition: await buildDefinition() })
+      const saved = await createMaze(token, await buildSaveRequest(name))
       flushSync(() => {
         setShowBlockerSaveModal(false)
         markSaved(saved.id, saved.name)
+        setGameSettingsDirty(false)
       })
       blocker.proceed?.()
     } catch (ex: unknown) {
@@ -380,9 +404,9 @@ export function MazePage() {
     setSaveError(null)
     let savedId: string | null = null
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: await buildDefinition() })
+      await updateMaze(token, mazeId, await buildSaveRequest(mazeName))
       const id = mazeId
-      flushSync(() => { markSaved(id, mazeName) })
+      flushSync(() => { markSaved(id, mazeName); setGameSettingsDirty(false) })
       savedId = id
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
@@ -402,6 +426,8 @@ export function MazePage() {
       const maze = await getMaze(token, mazeId)
       const { grid: refreshedGrid, overrides } = await splitDefinition(JSON.stringify(maze))
       initFromDefinition(maze.id, maze.name, { grid: refreshedGrid }, overrides)
+      setGameSettings(maze.game_settings)
+      setGameSettingsDirty(false)
     } catch (ex: unknown) {
       setRefreshError((ex as { message?: string }).message ?? 'Failed to refresh.')
     } finally {
@@ -575,7 +601,17 @@ export function MazePage() {
         <MazeGameSettingsModal
           mazeName={maze3dLaunch.name}
           onCancel={() => setMaze3dLaunch(null)}
-          onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
+          onSubmit={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
+        />
+      )}
+      {showSettingsModal && (
+        <MazeGameSettingsModal
+          mazeName={mazeName}
+          title={mazeName ? `Game settings — ${mazeName}` : 'Game settings'}
+          submitLabel="Save"
+          initialSettings={gameSettings ?? MAZE_GAME_SETTINGS_DEFAULTS}
+          onCancel={() => setShowSettingsModal(false)}
+          onSubmit={s => { setGameSettings(s); setGameSettingsDirty(true); setShowSettingsModal(false) }}
         />
       )}
 
@@ -810,6 +846,16 @@ export function MazePage() {
               onClick={() => handlePlayClick(GameType.ThreeD)}
             >
               <img src="/images/maze/play_3d_button.png" alt="Play in 3D" />
+            </button>
+            <button
+              type="button"
+              className="maze-toolbar-btn"
+              title="Game settings"
+              aria-label="Game settings"
+              disabled={isBusy}
+              onClick={() => setShowSettingsModal(true)}
+            >
+              <img src="/images/maze/settings_button.svg" alt="Game settings" />
             </button>
             {!isRangeMode && anchorCell === null && (
               <button

@@ -169,7 +169,7 @@ export function MazesPage() {
         <MazeGameSettingsModal
           mazeName={maze3dLaunch.name}
           onCancel={() => setMaze3dLaunch(null)}
-          onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
+          onSubmit={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
         />
       )}
       <header className="app-header">

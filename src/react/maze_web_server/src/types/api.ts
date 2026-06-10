@@ -1,4 +1,5 @@
 import type { CanonicalMazeDefinition } from './cellEntities'
+import type { MazeGameSettings } from '../utils/mazeGameSettings'
 
 export interface UserEmail {
   email: string
@@ -54,6 +55,7 @@ export interface Maze {
   id: string
   name: string
   definition: MazeDefinition
+  game_settings?: MazeGameSettings
 }
 
 export interface SaveMazeRequest {
@@ -61,6 +63,8 @@ export interface SaveMazeRequest {
   // The saved definition is the canonical char-or-array form (overridden cells carry
   // an entity array), so it accepts overrides as well as a plain-char grid.
   definition: CanonicalMazeDefinition
+  // Persisted per-maze 3D game settings; omitted when the maze has none.
+  game_settings?: MazeGameSettings
 }
 
 export interface OAuthProviderPublic {

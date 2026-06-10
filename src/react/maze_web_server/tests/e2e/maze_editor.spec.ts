@@ -1213,6 +1213,48 @@ test('authoring a lava wall override shows the lava sprite plus a badge and save
   await expect(page.locator('.error-msg')).not.toBeVisible()
 })
 
+test('editing game settings marks the maze dirty and the maze save succeeds', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page) // Alpha — a clean maze
+
+  // The toolbar Save starts disabled (nothing to save on a freshly-loaded maze).
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+  // Open the per-maze game settings editor from the toolbar gear.
+  await page.getByRole('button', { name: 'Game settings' }).click()
+  const dialog = page.getByRole('dialog', { name: /game settings/i })
+  await expect(dialog).toBeVisible()
+
+  // Change a value and save the settings — the modal closes.
+  await dialog.getByLabel(/sky/i).selectOption('day')
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(dialog).toBeHidden()
+
+  // The settings edit marked the maze dirty → the toolbar Save is now enabled,
+  // and saving the maze succeeds (button disables, no error).
+  const saveBtn = page.getByRole('button', { name: 'Save' })
+  await expect(saveBtn).toBeEnabled()
+  await saveBtn.click()
+  await expect(saveBtn).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('a maze with persisted game settings seeds the settings editor', async ({ page }) => {
+  await login(page)
+  // Deep-link to a maze whose stored definition carries game settings.
+  await page.goto('/mazes/maze-settings')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Game settings' }).click()
+  const dialog = page.getByRole('dialog', { name: /game settings/i })
+  await expect(dialog).toBeVisible()
+
+  // The modal is seeded from the maze's saved settings, not the localStorage defaults.
+  await expect(dialog.getByLabel(/sky/i)).toHaveValue('day')
+  await expect(dialog.getByLabel(/wall texture/i)).toHaveValue('wood')
+  await expect(dialog.getByLabel(/time limit/i)).toHaveValue('222')
+})
+
 test('Apply to all stamps a block of wall cells with one override', async ({ page }) => {
   await login(page)
   await openFirstMaze(page) // Alpha — a 3x3 grid
