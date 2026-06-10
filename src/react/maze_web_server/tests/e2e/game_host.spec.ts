@@ -215,11 +215,11 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     expect(mazeDef.grid).toEqual([['S', ' ', 'F']])
   })
 
-  test('reads localStorage settings written by the Play3dCustomLaunchModal', async ({ page }) => {
+  test('reads localStorage settings written by the MazeGameSettingsModal', async ({ page }) => {
     await stubGameHost(page, 'My Maze')
     await page.addInitScript(() => {
       localStorage.setItem(
-        'play3dCustomLaunchSettings',
+        'mazeGameSettings',
         JSON.stringify({
           skyType: 'sunset',
           wallType: 'wood',
@@ -270,7 +270,7 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
   })
 
   test('URL query params override localStorage (MAUI native-popup path)', async ({ page }) => {
-    // The MAUI native Play3dCustomLaunchPopup writes the chosen settings
+    // The MAUI native MazeGameSettingsPopup writes the chosen settings
     // as URL query params (MAUI's WebView can't share the React SPA's
     // localStorage), and /game/index.html prefers URL params over
     // localStorage so MAUI's explicit per-launch choice always wins.
@@ -278,7 +278,7 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     await page.addInitScript(() => {
       // Stale localStorage from a prior browser-only launch.
       localStorage.setItem(
-        'play3dCustomLaunchSettings',
+        'mazeGameSettings',
         JSON.stringify({
           skyType: 'night',
           wallType: 'brick',

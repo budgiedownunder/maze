@@ -12,7 +12,7 @@ export type GameType = (typeof GameType)[keyof typeof GameType]
 interface UsePlayMazeOptions {
   /// Called after a successful solvability check for a `GameType.ThreeD`
   /// launch instead of navigating directly. The page receiving the
-  /// callback typically opens the Play3dCustomLaunchModal with this
+  /// callback typically opens the MazeGameSettingsModal with this
   /// maze, then on the modal's Play action does the actual navigation
   /// to `/game/?id=…`. When this callback is absent the hook falls back
   /// to the legacy direct-navigation behaviour.

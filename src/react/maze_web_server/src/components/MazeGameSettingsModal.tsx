@@ -15,15 +15,15 @@ import type {
 import {
   SKY_TYPES,
   WALL_TYPES,
-  loadPlay3dCustomLaunchSettings,
-  type Play3dCustomLaunchSettings,
+  loadMazeGameSettings,
+  type MazeGameSettings,
   type SkyType,
   type WallType,
-} from '../utils/play3dCustomLaunchSettings'
+} from '../utils/mazeGameSettings'
 
 interface Props {
   mazeName: string
-  onPlay: (settings: Play3dCustomLaunchSettings) => void
+  onPlay: (settings: MazeGameSettings) => void
   onCancel: () => void
 }
 
@@ -39,8 +39,8 @@ const TAB_LABELS: Record<LaunchTab, string> = {
   decor: 'Decor',
 }
 
-export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
-  const initial = loadPlay3dCustomLaunchSettings()
+export function MazeGameSettingsModal({ mazeName, onPlay, onCancel }: Props) {
+  const initial = loadMazeGameSettings()
   const [activeTab, setActiveTab] = useState<LaunchTab>('scene')
   const [skyType, setSkyType] = useState<SkyType>(initial.skyType)
   const [wallType, setWallType] = useState<WallType>(initial.wallType)

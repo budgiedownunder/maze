@@ -391,7 +391,7 @@ describe('MazesPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: `Play in 3D ${mockMazeAlpha.name}` }))
 
-    // The Play3dCustomLaunchModal opens — no navigation yet.
+    // The MazeGameSettingsModal opens — no navigation yet.
     await waitFor(() =>
       expect(screen.getByRole('dialog', { name: /Play 3D — customise launch/i })).toBeInTheDocument(),
     )

@@ -428,13 +428,13 @@
 
     if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React
-      // Play3dCustomLaunchModal writes the user's last-chosen launch
+      // MazeGameSettingsModal writes the user's last-chosen launch
       // settings to localStorage under MODE_STORAGE_KEY before
       // navigating here; we read them back and build the StartConfig.
       // If no settings are stored (e.g. the user opened /game/?id=…
       // directly via URL), fall back to the same clean-look defaults
       // the modal itself uses.
-      const MODE_STORAGE_KEY = 'play3dCustomLaunchSettings';
+      const MODE_STORAGE_KEY = 'mazeGameSettings';
       // Max maze-name length passed as the in-game status-bar `mode`
       // label. The status bar is a fixed-width container (~140 px at
       // 22 pt font in maze_game_bevy/src/hud/statusbar.rs); 20 chars is
@@ -458,7 +458,7 @@
       };
       function loadLaunchSettings() {
         // Two channels write the per-launch settings:
-        //   - React SPA → localStorage (the Play3dCustomLaunchModal
+        //   - React SPA → localStorage (the MazeGameSettingsModal
         //     writes to MODE_STORAGE_KEY before navigating).
         //   - MAUI native popup → URL query params (each WebView has
         //     its own isolated storage, so MAUI can't share the SPA's

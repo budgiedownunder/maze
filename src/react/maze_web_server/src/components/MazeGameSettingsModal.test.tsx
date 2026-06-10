@@ -1,23 +1,23 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { Play3dCustomLaunchModal } from './Play3dCustomLaunchModal'
+import { MazeGameSettingsModal } from './MazeGameSettingsModal'
 import {
-  PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY,
-  PLAY3D_CUSTOM_LAUNCH_DEFAULTS,
-  loadPlay3dCustomLaunchSettings,
-  savePlay3dCustomLaunchSettings,
-  type Play3dCustomLaunchSettings,
-} from '../utils/play3dCustomLaunchSettings'
+  MAZE_GAME_SETTINGS_STORAGE_KEY,
+  MAZE_GAME_SETTINGS_DEFAULTS,
+  loadMazeGameSettings,
+  saveMazeGameSettings,
+  type MazeGameSettings,
+} from '../utils/mazeGameSettings'
 
-describe('Play3dCustomLaunchModal', () => {
+describe('MazeGameSettingsModal', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.restoreAllMocks()
   })
 
   it('renders sky options with Title-Cased labels but lowercase wire values', () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const sky = screen.getByLabelText(/sky/i) as HTMLSelectElement
     const labels = Array.from(sky.options).map(o => o.textContent)
     const values = Array.from(sky.options).map(o => o.value)
@@ -26,7 +26,7 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('renders wall texture options Title-Cased with underscore replaced', () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const wall = screen.getByLabelText(/wall texture/i) as HTMLSelectElement
     const labels = Array.from(wall.options).map(o => o.textContent)
     const values = Array.from(wall.options).map(o => o.value)
@@ -52,7 +52,7 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('disables wall texture and wall tint when material variation is on', async () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const materialVariation = screen.getByLabelText(/quadrant wall types/i)
     expect(materialVariation).not.toBeChecked()
     const wallTexture = screen.getByLabelText(/wall texture/i) as HTMLSelectElement
@@ -66,7 +66,7 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('forces and disables the perimeter-walls checkbox under an enclosed sky', async () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const perimeter = screen.getByLabelText(/perimeter walls/i) as HTMLInputElement
     // Default open sky (night): on by default and editable.
     expect(perimeter).toBeChecked()
@@ -79,7 +79,7 @@ describe('Play3dCustomLaunchModal', () => {
 
   it('rejects submission with non-positive time limit and shows an inline error', async () => {
     const onPlay = vi.fn()
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
     const timer = screen.getByLabelText(/time limit/i) as HTMLInputElement
     await userEvent.clear(timer)
     await userEvent.type(timer, '0')
@@ -90,7 +90,7 @@ describe('Play3dCustomLaunchModal', () => {
 
   it('calls onPlay with the form values on valid submission', async () => {
     const onPlay = vi.fn()
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
     const timer = screen.getByLabelText(/time limit/i) as HTMLInputElement
     await userEvent.clear(timer)
     await userEvent.type(timer, '120')
@@ -105,7 +105,7 @@ describe('Play3dCustomLaunchModal', () => {
     await userEvent.selectOptions(keyHolder, 'chest')
     await userEvent.click(screen.getByRole('button', { name: /play/i }))
     expect(onPlay).toHaveBeenCalledTimes(1)
-    const settings = onPlay.mock.calls[0][0] as Play3dCustomLaunchSettings
+    const settings = onPlay.mock.calls[0][0] as MazeGameSettings
     expect(settings.skyType).toBe('sunset')
     expect(settings.doorStyle).toBe('portcullis')
     expect(settings.keyHolder).toBe('chest')
@@ -114,13 +114,13 @@ describe('Play3dCustomLaunchModal', () => {
 
   it('calls onCancel when the Cancel button is clicked', async () => {
     const onCancel = vi.fn()
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={onCancel} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={onCancel} onPlay={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
   it('groups fields into Scene / Objects / Decor tabs and switches panels on click', async () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     // Scene is the default active tab: its panel is visible, the others hidden.
     const scenePanel = screen.getByRole('tabpanel', { name: /scene/i })
     expect(scenePanel).toBeVisible()
@@ -145,7 +145,7 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('pre-fills from localStorage when settings have been saved before', () => {
-    const stored: Play3dCustomLaunchSettings = {
+    const stored: MazeGameSettings = {
       skyType: 'day',
       wallType: 'wood',
       perimeterWalls: false,
@@ -160,8 +160,8 @@ describe('Play3dCustomLaunchModal', () => {
       floorAccents: true,
       timerSeconds: 180,
     }
-    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify(stored))
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify(stored))
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     expect((screen.getByLabelText(/sky/i) as HTMLSelectElement).value).toBe('day')
     expect((screen.getByLabelText(/wall texture/i) as HTMLSelectElement).value).toBe('wood')
     // Open sky (day) + stored false → the perimeter-walls box reflects it.
@@ -178,7 +178,7 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('renders enemy type options Title-Cased with lowercase wire values', () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const enemy = screen.getByLabelText(/enemy type/i) as HTMLSelectElement
     const labels = Array.from(enemy.options).map(o => o.textContent)
     const values = Array.from(enemy.options).map(o => o.value)
@@ -187,7 +187,7 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('renders health style options Title-Cased with lowercase wire values', () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const health = screen.getByLabelText(/health style/i) as HTMLSelectElement
     const labels = Array.from(health.options).map(o => o.textContent)
     const values = Array.from(health.options).map(o => o.value)
@@ -196,14 +196,14 @@ describe('Play3dCustomLaunchModal', () => {
   })
 
   it('defaults Enemy type and Health style to goblin / heart', () => {
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     expect((screen.getByLabelText(/enemy type/i) as HTMLSelectElement).value).toBe('goblin')
     expect((screen.getByLabelText(/health style/i) as HTMLSelectElement).value).toBe('heart')
   })
 
   it('passes enemyType and healthStyle through onPlay on submit', async () => {
     const onPlay = vi.fn()
-    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
+    render(<MazeGameSettingsModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
     // Enemy type and health style live on the Objects tab.
     await userEvent.click(screen.getByRole('tab', { name: /objects/i }))
     const enemy = screen.getByLabelText(/enemy type/i) as HTMLSelectElement
@@ -212,48 +212,48 @@ describe('Play3dCustomLaunchModal', () => {
     await userEvent.selectOptions(health, 'potion')
     await userEvent.click(screen.getByRole('button', { name: /play/i }))
     expect(onPlay).toHaveBeenCalledTimes(1)
-    const settings = onPlay.mock.calls[0][0] as Play3dCustomLaunchSettings
+    const settings = onPlay.mock.calls[0][0] as MazeGameSettings
     expect(settings.enemyType).toBe('ghost')
     expect(settings.healthStyle).toBe('potion')
   })
 })
 
-describe('loadPlay3dCustomLaunchSettings', () => {
+describe('loadMazeGameSettings', () => {
   beforeEach(() => {
     localStorage.clear()
   })
 
   it('returns the defaults when no setting is stored', () => {
-    expect(loadPlay3dCustomLaunchSettings()).toEqual(PLAY3D_CUSTOM_LAUNCH_DEFAULTS)
+    expect(loadMazeGameSettings()).toEqual(MAZE_GAME_SETTINGS_DEFAULTS)
   })
 
   it('returns the defaults when stored value is malformed JSON', () => {
-    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, '{not json')
-    expect(loadPlay3dCustomLaunchSettings()).toEqual(PLAY3D_CUSTOM_LAUNCH_DEFAULTS)
+    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, '{not json')
+    expect(loadMazeGameSettings()).toEqual(MAZE_GAME_SETTINGS_DEFAULTS)
   })
 
   it('falls back to default skyType when stored value is unknown', () => {
-    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify({ skyType: 'banana' }))
-    expect(loadPlay3dCustomLaunchSettings().skyType).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.skyType)
+    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ skyType: 'banana' }))
+    expect(loadMazeGameSettings().skyType).toBe(MAZE_GAME_SETTINGS_DEFAULTS.skyType)
   })
 
   it('falls back to default timerSeconds when stored value is non-positive', () => {
-    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify({ timerSeconds: -5 }))
-    expect(loadPlay3dCustomLaunchSettings().timerSeconds).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.timerSeconds)
+    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ timerSeconds: -5 }))
+    expect(loadMazeGameSettings().timerSeconds).toBe(MAZE_GAME_SETTINGS_DEFAULTS.timerSeconds)
   })
 
   it('falls back to default enemyType when stored value is unknown', () => {
-    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify({ enemyType: 'dragon' }))
-    expect(loadPlay3dCustomLaunchSettings().enemyType).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.enemyType)
+    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ enemyType: 'dragon' }))
+    expect(loadMazeGameSettings().enemyType).toBe(MAZE_GAME_SETTINGS_DEFAULTS.enemyType)
   })
 
   it('falls back to default healthStyle when stored value is unknown', () => {
-    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify({ healthStyle: 'shield' }))
-    expect(loadPlay3dCustomLaunchSettings().healthStyle).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.healthStyle)
+    localStorage.setItem(MAZE_GAME_SETTINGS_STORAGE_KEY, JSON.stringify({ healthStyle: 'shield' }))
+    expect(loadMazeGameSettings().healthStyle).toBe(MAZE_GAME_SETTINGS_DEFAULTS.healthStyle)
   })
 
   it('round-trips a save+load', () => {
-    const settings: Play3dCustomLaunchSettings = {
+    const settings: MazeGameSettings = {
       skyType: 'sunset',
       wallType: 'cobblestone',
       perimeterWalls: false,
@@ -268,7 +268,7 @@ describe('loadPlay3dCustomLaunchSettings', () => {
       floorAccents: true,
       timerSeconds: 240,
     }
-    savePlay3dCustomLaunchSettings(settings)
-    expect(loadPlay3dCustomLaunchSettings()).toEqual(settings)
+    saveMazeGameSettings(settings)
+    expect(loadMazeGameSettings()).toEqual(settings)
   })
 })

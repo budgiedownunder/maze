@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
-import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
+import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
@@ -166,7 +166,7 @@ export function MazesPage() {
         />
       )}
       {maze3dLaunch && (
-        <Play3dCustomLaunchModal
+        <MazeGameSettingsModal
           mazeName={maze3dLaunch.name}
           onCancel={() => setMaze3dLaunch(null)}
           onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}

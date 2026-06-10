@@ -7,7 +7,7 @@ import { CellOverridePanel } from '../components/CellOverridePanel'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
-import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
+import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
 import { AlertModal } from '../components/AlertModal'
 import { generateMaze, solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
 import type { GenerateOptions } from '../types/api'
@@ -572,7 +572,7 @@ export function MazePage() {
         />
       )}
       {maze3dLaunch && (
-        <Play3dCustomLaunchModal
+        <MazeGameSettingsModal
           mazeName={maze3dLaunch.name}
           onCancel={() => setMaze3dLaunch(null)}
           onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
