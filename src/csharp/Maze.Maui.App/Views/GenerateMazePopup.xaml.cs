@@ -124,7 +124,7 @@ namespace Maze.Maui.App.Views
             // a tall window the cap is well above the natural content
             // height, so the Border stays content-sized — popup doesn't
             // inflate. Re-applied on window resize; unsubscribed when
-            // the popup closes. Same approach as Play3dCustomLaunchPopup.
+            // the popup closes. Same approach as MazeGameSettingsPopup.
             Loaded += OnPopupLoaded;
             Closed += OnPopupClosed;
 

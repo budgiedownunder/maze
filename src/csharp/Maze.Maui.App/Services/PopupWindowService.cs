@@ -87,16 +87,16 @@ namespace Maze.Maui.App.Services
         /// Displays the Play 3D custom-launch picker (sky / wall texture /
         /// landmark toggles / time limit) for a user-edited maze as a popup
         /// window. Pre-fills from
-        /// <see cref="Services.Play3dCustomLaunchSettingsStore.Load"/>; on
+        /// <see cref="Services.MazeGameSettingsStore.Load"/>; on
         /// Play, the popup persists the chosen settings before returning
         /// them.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title</param>
         /// <returns>A task that contains the chosen settings, or <c>null</c> if the user cancelled</returns>
-        public async Task<Models.Play3dCustomLaunchSettings?> ShowPlay3dCustomLaunchAsync(string? mazeName = null)
+        public async Task<Models.MazeGameSettings?> ShowMazeGameSettingsAsync(string? mazeName = null)
         {
-            var popup = new Views.Play3dCustomLaunchPopup(mazeName);
-            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.Play3dCustomLaunchSettings?>(popup);
+            var popup = new Views.MazeGameSettingsPopup(mazeName);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.MazeGameSettings?>(popup);
             return result.Result;
         }
 

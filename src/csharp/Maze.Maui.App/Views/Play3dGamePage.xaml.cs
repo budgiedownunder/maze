@@ -25,13 +25,13 @@ namespace Maze.Maui.App.Views
 
         /// <summary>
         /// Per-launch custom settings chosen by the user via the
-        /// <see cref="Play3dCustomLaunchPopup"/>. Only relevant for the
+        /// <see cref="MazeGameSettingsPopup"/>. Only relevant for the
         /// <see cref="MazeItem"/>-driven path (specific stored maze); when
         /// set, the settings are appended to the <c>/game/?id=…</c> URL as
         /// query parameters that <c>/game/index.html</c> reads back when
         /// building the <c>StartConfig</c>.
         /// </summary>
-        public Play3dCustomLaunchSettings? LaunchSettings { get; set; }
+        public MazeGameSettings? LaunchSettings { get; set; }
 
         public Play3dGamePage(ConfigurationService configurationService, IAuthService authService, ILogger<Play3dGamePage> logger)
         {

@@ -5,22 +5,22 @@ namespace Maze.Maui.App.Models
 {
     /// <summary>
     /// Per-launch customisation values for the Play 3D button on user-edited
-    /// mazes. Mirrors the React SPA's <c>Play3dCustomLaunchSettings</c> in
-    /// <c>src/react/maze_web_server/src/utils/play3dCustomLaunchSettings.ts</c>
+    /// mazes. Mirrors the React SPA's <c>MazeGameSettings</c> in
+    /// <c>src/react/maze_web_server/src/utils/mazeGameSettings.ts</c>
     /// so the MAUI app and the web SPA offer the same set of knobs.
     ///
     /// This is a plain POCO with no MAUI / persistence dependencies — the
     /// <c>Maze.Maui.App.Tests</c> project file-links it for unit testing.
-    /// Preferences I/O lives in <c>Services.Play3dCustomLaunchSettingsStore</c>
+    /// Preferences I/O lives in <c>Services.MazeGameSettingsStore</c>
     /// in the main app project.
     /// </summary>
-    public sealed class Play3dCustomLaunchSettings
+    public sealed class MazeGameSettings
     {
         /// <summary>
         /// Preferences key under which the settings are persisted. Shared
         /// between the store and any caller that wants to clear it.
         /// </summary>
-        public const string PreferencesKey = "play3dCustomLaunchSettings";
+        public const string PreferencesKey = "mazeGameSettings";
 
         /// <summary>Sky type wire token (lowercase).</summary>
         public string SkyType { get; set; } = "night";

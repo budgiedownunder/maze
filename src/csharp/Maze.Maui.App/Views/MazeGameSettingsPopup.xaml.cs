@@ -10,14 +10,14 @@ using System.Runtime.InteropServices;
 namespace Maze.Maui.App.Views
 {
     /// <summary>
-    /// Native MAUI equivalent of the React SPA's <c>Play3dCustomLaunchModal</c>.
+    /// Native MAUI equivalent of the React SPA's <c>MazeGameSettingsModal</c>.
     /// Lets the user customise the per-launch settings (sky, wall texture,
     /// landmark toggles, time limit) for a 3D play of a user-edited maze.
-    /// Returns the chosen <see cref="Play3dCustomLaunchSettings"/> on Play,
-    /// or <c>null</c> on Cancel. Pre-fills from <see cref="Play3dCustomLaunchSettingsStore.Load"/>
+    /// Returns the chosen <see cref="MazeGameSettings"/> on Play,
+    /// or <c>null</c> on Cancel. Pre-fills from <see cref="MazeGameSettingsStore.Load"/>
     /// so the user's previous choices are remembered.
     /// </summary>
-    public partial class Play3dCustomLaunchPopup : Popup
+    public partial class MazeGameSettingsPopup : Popup
     {
         // Display labels for the Sky picker. Index matches SkyTypeValues so
         // SelectedIndex maps to a wire value. `Dungeon` + `Chamber` are the
@@ -56,7 +56,7 @@ namespace Maze.Maui.App.Views
         /// Constructor. Pre-fills the form from the previously-saved settings.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title (wraps in the header if it's long)</param>
-        public Play3dCustomLaunchPopup(string? mazeName = null)
+        public MazeGameSettingsPopup(string? mazeName = null)
         {
             InitializeComponent();
 
@@ -74,7 +74,7 @@ namespace Maze.Maui.App.Views
             foreach (var label in HealthStyleLabels) HealthStylePicker.Items.Add(label);
 
             // Pre-fill from saved settings.
-            var settings = Play3dCustomLaunchSettingsStore.Load();
+            var settings = MazeGameSettingsStore.Load();
             SkyPicker.SelectedIndex = IndexOf(SkyTypeValues, settings.SkyType);
             WallTexturePicker.SelectedIndex = IndexOf(WallTypeValues, settings.WallType);
             DoorStylePicker.SelectedIndex = IndexOf(DoorStyleValues, settings.DoorStyle);
@@ -295,7 +295,7 @@ namespace Maze.Maui.App.Views
         /// Handles the Play button click. Validates the time limit (must be
         /// &gt; 0) and on success closes the popup with the chosen settings,
         /// having also persisted them via
-        /// <see cref="Play3dCustomLaunchSettingsStore.Save"/>.
+        /// <see cref="MazeGameSettingsStore.Save"/>.
         /// </summary>
         private async void OnPlayClicked(object sender, EventArgs e)
         {
@@ -313,7 +313,7 @@ namespace Maze.Maui.App.Views
             var enemyType = EnemyTypePicker.SelectedIndex >= 0 ? EnemyTypeValues[EnemyTypePicker.SelectedIndex] : "goblin";
             var healthStyle = HealthStylePicker.SelectedIndex >= 0 ? HealthStyleValues[HealthStylePicker.SelectedIndex] : "heart";
 
-            var settings = new Play3dCustomLaunchSettings
+            var settings = new MazeGameSettings
             {
                 SkyType = sky,
                 WallType = wall,
@@ -331,8 +331,8 @@ namespace Maze.Maui.App.Views
                 FloorAccents = FloorAccentsCheck.IsChecked,
                 TimerSeconds = timer,
             };
-            Play3dCustomLaunchSettingsStore.Save(settings);
-            await Navigation.ClosePopupAsync<Play3dCustomLaunchSettings?>(settings);
+            MazeGameSettingsStore.Save(settings);
+            await Navigation.ClosePopupAsync<MazeGameSettings?>(settings);
         }
 
         /// <summary>
@@ -340,7 +340,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private async void OnCancelClicked(object sender, EventArgs e)
         {
-            await Navigation.ClosePopupAsync<Play3dCustomLaunchSettings?>(null);
+            await Navigation.ClosePopupAsync<MazeGameSettings?>(null);
         }
 
         private static int IndexOf(string[] values, string target)

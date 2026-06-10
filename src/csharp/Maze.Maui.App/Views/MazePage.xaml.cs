@@ -247,10 +247,10 @@ namespace Maze.Maui.App.Views
             // For 3D launches, show the per-launch custom popup so the
             // user can pick sky / wall texture / landmark toggles / timer.
             // Cancelling the popup aborts the launch.
-            Models.Play3dCustomLaunchSettings? launchSettings = null;
+            Models.MazeGameSettings? launchSettings = null;
             if (gameType == Models.GameType.ThreeD)
             {
-                launchSettings = await _dialogService.ShowPlay3dCustomLaunchAsync(MazeItem.Name);
+                launchSettings = await _dialogService.ShowMazeGameSettingsAsync(MazeItem.Name);
                 if (launchSettings is null) return;
             }
 

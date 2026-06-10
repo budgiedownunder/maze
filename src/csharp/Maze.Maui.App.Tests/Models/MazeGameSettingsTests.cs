@@ -6,18 +6,18 @@ namespace Maze.Maui.App.Tests.Models
     /// <summary>
     /// Tests for the per-launch settings POCO that the Play 3D popup
     /// emits and the game-launch URL consumes. Coverage focuses on the
-    /// wire-string emission (<see cref="Play3dCustomLaunchSettings.ToQueryString"/>)
+    /// wire-string emission (<see cref="MazeGameSettings.ToQueryString"/>)
     /// and the enum validators the store uses to reject stale values —
     /// these are the bits the wasm boundary at <c>/game/index.html</c>
     /// depends on for `doorStyle` and `keyHolder`, the two parity
     /// dropdowns added in 8I.
     /// </summary>
-    public class Play3dCustomLaunchSettingsTests
+    public class MazeGameSettingsTests
     {
         [Fact]
         public void Defaults_MatchReactDefaults()
         {
-            var s = new Play3dCustomLaunchSettings();
+            var s = new MazeGameSettings();
             Assert.Equal("night", s.SkyType);
             Assert.Equal("brick", s.WallType);
             Assert.True(s.PerimeterWalls);
@@ -36,7 +36,7 @@ namespace Maze.Maui.App.Tests.Models
         [Fact]
         public void ToQueryString_EmitsDoorStyleAndKeyHolderInTheCamelCaseGameWireFormat()
         {
-            var s = new Play3dCustomLaunchSettings
+            var s = new MazeGameSettings
             {
                 SkyType = "day",
                 WallType = "dressed_stone",
@@ -80,7 +80,7 @@ namespace Maze.Maui.App.Tests.Models
         [InlineData("SWING", false)]        // case-sensitive wire format
         public void IsValidDoorStyle_AcceptsCurrentWireVariantsOnly(string s, bool expected)
         {
-            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidDoorStyle(s));
+            Assert.Equal(expected, MazeGameSettings.IsValidDoorStyle(s));
         }
 
         [Theory]
@@ -92,7 +92,7 @@ namespace Maze.Maui.App.Tests.Models
         [InlineData("Pedestal", false)]     // case-sensitive
         public void IsValidKeyHolder_AcceptsCurrentWireVariantsOnly(string s, bool expected)
         {
-            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidKeyHolder(s));
+            Assert.Equal(expected, MazeGameSettings.IsValidKeyHolder(s));
         }
 
         [Theory]
@@ -103,7 +103,7 @@ namespace Maze.Maui.App.Tests.Models
         [InlineData("Goblin", false)]   // case-sensitive
         public void IsValidEnemyType_AcceptsCurrentWireVariantsOnly(string s, bool expected)
         {
-            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidEnemyType(s));
+            Assert.Equal(expected, MazeGameSettings.IsValidEnemyType(s));
         }
 
         [Theory]
@@ -114,7 +114,7 @@ namespace Maze.Maui.App.Tests.Models
         [InlineData("Heart", false)]    // case-sensitive
         public void IsValidHealthStyle_AcceptsCurrentWireVariantsOnly(string s, bool expected)
         {
-            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidHealthStyle(s));
+            Assert.Equal(expected, MazeGameSettings.IsValidHealthStyle(s));
         }
 
         [Theory]
@@ -129,7 +129,7 @@ namespace Maze.Maui.App.Tests.Models
         [InlineData("Night", false)]    // case-sensitive
         public void IsValidSkyType_AcceptsCurrentWireVariantsOnly(string s, bool expected)
         {
-            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidSkyType(s));
+            Assert.Equal(expected, MazeGameSettings.IsValidSkyType(s));
         }
     }
 }
