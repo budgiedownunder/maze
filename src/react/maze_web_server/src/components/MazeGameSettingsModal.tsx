@@ -174,7 +174,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               </label>
 
               <label className="modal-stacked-input">
-                Wall texture
+                Wall Texture (Default)
                 <select
                   className="input"
                   value={wallType}
@@ -217,7 +217,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               hidden={activeTab !== 'objects'}
             >
               <label className="modal-stacked-input">
-                Door style
+                Door Style (Default)
                 <select
                   className="input"
                   value={doorStyle}
@@ -230,7 +230,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               </label>
 
               <label className="modal-stacked-input">
-                Key holder
+                Key Holder (Default)
                 <select
                   className="input"
                   value={keyHolder}
@@ -243,7 +243,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               </label>
 
               <label className="modal-stacked-input">
-                Enemy type
+                Enemy Type (Default)
                 <select
                   className="input"
                   value={enemyType}
@@ -256,7 +256,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               </label>
 
               <label className="modal-stacked-input">
-                Health style
+                Health Style (Default)
                 <select
                   className="input"
                   value={healthStyle}

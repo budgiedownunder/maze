@@ -1251,7 +1251,7 @@ test('a maze with persisted game settings seeds the settings editor', async ({ p
 
   // The modal is seeded from the maze's saved settings, not the localStorage defaults.
   await expect(dialog.getByLabel(/sky/i)).toHaveValue('day')
-  await expect(dialog.getByLabel(/wall texture/i)).toHaveValue('wood')
+  await expect(dialog.getByRole('combobox', { name: 'Wall Texture (Default)', exact: true })).toHaveValue('wood')
   await expect(dialog.getByLabel(/time limit/i)).toHaveValue('222')
 })
 
