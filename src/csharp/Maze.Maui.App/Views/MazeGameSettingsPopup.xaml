@@ -127,7 +127,7 @@
 
                 <!-- Wall texture -->
                 <VerticalStackLayout x:Name="WallTextureStack" Spacing="4">
-                    <Label x:Name="WallTextureLabel" Text="Wall texture"/>
+                    <Label x:Name="WallTextureLabel" Text="Wall Texture (Default)"/>
                     <Picker x:Name="WallTexturePicker"/>
                 </VerticalStackLayout>
 
@@ -151,25 +151,25 @@
             <VerticalStackLayout x:Name="ObjectsTab" Spacing="12" Opacity="0" InputTransparent="True">
                 <!-- Door style -->
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Door style"/>
+                    <Label Text="Door Style (Default)"/>
                     <Picker x:Name="DoorStylePicker"/>
                 </VerticalStackLayout>
 
                 <!-- Key holder -->
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Key holder"/>
+                    <Label Text="Key Holder (Default)"/>
                     <Picker x:Name="KeyHolderPicker"/>
                 </VerticalStackLayout>
 
                 <!-- Enemy type -->
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Enemy type"/>
+                    <Label Text="Enemy Type (Default)"/>
                     <Picker x:Name="EnemyTypePicker"/>
                 </VerticalStackLayout>
 
                 <!-- Health style -->
                 <VerticalStackLayout Spacing="4">
-                    <Label Text="Health style"/>
+                    <Label Text="Health Style (Default)"/>
                     <Picker x:Name="HealthStylePicker"/>
                 </VerticalStackLayout>
             </VerticalStackLayout>
