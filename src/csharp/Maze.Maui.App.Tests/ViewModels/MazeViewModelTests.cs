@@ -173,6 +173,28 @@ namespace Maze.Maui.App.Tests.ViewModels
             Assert.False(vm.CanSave);
         }
 
+        [Fact]
+        public async Task RefreshMaze_PullsInGameSettings()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.MazeItem = new MazeItem { ID = "1", Name = "Alpha" };
+            dialog.Setup(d => d.ShowConfirmation("Refresh Maze", It.IsAny<string>(), "Yes", "No", true))
+                  .ReturnsAsync(true);
+            service.Setup(s => s.GetMazeItem("1")).ReturnsAsync(new MazeItem
+            {
+                ID = "1",
+                Name = "Alpha",
+                Definition = new Api.Maze(2, 2),
+                GameSettings = new MazeGameSettings { TimerSeconds = 120 },
+            });
+
+            bool result = await vm.RefreshMaze();
+
+            Assert.True(result);
+            Assert.NotNull(vm.MazeItem.GameSettings);
+            Assert.Equal(120, vm.MazeItem.GameSettings!.TimerSeconds);
+        }
+
         // ---- SaveMaze (stored) ----------------------------------------------
 
         [Fact]

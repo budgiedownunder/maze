@@ -124,10 +124,13 @@ namespace Maze.Maui.App.ViewModels
             IsBusy = true;
             try
             {
+                // The maze-list summary omits game_settings; load the full maze so the editor
+                // seeds its Settings from the maze's saved values rather than defaults.
+                MazeItem full = await LoadFullMazeAsync(item);
                 await _navigationService.GoToAsync(nameof(MazePage),
                     new Dictionary<string, object>
                     {
-                        {"MazeItem", item }
+                        {"MazeItem", full }
                     });
                 // Hold IsBusy for a further 500ms after navigation completes to block any
                 // buffered second taps (e.g. double-click) that arrive after GoToAsync returns
@@ -166,13 +169,15 @@ namespace Maze.Maui.App.ViewModels
                 return;
             }
 
-            // For 3D launches, show the per-launch custom popup first so
-            // the user can pick sky / wall texture / landmark toggles /
-            // timer. Cancelling the popup aborts the launch.
+            // For 3D launches, show the Run / Custom Run… / Cancel chooser.
+            // Cancelling aborts the launch.
             MazeGameSettings? launchSettings = null;
             if (gameType == GameType.ThreeD)
             {
-                launchSettings = await _dialogService.ShowMazeGameSettingsAsync(item.Name);
+                // The maze-list summary omits game_settings; load the full maze so Run / Custom
+                // Run use the maze's saved settings rather than defaults.
+                MazeItem full = await LoadFullMazeAsync(item);
+                launchSettings = await Play3dLaunchResolver.ResolveAsync(_dialogService, item.Name, full.GameSettings);
                 if (launchSettings is null) return;
             }
 
@@ -191,6 +196,18 @@ namespace Maze.Maui.App.ViewModels
                 await Task.Delay(500);
             }
             finally { IsBusy = false; }
+        }
+        /// <summary>
+        /// Loads the full maze for the given list item. The maze-list summary (<c>get_mazes</c>)
+        /// omits <c>game_settings</c>, so callers that need them (the editor, Play 3D) fetch the
+        /// whole maze via the single-maze GET, which carries them. Falls back to the list item if
+        /// the fetch fails or returns nothing.
+        /// </summary>
+        /// <param name="item">The maze-list item</param>
+        /// <returns>The full maze item (with game settings), or the original item on failure</returns>
+        private async Task<MazeItem> LoadFullMazeAsync(MazeItem item)
+        {
+            return await _mazeService.GetMazeItem(item.ID) ?? item;
         }
         /// <summary>
         /// Activates the maze (design) page for a new maze item

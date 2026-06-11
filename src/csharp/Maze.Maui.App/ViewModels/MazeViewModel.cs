@@ -604,6 +604,7 @@ namespace Maze.Maui.App.ViewModels
                     {
                         MazeItem.Name = item?.Name ?? "";
                         MazeItem.Definition = item?.Definition ?? new Api.Maze(1, 1);
+                        MazeItem.GameSettings = item?.GameSettings;
                         UpdateCanSaveRefresh(false);
                         refreshed = true;
                     }

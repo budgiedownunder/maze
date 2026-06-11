@@ -349,6 +349,29 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public async Task GoToDesignAsync_LoadsFullMazeSoTheEditorGetsGameSettings()
+        {
+            var (vm, _, service, nav) = BuildVm();
+            // The list summary has no game_settings; the single-maze GET carries them.
+            var listItem = MakeItem("1", "Alpha");
+            var fullMaze = new MazeItem
+            {
+                ID = "1",
+                Name = "Alpha",
+                GameSettings = new MazeGameSettings { TimerSeconds = 120 },
+            };
+            service.Setup(s => s.GetMazeItem("1")).ReturnsAsync(fullMaze);
+
+            await vm.GoToDesignCommand.ExecuteAsync(listItem);
+
+            service.Verify(s => s.GetMazeItem("1"), Times.Once);
+            nav.Verify(n => n.GoToAsync(
+                nameof(MazePage),
+                It.Is<IDictionary<string, object>>(d => ((MazeItem)d["MazeItem"]).GameSettings!.TimerSeconds == 120)),
+                Times.Once);
+        }
+
+        [Fact]
         public async Task NewAsync_NavigatesToDesignWithFreshMazeItem()
         {
             var (vm, _, _, nav) = BuildVm();

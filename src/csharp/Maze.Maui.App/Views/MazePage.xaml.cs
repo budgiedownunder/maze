@@ -260,7 +260,7 @@ namespace Maze.Maui.App.Views
             Models.MazeGameSettings? launchSettings = null;
             if (gameType == Models.GameType.ThreeD)
             {
-                launchSettings = await ResolveThreeDLaunchSettingsAsync(MazeItem);
+                launchSettings = await Services.Play3dLaunchResolver.ResolveAsync(_dialogService, MazeItem.Name, MazeItem.GameSettings);
                 if (launchSettings is null) return;
             }
 
@@ -283,37 +283,6 @@ namespace Maze.Maui.App.Views
                 await Task.Delay(500);
             }
             finally { _viewModel.IsBusy = false; }
-        }
-        /// <summary>
-        /// Resolves the settings for a 3D launch via the Run / Custom Run… / Cancel chooser.
-        /// <c>Run</c> launches with the maze's saved settings; <c>Custom Run…</c> opens the
-        /// settings popup (seeded from the maze's settings) for a one-off launch and returns
-        /// to the chooser if cancelled; <c>Cancel</c> aborts.
-        /// </summary>
-        /// <param name="mazeItem">The maze being launched</param>
-        /// <returns>The launch settings, or <c>null</c> if the user cancelled the launch</returns>
-        private async Task<Models.MazeGameSettings?> ResolveThreeDLaunchSettingsAsync(Models.MazeItem mazeItem)
-        {
-            Models.MazeGameSettings saved = mazeItem.GameSettings ?? new Models.MazeGameSettings();
-            while (true)
-            {
-                Services.Play3dLaunchChoice choice = await _dialogService.ShowPlay3dLaunchChooserAsync(mazeItem.Name);
-                if (choice == Services.Play3dLaunchChoice.Run)
-                {
-                    return saved;
-                }
-                if (choice == Services.Play3dLaunchChoice.CustomRun)
-                {
-                    // One-off launch; Cancel from the settings popup returns to the chooser.
-                    Models.MazeGameSettings? custom = await _dialogService.ShowMazeGameSettingsAsync(mazeItem.Name, saved);
-                    if (custom is not null)
-                    {
-                        return custom;
-                    }
-                    continue;
-                }
-                return null; // Cancel / dismiss
-            }
         }
         /// <summary>
         /// Handles the maze grid cell tapped event
