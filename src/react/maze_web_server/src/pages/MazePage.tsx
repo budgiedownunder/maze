@@ -915,6 +915,7 @@ export function MazePage() {
               anchorCell={anchorCell}
               isRangeMode={isRangeMode}
               cellOverrides={overrides}
+              gameSettings={gameSettings}
               onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
               onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
               onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}

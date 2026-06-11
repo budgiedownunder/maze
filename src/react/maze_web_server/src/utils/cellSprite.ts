@@ -1,10 +1,17 @@
 import type { CellEntity, EnemyType, HealthStyle, WallType } from '../types/cellEntities'
+import type { MazeGameSettings } from './mazeGameSettings'
 
 // Resolves a grid cell (its char + optional per-cell override) to the sprite to draw.
 // Shared by the editor grid and the 2D game so the char-or-override → sprite mapping
 // lives in one place. Enemy/health carry distinct 2D variants (ghost/potion), and the
 // special wall types (water/lava/iron_fence) have their own 2D sprites; key/door rigs
 // and the solid wall textures are a 3D-only concern, so they render their generic sprite.
+//
+// A cell with no per-cell visual override falls back to the maze's `game_settings`
+// default (wallType / enemyType / healthStyle), so a maze authored as e.g. all-lava or
+// ghost enemies shows that look in 2D. A per-cell override always wins over the maze
+// default, and the default still resolves to the generic sprite when it has no distinct
+// 2D variant (the solid wall textures, the goblin / heart rigs).
 
 export interface CellImage {
   src: string
@@ -40,21 +47,32 @@ const WALL_VARIANT_SPRITES: Partial<Record<WallType, string>> = {
 
 /**
  * The sprite for a cell, honouring a per-cell override's visual variant when one
- * exists (enemy `enemyType`, health `healthStyle`). Returns the generic sprite for a
- * cell with no override, an override with no visual field, or a rig with no 2D variant
- * (key/door); `null` for an empty/unknown cell.
+ * exists (enemy `enemyType`, health `healthStyle`, wall `wallType`) and otherwise the
+ * maze's `game_settings` default for that family. Returns the generic sprite for a cell
+ * whose effective variant has no distinct 2D sprite (the goblin / heart rigs, the solid
+ * wall textures), or a rig with no 2D variant at all (key/door); `null` for an
+ * empty/unknown cell. A per-cell override always wins over the maze default.
  */
-export function cellSprite(char: string, entity?: CellEntity): CellImage | null {
+export function cellSprite(
+  char: string,
+  entity?: CellEntity,
+  settings?: MazeGameSettings,
+): CellImage | null {
   const base = BASE[char] ?? null
-  if (!base || !entity) return base
-  if (entity.type === 'E' && entity.enemyType) {
-    const src = ENEMY_VARIANT_SPRITES[entity.enemyType]
+  if (!base) return base
+  // Per-cell override field wins; otherwise inherit the maze default for this family.
+  if (char === 'E') {
+    const enemyType = (entity?.type === 'E' ? entity.enemyType : undefined) ?? settings?.enemyType
+    const src = enemyType ? ENEMY_VARIANT_SPRITES[enemyType] : undefined
     if (src) return { src, alt: base.alt }
-  } else if (entity.type === 'H' && entity.healthStyle) {
-    const src = HEALTH_VARIANT_SPRITES[entity.healthStyle]
+  } else if (char === 'H') {
+    const healthStyle =
+      (entity?.type === 'H' ? entity.healthStyle : undefined) ?? settings?.healthStyle
+    const src = healthStyle ? HEALTH_VARIANT_SPRITES[healthStyle] : undefined
     if (src) return { src, alt: base.alt }
-  } else if (entity.type === 'W' && entity.wallType) {
-    const src = WALL_VARIANT_SPRITES[entity.wallType]
+  } else if (char === 'W') {
+    const wallType = (entity?.type === 'W' ? entity.wallType : undefined) ?? settings?.wallType
+    const src = wallType ? WALL_VARIANT_SPRITES[wallType] : undefined
     if (src) return { src, alt: base.alt }
   }
   return base

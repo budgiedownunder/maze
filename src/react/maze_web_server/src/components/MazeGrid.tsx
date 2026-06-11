@@ -5,6 +5,7 @@ import type { MazeGameWasm } from 'maze_wasm'
 import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
 import { cellSprite, enemyRigHasSprite } from '../utils/cellSprite'
 import type { CellEntity, EnemyType } from '../types/cellEntities'
+import type { MazeGameSettings } from '../utils/mazeGameSettings'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -30,6 +31,10 @@ interface MazeGridProps {
   // numeric-only ones with no distinct sprite — are visible at a glance. Omitted in
   // game mode (the game resolves its own live variants).
   cellOverrides?: Map<string, CellEntity>
+  // The maze's persisted game settings. Supplies the base sprite for a cell with no
+  // per-cell visual override (wall / enemy / health default), so the grid reflects the
+  // maze's authored 2D look. Omitted ⇒ the generic base sprites.
+  gameSettings?: MazeGameSettings
 }
 
 const FOOTSTEP_IMAGES: Record<string, string> = {
@@ -121,7 +126,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE, cellOverrides },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE, cellOverrides, gameSettings },
     ref,
   ) {
     const rows = grid.length
@@ -481,7 +486,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   // below (its spawn `'E'` is suppressed in game mode).
                   let img = (isWalker || isGamePlayer)
                     ? null
-                    : cellSprite(cell, cellOverrides?.get(key))
+                    : cellSprite(cell, cellOverrides?.get(key), gameSettings)
                   let imgStyle: React.CSSProperties | undefined
                   // Game mode: a collected key disappears, an open door disappears, and
                   // a door that is opening is dimmed. A consumed health pickup
@@ -506,7 +511,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const hasEnemy = enemyCount > 0
                   // Live enemy overlay sprite, honouring a per-cell `enemyType` rig.
                   const enemyType = enemyTypeByCell?.get(key)
-                  const enemySrc = cellSprite('E', enemyType ? { type: 'E', enemyType } : undefined)?.src
+                  const enemySrc = cellSprite('E', enemyType ? { type: 'E', enemyType } : undefined, gameSettings)?.src
                     ?? '/images/maze/enemy.svg'
                   return (
                     <td

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { cellSprite, enemyRigHasSprite } from '../../src/utils/cellSprite'
+import { MAZE_GAME_SETTINGS_DEFAULTS } from '../../src/utils/mazeGameSettings'
 
 describe('cellSprite', () => {
   it('returns null for an empty or unknown cell', () => {
@@ -52,6 +53,35 @@ describe('cellSprite', () => {
   it('returns the generic wall for a solid-texture override (texture is a 3D concern)', () => {
     expect(cellSprite('W', { type: 'W', wallType: 'brick' })?.src).toBe('/images/maze/wall.png')
     expect(cellSprite('W', { type: 'W', wallType: 'cobblestone' })?.src).toBe('/images/maze/wall.png')
+  })
+})
+
+describe('cellSprite with maze game settings', () => {
+  const lavaMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, wallType: 'lava' as const }
+  const ghostMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, enemyType: 'ghost' as const }
+  const potionMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, healthStyle: 'potion' as const }
+
+  it('uses the maze default for a cell with no per-cell override', () => {
+    expect(cellSprite('W', undefined, lavaMaze)?.src).toBe('/images/maze/lava.svg')
+    expect(cellSprite('E', undefined, ghostMaze)?.src).toBe('/images/maze/ghost.svg')
+    expect(cellSprite('H', undefined, potionMaze)?.src).toBe('/images/maze/potion.svg')
+  })
+
+  it('uses the maze default for an override with no matching visual field', () => {
+    expect(cellSprite('E', { type: 'E', damage: 3 }, ghostMaze)?.src).toBe('/images/maze/ghost.svg')
+  })
+
+  it('lets a per-cell override win over the maze default', () => {
+    // A water override beats a lava maze; a goblin override beats a ghost maze.
+    expect(cellSprite('W', { type: 'W', wallType: 'water' }, lavaMaze)?.src).toBe('/images/maze/water.svg')
+    expect(cellSprite('E', { type: 'E', enemyType: 'goblin' }, ghostMaze)?.src).toBe('/images/maze/enemy.svg')
+  })
+
+  it('falls back to the generic sprite when the maze default has no distinct 2D sprite', () => {
+    const solidMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, wallType: 'dressed_stone' as const }
+    expect(cellSprite('W', undefined, solidMaze)?.src).toBe('/images/maze/wall.png')
+    expect(cellSprite('E', undefined, MAZE_GAME_SETTINGS_DEFAULTS)?.src).toBe('/images/maze/enemy.svg')
+    expect(cellSprite('H', undefined, MAZE_GAME_SETTINGS_DEFAULTS)?.src).toBe('/images/maze/health.svg')
   })
 })
 
