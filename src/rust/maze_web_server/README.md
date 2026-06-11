@@ -440,7 +440,7 @@ Notes:
 
 ## Storage Backend
 
-The server stores users, maze definitions, OAuth identities, and login tokens in a pluggable backend selected by `storage.type`.
+The server stores users, maze definitions, OAuth identities, and login tokens in a pluggable backend selected by `storage.type`. A maze's stored JSON may also carry an optional `game_settings` sibling to its `definition` — the per-maze 3D environment settings (sky, wall/enemy/health styles, timer, …) authored in the clients; the server stores and returns it opaquely as part of the maze blob.
 
 ### When to use which
 

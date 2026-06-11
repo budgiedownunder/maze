@@ -12,13 +12,20 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   pickups), multi-cell range selection, structural editing (insert/delete rows and columns),
   keyboard shortcuts, and a per-cell override panel for tuning an individual cell's
   characteristics (an enemy's type/damage/move interval, a health pickup's style/heal amount,
-  a key holder or door style, or a wall's type — a solid texture or a water / lava / iron-fence
-  skin). Variant types such as ghost enemies, potion pickups, and water/lava/iron-fence walls
-  show their own sprite in the grid, and overridden cells are marked with a corner badge
+  a key holder or door style, or a wall's type — "Default" (inherit the maze's wall
+  default), a forced solid texture, or a water / lava / iron-fence skin). Variant types such
+  as ghost enemies, potion pickups, and water/lava/iron-fence walls show their own sprite in
+  the grid, and overridden cells are marked with a corner badge. A settings toolbar button
+  opens a per-maze game-settings editor (sky, wall / enemy / health styles, timer, …) saved
+  with the maze; a cell with no per-cell override inherits the maze's wall / enemy / health
+  default as its 2D base sprite
 - **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
-  on-screen D-pad; visited cells are marked; completion shows a result popup
-- **3D maze game** — a "Play 3D" button on the maze list and maze editor pages
-  navigates the browser to `/game/?id={mazeId}` on the Rust server, which serves the
+  on-screen D-pad; visited cells are marked; completion shows a result popup. Wall / enemy /
+  health cells render the maze's default sprites (e.g. lava walls, ghost enemies, potion
+  pickups) unless a per-cell override says otherwise
+- **3D maze game** — a "Play 3D" button on the maze list and maze editor pages opens a
+  "Run / Custom Run" chooser — "Run" launches with the maze's saved settings, "Custom
+  Run" with one-off tweaks — then navigates the browser to `/game/?id={mazeId}` on the Rust server, which serves the
   [`Bevy`](https://bevyengine.org/) WebAssembly module ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md))
   that runs the first-person 3D game entirely in-browser. On touch devices
   the game accepts both a six-button D-pad (turn / move / tilt / pause) and
