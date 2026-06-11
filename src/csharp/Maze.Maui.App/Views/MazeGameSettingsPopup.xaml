@@ -39,7 +39,7 @@
             Border stays content-sized (the * row falls back to Auto), so
             the popup doesn't inflate on a tall window. When the window
             shrinks, only the active tab's panel scrolls — the title, tab
-            strip, time limit and Cancel/Play row stay anchored. The
+            strip, time limit and Cancel/Submit row stay anchored. The
             settings are grouped across the Scene / Objects / Decor tabs
             so the form reads as a few short panels rather than one long
             scrolling list.
@@ -210,10 +210,10 @@
                        HorizontalOptions="Center"/>
             </VerticalStackLayout>
 
-            <!-- Buttons (pinned outside the ScrollView so Cancel/Play
+            <!-- Buttons (pinned outside the ScrollView so Cancel/Submit
                  stay visible). Centred with explicit button widths so
                  they don't span the full popup width (which would make
-                 a 4-char "Play" button absurdly wide). 100 px each is
+                 a short submit-button label absurdly wide). 100 px each is
                  enough for the longest label ("Cancel") at the default
                  button font size. -->
             <HorizontalStackLayout Grid.Row="4"
@@ -222,7 +222,7 @@
                 <Button x:Name="CancelButton" Text="Cancel" WidthRequest="100" Clicked="OnCancelClicked"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                         TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
-                <Button x:Name="PlayButton" Text="Play" WidthRequest="100" Clicked="OnPlayClicked"/>
+                <Button x:Name="SubmitButton" Text="Submit" WidthRequest="100" Clicked="OnSubmitClicked"/>
             </HorizontalStackLayout>
 
         </Grid>

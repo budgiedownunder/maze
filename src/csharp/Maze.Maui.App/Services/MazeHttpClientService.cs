@@ -269,6 +269,14 @@ namespace Maze.Maui.App.Services
                 Definition = new Api.Maze(0, 0)
             };
             item.Definition.FromJson(jsonResponse);
+            // The maze carries optional per-maze game settings as a sibling of
+            // `definition`; pull them off the same response object.
+            if (fields is not null && fields.TryGetValue("game_settings", out object? gameSettingsValue)
+                && gameSettingsValue is JsonElement gameSettingsElement
+                && gameSettingsElement.ValueKind == JsonValueKind.Object)
+            {
+                item.GameSettings = JsonSerializer.Deserialize<MazeGameSettings>(gameSettingsElement.GetRawText());
+            }
             return item;
         }
         /// <summary>

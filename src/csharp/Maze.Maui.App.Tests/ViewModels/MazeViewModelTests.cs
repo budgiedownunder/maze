@@ -102,6 +102,77 @@ namespace Maze.Maui.App.Tests.ViewModels
             service.Verify(s => s.CreateMazeItem(It.IsAny<MazeItem>()), Times.Never);
         }
 
+        // ---- Game settings --------------------------------------------------
+
+        [Fact]
+        public void ApplyGameSettings_MarksSettingsDirtyAndEnablesSave()
+        {
+            var (vm, _, _, _) = BuildVm();
+            var settings = new MazeGameSettings { SkyType = "dungeon", TimerSeconds = 90 };
+
+            vm.ApplyGameSettings(settings);
+
+            Assert.Same(settings, vm.MazeItem.GameSettings);
+            Assert.True(vm.GameSettingsDirty);
+            // A settings-only edit enables Save without flipping the grid/definition dirty flag.
+            Assert.False(vm.IsDirty);
+            Assert.True(vm.CanSave);
+        }
+
+        [Fact]
+        public void ApplyGameSettings_WhileBusy_EnablesSaveOnceBusyClears()
+        {
+            var (vm, _, _, _) = BuildVm();
+            // The settings popup closes via a Shell navigation that flips IsBusy on for ~300ms;
+            // a settings edit applied inside that window must still enable Save once busy clears.
+            vm.IsBusy = true;
+            vm.ApplyGameSettings(new MazeGameSettings { SkyType = "dungeon" });
+            Assert.True(vm.GameSettingsDirty);
+            Assert.False(vm.CanSave);   // save is gated off while busy
+
+            vm.IsBusy = false;
+
+            Assert.True(vm.CanSave);    // OnPropertyChanged(IsBusy) recomputes the save-state
+        }
+
+        [Fact]
+        public async Task SaveMaze_Draft_CarriesGameSettings()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.IsStored = false;
+            vm.MazeItem = new MazeItem();
+            var settings = new MazeGameSettings { SkyType = "dungeon" };
+            vm.ApplyGameSettings(settings);
+            dialog.Setup(d => d.DisplayPrompt(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                                              It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+                                              It.IsAny<int>(), It.IsAny<Keyboard?>(), It.IsAny<string?>(),
+                                              It.IsAny<bool>(), It.IsAny<bool>()))
+                  .ReturnsAsync("New Maze");
+
+            var result = await vm.SaveMaze(new Api.Maze(3, 3));
+
+            Assert.True(result);
+            service.Verify(s => s.CreateMazeItem(It.Is<MazeItem>(i => i.GameSettings == settings)), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveMaze_Stored_CarriesGameSettings()
+        {
+            var (vm, _, _, service) = BuildVm();
+            vm.IsStored = true;
+            vm.MazeItem = new MazeItem { ID = "abc", Name = "Existing" };
+            var settings = new MazeGameSettings { SkyType = "dungeon", TimerSeconds = 90 };
+            vm.ApplyGameSettings(settings);
+
+            var result = await vm.SaveMaze(new Api.Maze(3, 3));
+
+            Assert.True(result);
+            service.Verify(s => s.UpdateMazeItem(It.Is<MazeItem>(i => i.GameSettings == settings)), Times.Once);
+            // Saving persists the settings, so the settings-dirty flag clears and Save disables.
+            Assert.False(vm.GameSettingsDirty);
+            Assert.False(vm.CanSave);
+        }
+
         // ---- SaveMaze (stored) ----------------------------------------------
 
         [Fact]

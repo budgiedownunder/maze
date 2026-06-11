@@ -217,6 +217,17 @@ namespace Maze.Maui.App.Views
         }
         private void OnPlayClicked(object sender, EventArgs e) => _ = PlayAsync(Models.GameType.TwoD);
         private void OnPlay3dClicked(object sender, EventArgs e) => _ = PlayAsync(Models.GameType.ThreeD);
+        private async void OnSettingsClicked(object sender, EventArgs e)
+        {
+            if (MazeItem is null || _viewModel.IsBusy) return;
+            // Edit the maze's 3D game settings; Apply marks the maze dirty so the
+            // change persists on the next Save (the settings ride the maze).
+            var result = await _dialogService.ShowMazeGameSettingsEditorAsync(MazeItem.Name, MazeItem.GameSettings);
+            if (result is not null)
+            {
+                _viewModel.ApplyGameSettings(result);
+            }
+        }
 
         private async Task PlayAsync(Models.GameType gameType)
         {

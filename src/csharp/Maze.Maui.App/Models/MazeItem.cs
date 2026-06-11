@@ -54,6 +54,13 @@ namespace Maze.Maui.App.Models
             }
         }
         /// <summary>
+        /// Optional per-maze 3D game settings (the launch environment), carried
+        /// alongside the definition. Null until settings have been saved.
+        /// </summary>
+        /// <returns>Per-maze game settings, or null</returns>
+        [JsonPropertyName("game_settings")]
+        public MazeGameSettings? GameSettings { get; set; }
+        /// <summary>
         /// Provides a textual summary of the maze's dimensions
         /// </summary>
         /// <returns>Dimensions summary</returns>
@@ -115,6 +122,9 @@ namespace Maze.Maui.App.Models
                 ID = this.ID,
                 Name = this.Name,
                 Definition = new Api.Maze(0, 0),
+                // Settings are replaced wholesale on edit (never mutated in place),
+                // so sharing the reference is safe.
+                GameSettings = this.GameSettings,
             };
 
             if (this.Definition is not null)

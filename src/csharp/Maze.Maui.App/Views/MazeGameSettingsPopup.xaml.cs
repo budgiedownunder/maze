@@ -27,8 +27,8 @@ namespace Maze.Maui.App.Views
         private static readonly string[] SkyTypeValues = { "night", "sunrise", "day", "sunset", "dungeon", "chamber" };
 
         // Display labels for the Wall texture picker. Same index pairing.
-        private static readonly string[] WallTypeLabels = { "Brick", "Dressed Stone", "Wood", "Cobblestone" };
-        private static readonly string[] WallTypeValues = { "brick", "dressed_stone", "wood", "cobblestone" };
+        private static readonly string[] WallTypeLabels = { "Brick", "Dressed Stone", "Wood", "Cobblestone", "Water", "Lava", "Iron Fence" };
+        private static readonly string[] WallTypeValues = { "brick", "dressed_stone", "wood", "cobblestone", "water", "lava", "iron_fence" };
 
         // Display labels for the Door style picker. Same index pairing.
         private static readonly string[] DoorStyleLabels = { "Swing", "Slide", "Portcullis", "Dissolve" };
@@ -52,15 +52,33 @@ namespace Maze.Maui.App.Views
         // the React modal, which forces the box visually but still emits the stored value.
         private bool _perimeterWallsPreference = true;
 
+        // Whether the submit action persists the chosen settings to the device store.
+        // True for the launch path (remembers the last-used launch); false for the
+        // per-maze settings editor, whose settings persist with the maze instead.
+        private readonly bool _persistToStore;
+
         /// <summary>
-        /// Constructor. Pre-fills the form from the previously-saved settings.
+        /// Constructor. Pre-fills the form from <paramref name="initialSettings"/>
+        /// (or the device's last-used settings when null).
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title (wraps in the header if it's long)</param>
-        public MazeGameSettingsPopup(string? mazeName = null)
+        /// <param name="initialSettings">Settings to seed the form with; null falls back to the device store</param>
+        /// <param name="title">Explicit dialog title; null derives one from <paramref name="mazeName"/></param>
+        /// <param name="submitLabel">Text for the submit button (e.g. "Apply" or "Play"); defaults to "Submit"</param>
+        /// <param name="persistToStore">Whether submit saves the settings to the device store</param>
+        public MazeGameSettingsPopup(string? mazeName = null, MazeGameSettings? initialSettings = null,
+            string? title = null, string submitLabel = "Submit", bool persistToStore = true)
         {
             InitializeComponent();
 
-            if (!string.IsNullOrWhiteSpace(mazeName))
+            _persistToStore = persistToStore;
+            SubmitButton.Text = submitLabel;
+
+            if (title is not null)
+            {
+                TitleLabel.Text = title;
+            }
+            else if (!string.IsNullOrWhiteSpace(mazeName))
             {
                 TitleLabel.Text = $"Play 3D — {mazeName}";
             }
@@ -73,8 +91,9 @@ namespace Maze.Maui.App.Views
             foreach (var label in EnemyTypeLabels) EnemyTypePicker.Items.Add(label);
             foreach (var label in HealthStyleLabels) HealthStylePicker.Items.Add(label);
 
-            // Pre-fill from saved settings.
-            var settings = MazeGameSettingsStore.Load();
+            // Pre-fill: an explicit initialSettings (the maze's saved settings) wins;
+            // otherwise fall back to the device's last-used launch settings.
+            var settings = initialSettings ?? MazeGameSettingsStore.Load();
             SkyPicker.SelectedIndex = IndexOf(SkyTypeValues, settings.SkyType);
             WallTexturePicker.SelectedIndex = IndexOf(WallTypeValues, settings.WallType);
             DoorStylePicker.SelectedIndex = IndexOf(DoorStyleValues, settings.DoorStyle);
@@ -175,14 +194,14 @@ namespace Maze.Maui.App.Views
             // page underneath. Mirrors the same wiring in GenerateMazePopup.
             if (e.Key != Windows.System.VirtualKey.Tab) return;
             bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (!shift && PlayButton.IsFocused)
+            if (!shift && SubmitButton.IsFocused)
             {
                 SkyPicker.Focus();
                 e.Handled = true;
             }
             else if (shift && SkyPicker.IsFocused)
             {
-                PlayButton.Focus();
+                SubmitButton.Focus();
                 e.Handled = true;
             }
         }
@@ -292,12 +311,13 @@ namespace Maze.Maui.App.Views
         }
 
         /// <summary>
-        /// Handles the Play button click. Validates the time limit (must be
+        /// Handles the submit button click. Validates the time limit (must be
         /// &gt; 0) and on success closes the popup with the chosen settings,
-        /// having also persisted them via
-        /// <see cref="MazeGameSettingsStore.Save"/>.
+        /// persisting them via <see cref="MazeGameSettingsStore.Save"/> first
+        /// when the popup is in store-backed mode (the launch path, not the
+        /// per-maze settings editor).
         /// </summary>
-        private async void OnPlayClicked(object sender, EventArgs e)
+        private async void OnSubmitClicked(object sender, EventArgs e)
         {
             if (!int.TryParse(TimerEntry.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int timer) || timer <= 0)
             {
@@ -331,7 +351,7 @@ namespace Maze.Maui.App.Views
                 FloorAccents = FloorAccentsCheck.IsChecked,
                 TimerSeconds = timer,
             };
-            MazeGameSettingsStore.Save(settings);
+            if (_persistToStore) MazeGameSettingsStore.Save(settings);
             await Navigation.ClosePopupAsync<MazeGameSettings?>(settings);
         }
 

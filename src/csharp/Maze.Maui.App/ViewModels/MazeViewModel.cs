@@ -135,6 +135,14 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Boolean value</returns>
         public bool IsDirty { get; set; }
         /// <summary>
+        /// Indicates whether the maze's 3D game settings have unsaved edits. Tracked
+        /// separately from <see cref="IsDirty"/> (the grid/definition dirty flag) so a
+        /// settings-only change still enables Save and triggers the save-on-play prompt —
+        /// mirroring the React client's separate <c>gameSettingsDirty</c> flag.
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool GameSettingsDirty { get; set; }
+        /// <summary>
         /// The maze item currently being displayed
         /// </summary>
         /// <returns>Maze item</returns>
@@ -541,7 +549,8 @@ namespace Maze.Maui.App.ViewModels
                 MazeItem item = new MazeItem
                 {
                     Name = name,
-                    Definition = definition
+                    Definition = definition,
+                    GameSettings = MazeItem.GameSettings
                 };
 
                 await _mazeService.CreateMazeItem(item);
@@ -564,7 +573,8 @@ namespace Maze.Maui.App.ViewModels
             {
                 ID = MazeItem.ID,
                 Name = MazeItem.Name,
-                Definition = definition
+                Definition = definition,
+                GameSettings = MazeItem.GameSettings
             };
             await _mazeService.UpdateMazeItem(item);
             MazeItem.Definition = definition;
@@ -614,15 +624,57 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         public void NotifyMazeChanged() => UpdateCanSaveRefresh(true);
         /// <summary>
-        /// Updates the `CanSave`/`CanRefresh` property states for the given dirty state
+        /// Applies edited 3D game settings to the current maze and marks it dirty,
+        /// so the change is persisted on the next Save (the settings ride the maze).
+        /// </summary>
+        /// <param name="settings">The chosen game settings</param>
+        public void ApplyGameSettings(MazeGameSettings settings)
+        {
+            MazeItem.GameSettings = settings;
+            GameSettingsDirty = true;
+            RefreshSaveState();
+        }
+        /// <summary>
+        /// Updates the grid/definition dirty state and recomputes the `CanSave`/`CanRefresh`
+        /// states. A save/refresh (<paramref name="dirty"/> == false) persists or reloads the
+        /// whole maze — including its game settings — so it also clears the separate
+        /// game-settings dirty flag.
         /// </summary>
         /// <returns>Nothing</returns>
         private void UpdateCanSaveRefresh(bool dirty)
         {
             IsDirty = dirty;
+            if (!dirty)
+                GameSettingsDirty = false;
+            RefreshSaveState();
+        }
+        /// <summary>
+        /// Recomputes the `CanSave`/`CanRefresh` states from the current dirty flags. Save is
+        /// enabled when either the grid/definition or the game settings have unsaved edits
+        /// (and the view model is not busy).
+        /// </summary>
+        /// <returns>Nothing</returns>
+        private void RefreshSaveState()
+        {
+            bool hasUnsavedWork = (IsDirty || GameSettingsDirty) && !IsBusy;
             if (IsStored)
-                CanRefresh = IsDirty && !IsBusy;
-            CanSave = IsDirty && !IsBusy;
+                CanRefresh = hasUnsavedWork;
+            CanSave = hasUnsavedWork;
+        }
+        /// <summary>
+        /// Reacts to <see cref="BaseViewModel.IsBusy"/> changes. Because save-state is gated on
+        /// <c>!IsBusy</c>, a transient busy blip would otherwise strand <c>CanSave</c> at the
+        /// value computed while busy. (The game-settings popup closes via a Shell navigation,
+        /// which fires <c>MazePage.OnNavigatedTo</c> and flips <c>IsBusy</c> on for ~300ms; a
+        /// settings edit applied inside that window would not enable Save.) Recomputing the
+        /// save-state whenever <c>IsBusy</c> changes keeps it consistent once busy clears.
+        /// </summary>
+        /// <param name="e">The changed-property arguments</param>
+        protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            base.OnPropertyChanged(e);
+            if (e.PropertyName == nameof(IsBusy))
+                RefreshSaveState();
         }
         /// <summary>
         /// Runs the given event handler request

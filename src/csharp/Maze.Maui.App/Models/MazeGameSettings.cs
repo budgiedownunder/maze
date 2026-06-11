@@ -1,18 +1,20 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace Maze.Maui.App.Models
 {
     /// <summary>
-    /// Per-launch customisation values for the Play 3D button on user-edited
-    /// mazes. Mirrors the React SPA's <c>MazeGameSettings</c> in
-    /// <c>src/react/maze_web_server/src/utils/mazeGameSettings.ts</c>
-    /// so the MAUI app and the web SPA offer the same set of knobs.
+    /// The 3D game settings for a user-edited maze (sky, walls, rig styles,
+    /// landmarks, timer). Persisted per-maze on <c>MazeItem.GameSettings</c> and
+    /// mirrors the React SPA's <c>MazeGameSettings</c> in
+    /// <c>src/react/maze_web_server/src/utils/mazeGameSettings.ts</c>. The
+    /// <c>[JsonPropertyName]</c> camelCase keys match the React/server
+    /// <c>game_settings</c> wire shape, so a maze's settings round-trip across
+    /// both clients.
     ///
-    /// This is a plain POCO with no MAUI / persistence dependencies — the
-    /// <c>Maze.Maui.App.Tests</c> project file-links it for unit testing.
-    /// Preferences I/O lives in <c>Services.MazeGameSettingsStore</c>
-    /// in the main app project.
+    /// A plain POCO — the <c>Maze.Maui.App.Tests</c> project file-links it for
+    /// unit testing.
     /// </summary>
     public sealed class MazeGameSettings
     {
@@ -23,47 +25,60 @@ namespace Maze.Maui.App.Models
         public const string PreferencesKey = "mazeGameSettings";
 
         /// <summary>Sky type wire token (lowercase).</summary>
+        [JsonPropertyName("skyType")]
         public string SkyType { get; set; } = "night";
 
         /// <summary>Wall texture wire token (lowercase / snake_case).</summary>
+        [JsonPropertyName("wallType")]
         public string WallType { get; set; } = "brick";
 
         /// <summary>Whether the maze perimeter is walled at the grid edge under an open
         /// sky. Enclosed skies (dungeon / chamber) always wall it regardless.</summary>
+        [JsonPropertyName("perimeterWalls")]
         public bool PerimeterWalls { get; set; } = true;
 
         /// <summary>Door style wire token (lowercase / snake_case) — selects the
         /// 3D door rig (swing / slide / portcullis / dissolve).</summary>
+        [JsonPropertyName("doorStyle")]
         public string DoorStyle { get; set; } = "swing";
 
         /// <summary>Key-holder style wire token (lowercase / snake_case) — selects
         /// the 3D pickup rig (pedestal / chest / floating_key).</summary>
+        [JsonPropertyName("keyHolder")]
         public string KeyHolder { get; set; } = "pedestal";
 
         /// <summary>Enemy type wire token (lowercase) — selects the 3D enemy
         /// rig (goblin / ghost).</summary>
+        [JsonPropertyName("enemyType")]
         public string EnemyType { get; set; } = "goblin";
 
         /// <summary>Health-pickup style wire token (lowercase) — selects the
         /// 3D pickup rig (heart / potion).</summary>
+        [JsonPropertyName("healthStyle")]
         public string HealthStyle { get; set; } = "heart";
 
         /// <summary>Per-cell wall tint variation on?</summary>
+        [JsonPropertyName("wallTint")]
         public bool WallTint { get; set; } = false;
 
         /// <summary>Per-quadrant wall material variation on? Disables wall_type + wall_tint when true.</summary>
+        [JsonPropertyName("wallMaterialVariation")]
         public bool WallMaterialVariation { get; set; } = false;
 
         /// <summary>Dead-end landmark objects on?</summary>
+        [JsonPropertyName("deadEndObjects")]
         public bool DeadEndObjects { get; set; } = true;
 
         /// <summary>Sparse wall decorations on?</summary>
+        [JsonPropertyName("wallDecorations")]
         public bool WallDecorations { get; set; } = true;
 
         /// <summary>Floor accents at junctions on?</summary>
+        [JsonPropertyName("floorAccents")]
         public bool FloorAccents { get; set; } = true;
 
         /// <summary>Time limit (seconds). Must be &gt; 0.</summary>
+        [JsonPropertyName("timerSeconds")]
         public int TimerSeconds { get; set; } = 60;
 
         /// <summary>
@@ -110,7 +125,8 @@ namespace Maze.Maui.App.Models
         /// the default on a stale stored value.
         /// </summary>
         public static bool IsValidWallType(string s) =>
-            s is "brick" or "dressed_stone" or "wood" or "cobblestone";
+            s is "brick" or "dressed_stone" or "wood" or "cobblestone"
+                or "water" or "lava" or "iron_fence";
 
         /// <summary>
         /// Returns <c>true</c> when <paramref name="s"/> is a recognised

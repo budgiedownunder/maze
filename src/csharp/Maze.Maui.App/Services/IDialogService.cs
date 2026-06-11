@@ -91,5 +91,16 @@
         /// <param name="mazeName">Maze name shown in the popup title</param>
         /// <returns>A task containing the chosen settings, or <c>null</c> if the user cancelled</returns>
         public Task<Models.MazeGameSettings?> ShowMazeGameSettingsAsync(string? mazeName = null);
+
+        /// <summary>
+        /// Displays the per-maze game-settings editor for a user-edited maze,
+        /// seeded from the maze's current settings (or defaults when none).
+        /// On Apply the returned settings are the caller's to persist with the
+        /// maze; nothing is written to the device store.
+        /// </summary>
+        /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <param name="current">The maze's current settings, or null for defaults</param>
+        /// <returns>A task containing the edited settings, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.MazeGameSettings?> ShowMazeGameSettingsEditorAsync(string? mazeName, Models.MazeGameSettings? current);
     }
 }

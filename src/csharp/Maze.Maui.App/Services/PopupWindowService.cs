@@ -101,6 +101,22 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
+        /// Displays the per-maze game-settings editor, seeded from the maze's
+        /// current settings. On Apply the returned settings are the caller's to
+        /// persist with the maze; the popup writes nothing to the device store.
+        /// </summary>
+        /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <param name="current">The maze's current settings, or null for defaults</param>
+        /// <returns>A task that contains the edited settings, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.MazeGameSettings?> ShowMazeGameSettingsEditorAsync(string? mazeName, Models.MazeGameSettings? current)
+        {
+            string title = !string.IsNullOrWhiteSpace(mazeName) ? $"Game settings — {mazeName}" : "Game settings";
+            var popup = new Views.MazeGameSettingsPopup(mazeName, current, title: title, submitLabel: "Apply", persistToStore: false);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.MazeGameSettings?>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
         /// Displays a prompt to the user as a popup window with the intent to capture a single string value, together with `accept` and `cancel` buttons
         /// </summary>
         /// <param name="title">Title</param>

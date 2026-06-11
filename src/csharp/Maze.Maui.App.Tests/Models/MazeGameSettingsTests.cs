@@ -131,5 +131,44 @@ namespace Maze.Maui.App.Tests.Models
         {
             Assert.Equal(expected, MazeGameSettings.IsValidSkyType(s));
         }
+
+        [Theory]
+        [InlineData("brick", true)]
+        [InlineData("dressed_stone", true)]
+        [InlineData("wood", true)]
+        [InlineData("cobblestone", true)]
+        [InlineData("water", true)]        // non-occluding pool
+        [InlineData("lava", true)]         // non-occluding pool
+        [InlineData("iron_fence", true)]   // non-occluding see-through bars
+        [InlineData("marble", false)]      // never on the wire
+        [InlineData("", false)]
+        public void IsValidWallType_AcceptsCurrentWireVariantsOnly(string s, bool expected)
+        {
+            Assert.Equal(expected, MazeGameSettings.IsValidWallType(s));
+        }
+
+        [Fact]
+        public void SerializesToCamelCaseWireKeys()
+        {
+            var s = new MazeGameSettings { SkyType = "dungeon", WallType = "lava", TimerSeconds = 90 };
+            string json = System.Text.Json.JsonSerializer.Serialize(s);
+            // camelCase keys match the React/server `game_settings` wire shape so a
+            // maze's settings round-trip across both clients.
+            Assert.Contains("\"skyType\":\"dungeon\"", json);
+            Assert.Contains("\"wallType\":\"lava\"", json);
+            Assert.Contains("\"timerSeconds\":90", json);
+            Assert.DoesNotContain("SkyType", json);
+        }
+
+        [Fact]
+        public void DeserializesFromCamelCaseWireKeys()
+        {
+            string json = "{\"skyType\":\"day\",\"wallType\":\"wood\",\"timerSeconds\":120,\"enemyType\":\"ghost\"}";
+            var s = System.Text.Json.JsonSerializer.Deserialize<MazeGameSettings>(json)!;
+            Assert.Equal("day", s.SkyType);
+            Assert.Equal("wood", s.WallType);
+            Assert.Equal(120, s.TimerSeconds);
+            Assert.Equal("ghost", s.EnemyType);
+        }
     }
 }
