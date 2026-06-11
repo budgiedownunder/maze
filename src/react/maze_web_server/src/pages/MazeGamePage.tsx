@@ -161,6 +161,7 @@ export function MazeGamePage() {
               version={version}
               cellSize={gameCellSize}
               cellOverrides={cellOverrides}
+              gameSettings={maze?.game_settings}
             />
 
             <div className="maze-game-status">

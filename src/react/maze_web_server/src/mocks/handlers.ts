@@ -154,6 +154,37 @@ export const mockMazeWithSettings: Maze = {
   },
 }
 
+// A maze whose per-maze game settings make ghost the default enemy and lava the
+// default wall, with NO per-cell overrides. Used to verify the 2D game renders those
+// maze-default bases (the 'E' enemy as a ghost, the 'W' wall as lava). Kept out of
+// `mockMazes`, served by id directly. Layout: an enemy on the S→F path and a wall
+// off-path.
+export const mockMazeSettingsDisplay: Maze = {
+  id: 'maze-settings-display',
+  name: 'SettingsDisplay',
+  definition: {
+    grid: [
+      ['S', 'E', 'F'],
+      ['W', ' ', ' '],
+    ],
+  },
+  game_settings: {
+    skyType: 'night',
+    wallType: 'lava',
+    perimeterWalls: true,
+    doorStyle: 'swing',
+    keyHolder: 'pedestal',
+    enemyType: 'ghost',
+    healthStyle: 'heart',
+    wallTint: false,
+    wallMaterialVariation: false,
+    deadEndObjects: true,
+    wallDecorations: true,
+    floorAccents: true,
+    timerSeconds: 60,
+  },
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -352,6 +383,7 @@ export const handlers = [
       ?? (params.id === mockMazeOverride.id ? mockMazeOverride : undefined)
       ?? (params.id === mockMazeOverrideStatic.id ? mockMazeOverrideStatic : undefined)
       ?? (params.id === mockMazeWithSettings.id ? mockMazeWithSettings : undefined)
+      ?? (params.id === mockMazeSettingsDisplay.id ? mockMazeSettingsDisplay : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

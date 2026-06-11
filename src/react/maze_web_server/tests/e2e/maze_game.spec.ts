@@ -356,4 +356,15 @@ test.describe('MazeGamePage — per-cell variants', () => {
     await expect(grid.getByAltText('Key')).toBeVisible()
     await expect(grid.getByAltText('Door')).toBeVisible()
   })
+
+  test('maze game_settings drive the 2D base sprites (ghost enemy, lava wall) with no per-cell override', async ({ page }) => {
+    await login(page)
+    // maze-settings-display has game_settings enemyType=ghost / wallType=lava and NO
+    // per-cell overrides — the maze defaults alone must drive the 2D bases.
+    await page.goto('/play/maze-settings-display')
+    await expect(page.getByAltText('Player')).toBeVisible({ timeout: 15000 })
+    const grid = page.locator('.maze-grid-container')
+    await expect(grid.locator('img[src*="ghost.svg"]').first()).toBeVisible({ timeout: 15000 })
+    await expect(grid.locator('img[src*="lava.svg"]').first()).toBeVisible({ timeout: 15000 })
+  })
 })

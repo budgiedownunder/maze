@@ -7,6 +7,7 @@ import { server } from '../../src/mocks/server'
 import { mockMazeAlpha, mockMazeOverrideStatic } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { MazeGamePage } from '../../src/pages/MazeGamePage'
+import { MAZE_GAME_SETTINGS_DEFAULTS } from '../../src/utils/mazeGameSettings'
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ vi.mock('../../src/components/MazeGrid', () => ({
       data-version={props.version as number}
       data-grid={JSON.stringify(props.grid)}
       data-overrides={JSON.stringify(props.cellOverrides ? Array.from((props.cellOverrides as Map<string, unknown>).entries()) : null)}
+      data-game-settings={JSON.stringify(props.gameSettings ?? null)}
     />
   ),
 }))
@@ -456,5 +458,27 @@ describe('MazeGamePage per-cell overrides', () => {
     expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
     const overrides = JSON.parse(gridEl.getAttribute('data-overrides')!) as [string, unknown][]
     expect(overrides).toEqual([])
+  })
+})
+
+describe('MazeGamePage maze game settings', () => {
+  it('passes the loaded maze game_settings to MazeGrid so the 2D game shows the maze defaults', async () => {
+    const settings = { ...MAZE_GAME_SETTINGS_DEFAULTS, enemyType: 'ghost' as const, wallType: 'lava' as const }
+    server.use(
+      http.get('/api/v1/mazes/:id', () =>
+        HttpResponse.json({ ...mockMazeAlpha, game_settings: settings }),
+      ),
+    )
+    renderPage(mockMazeAlpha.id)
+    await waitForLoad()
+    const gridEl = screen.getByTestId('maze-grid')
+    expect(JSON.parse(gridEl.getAttribute('data-game-settings')!)).toEqual(settings)
+  })
+
+  it('passes null game settings for a maze with none', async () => {
+    renderPage(mockMazeAlpha.id)
+    await waitForLoad()
+    const gridEl = screen.getByTestId('maze-grid')
+    expect(JSON.parse(gridEl.getAttribute('data-game-settings')!)).toBeNull()
   })
 })
