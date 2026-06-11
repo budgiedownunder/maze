@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using Maze.Api;
+using Maze.Maui.App.Models;
+using static Maze.Api.Maze;
 
 namespace Maze.Maui.App
 {
@@ -29,6 +31,66 @@ namespace Maze.Maui.App
             WallCellEntity { WallType: WallType.IronFence } => "iron_fence.png",
             _ => null
         };
+
+        /// <summary>
+        /// The base sprite a non-overridden cell inherits from the maze's game settings
+        /// (e.g. a lava maze renders its walls as <c>"lava.png"</c>), or <c>null</c> when
+        /// the maze default has no distinct 2D sprite (a solid wall texture, the goblin /
+        /// heart rigs) so the hardcoded base applies. Only wall / enemy / health carry a 2D
+        /// variant; every other cell type is unaffected.
+        ///
+        /// A per-cell override always wins: when the override explicitly sets this family's
+        /// visual field (e.g. a goblin or brick override), the maze default is ignored
+        /// (<c>null</c>) so the override's own resolution stands — mirroring the web
+        /// editor's <c>override.field ?? settings.field</c> precedence.
+        /// </summary>
+        /// <param name="cellType">The cell's feature type.</param>
+        /// <param name="cellOverride">The cell's per-cell override, or null.</param>
+        /// <param name="settings">The maze's game settings, or null.</param>
+        /// <returns>The maze-default base image name, or null.</returns>
+        public static string? BaseImageName(CellType cellType, CellEntityInfo? cellOverride, MazeGameSettings? settings)
+        {
+            if (settings is null)
+            {
+                return null;
+            }
+            return cellType switch
+            {
+                CellType.Wall when cellOverride is not WallCellEntity { WallType: not null } => settings.WallType switch
+                {
+                    "water" => "water.png",
+                    "lava" => "lava.png",
+                    "iron_fence" => "iron_fence.png",
+                    _ => null
+                },
+                CellType.Enemy when cellOverride is not EnemyCellEntity { EnemyType: not null } =>
+                    settings.EnemyType == "ghost" ? "ghost.png" : null,
+                CellType.Health when cellOverride is not HealthCellEntity { HealthStyle: not null } =>
+                    settings.HealthStyle == "potion" ? "potion.png" : null,
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Whether the maze-default 2D base sprite of any wall / enemy / health cell differs
+        /// between two settings (treating null as "no settings" → the hardcoded bases). Used
+        /// to skip the editor-grid refresh when a settings edit only touched 3D-only fields
+        /// (sky, timer, rig styles, …) that don't change the 2D display.
+        /// </summary>
+        /// <param name="before">The settings before the edit, or null.</param>
+        /// <param name="after">The settings after the edit, or null.</param>
+        /// <returns>True when a 2D base sprite changed.</returns>
+        public static bool MazeDefaultBaseChanged(MazeGameSettings? before, MazeGameSettings? after)
+        {
+            foreach (CellType cellType in new[] { CellType.Wall, CellType.Enemy, CellType.Health })
+            {
+                if (BaseImageName(cellType, null, before) != BaseImageName(cellType, null, after))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         /// <summary>
         /// The rig to display for a cell shared by multiple enemies: a rig with a distinct

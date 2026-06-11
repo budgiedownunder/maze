@@ -222,10 +222,18 @@ namespace Maze.Maui.App.Views
             if (MazeItem is null || _viewModel.IsBusy) return;
             // Edit the maze's 3D game settings; Apply marks the maze dirty so the
             // change persists on the next Save (the settings ride the maze).
+            Models.MazeGameSettings? before = MazeItem.GameSettings;
             var result = await _dialogService.ShowMazeGameSettingsEditorAsync(MazeItem.Name, MazeItem.GameSettings);
             if (result is not null)
             {
                 _viewModel.ApplyGameSettings(result);
+                // Only repaint the grid when a 2D-relevant default (wall / enemy / health)
+                // actually changed — the other settings are 3D-only and don't affect the
+                // 2D display.
+                if (CellSprite.MazeDefaultBaseChanged(before, result))
+                {
+                    MazeGrid.RefreshGameSettingsBaseSprites();
+                }
             }
         }
 

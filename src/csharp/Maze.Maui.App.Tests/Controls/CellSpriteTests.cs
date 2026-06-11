@@ -1,6 +1,8 @@
 using Maze.Api;
 using Maze.Maui.App;
+using Maze.Maui.App.Models;
 using Xunit;
+using static Maze.Api.Maze;
 
 namespace Maze.Maui.App.Tests.Controls
 {
@@ -48,6 +50,78 @@ namespace Maze.Maui.App.Tests.Controls
         {
             Assert.Null(CellSprite.VariantImageName(new KeyCellEntity { KeyHolder = KeyHolderStyle.Chest }));
             Assert.Null(CellSprite.VariantImageName(new DoorCellEntity { DoorStyle = DoorStyle.Portcullis }));
+        }
+
+        [Theory]
+        [InlineData("water", "water.png")]
+        [InlineData("lava", "lava.png")]
+        [InlineData("iron_fence", "iron_fence.png")]
+        [InlineData("brick", null)] // solid textures have no 2D sprite — hardcoded base
+        [InlineData("wood", null)]
+        public void Base_wall_from_settings(string wallType, string? expected) =>
+            Assert.Equal(expected, CellSprite.BaseImageName(CellType.Wall, null, new MazeGameSettings { WallType = wallType }));
+
+        [Theory]
+        [InlineData("ghost", "ghost.png")]
+        [InlineData("goblin", null)] // the default rig has no 2D sprite — hardcoded base
+        public void Base_enemy_from_settings(string enemyType, string? expected) =>
+            Assert.Equal(expected, CellSprite.BaseImageName(CellType.Enemy, null, new MazeGameSettings { EnemyType = enemyType }));
+
+        [Theory]
+        [InlineData("potion", "potion.png")]
+        [InlineData("heart", null)] // the default style has no 2D sprite — hardcoded base
+        public void Base_health_from_settings(string healthStyle, string? expected) =>
+            Assert.Equal(expected, CellSprite.BaseImageName(CellType.Health, null, new MazeGameSettings { HealthStyle = healthStyle }));
+
+        [Fact]
+        public void Base_is_null_without_settings() =>
+            Assert.Null(CellSprite.BaseImageName(CellType.Wall, null, null));
+
+        [Fact]
+        public void Base_ignores_non_feature_cell_types() =>
+            Assert.Null(CellSprite.BaseImageName(CellType.Door, null, new MazeGameSettings { WallType = "lava" }));
+
+        [Fact]
+        public void Explicit_override_field_suppresses_the_maze_default()
+        {
+            // A per-cell override that explicitly sets the family's field wins: the maze
+            // default is ignored (null) so the override's own resolution (variant or
+            // hardcoded base) stands — mirroring the web editor's override-wins precedence.
+            var lava = new MazeGameSettings { WallType = "lava" };
+            Assert.Null(CellSprite.BaseImageName(CellType.Wall, new WallCellEntity { WallType = WallType.Brick }, lava));
+            var ghost = new MazeGameSettings { EnemyType = "ghost" };
+            Assert.Null(CellSprite.BaseImageName(CellType.Enemy, new EnemyCellEntity { EnemyType = EnemyType.Goblin }, ghost));
+        }
+
+        [Fact]
+        public void A_field_less_override_still_inherits_the_maze_default() =>
+            // An override with only a numeric field doesn't set the rig, so the cell still
+            // inherits the maze default (matches the web editor).
+            Assert.Equal("ghost.png",
+                CellSprite.BaseImageName(CellType.Enemy, new EnemyCellEntity { Damage = 3 }, new MazeGameSettings { EnemyType = "ghost" }));
+
+        [Fact]
+        public void Default_base_change_triggers_on_a_2d_relevant_change()
+        {
+            // A wall special change, an enemy rig change, and a health style change each flip
+            // a 2D base sprite, so a refresh is needed.
+            Assert.True(CellSprite.MazeDefaultBaseChanged(new MazeGameSettings { WallType = "brick" }, new MazeGameSettings { WallType = "lava" }));
+            Assert.True(CellSprite.MazeDefaultBaseChanged(new MazeGameSettings { EnemyType = "goblin" }, new MazeGameSettings { EnemyType = "ghost" }));
+            Assert.True(CellSprite.MazeDefaultBaseChanged(new MazeGameSettings { HealthStyle = "heart" }, new MazeGameSettings { HealthStyle = "potion" }));
+            Assert.True(CellSprite.MazeDefaultBaseChanged(new MazeGameSettings { WallType = "lava" }, new MazeGameSettings { WallType = "water" }));
+        }
+
+        [Fact]
+        public void Default_base_change_skips_a_solid_to_solid_or_3d_only_change()
+        {
+            // brick -> wood are both solid (no 2D sprite), so no 2D base changed.
+            Assert.False(CellSprite.MazeDefaultBaseChanged(new MazeGameSettings { WallType = "brick" }, new MazeGameSettings { WallType = "wood" }));
+            // A 3D-only edit (sky / timer) leaves every 2D base unchanged.
+            Assert.False(CellSprite.MazeDefaultBaseChanged(
+                new MazeGameSettings { SkyType = "night", TimerSeconds = 60 },
+                new MazeGameSettings { SkyType = "day", TimerSeconds = 120 }));
+            // null (no settings) vs all-default tokens both render the hardcoded bases.
+            Assert.False(CellSprite.MazeDefaultBaseChanged(null, new MazeGameSettings()));
         }
 
         [Fact]

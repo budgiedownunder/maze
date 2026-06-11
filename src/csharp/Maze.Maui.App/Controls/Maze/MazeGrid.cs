@@ -298,7 +298,7 @@ namespace Maze.Maui.App
         {
             // Logical model is already populated in Initialize() before InitializeContent() runs
             CellType type = gridInitializing ? _cellTypes[row, column] : CellType.Empty;
-            var content = new MazeCellContent(type, OverrideForRender(type, row, column), showBadge: !_gameMode);
+            var content = new MazeCellContent(type, OverrideForRender(type, row, column), mazeItem?.GameSettings, showBadge: !_gameMode);
             ApplyGameRuntimeState(content, row, column);
             return content;
         }
@@ -339,12 +339,12 @@ namespace Maze.Maui.App
             MazeCellContent content;
             if (frame.Content is MazeCellContent existing)
             {
-                existing.Update(type, direction, entity, showBadge: !_gameMode);
+                existing.Update(type, direction, entity, mazeItem?.GameSettings, showBadge: !_gameMode);
                 content = existing;
             }
             else
             {
-                content = new MazeCellContent(type, entity, showBadge: !_gameMode);
+                content = new MazeCellContent(type, entity, mazeItem?.GameSettings, showBadge: !_gameMode);
                 if (direction != MazeCellContent.PathDirection.None)
                     content.SetSolutionPath(direction);
                 frame.Content = content;
@@ -514,8 +514,31 @@ namespace Maze.Maui.App
             MazeCellContent? content = GetCellContent(row + 1, col + 1);
             if (content is null) return;
             content.Update(_cellTypes[row, col], _solutionDirections[row, col],
-                OverrideForRender(_cellTypes[row, col], row, col), showBadge: !_gameMode);
+                OverrideForRender(_cellTypes[row, col], row, col), mazeItem?.GameSettings, showBadge: !_gameMode);
             ApplyGameRuntimeState(content, row, col);
+        }
+        /// <summary>
+        /// Re-renders the base sprite of every realized wall / enemy / health cell from the
+        /// maze's current game settings, so the editor grid reflects a changed wall / enemy /
+        /// health default. Off-screen (virtualized) cells are not realized; they pick up the
+        /// new settings when they scroll into view via <see cref="UpdateCellContent"/>.
+        /// </summary>
+        public void RefreshGameSettingsBaseSprites()
+        {
+            for (int row = 0; row < RowCount; row++)
+            {
+                for (int col = 0; col < ColumnCount; col++)
+                {
+                    CellType type = _cellTypes[row, col];
+                    if (type is not (CellType.Wall or CellType.Enemy or CellType.Health))
+                    {
+                        continue;
+                    }
+                    MazeCellContent? content = GetCellContent(row + 1, col + 1);
+                    content?.Update(type, _solutionDirections[row, col],
+                        OverrideForRender(type, row, col), mazeItem?.GameSettings, showBadge: !_gameMode);
+                }
+            }
         }
         /// <summary>
         /// Marks the key at the given 0-based cell as collected — the cell
@@ -1591,6 +1614,10 @@ namespace Maze.Maui.App
         PathDirection solutionPathDirection = PathDirection.None;
         // The cell's per-cell override (drives the variant sprite + badge), or null.
         CellEntityInfo? cellOverride = null;
+        // The maze's game settings, supplying the base sprite a non-overridden wall /
+        // enemy / health cell inherits (e.g. a lava maze's walls), or null for the
+        // hardcoded bases. Per-cell overrides still win.
+        MazeGameSettings? settings = null;
         // Whether to overlay the authoring badge on an override cell. The variant sprite
         // always renders from the override; the badge is an editor affordance only and is
         // suppressed during play (matching the web editor, which hides it in-game).
@@ -1656,11 +1683,13 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="cellType">Cell type</param>
         /// <param name="cellOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
+        /// <param name="settings">The maze's game settings (supplies the non-overridden base sprite), or null</param>
         /// <param name="showBadge">Whether to overlay the authoring badge on an override cell (editor only)</param>
-        public MazeCellContent(CellType cellType, CellEntityInfo? cellOverride = null, bool showBadge = true)
+        public MazeCellContent(CellType cellType, CellEntityInfo? cellOverride = null, MazeGameSettings? settings = null, bool showBadge = true)
         {
             this.cellType = cellType;
             this.cellOverride = cellOverride;
+            this.settings = settings;
             this.showOverrideBadge = showBadge;
             switch (cellType)
             {
@@ -1727,6 +1756,13 @@ namespace Maze.Maui.App
             {
                 return variant;
             }
+            // A non-overridden wall / enemy / health cell inherits the maze's game-settings
+            // default base (e.g. lava walls); falls through to the hardcoded base otherwise.
+            string? mazeDefault = CellSprite.BaseImageName(cellType, cellOverride, settings);
+            if (mazeDefault is not null)
+            {
+                return mazeDefault;
+            }
             switch (cellType)
             {
                 case CellType.Start:
@@ -1753,12 +1789,14 @@ namespace Maze.Maui.App
         /// <param name="newCellType">New cell type</param>
         /// <param name="newDirection">New solution path direction</param>
         /// <param name="newOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
+        /// <param name="newSettings">The maze's game settings (supplies the non-overridden base sprite), or null</param>
         /// <param name="showBadge">Whether to overlay the authoring badge on an override cell (editor only)</param>
-        public void Update(CellType newCellType, PathDirection newDirection, CellEntityInfo? newOverride = null, bool showBadge = true)
+        public void Update(CellType newCellType, PathDirection newDirection, CellEntityInfo? newOverride = null, MazeGameSettings? newSettings = null, bool showBadge = true)
         {
             cellType = newCellType;
             solutionPathDirection = newDirection;
             cellOverride = newOverride;
+            settings = newSettings;
             showOverrideBadge = showBadge;
 
             bool needsImage = cellType != CellType.Empty || solutionPathDirection != PathDirection.None;
