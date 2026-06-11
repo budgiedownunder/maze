@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CellOverridePanel } from '../../src/components/CellOverridePanel'
 import type { CellEntity } from '../../src/types/cellEntities'
+import { MAZE_GAME_SETTINGS_DEFAULTS, type MazeGameSettings } from '../../src/utils/mazeGameSettings'
 
-function setup(cellType: 'E' | 'H' | 'K' | 'D' | 'W', override?: CellEntity) {
+function setup(cellType: 'E' | 'H' | 'K' | 'D' | 'W', override?: CellEntity, gameSettings?: MazeGameSettings) {
   const onApply = vi.fn()
   const onClear = vi.fn()
   render(
@@ -15,6 +16,7 @@ function setup(cellType: 'E' | 'H' | 'K' | 'D' | 'W', override?: CellEntity) {
       override={override}
       onApply={onApply}
       onClear={onClear}
+      gameSettings={gameSettings}
     />,
   )
   return { onApply, onClear }
@@ -162,10 +164,36 @@ describe('CellOverridePanel', () => {
     expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/potion.svg')
   })
 
-  it('renders the wall Type + Texture selects, with Texture shown under "Wall"', () => {
+  it('defaults a fresh wall cell to the "Default" (inherit) tier-1, with the texture picker shown for a solid maze default', () => {
+    // No game settings ⇒ the effective maze default wall is solid (brick), so tier-1
+    // "Default" still offers a per-cell texture override (its tier-2 inherit value '').
     setup('W')
-    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('wall')
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('default')
     expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('')
+  })
+
+  it('lists Default, Wall, and the special wall types in tier-1', () => {
+    setup('W')
+    const type = screen.getByRole('combobox', { name: 'Type' })
+    for (const name of ['Default', 'Wall', 'Water', 'Lava', 'Iron Fence']) {
+      expect(within(type).getByRole('option', { name })).toBeInTheDocument()
+    }
+  })
+
+  it('selecting "Default" inherits (clears the override)', async () => {
+    const { onClear } = setup('W', { type: 'W', wallType: 'lava' })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'default')
+    expect(onClear).toHaveBeenCalled()
+  })
+
+  it('selecting "Wall" forces a solid wall (first texture) and shows the texture picker', async () => {
+    const { onApply } = setup('W')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'wall')
+    expect(onApply).toHaveBeenLastCalledWith({ type: 'W', wallType: 'brick' })
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toBeInTheDocument()
+    // "Wall" forces a concrete texture — no inherit option in tier-2.
+    expect(within(screen.getByRole('combobox', { name: 'Texture' })).queryByRole('option', { name: 'Default' }))
+      .not.toBeInTheDocument()
   })
 
   it('applies a special wall type and hides the Texture select', async () => {
@@ -175,17 +203,33 @@ describe('CellOverridePanel', () => {
     expect(screen.queryByRole('combobox', { name: 'Texture' })).not.toBeInTheDocument()
   })
 
-  it('applies a solid texture chosen under "Wall"', async () => {
-    const { onApply } = setup('W')
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Texture' }), 'brick')
-    expect(onApply).toHaveBeenLastCalledWith({ type: 'W', wallType: 'brick' })
-  })
-
-  it('clears the override when Texture returns to Default under "Wall"', async () => {
-    const { onClear } = setup('W', { type: 'W', wallType: 'brick' })
-    expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('brick')
+  it('under "Default" with a solid maze default, picking a texture overrides just this cell; back to Default inherits', async () => {
+    const { onApply, onClear } = setup('W')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Texture' }), 'wood')
+    expect(onApply).toHaveBeenLastCalledWith({ type: 'W', wallType: 'wood' })
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Texture' }), '')
     expect(onClear).toHaveBeenCalled()
+  })
+
+  it('clears the override by switching tier-1 from Wall to Default', async () => {
+    const { onClear } = setup('W', { type: 'W', wallType: 'brick' })
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('wall')
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('brick')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'default')
+    expect(onClear).toHaveBeenCalled()
+  })
+
+  it('hides the texture picker under "Default" when the maze default wall is special', () => {
+    setup('W', undefined, { ...MAZE_GAME_SETTINGS_DEFAULTS, wallType: 'lava' })
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('default')
+    expect(screen.queryByRole('combobox', { name: 'Texture' })).not.toBeInTheDocument()
+  })
+
+  it('shows the texture picker under "Wall" even when the maze default wall is special', async () => {
+    setup('W', undefined, { ...MAZE_GAME_SETTINGS_DEFAULTS, wallType: 'lava' })
+    expect(screen.queryByRole('combobox', { name: 'Texture' })).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'wall')
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toBeInTheDocument()
   })
 
   it('seeds a special wall type into the Type select (no Texture select)', () => {
@@ -194,7 +238,7 @@ describe('CellOverridePanel', () => {
     expect(screen.queryByRole('combobox', { name: 'Texture' })).not.toBeInTheDocument()
   })
 
-  it('seeds a solid wall texture into the Texture select under "Wall"', () => {
+  it('seeds a solid wall override as "Wall" + that texture', () => {
     setup('W', { type: 'W', wallType: 'dressed_stone' })
     expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('wall')
     expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('dressed_stone')
@@ -209,6 +253,30 @@ describe('CellOverridePanel', () => {
       />,
     )
     expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/water.svg')
+  })
+
+  it('previews the maze default wall/enemy/health when no per-cell override is set', () => {
+    const lavaMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, wallType: 'lava' as const }
+    const ghostMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, enemyType: 'ghost' as const }
+    const potionMaze = { ...MAZE_GAME_SETTINGS_DEFAULTS, healthStyle: 'potion' as const }
+
+    const wall = render(
+      <CellOverridePanel cellType="W" row={0} col={0} override={undefined} onApply={vi.fn()} onClear={vi.fn()} gameSettings={lavaMaze} />,
+    )
+    expect(wall.container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/lava.svg')
+    wall.unmount()
+
+    const enemy = render(
+      <CellOverridePanel cellType="E" row={0} col={0} override={undefined} onApply={vi.fn()} onClear={vi.fn()} gameSettings={ghostMaze} />,
+    )
+    expect(enemy.container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/ghost.svg')
+    enemy.unmount()
+
+    const health = render(
+      <CellOverridePanel cellType="H" row={0} col={0} override={undefined} onApply={vi.fn()} onClear={vi.fn()} gameSettings={potionMaze} />,
+    )
+    expect(health.container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/potion.svg')
+    health.unmount()
   })
 
   it('re-seeds the fields to defaults when the override is cleared externally', () => {

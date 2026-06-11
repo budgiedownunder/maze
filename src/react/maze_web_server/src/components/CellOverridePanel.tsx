@@ -9,6 +9,7 @@ import {
   titleCaseWire,
 } from '../utils/cellEntityStyles'
 import { cellSprite } from '../utils/cellSprite'
+import type { MazeGameSettings } from '../utils/mazeGameSettings'
 import type {
   CellEntity,
   DoorStyle,
@@ -18,6 +19,12 @@ import type {
   KeyHolderStyle,
   WallType,
 } from '../types/cellEntities'
+
+// The two tier-1 wall kinds that aren't a special (non-occluding) type: 'default'
+// inherits the maze's `wallType` (no per-cell override), 'wall' forces a solid wall
+// for this cell. The solid texture is then chosen in tier-2.
+const WALL_KIND_DEFAULT = 'default'
+const WALL_KIND_WALL = 'wall'
 
 const TYPE_LABELS: Record<FeatureChar, string> = {
   E: 'Enemy',
@@ -53,6 +60,10 @@ interface Props {
   onApplyToAll?: () => void
   /** Number of cells in the selection (> 1), shown in the Apply-to-all label. */
   selectionCount?: number
+  /** The maze's game settings, used so the wall tier-1 "Default" knows whether the
+   * maze default wallType is solid (→ offer a texture override) and so the previews
+   * reflect the maze's wall/enemy/health defaults when no per-cell override is set. */
+  gameSettings?: MazeGameSettings
 }
 
 // "" means "Default (inherit)" for a rig select; "" / invalid means inherit for a
@@ -93,6 +104,7 @@ export function CellOverridePanel({
   onResetAll,
   onApplyToAll,
   selectionCount,
+  gameSettings,
 }: Props) {
   const enemy = override?.type === 'E' ? override : undefined
   const health = override?.type === 'H' ? override : undefined
@@ -107,15 +119,25 @@ export function CellOverridePanel({
   const [healAmount, setHealAmount] = useState<string>(health?.healAmount?.toString() ?? '')
   const [keyHolder, setKeyHolder] = useState<string>(key?.keyHolder ?? '')
   const [doorStyle, setDoorStyle] = useState<string>(door?.doorStyle ?? '')
-  // Wall is two-tier: `wallKind` is 'wall' (a solid texture, chosen via wallTexture) or
-  // one of the special types; `wallTexture` is the solid texture when kind is 'wall'.
+  // Wall is two-tier. `wallKind` is 'default' (inherit the maze's wallType — no
+  // override), 'wall' (force a solid wall, texture chosen via wallTexture), or a special
+  // type; `wallTexture` is the solid texture when a texture is in play. A stored override
+  // is always a concrete wallType: a special seeds its kind directly, a solid seeds 'wall'
+  // + that texture, and no override seeds 'default'.
   const initialWallType = wall?.wallType
   const [wallKind, setWallKind] = useState<string>(
-    initialWallType !== undefined && isSpecialWallType(initialWallType) ? initialWallType : 'wall',
+    initialWallType === undefined
+      ? WALL_KIND_DEFAULT
+      : isSpecialWallType(initialWallType)
+        ? initialWallType
+        : WALL_KIND_WALL,
   )
   const [wallTexture, setWallTexture] = useState<string>(
     initialWallType !== undefined && !isSpecialWallType(initialWallType) ? initialWallType : '',
   )
+  // Whether the maze's default wallType is a solid texture (so tier-1 "Default" can offer
+  // a per-cell texture override). No settings ⇒ the effective default is solid (brick).
+  const mazeDefaultWallIsSolid = !isSpecialWallType(gameSettings?.wallType ?? '')
 
   // Re-seed the fields to defaults when the override is cleared externally (e.g. the
   // toolbar re-stamps the same cell type, which drops the override but keeps the cell
@@ -134,7 +156,7 @@ export function CellOverridePanel({
       setHealAmount('')
       setKeyHolder('')
       setDoorStyle('')
-      setWallKind('wall')
+      setWallKind(WALL_KIND_DEFAULT)
       setWallTexture('')
     }
   }
@@ -175,17 +197,35 @@ export function CellOverridePanel({
     emit(entity)
   }
 
-  // The single flat wallType the two-tier UI resolves to: a special kind directly, or
-  // the chosen solid texture under "Wall" (or none → default).
+  // The single flat wallType the two-tier UI resolves to, or undefined when the cell
+  // inherits the maze default (tier-1 "Default" with no texture override). "Wall" always
+  // forces a concrete solid texture (its tier-2 has no inherit option, so the texture is
+  // never blank); a special kind maps directly.
   function effectiveWallType(kind: string, texture: string): WallType | undefined {
-    if (kind === 'wall') return texture ? (texture as WallType) : undefined
+    if (kind === WALL_KIND_DEFAULT) return texture ? (texture as WallType) : undefined
+    if (kind === WALL_KIND_WALL) return (texture || WALL_SOLID_TEXTURES[0]) as WallType
     return kind as WallType
   }
 
   function applyWall(kind: string, texture: string) {
     const wallType = effectiveWallType(kind, texture)
     if (wallType) onApply({ type: 'W', wallType })
-    else onClear() // "Wall" + Default texture = no override (varied default)
+    else onClear() // tier-1 "Default" with no texture override = inherit the maze default
+  }
+
+  // Tier-1 change. "Default" inherits (clears any override); "Wall" forces a solid,
+  // keeping a prior solid texture or falling back to the first; a special applies
+  // directly. wallTexture is reset for the inherit/special kinds so it doesn't linger.
+  function changeWallKind(kind: string) {
+    setWallKind(kind)
+    if (kind === WALL_KIND_WALL) {
+      const texture = wallTexture && !isSpecialWallType(wallTexture) ? wallTexture : WALL_SOLID_TEXTURES[0]
+      setWallTexture(texture)
+      applyWall(kind, texture)
+    } else {
+      setWallTexture('')
+      applyWall(kind, '')
+    }
   }
 
   function resetAll() {
@@ -196,7 +236,7 @@ export function CellOverridePanel({
     setHealAmount('')
     setKeyHolder('')
     setDoorStyle('')
-    setWallKind('wall')
+    setWallKind(WALL_KIND_DEFAULT)
     setWallTexture('')
     // For a block, clear every cell in the selection; for a single cell, just it.
     ;(onResetAll ?? onClear)()
@@ -216,7 +256,7 @@ export function CellOverridePanel({
             <div className="cell-override-select-row">
               <img
                 className="cell-override-preview"
-                src={cellSprite('E', { type: 'E', enemyType: enemyType ? (enemyType as EnemyType) : undefined })?.src}
+                src={cellSprite('E', { type: 'E', enemyType: enemyType ? (enemyType as EnemyType) : undefined }, gameSettings)?.src}
                 alt="" aria-hidden="true"
               />
               <select
@@ -255,7 +295,7 @@ export function CellOverridePanel({
             <div className="cell-override-select-row">
               <img
                 className="cell-override-preview"
-                src={cellSprite('H', { type: 'H', healthStyle: healthStyle ? (healthStyle as HealthStyle) : undefined })?.src}
+                src={cellSprite('H', { type: 'H', healthStyle: healthStyle ? (healthStyle as HealthStyle) : undefined }, gameSettings)?.src}
                 alt="" aria-hidden="true"
               />
               <select
@@ -314,20 +354,24 @@ export function CellOverridePanel({
             <div className="cell-override-select-row">
               <img
                 className="cell-override-preview"
-                src={cellSprite('W', { type: 'W', wallType: effectiveWallType(wallKind, wallTexture) })?.src}
+                src={cellSprite('W', { type: 'W', wallType: effectiveWallType(wallKind, wallTexture) }, gameSettings)?.src}
                 alt="" aria-hidden="true"
               />
               <select
                 className="cell-override-input"
                 value={wallKind}
-                onChange={e => { setWallKind(e.target.value); applyWall(e.target.value, wallTexture) }}
+                onChange={e => changeWallKind(e.target.value)}
               >
-                <option value="wall">Wall</option>
+                <option value={WALL_KIND_DEFAULT}>Default</option>
+                <option value={WALL_KIND_WALL}>Wall</option>
                 {WALL_SPECIAL_TYPES.map(t => <option key={t} value={t}>{titleCaseWire(t)}</option>)}
               </select>
             </div>
           </label>
-          {wallKind === 'wall' && (
+          {/* Tier-2 texture picker: under "Wall" (force a specific solid), or under
+              "Default" only when the maze default is itself solid (so you can override
+              just this cell's texture). Hidden when "Default" inherits a special look. */}
+          {(wallKind === WALL_KIND_WALL || (wallKind === WALL_KIND_DEFAULT && mazeDefaultWallIsSolid)) && (
             <label className="cell-override-field">
               <span>Texture</span>
               <select
@@ -335,7 +379,9 @@ export function CellOverridePanel({
                 value={wallTexture}
                 onChange={e => { setWallTexture(e.target.value); applyWall(wallKind, e.target.value) }}
               >
-                <option value="">Default</option>
+                {/* "Wall" forces a concrete texture (no inherit option); under "Default"
+                    a blank texture inherits the maze's solid default. */}
+                {wallKind === WALL_KIND_DEFAULT && <option value="">Default</option>}
                 {WALL_SOLID_TEXTURES.map(t => <option key={t} value={t}>{titleCaseWire(t)}</option>)}
               </select>
             </label>

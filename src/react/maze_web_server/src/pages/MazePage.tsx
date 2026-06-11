@@ -930,6 +930,7 @@ export function MazePage() {
                 row={overridePanelTarget.row}
                 col={overridePanelTarget.col}
                 override={getOverride(overridePanelTarget.row, overridePanelTarget.col)}
+                gameSettings={gameSettings}
                 onApply={entity => setOverride(overridePanelTarget.row, overridePanelTarget.col, entity)}
                 onClear={() => clearOverride(overridePanelTarget.row, overridePanelTarget.col)}
                 onResetAll={
