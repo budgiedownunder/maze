@@ -838,6 +838,11 @@ namespace Maze.Maui.App
             return cellFrame;
         }
         /// <summary>
+        /// The maze's game settings (the wall/enemy/health defaults the override panel
+        /// inherits for a non-overridden cell), or null when unset.
+        /// </summary>
+        public MazeGameSettings? GameSettings => mazeItem?.GameSettings;
+        /// <summary>
         /// Gets the per-cell override on a cell (its non-default characteristics), or
         /// null when the cell carries none.
         /// </summary>

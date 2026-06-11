@@ -1,9 +1,11 @@
 using Maze.Api;
+using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Moq;
 using Xunit;
 using CellType = Maze.Api.Maze.CellType;
+using WallKind = Maze.Maui.App.ViewModels.CellOverridePanelViewModel.WallKind;
 
 namespace Maze.Maui.App.Tests.ViewModels
 {
@@ -14,10 +16,13 @@ namespace Maze.Maui.App.Tests.ViewModels
     /// </summary>
     public class CellOverridePanelViewModelTests
     {
-        private static (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) Build(CellEntityInfo? seed = null)
+        private static readonly string[] ExpectedWallTypeOptions = { "Default", "Wall", "Water", "Lava", "Iron Fence" };
+
+        private static (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) Build(CellEntityInfo? seed = null, MazeGameSettings? settings = null)
         {
             Mock<ICellOverrideEditor> editor = new();
             editor.Setup(e => e.GetCellOverride(It.IsAny<int>(), It.IsAny<int>())).Returns(seed);
+            editor.Setup(e => e.GameSettings).Returns(settings);
             return (new CellOverridePanelViewModel(editor.Object), editor);
         }
 
@@ -94,19 +99,60 @@ namespace Maze.Maui.App.Tests.ViewModels
         {
             (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.Lava });
             vm.LoadCell(1, 1, CellType.Wall);
-            Assert.Equal(WallType.Lava, vm.SpecialWallType);
+            Assert.Equal(WallKind.Lava, vm.WallTypeKind);
             Assert.Null(vm.WallTexture);
             Assert.False(vm.IsWallTextureVisible);
         }
 
         [Fact]
-        public void Seeds_a_solid_texture_under_wall_and_shows_the_texture_picker()
+        public void Seeds_a_solid_override_as_wall_plus_that_texture()
         {
             (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.DressedStone });
             vm.LoadCell(1, 1, CellType.Wall);
-            Assert.Null(vm.SpecialWallType);
+            Assert.Equal(WallKind.Wall, vm.WallTypeKind);
             Assert.Equal(WallType.DressedStone, vm.WallTexture);
             Assert.True(vm.IsWallTextureVisible);
+        }
+
+        [Fact]
+        public void Defaults_a_fresh_wall_cell_to_the_inherit_kind()
+        {
+            // No game settings ⇒ the effective maze default wall is solid (brick), so the
+            // texture picker is offered under "Default" for a per-cell texture override.
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal(WallKind.Default, vm.WallTypeKind);
+            Assert.True(vm.IsWallTextureVisible);
+        }
+
+        [Fact]
+        public void Wall_type_options_list_default_wall_and_the_specials()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal(ExpectedWallTypeOptions, vm.WallTypeOptions);
+        }
+
+        [Fact]
+        public void Selecting_default_inherits_and_clears_the_override()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build(new WallCellEntity { WallType = WallType.Lava });
+            vm.LoadCell(1, 1, CellType.Wall);
+            vm.WallTypeKind = WallKind.Default;
+            editor.Verify(e => e.ClearCellOverride(1, 1), Times.AtLeastOnce);
+        }
+
+        [Fact]
+        public void Selecting_wall_forces_a_solid_and_shows_the_texture_picker()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build();
+            vm.LoadCell(1, 1, CellType.Wall);
+            vm.WallTypeKind = WallKind.Wall;
+            editor.Verify(e => e.SetCellOverride(1, 1,
+                It.Is<WallCellEntity>(x => x.WallType == WallType.Brick)), Times.AtLeastOnce);
+            Assert.True(vm.IsWallTextureVisible);
+            // "Wall" forces a concrete texture — no inherit option in tier 2.
+            Assert.DoesNotContain("Default", vm.WallTextureOptions);
         }
 
         [Fact]
@@ -114,29 +160,53 @@ namespace Maze.Maui.App.Tests.ViewModels
         {
             (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build();
             vm.LoadCell(1, 1, CellType.Wall);
-            vm.SpecialWallType = WallType.Water;
+            vm.WallTypeKind = WallKind.Water;
             editor.Verify(e => e.SetCellOverride(1, 1,
-                It.Is<WallCellEntity>(x => x.WallType == WallType.Water)), Times.Once);
+                It.Is<WallCellEntity>(x => x.WallType == WallType.Water)), Times.AtLeastOnce);
             Assert.False(vm.IsWallTextureVisible);
         }
 
         [Fact]
-        public void Applies_a_solid_texture_chosen_under_wall()
+        public void Under_default_with_a_solid_maze_default_a_texture_overrides_just_this_cell()
         {
             (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build();
             vm.LoadCell(1, 1, CellType.Wall);
-            vm.WallTexture = WallType.Brick;
+            vm.WallTexture = WallType.Wood;
             editor.Verify(e => e.SetCellOverride(1, 1,
-                It.Is<WallCellEntity>(x => x.WallType == WallType.Brick)), Times.Once);
+                It.Is<WallCellEntity>(x => x.WallType == WallType.Wood)), Times.AtLeastOnce);
+            vm.WallTexture = null; // back to "Default texture" = inherit
+            editor.Verify(e => e.ClearCellOverride(1, 1), Times.AtLeastOnce);
         }
 
         [Fact]
-        public void Clears_the_override_when_texture_returns_to_default_under_wall()
+        public void Clears_the_override_by_switching_from_wall_to_default()
         {
             (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build(new WallCellEntity { WallType = WallType.Wood });
             vm.LoadCell(1, 1, CellType.Wall);
-            vm.WallTexture = null;
-            editor.Verify(e => e.ClearCellOverride(1, 1), Times.Once);
+            Assert.Equal(WallKind.Wall, vm.WallTypeKind);
+            vm.WallTypeKind = WallKind.Default;
+            editor.Verify(e => e.ClearCellOverride(1, 1), Times.AtLeastOnce);
+        }
+
+        [Theory]
+        [InlineData("brick", true)]   // solid maze default ⇒ a texture override is offered under Default
+        [InlineData("lava", false)]   // special maze default ⇒ the cell inherits that look, no texture picker
+        public void Texture_visibility_under_default_follows_the_maze_default(string mazeWall, bool visible)
+        {
+            (CellOverridePanelViewModel vm, _) = Build(settings: new MazeGameSettings { WallType = mazeWall });
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal(WallKind.Default, vm.WallTypeKind);
+            Assert.Equal(visible, vm.IsWallTextureVisible);
+        }
+
+        [Fact]
+        public void Texture_picker_shows_under_wall_even_when_the_maze_default_is_special()
+        {
+            (CellOverridePanelViewModel vm, _) = Build(settings: new MazeGameSettings { WallType = "lava" });
+            vm.LoadCell(1, 1, CellType.Wall);
+            Assert.False(vm.IsWallTextureVisible);
+            vm.WallTypeKind = WallKind.Wall;
+            Assert.True(vm.IsWallTextureVisible);
         }
 
         [Fact]
@@ -160,22 +230,26 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public void Wall_type_index_maps_special_types()
+        public void Wall_type_index_maps_the_tier1_kinds()
         {
             (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.Lava });
             vm.LoadCell(1, 1, CellType.Wall);
-            Assert.Equal(2, vm.WallTypeIndex); // [Wall, Water, Lava, Iron Fence] → Lava
-            vm.WallTypeIndex = 1; // Water
-            Assert.Equal(WallType.Water, vm.SpecialWallType);
+            Assert.Equal(3, vm.WallTypeIndex); // [Default, Wall, Water, Lava, Iron Fence] → Lava
+            vm.WallTypeIndex = 2; // Water
+            Assert.Equal(WallKind.Water, vm.WallTypeKind);
+            vm.WallTypeIndex = 0; // Default
+            Assert.Equal(WallKind.Default, vm.WallTypeKind);
         }
 
         [Fact]
-        public void Wall_texture_index_maps_solid_textures()
+        public void Wall_texture_index_maps_solid_textures_under_wall()
         {
+            // Seeding a solid override puts the panel in "Wall" kind, whose tier-2 list has
+            // no "Default" entry, so the solid textures map from index 0.
             (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.DressedStone });
             vm.LoadCell(1, 1, CellType.Wall);
-            Assert.Equal(2, vm.WallTextureIndex); // [Default, Brick, Dressed Stone, ...] → Dressed Stone
-            vm.WallTextureIndex = 1; // Brick
+            Assert.Equal(1, vm.WallTextureIndex); // [Brick, Dressed Stone, Wood, Cobblestone] → Dressed Stone
+            vm.WallTextureIndex = 0; // Brick
             Assert.Equal(WallType.Brick, vm.WallTexture);
         }
 
@@ -225,8 +299,27 @@ namespace Maze.Maui.App.Tests.ViewModels
             (CellOverridePanelViewModel vm, _) = Build();
             vm.LoadCell(1, 1, CellType.Wall);
             Assert.Equal("wall.png", vm.WallPreviewImage); // default / solid
-            vm.SpecialWallType = WallType.Water;
+            vm.WallTypeKind = WallKind.Water;
             Assert.Equal("water.png", vm.WallPreviewImage);
+        }
+
+        [Fact]
+        public void Previews_reflect_the_maze_default_when_no_override_is_set()
+        {
+            // Wall: a lava maze default previews lava under the inherit ("Default") kind.
+            (CellOverridePanelViewModel wall, _) = Build(settings: new MazeGameSettings { WallType = "lava" });
+            wall.LoadCell(1, 1, CellType.Wall);
+            Assert.Equal("lava.png", wall.WallPreviewImage);
+
+            // Enemy: a ghost maze default previews ghost under "Default".
+            (CellOverridePanelViewModel enemy, _) = Build(settings: new MazeGameSettings { EnemyType = "ghost" });
+            enemy.LoadCell(1, 1, CellType.Enemy);
+            Assert.Equal("ghost.png", enemy.EnemyPreviewImage);
+
+            // Health: a potion maze default previews potion under "Default".
+            (CellOverridePanelViewModel health, _) = Build(settings: new MazeGameSettings { HealthStyle = "potion" });
+            health.LoadCell(1, 1, CellType.Health);
+            Assert.Equal("potion.png", health.HealthPreviewImage);
         }
 
         [Fact]

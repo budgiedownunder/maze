@@ -227,12 +227,13 @@ namespace Maze.Maui.App.Views
             if (result is not null)
             {
                 _viewModel.ApplyGameSettings(result);
-                // Only repaint the grid when a 2D-relevant default (wall / enemy / health)
-                // actually changed — the other settings are 3D-only and don't affect the
-                // 2D display.
+                // Only repaint the grid / refresh the override panel when a 2D-relevant
+                // default (wall / enemy / health) actually changed — the other settings are
+                // 3D-only and don't affect the 2D display.
                 if (CellSprite.MazeDefaultBaseChanged(before, result))
                 {
                     MazeGrid.RefreshGameSettingsBaseSprites();
+                    _overridePanelViewModel?.NotifyGameSettingsChanged();
                 }
             }
         }

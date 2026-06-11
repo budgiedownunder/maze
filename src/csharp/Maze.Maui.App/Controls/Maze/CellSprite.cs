@@ -108,6 +108,21 @@ namespace Maze.Maui.App
             ?? "enemy.png";
 
         /// <summary>
+        /// The sprite to preview for a per-cell selection in the override panel: the
+        /// selection's own variant (ghost / potion / lava …), else the maze's game-settings
+        /// default for that family (so a "Default" selection previews what the cell actually
+        /// renders), else the generic fallback. Mirrors the web panel's preview, which
+        /// resolves <c>override ?? mazeDefault</c>.
+        /// </summary>
+        /// <param name="cellType">The cell's feature type.</param>
+        /// <param name="selection">The selection as a cell entity, or null for "Default" (inherit).</param>
+        /// <param name="settings">The maze's game settings, or null.</param>
+        /// <param name="fallback">The generic base sprite for the cell type.</param>
+        /// <returns>The preview image name.</returns>
+        public static string PreviewImageName(CellType cellType, CellEntityInfo? selection, MazeGameSettings? settings, string fallback) =>
+            VariantImageName(selection) ?? BaseImageName(cellType, selection, settings) ?? fallback;
+
+        /// <summary>
         /// The rig to display for a cell shared by multiple enemies: a rig with a distinct
         /// sprite (e.g. ghost) takes priority over the default goblin, so a mixed stack
         /// surfaces the special enemy; otherwise the first enemy's rig. Null for an empty

@@ -1,4 +1,5 @@
 using Maze.Api;
+using Maze.Maui.App.Models;
 
 namespace Maze.Maui.App.Services
 {
@@ -9,6 +10,11 @@ namespace Maze.Maui.App.Services
     /// </summary>
     public interface ICellOverrideEditor
     {
+        /// <summary>The maze's game settings, supplying the wall/enemy/health defaults the
+        /// panel inherits when a cell carries no per-cell override (drives the "Default"
+        /// tier-1 texture visibility and the maze-default previews). Null when unset.</summary>
+        MazeGameSettings? GameSettings { get; }
+
         /// <summary>The override on the cell, or null when it carries none.</summary>
         /// <param name="row">Row index (one-based)</param>
         /// <param name="column">Column index (one-based)</param>

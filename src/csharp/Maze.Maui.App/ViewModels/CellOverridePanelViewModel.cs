@@ -111,15 +111,33 @@ namespace Maze.Maui.App.ViewModels
         private DoorStyle? doorStyleValue;
 
         // ── Wall (two-tier) ──
-        /// <summary>The wall's special type (water/lava/iron-fence), or null for "Wall"
-        /// (a solid texture chosen via <see cref="WallTexture"/>).</summary>
+        /// <summary>The tier-1 wall kind selected by the user.</summary>
+        public enum WallKind
+        {
+            /// <summary>Inherit the maze's wallType — no per-cell override.</summary>
+            Default,
+            /// <summary>Force a solid wall for this cell (texture chosen in tier 2).</summary>
+            Wall,
+            /// <summary>Water.</summary>
+            Water,
+            /// <summary>Lava.</summary>
+            Lava,
+            /// <summary>Iron fence.</summary>
+            IronFence
+        }
+
+        /// <summary>Tier-1 wall kind: Default (inherit the maze's wallType — no override),
+        /// Wall (force a solid texture, chosen via <see cref="WallTexture"/>), or a special
+        /// type (water/lava/iron-fence).</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsWallTextureVisible))]
         [NotifyPropertyChangedFor(nameof(WallTypeIndex))]
+        [NotifyPropertyChangedFor(nameof(WallTextureOptions))]
+        [NotifyPropertyChangedFor(nameof(WallTextureIndex))]
         [NotifyPropertyChangedFor(nameof(WallPreviewImage))]
-        private WallType? specialWallType;
-        /// <summary>The solid wall texture (shown only under "Wall"), or null for the
-        /// varied default.</summary>
+        private WallKind wallTypeKind;
+        /// <summary>The solid wall texture for tier 2, or null for the "Default" (inherit)
+        /// option under the Default kind.</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(WallTextureIndex))]
         [NotifyPropertyChangedFor(nameof(WallPreviewImage))]
@@ -135,19 +153,35 @@ namespace Maze.Maui.App.ViewModels
         public bool IsDoor => CellType == CellType.Door;
         /// <summary>Whether the selected cell is a wall cell.</summary>
         public bool IsWall => CellType == CellType.Wall;
-        /// <summary>Whether the solid-texture picker is shown (only under "Wall").</summary>
-        public bool IsWallTextureVisible => IsWall && SpecialWallType is null;
+        /// <summary>Whether the solid-texture picker is shown: under "Wall", or under
+        /// "Default" when the maze default wall is itself solid (so just this cell's texture
+        /// can be overridden). Hidden when "Default" inherits a special (water/lava/iron-fence) look.</summary>
+        public bool IsWallTextureVisible =>
+            IsWall && (WallTypeKind == WallKind.Wall || (WallTypeKind == WallKind.Default && MazeDefaultWallIsSolid));
 
-        /// <summary>Sprite previewing the selected enemy rig (goblin / ghost).</summary>
+        // Whether the maze's default wallType has no distinct 2D sprite (a solid texture, or
+        // unset → the brick default). False for water/lava/iron-fence.
+        private bool MazeDefaultWallIsSolid =>
+            editor.GameSettings?.WallType is not ("water" or "lava" or "iron_fence");
+
+        /// <summary>Sprite previewing the selected enemy rig, or the maze default (ghost)
+        /// when "Default" is selected.</summary>
         public string EnemyPreviewImage =>
-            CellSprite.VariantImageName(new EnemyCellEntity { EnemyType = EnemyTypeValue }) ?? "enemy.png";
-        /// <summary>Sprite previewing the selected health rig (heart / potion).</summary>
+            CellSprite.PreviewImageName(CellType.Enemy,
+                EnemyTypeValue is null ? null : new EnemyCellEntity { EnemyType = EnemyTypeValue },
+                editor.GameSettings, "enemy.png");
+        /// <summary>Sprite previewing the selected health rig, or the maze default (potion)
+        /// when "Default" is selected.</summary>
         public string HealthPreviewImage =>
-            CellSprite.VariantImageName(new HealthCellEntity { HealthStyle = HealthStyleValue }) ?? "health.png";
-        /// <summary>Sprite previewing the selected wall type (water / lava / iron-fence,
-        /// else the generic wall for solid textures and the default).</summary>
+            CellSprite.PreviewImageName(CellType.Health,
+                HealthStyleValue is null ? null : new HealthCellEntity { HealthStyle = HealthStyleValue },
+                editor.GameSettings, "health.png");
+        /// <summary>Sprite previewing the selected wall type, or the maze default (e.g. lava)
+        /// when "Default" inherits it.</summary>
         public string WallPreviewImage =>
-            CellSprite.VariantImageName(new WallCellEntity { WallType = EffectiveWallType(SpecialWallType, WallTexture) }) ?? "wall.png";
+            CellSprite.PreviewImageName(CellType.Wall,
+                EffectiveWallType() is { } wallType ? new WallCellEntity { WallType = wallType } : null,
+                editor.GameSettings, "wall.png");
 
         /// <summary>The panel heading: the cell type and its one-based coordinates.</summary>
         public string Title =>
@@ -194,28 +228,39 @@ namespace Maze.Maui.App.ViewModels
             set => DoorStyleValue = value <= 0 ? null : (DoorStyle)(value - 1);
         }
 
-        // Tier 1 of the wall type: "Wall" (a solid texture chosen below) or a special type.
-        private static readonly WallType?[] WallTypeTier1 = { null, WallType.Water, WallType.Lava, WallType.IronFence };
         /// <summary>Wall type (tier 1) picker options.</summary>
-        public IReadOnlyList<string> WallTypeOptions { get; } = new[] { "Wall", "Water", "Lava", "Iron Fence" };
-        /// <summary>Selected index of the wall type (tier 1) picker.</summary>
+        public IReadOnlyList<string> WallTypeOptions { get; } = new[] { "Default", "Wall", "Water", "Lava", "Iron Fence" };
+        /// <summary>Selected index of the wall type (tier 1) picker (maps to <see cref="WallKind"/>).</summary>
         public int WallTypeIndex
         {
-            get
-            {
-                int index = Array.IndexOf(WallTypeTier1, SpecialWallType);
-                return index < 0 ? 0 : index;
-            }
-            set => SpecialWallType = value >= 0 && value < WallTypeTier1.Length ? WallTypeTier1[value] : null;
+            get => (int)WallTypeKind;
+            set => WallTypeKind = value >= 0 && value <= (int)WallKind.IronFence ? (WallKind)value : WallKind.Default;
         }
 
-        /// <summary>Wall texture (tier 2) picker options.</summary>
-        public IReadOnlyList<string> WallTextureOptions { get; } = new[] { "Default", "Brick", "Dressed Stone", "Wood", "Cobblestone" };
+        // Tier-2 solid textures map to WallType 0..3 (Brick, DressedStone, Wood, Cobblestone).
+        private static readonly string[] SolidTextureOptions = { "Brick", "Dressed Stone", "Wood", "Cobblestone" };
+        private static readonly string[] SolidTextureOptionsWithDefault = { "Default", "Brick", "Dressed Stone", "Wood", "Cobblestone" };
+        /// <summary>Wall texture (tier 2) picker options — "Default" (inherit) is offered only
+        /// under the Default kind; "Wall" forces a concrete solid, so it drops "Default".</summary>
+        public IReadOnlyList<string> WallTextureOptions =>
+            WallTypeKind == WallKind.Wall ? SolidTextureOptions : SolidTextureOptionsWithDefault;
         /// <summary>Selected index of the wall texture (tier 2) picker.</summary>
         public int WallTextureIndex
         {
-            get => WallTexture is null ? 0 : (int)WallTexture.Value + 1;
-            set => WallTexture = value <= 0 ? null : (WallType)(value - 1);
+            get => WallTypeKind == WallKind.Wall
+                ? (WallTexture is null ? 0 : (int)WallTexture.Value)
+                : (WallTexture is null ? 0 : (int)WallTexture.Value + 1);
+            set
+            {
+                if (WallTypeKind == WallKind.Wall)
+                {
+                    WallTexture = value >= 0 && value < SolidTextureOptions.Length ? (WallType)value : WallType.Brick;
+                }
+                else
+                {
+                    WallTexture = value <= 0 ? null : (WallType)(value - 1);
+                }
+            }
         }
 
         partial void OnEnemyTypeValueChanged(EnemyType? value) => ApplyCurrent();
@@ -225,7 +270,19 @@ namespace Maze.Maui.App.ViewModels
         partial void OnHealAmountTextChanged(string value) => ApplyCurrent();
         partial void OnKeyHolderValueChanged(KeyHolderStyle? value) => ApplyCurrent();
         partial void OnDoorStyleValueChanged(DoorStyle? value) => ApplyCurrent();
-        partial void OnSpecialWallTypeChanged(WallType? value) => ApplyCurrent();
+        partial void OnWallTypeKindChanged(WallKind value)
+        {
+            // Mirror the web panel's tier-1 change: "Wall" forces a concrete solid (keep a
+            // prior solid texture, else brick); "Default"/special carry no solid texture.
+            // Adjust the texture silently, then apply once.
+            bool wasSuppressed = suppressApply;
+            suppressApply = true;
+            WallTexture = value == WallKind.Wall
+                ? (WallTexture is { } t && IsSolidWall(t) ? t : WallType.Brick)
+                : null;
+            suppressApply = wasSuppressed;
+            ApplyCurrent();
+        }
         partial void OnWallTextureChanged(WallType? value) => ApplyCurrent();
 
         /// <summary>
@@ -267,7 +324,7 @@ namespace Maze.Maui.App.ViewModels
             HealAmountText = "";
             KeyHolderValue = null;
             DoorStyleValue = null;
-            SpecialWallType = null;
+            WallTypeKind = WallKind.Default;
             WallTexture = null;
 
             CellEntityInfo? current = IsVisible ? editor.GetCellOverride(top, left) : null;
@@ -291,10 +348,11 @@ namespace Maze.Maui.App.ViewModels
                 case WallCellEntity { WallType: WallType wt }:
                     if (IsSpecialWall(wt))
                     {
-                        SpecialWallType = wt;
+                        WallTypeKind = ToWallKind(wt);
                     }
                     else
                     {
+                        WallTypeKind = WallKind.Wall;
                         WallTexture = wt;
                     }
                     break;
@@ -317,7 +375,7 @@ namespace Maze.Maui.App.ViewModels
             HealAmountText = "";
             KeyHolderValue = null;
             DoorStyleValue = null;
-            SpecialWallType = null;
+            WallTypeKind = WallKind.Default;
             WallTexture = null;
             suppressApply = false;
 
@@ -450,19 +508,54 @@ namespace Maze.Maui.App.ViewModels
                 case CellType.Door:
                     return DoorStyleValue is null ? null : new DoorCellEntity { DoorStyle = DoorStyleValue };
                 case CellType.Wall:
-                    WallType? wallType = EffectiveWallType(SpecialWallType, WallTexture);
+                    WallType? wallType = EffectiveWallType();
                     return wallType is null ? null : new WallCellEntity { WallType = wallType };
                 default:
                     return null;
             }
         }
 
-        // "Wall" + a solid texture resolves to that texture; a special type resolves to
-        // itself; "Wall" + the default texture resolves to no override.
-        private static WallType? EffectiveWallType(WallType? special, WallType? texture) => special ?? texture;
+        // The single flat wallType the tri-state UI resolves to, or null when the cell
+        // inherits the maze default ("Default" with no texture override). "Wall" always
+        // forces a concrete solid; a special kind maps to itself.
+        private WallType? EffectiveWallType() => WallTypeKind switch
+        {
+            WallKind.Default => WallTexture,
+            WallKind.Wall => WallTexture ?? WallType.Brick,
+            WallKind.Water => WallType.Water,
+            WallKind.Lava => WallType.Lava,
+            WallKind.IronFence => WallType.IronFence,
+            _ => null
+        };
 
         private static bool IsSpecialWall(WallType type) =>
             type is WallType.Water or WallType.Lava or WallType.IronFence;
+
+        private static bool IsSolidWall(WallType type) =>
+            type is WallType.Brick or WallType.DressedStone or WallType.Wood or WallType.Cobblestone;
+
+        private static WallKind ToWallKind(WallType special) => special switch
+        {
+            WallType.Water => WallKind.Water,
+            WallType.Lava => WallKind.Lava,
+            WallType.IronFence => WallKind.IronFence,
+            _ => WallKind.Wall
+        };
+
+        /// <summary>
+        /// Notifies the panel that the maze's game settings changed, so the maze-default
+        /// previews and the maze-aware wall-texture visibility re-evaluate. Called by the
+        /// editor after the settings editor applies a change.
+        /// </summary>
+        public void NotifyGameSettingsChanged()
+        {
+            OnPropertyChanged(nameof(EnemyPreviewImage));
+            OnPropertyChanged(nameof(HealthPreviewImage));
+            OnPropertyChanged(nameof(WallPreviewImage));
+            OnPropertyChanged(nameof(IsWallTextureVisible));
+            OnPropertyChanged(nameof(WallTextureOptions));
+            OnPropertyChanged(nameof(WallTextureIndex));
+        }
 
         private static bool IsOverridable(CellType type) =>
             type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health;
