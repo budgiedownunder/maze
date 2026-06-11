@@ -503,6 +503,10 @@ pub struct MazeGame {
     /// Per-game maximum HP — also the starting HP. Heals are clamped to this
     /// value; the player can never gain HP beyond it.
     max_hp: u32,
+    /// Monotonic count of keys auto-collected over the run, feeding
+    /// [`MazeGame::score`]. Distinct from [`Self::bag`], which doors *consume* —
+    /// this only ever grows, so the score is a true progress measure.
+    keys_collected: u32,
     /// Events produced synchronously by [`MazeGame::move_player`]
     /// (`PlayerHealed` from an auto-pickup, `PlayerDamaged` from stepping into
     /// an enemy-occupied cell) that surface on the next [`MazeGame::tick`]
@@ -713,6 +717,7 @@ impl MazeGame {
             default_enemy_damage,
             hp: starting_hp,
             max_hp,
+            keys_collected: 0,
             pending_events: Vec::new(),
         })
     }
@@ -876,6 +881,7 @@ impl MazeGame {
                 // the bag, and queue an event so renderers can react. The door
                 // a held key opens is unlocked later by walking onto the `'D'`.
                 if let Some(BagItem::Key { id }) = self.pickup() {
+                    self.keys_collected += 1;
                     self.pending_events.push(GameEvent::KeyCollected {
                         cell: (new_row, new_col),
                         id,
@@ -1620,6 +1626,29 @@ impl MazeGame {
     pub fn max_hp(&self) -> u32 {
         self.max_hp
     }
+
+    /// The run's current score — the single source of truth for both the live
+    /// readout and the value recorded on completion.
+    ///
+    /// The exact determination is internal to the engine and provisional: today
+    /// it is the number of keys collected this run, but it is expected to fold in
+    /// further reward sources over time. Callers should read this getter rather
+    /// than recomputing a score, so every surface stays in agreement when the
+    /// formula changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction};
+    /// let json = r#"{"grid":[["S","K","D","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.score(), 0); // nothing collected yet
+    /// game.move_player(Direction::Right); // walk onto the key — auto-collected
+    /// assert_eq!(game.score(), 1);
+    /// ```
+    pub fn score(&self) -> u32 {
+        self.keys_collected
+    }
 }
 
 /// Returns 4-neighbours of `(r, c)` in `(Up, Left, Down, Right)` order, in
@@ -2060,6 +2089,52 @@ mod tests {
             MoveResult::BlockedByLockedDoor
         );
         assert!(game.bag().is_empty());
+    }
+
+    // ── score ────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn score_starts_at_zero() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.score(), 0);
+    }
+
+    #[test]
+    fn score_climbs_when_a_key_is_collected() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.score(), 0);
+        game.move_player(Direction::Right); // onto the key — auto-collected
+        assert_eq!(game.score(), 1);
+    }
+
+    #[test]
+    fn score_does_not_include_hp() {
+        // Score is keys-collected only: a full-HP fresh game scores 0, and taking
+        // enemy damage (HP drops) leaves the score unchanged.
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.hp(), 3);
+        assert_eq!(game.score(), 0);
+        // The enemy at (0,1) steps onto the player at (0,0) on its move tick.
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert!(game.hp() < 3); // took damage
+        assert_eq!(game.score(), 0); // score is unaffected by HP
+    }
+
+    #[test]
+    fn score_survives_door_consumption_of_a_key() {
+        // keys_collected is monotonic: opening a door consumes the key from the
+        // bag, but the score (a progress measure) must not drop.
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // collect the key
+        assert_eq!(game.score(), 1);
+        assert_eq!(game.bag().len(), 1);
+        game.move_player(Direction::Right); // onto the door — key consumed
+        assert!(game.bag().is_empty());
+        assert_eq!(game.score(), 1); // score holds despite the empty bag
     }
 
     // ── doors — tick / opening ───────────────────────────────────────────────────
