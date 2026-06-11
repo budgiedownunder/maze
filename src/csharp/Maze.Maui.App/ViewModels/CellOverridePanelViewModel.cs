@@ -25,6 +25,13 @@ namespace Maze.Maui.App.ViewModels
         private bool suppressApply;
 
         /// <summary>
+        /// Raised when the panel applies, clears, or resets a cell override. The panel
+        /// writes overrides straight to the grid, bypassing the editor commands that
+        /// normally flag a change, so the host listens to this to mark the maze dirty.
+        /// </summary>
+        public event EventHandler? OverrideChanged;
+
+        /// <summary>
         /// Constructor.
         /// </summary>
         /// <param name="editor">The grid the panel reads and writes overrides on</param>
@@ -387,6 +394,7 @@ namespace Maze.Maui.App.ViewModels
                     editor.RefreshCellContent(r, c);
                 }
             }
+            OverrideChanged?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>
@@ -418,6 +426,7 @@ namespace Maze.Maui.App.ViewModels
                     editor.RefreshCellContent(r, c);
                 }
             }
+            OverrideChanged?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Steps the enemy damage override up by one.</summary>
@@ -482,6 +491,7 @@ namespace Maze.Maui.App.ViewModels
                 editor.ClearCellOverride(Row, Column);
             }
             editor.RefreshCellContent(Row, Column);
+            OverrideChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private CellEntityInfo? BuildEntity()

@@ -184,6 +184,9 @@ namespace Maze.Maui.App.Views
             // The override panel reads/writes overrides on the live grid (which
             // implements ICellOverrideEditor) and seeds from the current selection.
             _overridePanelViewModel = new CellOverridePanelViewModel(MazeGrid);
+            // The panel writes overrides straight to the grid, so mark the maze dirty here
+            // (the editor commands that normally flag a change are bypassed).
+            _overridePanelViewModel.OverrideChanged += (s, e) => _viewModel.NotifyMazeChanged();
             OverridePanel.BindingContext = _overridePanelViewModel;
             // Size the panel to the device (capped + left-aligned on desktop, full-width +
             // height-capped/scrollable on phone/tablet), and once the panel appears and

@@ -369,5 +369,40 @@ namespace Maze.Maui.App.Tests.ViewModels
             vm.ResetCommand.Execute(null);
             editor.Verify(e => e.ClearCellOverride(It.IsAny<int>(), It.IsAny<int>()), Times.Exactly(4));
         }
+
+        [Fact]
+        public void OverrideChanged_fires_on_a_live_field_change()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Enemy);
+            int changes = 0;
+            vm.OverrideChanged += (_, _) => changes++;
+            vm.EnemyTypeValue = EnemyType.Ghost;
+            Assert.True(changes >= 1);
+        }
+
+        [Fact]
+        public void OverrideChanged_fires_on_reset_and_apply_to_all()
+        {
+            (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.Lava });
+            vm.LoadCell(1, 1, 2, 2, CellType.Wall);
+            int changes = 0;
+            vm.OverrideChanged += (_, _) => changes++;
+            vm.ApplyToAllCommand.Execute(null);
+            vm.ResetCommand.Execute(null);
+            Assert.Equal(2, changes);
+        }
+
+        [Fact]
+        public void OverrideChanged_does_not_fire_during_seeding()
+        {
+            // LoadCell seeds the fields from the existing override; that must not be reported
+            // as a change (it would spuriously dirty the maze on selection).
+            (CellOverridePanelViewModel vm, _) = Build(new EnemyCellEntity { EnemyType = EnemyType.Ghost, Damage = 2 });
+            int changes = 0;
+            vm.OverrideChanged += (_, _) => changes++;
+            vm.LoadCell(1, 1, CellType.Enemy);
+            Assert.Equal(0, changes);
+        }
     }
 }
