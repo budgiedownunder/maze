@@ -1871,7 +1871,7 @@ namespace Maze.Maui.App
             {
                 layers.Add(new Image
                 {
-                    Source = CellSprite.VariantImageName(new EnemyCellEntity { EnemyType = enemyType }) ?? "enemy.png",
+                    Source = CellSprite.LiveEnemyImageName(enemyType, settings),
                     Aspect = Aspect.AspectFit,
                     HorizontalOptions = LayoutOptions.Fill,
                     VerticalOptions = LayoutOptions.Fill,

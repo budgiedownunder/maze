@@ -272,11 +272,13 @@ namespace Maze.Maui.App.Views
                 if (launchSettings is null) return;
             }
 
-            // 2D: pass in-memory definition directly (MazeGamePage renders from it)
+            // 2D: pass in-memory definition directly (MazeGamePage renders from it),
+            //     carrying the maze's game settings so the 2D grid shows the
+            //     wall/enemy/health defaults
             // 3D: pass the saved MazeItem by ID (Play3dGamePage fetches from server)
             Models.MazeItem navigationItem = gameType == Models.GameType.ThreeD
                 ? MazeItem
-                : new Models.MazeItem { ID = MazeItem.ID, Name = MazeItem.Name, Definition = currentMaze };
+                : new Models.MazeItem { ID = MazeItem.ID, Name = MazeItem.Name, Definition = currentMaze, GameSettings = MazeItem.GameSettings };
 
             _viewModel.IsBusy = true;
             try

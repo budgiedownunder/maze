@@ -125,6 +125,22 @@ namespace Maze.Maui.App.Tests.Controls
         }
 
         [Fact]
+        public void Live_enemy_uses_its_own_rig_then_the_maze_default()
+        {
+            var ghostMaze = new MazeGameSettings { EnemyType = "ghost" };
+            var goblinMaze = new MazeGameSettings { EnemyType = "goblin" };
+            // The enemy's own rig wins.
+            Assert.Equal("ghost.png", CellSprite.LiveEnemyImageName(EnemyType.Ghost, goblinMaze));
+            // An explicit goblin rig stays goblin even on a ghost maze (pin wins).
+            Assert.Equal("enemy.png", CellSprite.LiveEnemyImageName(EnemyType.Goblin, ghostMaze));
+            // A default (null) rig inherits the maze default.
+            Assert.Equal("ghost.png", CellSprite.LiveEnemyImageName(null, ghostMaze));
+            Assert.Equal("enemy.png", CellSprite.LiveEnemyImageName(null, goblinMaze));
+            // No settings → the generic goblin.
+            Assert.Equal("enemy.png", CellSprite.LiveEnemyImageName(null, null));
+        }
+
+        [Fact]
         public void Dominant_rig_prefers_a_distinctive_sprite_over_the_default()
         {
             // A ghost in the stack wins regardless of order; an all-default stack keeps the

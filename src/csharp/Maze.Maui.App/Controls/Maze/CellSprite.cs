@@ -93,6 +93,21 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
+        /// The sprite for a live in-game enemy: its own rig wins (ghost), else the maze's
+        /// game-settings enemy default (a goblin maze or no settings → the generic goblin
+        /// <c>"enemy.png"</c>). Mirrors the web game's live-enemy overlay, which resolves
+        /// <c>rig ?? settings.enemyType</c>. Unlike a static cell this always returns a
+        /// concrete sprite (the overlay is never empty).
+        /// </summary>
+        /// <param name="rig">The live enemy's visual rig, or null for the default.</param>
+        /// <param name="settings">The maze's game settings, or null.</param>
+        /// <returns>The enemy sprite image name.</returns>
+        public static string LiveEnemyImageName(EnemyType? rig, MazeGameSettings? settings) =>
+            VariantImageName(new EnemyCellEntity { EnemyType = rig })
+            ?? BaseImageName(CellType.Enemy, rig is null ? null : new EnemyCellEntity { EnemyType = rig }, settings)
+            ?? "enemy.png";
+
+        /// <summary>
         /// The rig to display for a cell shared by multiple enemies: a rig with a distinct
         /// sprite (e.g. ghost) takes priority over the default goblin, so a mixed stack
         /// surfaces the special enemy; otherwise the first enemy's rig. Null for an empty

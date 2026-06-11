@@ -172,13 +172,19 @@ namespace Maze.Maui.App.ViewModels
             // For 3D launches, show the Run / Custom Run… / Cancel chooser.
             // Cancelling aborts the launch.
             MazeGameSettings? launchSettings = null;
+            // The maze-list summary omits game_settings. 3D refetches by ID server-side, but
+            // 2D renders from the passed maze, so load the full maze for the wall/enemy/health
+            // base sprites (and, for 3D, the chooser's saved-settings seed).
+            MazeItem navItem = item;
             if (gameType == GameType.ThreeD)
             {
-                // The maze-list summary omits game_settings; load the full maze so Run / Custom
-                // Run use the maze's saved settings rather than defaults.
                 MazeItem full = await LoadFullMazeAsync(item);
                 launchSettings = await Play3dLaunchResolver.ResolveAsync(_dialogService, item.Name, full.GameSettings);
                 if (launchSettings is null) return;
+            }
+            else
+            {
+                navItem = await LoadFullMazeAsync(item);
             }
 
             IsBusy = true;
@@ -187,7 +193,7 @@ namespace Maze.Maui.App.ViewModels
                 var route = gameType == GameType.ThreeD
                     ? nameof(Views.Play3dGamePage)
                     : nameof(Views.MazeGamePage);
-                var navArgs = new Dictionary<string, object> { { "MazeItem", item } };
+                var navArgs = new Dictionary<string, object> { { "MazeItem", navItem } };
                 if (launchSettings is not null)
                 {
                     navArgs["LaunchSettings"] = launchSettings;
