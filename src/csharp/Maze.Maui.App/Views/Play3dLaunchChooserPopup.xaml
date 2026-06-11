@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               x:Class="Maze.Maui.App.Views.Play3dLaunchChooserPopup"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <Border Padding="20"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <!-- Vertical full-width buttons: a deliberate touch-friendly target size.
+             A small caret/popover menu is hard to tap (especially on phones),
+             which is why the launch choice is a modal with stacked buttons. -->
+        <VerticalStackLayout Spacing="12" MinimumWidthRequest="280">
+
+            <!-- Title (WordWrap so a long maze name wraps rather than widening the popup). -->
+            <Label x:Name="TitleLabel"
+                   Text="Play 3D"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"
+                   LineBreakMode="WordWrap"
+                   Margin="0,0,0,4"/>
+
+            <!-- Run is the primary action; Custom Run… + Cancel are gray -->
+            <Button x:Name="RunButton" Text="Run" Clicked="OnRunClicked"/>
+            <Button x:Name="CustomRunButton" Text="Custom Run…" Clicked="OnCustomRunClicked"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+            <Button x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+
+        </VerticalStackLayout>
+    </Border>
+
+</toolkit:Popup>

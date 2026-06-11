@@ -84,18 +84,29 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
-        /// Displays the Play 3D custom-launch picker (sky / wall texture /
-        /// landmark toggles / time limit) for a user-edited maze as a popup
-        /// window. Pre-fills from
-        /// <see cref="Services.MazeGameSettingsStore.Load"/>; on
-        /// Play, the popup persists the chosen settings before returning
-        /// them.
+        /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) as a popup window.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title</param>
-        /// <returns>A task that contains the chosen settings, or <c>null</c> if the user cancelled</returns>
-        public async Task<Models.MazeGameSettings?> ShowMazeGameSettingsAsync(string? mazeName = null)
+        /// <returns>A task that contains the chosen <see cref="Play3dLaunchChoice"/> (<see cref="Play3dLaunchChoice.Cancel"/> if dismissed)</returns>
+        public async Task<Play3dLaunchChoice> ShowPlay3dLaunchChooserAsync(string? mazeName = null)
         {
-            var popup = new Views.MazeGameSettingsPopup(mazeName);
+            var popup = new Views.Play3dLaunchChooserPopup(mazeName);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Play3dLaunchChoice>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
+        /// Displays the Play 3D settings popup (sky / wall texture / landmark
+        /// toggles / time limit) for a one-off custom launch as a popup window,
+        /// seeded from <paramref name="current"/> (or defaults when none). The
+        /// returned settings drive this launch only; nothing is persisted.
+        /// </summary>
+        /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <param name="current">Settings to seed the popup with, or null for defaults</param>
+        /// <returns>A task that contains the chosen settings, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.MazeGameSettings?> ShowMazeGameSettingsAsync(string? mazeName = null, Models.MazeGameSettings? current = null)
+        {
+            var popup = new Views.MazeGameSettingsPopup(mazeName, current, submitButtonText: "Play");
             var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.MazeGameSettings?>(popup);
             return result.Result;
         }
@@ -111,7 +122,7 @@ namespace Maze.Maui.App.Services
         public async Task<Models.MazeGameSettings?> ShowMazeGameSettingsEditorAsync(string? mazeName, Models.MazeGameSettings? current)
         {
             string title = !string.IsNullOrWhiteSpace(mazeName) ? $"Game settings — {mazeName}" : "Game settings";
-            var popup = new Views.MazeGameSettingsPopup(mazeName, current, title: title, submitLabel: "Apply", persistToStore: false);
+            var popup = new Views.MazeGameSettingsPopup(mazeName, current, title: title, submitButtonText: "Apply");
             var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.MazeGameSettings?>(popup);
             return result.Result;
         }

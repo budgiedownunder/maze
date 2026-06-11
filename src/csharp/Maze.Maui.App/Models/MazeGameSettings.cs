@@ -18,12 +18,6 @@ namespace Maze.Maui.App.Models
     /// </summary>
     public sealed class MazeGameSettings
     {
-        /// <summary>
-        /// Preferences key under which the settings are persisted. Shared
-        /// between the store and any caller that wants to clear it.
-        /// </summary>
-        public const string PreferencesKey = "mazeGameSettings";
-
         /// <summary>Sky type wire token (lowercase).</summary>
         [JsonPropertyName("skyType")]
         public string SkyType { get; set; } = "night";
