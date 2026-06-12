@@ -356,6 +356,19 @@ pub trait ScoreStore {
     ) -> Result<Vec<ScoreEntry>, Error>;
 }
 
+/// Enforces the dual-keyed subject invariant for a [`ScoreEntry`]: exactly one
+/// of `maze_id` / `challenge` must be set. Shared by every [`ScoreStore`]
+/// backend's `record_score` (there is no portable cross-column CHECK).
+pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
+    // `is_some() == is_some()` is true when both are set or both are unset.
+    if entry.maze_id.is_some() == entry.challenge.is_some() {
+        return Err(Error::Other(
+            "score entry must set exactly one of maze_id / challenge".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 // Store management
 #[async_trait]
 pub trait Manage {
@@ -364,7 +377,7 @@ pub trait Manage {
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + ScoreStore + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

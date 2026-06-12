@@ -13,7 +13,10 @@ use data_model::{
 };
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
-use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
+use crate::store::{
+    EmailAuditLog, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore,
+    SortDirection, TokenStore, UserStore,
+};
 use crate::{
     file_store_migration,
     validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_user_fields},
@@ -71,6 +74,8 @@ pub struct FileStore {
     tokens_dir: String,
     /// Full path to the email audit log directory (one file per entry).
     audit_log_dir: String,
+    /// Full path to the score history directory (one file per completed run).
+    score_history_dir: String,
 }
 
 // Private trait used for accessing struct fields
@@ -155,6 +160,7 @@ impl FileStore {
             users_dir: "".to_string(),
             tokens_dir: "".to_string(),
             audit_log_dir: "".to_string(),
+            score_history_dir: "".to_string(),
         };
 
         match store.init() {
@@ -184,6 +190,10 @@ impl FileStore {
             .to_string();
         self.audit_log_dir = Path::new(&self.data_dir)
             .join("email_audit_log")
+            .to_string_lossy()
+            .to_string();
+        self.score_history_dir = Path::new(&self.data_dir)
+            .join("score_history")
             .to_string_lossy()
             .to_string();
         Ok(())
@@ -302,6 +312,122 @@ impl FileStore {
             })
             .collect();
         Ok(ids)
+    }
+
+    // ── score history JSON helpers (one file per completed run) ──────────────
+
+    // Returns the file path for a given score entry id.
+    fn score_entry_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.score_history_dir)
+            .join(format!("{id}.json"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads a score row's JSON file from disk.
+    fn read_score_entry_raw(&self, id: Uuid) -> Result<ScoreEntry, Error> {
+        let path = self.score_entry_file_path(id);
+        if !file_exists(&path) {
+            return Err(Error::Other(format!("score entry {id} not found")));
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, ScoreEntry>(reader).map_err(Error::from)
+    }
+
+    // Atomically writes a score row JSON via tempfile + rename. Rejects a
+    // duplicate id.
+    fn write_score_entry_file(&self, entry: &ScoreEntry) -> Result<(), Error> {
+        if !dir_exists(&self.score_history_dir) {
+            fs::create_dir_all(&self.score_history_dir)?;
+        }
+        let target = self.score_entry_file_path(entry.id);
+        if file_exists(&target) {
+            return Err(Error::Other(format!(
+                "score entry {} already exists",
+                entry.id
+            )));
+        }
+        let json = serde_json::to_string(entry)?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // Enumerates score entry ids in the score_history directory.
+    fn get_score_entry_ids(&self) -> Result<Vec<Uuid>, Error> {
+        if !dir_exists(&self.score_history_dir) {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<Uuid> = fs::read_dir(&self.score_history_dir)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    let path = e.path();
+                    if !path.is_file() {
+                        return None;
+                    }
+                    let name = path.file_stem()?.to_str()?;
+                    Uuid::parse_str(name).ok()
+                })
+            })
+            .collect();
+        Ok(ids)
+    }
+
+    // Loads every score row, skipping any unreadable file.
+    fn read_all_score_entries(&self) -> Result<Vec<ScoreEntry>, Error> {
+        let mut entries = Vec::new();
+        for id in self.get_score_entry_ids()? {
+            match self.read_score_entry_raw(id) {
+                Ok(entry) => entries.push(entry),
+                Err(error) => {
+                    log::warn!("FileStore score read: skipping unreadable entry '{id}' - {error}");
+                }
+            }
+        }
+        Ok(entries)
+    }
+
+    // The maze ids owned by `user_id` — the file stems under the user's mazes
+    // directory. Used to cascade-delete those mazes' score boards when the user
+    // (and thus their mazes) is deleted.
+    fn user_maze_ids(&self, user_id: Uuid) -> Vec<String> {
+        let mazes_dir = Path::new(&self.user_dir_path(user_id)).join("mazes");
+        let Ok(read) = fs::read_dir(&mazes_dir) else {
+            return Vec::new();
+        };
+        read.filter_map(|e| {
+            let path = e.ok()?.path();
+            if !path.is_file() {
+                return None;
+            }
+            Some(path.file_stem()?.to_str()?.to_string())
+        })
+        .collect()
+    }
+
+    // Removes every score row whose player is `user_id` (when set) or whose maze
+    // is in `maze_ids`. The FileStore counterpart to the SqlStore app-level
+    // cascade (which the SQL FK only backstops).
+    fn delete_score_rows(&self, user_id: Option<Uuid>, maze_ids: &[String]) -> Result<(), Error> {
+        for id in self.get_score_entry_ids()? {
+            let Ok(entry) = self.read_score_entry_raw(id) else {
+                continue;
+            };
+            let by_user = user_id.is_some_and(|u| entry.user_id == u);
+            let by_maze = entry
+                .maze_id
+                .as_deref()
+                .is_some_and(|m| maze_ids.iter().any(|x| x == m));
+            if by_user || by_maze {
+                delete_file(&self.score_entry_file_path(id));
+            }
+        }
+        Ok(())
     }
 
     // Walks the audit log and clears `recipient_user_id` and
@@ -946,6 +1072,12 @@ impl UserStore for FileStore {
         user.oauth_identities.clear();
         user.emails.clear();
         self.write_user_file(&user, true)?;
+        // Hard-delete the user's own score history and the boards of the mazes
+        // about to be deleted (other players' runs on them). Runs before the
+        // mazes are removed so `user_maze_ids` can still read them. Mirrors the
+        // SqlStore app-level cascade.
+        let owned_mazes = self.user_maze_ids(id);
+        self.delete_score_rows(Some(id), &owned_mazes)?;
         // Hard-delete the user's mazes — the user asked to delete the
         // account, their content goes with it. Mirrors `mazes ON DELETE
         // CASCADE` in the SQL schema.
@@ -1034,6 +1166,12 @@ impl UserStore for FileStore {
         // audit row that referenced this user, so the audit history
         // survives but no longer re-identifies them.
         self.null_audit_user_id_references(id)?;
+        // FileStore counterpart to the SQL `ON DELETE CASCADE` on
+        // `score_history` — the score rows live in a flat directory (not under
+        // the user dir being removed below), so drop them explicitly: the
+        // user's own runs and the boards of their mazes.
+        let owned_mazes = self.user_maze_ids(id);
+        self.delete_score_rows(Some(id), &owned_mazes)?;
         delete_dir(&self.user_dir_path(id));
         if self.user_dir_exists(id) {
             return Err(Error::Other(format!(
@@ -2209,6 +2347,7 @@ impl MazeStore for FileStore {
             return Err(Error::MazeIdNotFound(id.to_string()));
         }
         delete_file(&self.maze_path(owner, id));
+        self.delete_score_rows(None, &[id.to_string()])?;
         Ok(())
     }
     /// Updates an existing maze within the file store instance
@@ -3019,6 +3158,112 @@ impl EmailAuditLog for FileStore {
     }
 }
 
+/// Comparator mirroring the SqlStore `ORDER BY`: the primary metric in the
+/// requested direction, then the other metric in its fixed best direction
+/// (score DESC / elapsed_ms ASC), then `completed_at` ASC and `id` ASC.
+fn score_cmp(ordering: ScoreOrdering, a: &ScoreEntry, b: &ScoreEntry) -> std::cmp::Ordering {
+    let primary = match ordering.metric {
+        ScoreMetric::Time => a.elapsed_ms.cmp(&b.elapsed_ms),
+        ScoreMetric::Score => a.score.cmp(&b.score),
+    };
+    let primary = match ordering.direction {
+        SortDirection::Ascending => primary,
+        SortDirection::Descending => primary.reverse(),
+    };
+    let secondary = match ordering.metric {
+        ScoreMetric::Time => b.score.cmp(&a.score), // score DESC
+        ScoreMetric::Score => a.elapsed_ms.cmp(&b.elapsed_ms), // elapsed_ms ASC
+    };
+    primary
+        .then(secondary)
+        .then(a.completed_at.cmp(&b.completed_at))
+        .then(a.id.cmp(&b.id))
+}
+
+/// Filters, sorts by `ordering`, and returns the `[offset .. offset+limit]`
+/// page of a board.
+fn paged_board(
+    entries: Vec<ScoreEntry>,
+    keep: impl Fn(&ScoreEntry) -> bool,
+    ordering: ScoreOrdering,
+    limit: u32,
+    offset: u32,
+) -> Vec<ScoreEntry> {
+    let mut matched: Vec<ScoreEntry> = entries.into_iter().filter(|e| keep(e)).collect();
+    matched.sort_by(|a, b| score_cmp(ordering, a, b));
+    matched
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect()
+}
+
+#[async_trait]
+impl ScoreStore for FileStore {
+    async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error> {
+        if entry.id.is_nil() {
+            return Err(Error::Other("score entry id must not be nil".to_string()));
+        }
+        crate::store::validate_score_subject(entry)?;
+        self.write_score_entry_file(entry)?;
+        Ok(entry.id)
+    }
+
+    async fn maze_leaderboard(
+        &self,
+        maze_id: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error> {
+        let all = self.read_all_score_entries()?;
+        Ok(paged_board(
+            all,
+            |e| e.maze_id.as_deref() == Some(maze_id),
+            ordering,
+            limit,
+            offset,
+        ))
+    }
+
+    async fn challenge_leaderboard(
+        &self,
+        challenge: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error> {
+        let all = self.read_all_score_entries()?;
+        Ok(paged_board(
+            all,
+            |e| e.challenge.as_deref() == Some(challenge),
+            ordering,
+            limit,
+            offset,
+        ))
+    }
+
+    async fn user_history(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error> {
+        let mut matched: Vec<ScoreEntry> = self
+            .read_all_score_entries()?
+            .into_iter()
+            .filter(|e| e.user_id == user_id)
+            .collect();
+        // Recent first: completed_at DESC, id DESC.
+        matched.sort_by(|a, b| b.completed_at.cmp(&a.completed_at).then(b.id.cmp(&a.id)));
+        Ok(matched
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
+    }
+}
+
 impl Store for FileStore {}
 
 #[cfg(test)]
@@ -3079,6 +3324,65 @@ mod tests {
             panic!("{}", error);
         }
         user
+    }
+
+    // ── score_history smoke tests. The full cross-backend contract suite lives
+    //    in tests/. ────────────────────────────────────────────────────────────
+
+    fn challenge_score(user_id: Uuid, challenge: &str, score: u64, elapsed_ms: u64) -> ScoreEntry {
+        ScoreEntry {
+            id: Uuid::new_v4(),
+            user_id,
+            maze_id: None,
+            challenge: Some(challenge.to_string()),
+            score,
+            elapsed_ms,
+            completed_at: chrono::Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn score_challenge_leaderboard_orders_and_pages() {
+        let (mut store, _t) = new_store().await;
+        let user = create_user(&mut store, false, "alice", "Alice", "alice@example.com", "hash").await;
+        store.record_score(&challenge_score(user.id, "hard:1", 10, 5000)).await.unwrap();
+        store.record_score(&challenge_score(user.id, "hard:1", 2, 1000)).await.unwrap();
+        store.record_score(&challenge_score(user.id, "hard:1", 6, 3000)).await.unwrap();
+
+        let fastest = ScoreOrdering { metric: ScoreMetric::Time, direction: SortDirection::Ascending };
+        let highest = ScoreOrdering { metric: ScoreMetric::Score, direction: SortDirection::Descending };
+
+        let fast = store.challenge_leaderboard("hard:1", fastest, 10, 0).await.unwrap();
+        assert_eq!(fast.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>(), vec![1000, 3000, 5000]);
+        let high = store.challenge_leaderboard("hard:1", highest, 10, 0).await.unwrap();
+        assert_eq!(high.iter().map(|e| e.score).collect::<Vec<_>>(), vec![10, 6, 2]);
+
+        // Paging: limit 1, offset 1 of fastest → the middle (3000 ms) run.
+        let page = store.challenge_leaderboard("hard:1", fastest, 1, 1).await.unwrap();
+        assert_eq!(page.len(), 1);
+        assert_eq!(page[0].elapsed_ms, 3000);
+    }
+
+    #[tokio::test]
+    async fn score_record_enforces_subject_invariant() {
+        let (mut store, _t) = new_store().await;
+        let user = create_user(&mut store, false, "alice", "Alice", "alice@example.com", "hash").await;
+        let mut both = challenge_score(user.id, "easy:1", 1, 100);
+        both.maze_id = Some("m1".to_string()); // both subjects set → rejected
+        assert!(store.record_score(&both).await.is_err());
+        let mut neither = challenge_score(user.id, "easy:1", 1, 100);
+        neither.challenge = None; // neither subject set → rejected
+        assert!(store.record_score(&neither).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn score_delete_user_cascades_history() {
+        let (mut store, _t) = new_store().await;
+        let user = create_user(&mut store, false, "alice", "Alice", "alice@example.com", "hash").await;
+        store.record_score(&challenge_score(user.id, "easy:1", 1, 100)).await.unwrap();
+        assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 1);
+        store.delete_user(user.id).await.unwrap();
+        assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 0);
     }
 
     // Initialize a Maze struct

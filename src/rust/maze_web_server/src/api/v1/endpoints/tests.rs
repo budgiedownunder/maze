@@ -23,7 +23,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreOrdering, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -712,6 +712,42 @@ mod test_definitions {
             });
             matches.truncate(limit as usize);
             Ok(matches)
+        }
+    }
+
+    // Minimal stub — the server does not exercise scoring yet (the record +
+    // leaderboard handlers land in a later step, which will flesh this out).
+    // Present so `MockStore` satisfies the `Store` supertrait bound.
+    #[async_trait]
+    impl ScoreStore for MockStore {
+        async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, StoreError> {
+            Ok(entry.id)
+        }
+        async fn maze_leaderboard(
+            &self,
+            _maze_id: &str,
+            _ordering: ScoreOrdering,
+            _limit: u32,
+            _offset: u32,
+        ) -> Result<Vec<ScoreEntry>, StoreError> {
+            Ok(Vec::new())
+        }
+        async fn challenge_leaderboard(
+            &self,
+            _challenge: &str,
+            _ordering: ScoreOrdering,
+            _limit: u32,
+            _offset: u32,
+        ) -> Result<Vec<ScoreEntry>, StoreError> {
+            Ok(Vec::new())
+        }
+        async fn user_history(
+            &self,
+            _user_id: Uuid,
+            _limit: u32,
+            _offset: u32,
+        ) -> Result<Vec<ScoreEntry>, StoreError> {
+            Ok(Vec::new())
         }
     }
 

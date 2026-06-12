@@ -233,6 +233,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (6, migrate_0006_create_email_audit_log_dir),
     (7, no_op_migration),
     (8, migrate_0008_user_timestamps),
+    (9, migrate_0009_create_score_history_dir),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -269,6 +270,16 @@ fn migrate_0005_create_one_time_tokens_dir(data_dir: &Path) -> Result<(), Error>
 /// `EmailAuditLog` impl. Idempotent.
 fn migrate_0006_create_email_audit_log_dir(data_dir: &Path) -> Result<(), Error> {
     let dir = data_dir.join("email_audit_log");
+    fs::create_dir_all(&dir)?;
+    Ok(())
+}
+
+/// FileStore migration 0009 — counterpart to
+/// `migrations/0009_score_history.sql`. The SQL side creates a table; the
+/// FileStore side creates the per-row directory used by the `ScoreStore` impl.
+/// Idempotent.
+fn migrate_0009_create_score_history_dir(data_dir: &Path) -> Result<(), Error> {
+    let dir = data_dir.join("score_history");
     fs::create_dir_all(&dir)?;
     Ok(())
 }

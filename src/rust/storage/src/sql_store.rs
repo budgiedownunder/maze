@@ -4016,13 +4016,7 @@ impl ScoreStore for SqlStore {
         if entry.id.is_nil() {
             return Err(Error::Other("score entry id must not be nil".to_string()));
         }
-        // The dual-keyed subject invariant: exactly one of maze_id / challenge.
-        // `is_some() == is_some()` is true when both are set or both are unset.
-        if entry.maze_id.is_some() == entry.challenge.is_some() {
-            return Err(Error::Other(
-                "score entry must set exactly one of maze_id / challenge".to_string(),
-            ));
-        }
+        crate::store::validate_score_subject(entry)?;
         sqlx::query(&q(
             self.kind,
             "INSERT INTO score_history \
