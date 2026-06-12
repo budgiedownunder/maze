@@ -35,6 +35,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::update_maze)
                 // Scores
                 .service(scores::record_score)
+                .service(scores::get_my_history)
+                .service(scores::get_leaderboard)
                 // Users (self-service) - must come BEFORE /users/{id}
                 .service(handlers::change_password_me)
                 .service(handlers::update_profile_me)

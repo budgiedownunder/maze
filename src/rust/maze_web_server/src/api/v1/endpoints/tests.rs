@@ -9,7 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreResponse};
+    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreBoardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -24,7 +24,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreOrdering, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -737,30 +737,81 @@ mod test_definitions {
         }
         async fn maze_leaderboard(
             &self,
-            _maze_id: &str,
-            _ordering: ScoreOrdering,
-            _limit: u32,
-            _offset: u32,
+            maze_id: &str,
+            ordering: ScoreOrdering,
+            limit: u32,
+            offset: u32,
         ) -> Result<Vec<ScoreEntry>, StoreError> {
-            Ok(Vec::new())
+            Ok(mock_paged_board(
+                &self.scores,
+                |e| e.maze_id.as_deref() == Some(maze_id),
+                ordering,
+                limit,
+                offset,
+            ))
         }
         async fn challenge_leaderboard(
             &self,
-            _challenge: &str,
-            _ordering: ScoreOrdering,
-            _limit: u32,
-            _offset: u32,
+            challenge: &str,
+            ordering: ScoreOrdering,
+            limit: u32,
+            offset: u32,
         ) -> Result<Vec<ScoreEntry>, StoreError> {
-            Ok(Vec::new())
+            Ok(mock_paged_board(
+                &self.scores,
+                |e| e.challenge.as_deref() == Some(challenge),
+                ordering,
+                limit,
+                offset,
+            ))
         }
         async fn user_history(
             &self,
-            _user_id: Uuid,
-            _limit: u32,
-            _offset: u32,
+            user_id: Uuid,
+            limit: u32,
+            offset: u32,
         ) -> Result<Vec<ScoreEntry>, StoreError> {
-            Ok(Vec::new())
+            let mut matched: Vec<ScoreEntry> =
+                self.scores.iter().filter(|e| e.user_id == user_id).cloned().collect();
+            // Recent first: recorded_at DESC, id DESC (mirrors FileStore/SqlStore).
+            matched.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at).then(b.id.cmp(&a.id)));
+            Ok(matched.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
+    }
+
+    /// Orders two score entries by `ordering`, mirroring the FileStore /
+    /// SqlStore tie-break (primary metric per direction, the other metric, then
+    /// recorded_at ASC, then id ASC). Used by the MockStore board queries so the
+    /// handler tests exercise real ordering + paging.
+    fn mock_score_cmp(ordering: ScoreOrdering, a: &ScoreEntry, b: &ScoreEntry) -> std::cmp::Ordering {
+        let primary = match ordering.metric {
+            ScoreMetric::Time => a.elapsed_ms.cmp(&b.elapsed_ms),
+            ScoreMetric::Score => a.score.cmp(&b.score),
+        };
+        let primary = match ordering.direction {
+            SortDirection::Ascending => primary,
+            SortDirection::Descending => primary.reverse(),
+        };
+        let secondary = match ordering.metric {
+            ScoreMetric::Time => b.score.cmp(&a.score),
+            ScoreMetric::Score => a.elapsed_ms.cmp(&b.elapsed_ms),
+        };
+        primary
+            .then(secondary)
+            .then(a.recorded_at.cmp(&b.recorded_at))
+            .then(a.id.cmp(&b.id))
+    }
+
+    fn mock_paged_board(
+        entries: &[ScoreEntry],
+        keep: impl Fn(&ScoreEntry) -> bool,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Vec<ScoreEntry> {
+        let mut matched: Vec<ScoreEntry> = entries.iter().filter(|e| keep(e)).cloned().collect();
+        matched.sort_by(|a, b| mock_score_cmp(ordering, a, b));
+        matched.into_iter().skip(offset as usize).take(limit as usize).collect()
     }
 
     impl Store for MockStore {}
@@ -6985,6 +7036,215 @@ mod test_definitions {
             elapsed_ms: 1,
         };
         let req = create_test_post_request("/api/v1/scores", None, None, Some(&body));
+        test::call_service(&app, req).await;
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /api/v1/scores  (leaderboard)  +  GET /api/v1/scores/me  (history)
+    // -----------------------------------------------------------------------
+
+    /// Three runs whose time order (fastest first) and score order (highest
+    /// first) are deliberately different, so a test can tell the orderings
+    /// apart: by time → [B, C, A]; by score → [A, C, B].
+    const SCORE_SEED: [(u64, u64); 3] = [
+        // (score, elapsed_ms)
+        (10, 300), // A
+        (5, 100),  // B
+        (8, 200),  // C
+    ];
+
+    async fn seed_maze_scores(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+        maze_id: &str,
+    ) {
+        for (score, elapsed_ms) in SCORE_SEED {
+            let body = RecordScoreRequest {
+                maze_id: Some(maze_id.to_string()),
+                challenge: None,
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            let resp = test::call_service(app, req).await;
+            assert_eq!(resp.status(), StatusCode::CREATED);
+        }
+    }
+
+    async fn read_board(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        url: &str,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+    ) -> ScoreBoardResponse {
+        let req = create_test_get_request(url, api_key, login_id);
+        let resp = test::call_service(app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK, "GET {url}");
+        let bytes = test::read_body(resp).await;
+        serde_json::from_slice(&bytes).expect("ScoreBoardResponse")
+    }
+
+    #[tokio::test]
+    async fn leaderboard_orders_by_time_then_score() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // Default metric is time, default direction fastest-first → [B, C, A].
+        let by_time = read_board(&app, "/api/v1/scores?maze_id=maze-1", api_key, login_id).await;
+        let times: Vec<u64> = by_time.scores.iter().map(|s| s.elapsed_ms).collect();
+        assert_eq!(times, vec![100, 200, 300]);
+        assert!(!by_time.has_more);
+        assert_eq!(by_time.offset, 0);
+
+        // metric=score → highest-first → [A, C, B].
+        let by_score =
+            read_board(&app, "/api/v1/scores?maze_id=maze-1&metric=score", api_key, login_id).await;
+        let scores: Vec<u64> = by_score.scores.iter().map(|s| s.score).collect();
+        assert_eq!(scores, vec![10, 8, 5]);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_pages_with_limit_offset_and_has_more() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // Page 1 (limit=2) of the time board [B, C, A] → [B, C], more to come.
+        let page1 =
+            read_board(&app, "/api/v1/scores?maze_id=maze-1&limit=2", api_key, login_id).await;
+        assert_eq!(page1.scores.iter().map(|s| s.elapsed_ms).collect::<Vec<_>>(), vec![100, 200]);
+        assert_eq!(page1.limit, 2);
+        assert!(page1.has_more);
+
+        // Page 2 (offset=2) → [A], no more.
+        let page2 = read_board(
+            &app,
+            "/api/v1/scores?maze_id=maze-1&limit=2&offset=2",
+            api_key,
+            login_id,
+        )
+        .await;
+        assert_eq!(page2.scores.iter().map(|s| s.elapsed_ms).collect::<Vec<_>>(), vec![300]);
+        assert!(!page2.has_more);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_caps_limit_at_server_max() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // Ask for far more than the cap — the effective limit echoed back is 100.
+        let board =
+            read_board(&app, "/api/v1/scores?maze_id=maze-1&limit=100000", api_key, login_id).await;
+        assert_eq!(board.limit, 100);
+        assert_eq!(board.scores.len(), 3);
+        assert!(!board.has_more);
+    }
+
+    #[tokio::test]
+    async fn challenge_leaderboard_reads_curated_subject() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        for (score, elapsed_ms) in SCORE_SEED {
+            let body = RecordScoreRequest {
+                maze_id: None,
+                challenge: Some("hard:12345".to_string()),
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+        }
+
+        let board =
+            read_board(&app, "/api/v1/scores?challenge=hard:12345", api_key, login_id).await;
+        assert_eq!(board.scores.iter().map(|s| s.elapsed_ms).collect::<Vec<_>>(), vec![100, 200, 300]);
+        assert!(board.scores.iter().all(|s| s.challenge.as_deref() == Some("hard:12345")));
+    }
+
+    #[tokio::test]
+    async fn leaderboard_requires_exactly_one_subject() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        // Neither subject.
+        let req = create_test_get_request("/api/v1/scores", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+
+        // Both subjects.
+        let req = create_test_get_request(
+            "/api/v1/scores?maze_id=maze-1&challenge=hard:1",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_rejects_bad_metric_and_direction() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let req = create_test_get_request(
+            "/api/v1/scores?maze_id=maze-1&metric=bogus",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+
+        let req = create_test_get_request(
+            "/api/v1/scores?maze_id=maze-1&direction=sideways",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn history_returns_callers_runs_paged() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // All three runs belong to the caller; page size 2 → has_more.
+        let page1 = read_board(&app, "/api/v1/scores/me?limit=2", api_key, login_id).await;
+        assert_eq!(page1.scores.len(), 2);
+        assert!(page1.has_more);
+        assert!(page1.scores.iter().all(|s| s.maze_id.as_deref() == Some("maze-1")));
+
+        let page2 = read_board(&app, "/api/v1/scores/me?limit=2&offset=2", api_key, login_id).await;
+        assert_eq!(page2.scores.len(), 1);
+        assert!(!page2.has_more);
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn leaderboard_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_get_request("/api/v1/scores?maze_id=maze-1", None, None);
+        test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn history_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_get_request("/api/v1/scores/me", None, None);
         test::call_service(&app, req).await;
     }
 }
