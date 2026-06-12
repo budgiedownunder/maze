@@ -505,8 +505,9 @@ pub struct MazeGame {
     max_hp: u32,
     /// Monotonic count of keys auto-collected over the run, feeding
     /// [`MazeGame::score`]. Distinct from [`Self::bag`], which doors *consume* —
-    /// this only ever grows, so the score is a true progress measure.
-    keys_collected: u32,
+    /// this only ever grows, so the score is a true progress measure. `u64` for
+    /// headroom as future reward sources fold into the score.
+    keys_collected: u64,
     /// Events produced synchronously by [`MazeGame::move_player`]
     /// (`PlayerHealed` from an auto-pickup, `PlayerDamaged` from stepping into
     /// an enemy-occupied cell) that surface on the next [`MazeGame::tick`]
@@ -1646,7 +1647,7 @@ impl MazeGame {
     /// game.move_player(Direction::Right); // walk onto the key — auto-collected
     /// assert_eq!(game.score(), 1);
     /// ```
-    pub fn score(&self) -> u32 {
+    pub fn score(&self) -> u64 {
         self.keys_collected
     }
 }
