@@ -16,7 +16,7 @@ use data_model::{
     EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User,
     UserEmail, UserLogin,
 };
-use storage::{Error, Store};
+use storage::{Error, ScoreEntry, ScoreMetric, ScoreOrdering, SortDirection, Store};
 use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1900,4 +1900,243 @@ pub async fn empty_clears_all_data(store: &mut Box<dyn Store>) {
     // when the user's mazes directory no longer exists. The user-list
     // assertion is sufficient: no users → no mazes (mazes are owned).
     assert!(store.get_users().await.expect("get_users").is_empty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ScoreStore
+// ─────────────────────────────────────────────────────────────────────────
+
+fn score_entry(
+    user_id: Uuid,
+    maze_id: Option<&str>,
+    challenge: Option<&str>,
+    score: u64,
+    elapsed_ms: u64,
+) -> ScoreEntry {
+    ScoreEntry {
+        id: Uuid::new_v4(),
+        user_id,
+        maze_id: maze_id.map(str::to_string),
+        challenge: challenge.map(str::to_string),
+        score,
+        elapsed_ms,
+        // Millisecond precision so the value round-trips identically through the
+        // SQL backends (which store RFC 3339 to millis) and FileStore.
+        completed_at: Utc::now().trunc_subsecs(3),
+    }
+}
+
+const FASTEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Time,
+    direction: SortDirection::Ascending,
+};
+const SLOWEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Time,
+    direction: SortDirection::Descending,
+};
+const HIGHEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Score,
+    direction: SortDirection::Descending,
+};
+const LOWEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Score,
+    direction: SortDirection::Ascending,
+};
+
+// Seeds a maze owned by `owner` and returns its assigned id.
+async fn fixture_maze(store: &mut Box<dyn Store>, owner: &User, name: &str) -> String {
+    let mut maze = make_maze(name);
+    store.create_maze(owner, &mut maze).await.expect("fixture_maze");
+    maze.id
+}
+
+pub async fn score_record_round_trips_for_both_subjects(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_id = fixture_maze(store, &alice, "board-maze").await;
+
+    let on_maze = score_entry(alice.id, Some(&maze_id), None, 5, 4_200);
+    let on_challenge = score_entry(alice.id, None, Some("hard:7"), 3, 9_100);
+    let maze_row = store.record_score(&on_maze).await.expect("record maze score");
+    let challenge_row = store
+        .record_score(&on_challenge)
+        .await
+        .expect("record challenge score");
+    assert_eq!(maze_row, on_maze.id);
+    assert_eq!(challenge_row, on_challenge.id);
+
+    let board = store
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0)
+        .await
+        .expect("maze_leaderboard");
+    assert_eq!(board, vec![on_maze.clone()]);
+
+    let challenge_board = store
+        .challenge_leaderboard("hard:7", HIGHEST, 10, 0)
+        .await
+        .expect("challenge_leaderboard");
+    assert_eq!(challenge_board, vec![on_challenge.clone()]);
+
+    // Personal history aggregates a player's runs across both subjects.
+    let history = store
+        .user_history(alice.id, 10, 0)
+        .await
+        .expect("user_history");
+    assert_eq!(history.len(), 2);
+}
+
+pub async fn score_record_rejects_invalid_subject(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    // Both subjects set.
+    let both = score_entry(alice.id, Some("m1"), Some("c:1"), 1, 100);
+    assert!(store.record_score(&both).await.is_err());
+    // Neither subject set.
+    let neither = score_entry(alice.id, None, None, 1, 100);
+    assert!(store.record_score(&neither).await.is_err());
+}
+
+pub async fn score_maze_leaderboard_orders_by_metric_and_direction(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_id = fixture_maze(store, &alice, "board-maze").await;
+    // (score, elapsed_ms): (10, 5000), (2, 1000), (6, 3000).
+    for (score, ms) in [(10u64, 5_000u64), (2, 1_000), (6, 3_000)] {
+        store
+            .record_score(&score_entry(alice.id, Some(&maze_id), None, score, ms))
+            .await
+            .expect("record_score");
+    }
+    let elapsed = |rows: Vec<ScoreEntry>| rows.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>();
+    let scores = |rows: Vec<ScoreEntry>| rows.iter().map(|e| e.score).collect::<Vec<_>>();
+
+    let fastest = store.maze_leaderboard(&maze_id, FASTEST, 10, 0).await.expect("fastest");
+    assert_eq!(elapsed(fastest), vec![1_000, 3_000, 5_000]);
+    let slowest = store.maze_leaderboard(&maze_id, SLOWEST, 10, 0).await.expect("slowest");
+    assert_eq!(elapsed(slowest), vec![5_000, 3_000, 1_000]);
+    let highest = store.maze_leaderboard(&maze_id, HIGHEST, 10, 0).await.expect("highest");
+    assert_eq!(scores(highest), vec![10, 6, 2]);
+    let lowest = store.maze_leaderboard(&maze_id, LOWEST, 10, 0).await.expect("lowest");
+    assert_eq!(scores(lowest), vec![2, 6, 10]);
+}
+
+pub async fn score_challenge_leaderboard_orders_and_pages(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    for score in [10u64, 2, 6, 8] {
+        store
+            .record_score(&score_entry(alice.id, None, Some("c:1"), score, 1_000))
+            .await
+            .expect("record_score");
+    }
+    // Highest first: 10, 8, 6, 2. Page of 2 from offset 0, then offset 2.
+    let page1 = store
+        .challenge_leaderboard("c:1", HIGHEST, 2, 0)
+        .await
+        .expect("page1");
+    assert_eq!(page1.iter().map(|e| e.score).collect::<Vec<_>>(), vec![10, 8]);
+    let page2 = store
+        .challenge_leaderboard("c:1", HIGHEST, 2, 2)
+        .await
+        .expect("page2");
+    assert_eq!(page2.iter().map(|e| e.score).collect::<Vec<_>>(), vec![6, 2]);
+    // Offset past the end yields an empty page.
+    let page3 = store
+        .challenge_leaderboard("c:1", HIGHEST, 2, 4)
+        .await
+        .expect("page3");
+    assert!(page3.is_empty());
+}
+
+pub async fn score_user_history_is_recent_first_and_pages(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let base = Utc::now().trunc_subsecs(3);
+    // Three runs at increasing completion times — newest must come first.
+    for secs in [0i64, 1, 2] {
+        let mut e = score_entry(alice.id, None, Some("c:1"), 1, 1_000);
+        e.completed_at = base + Duration::seconds(secs);
+        store.record_score(&e).await.expect("record_score");
+    }
+    let all = store
+        .user_history(alice.id, 10, 0)
+        .await
+        .expect("user_history");
+    let ts: Vec<_> = all.iter().map(|e| e.completed_at).collect();
+    assert!(ts[0] > ts[1] && ts[1] > ts[2], "must be most-recent first");
+    // Paging: one row per page.
+    let first = store.user_history(alice.id, 1, 0).await.expect("first");
+    let second = store.user_history(alice.id, 1, 1).await.expect("second");
+    assert_eq!(first[0].completed_at, ts[0]);
+    assert_eq!(second[0].completed_at, ts[1]);
+}
+
+pub async fn score_boards_are_empty_for_unknown_subject(store: &mut Box<dyn Store>) {
+    assert!(store
+        .maze_leaderboard("does-not-exist", FASTEST, 10, 0)
+        .await
+        .expect("maze_leaderboard")
+        .is_empty());
+    assert!(store
+        .challenge_leaderboard("nope:0", HIGHEST, 10, 0)
+        .await
+        .expect("challenge_leaderboard")
+        .is_empty());
+    assert!(store
+        .user_history(Uuid::new_v4(), 10, 0)
+        .await
+        .expect("user_history")
+        .is_empty());
+}
+
+pub async fn score_delete_user_cascades_player_rows(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 1, 100))
+        .await
+        .expect("record_score");
+    assert_eq!(store.user_history(alice.id, 10, 0).await.unwrap().len(), 1);
+    store.delete_user(alice.id).await.expect("delete_user");
+    assert!(store.user_history(alice.id, 10, 0).await.unwrap().is_empty());
+}
+
+pub async fn score_delete_maze_cascades_its_board_not_challenge_rows(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_id = fixture_maze(store, &alice, "board-maze").await;
+    store
+        .record_score(&score_entry(alice.id, Some(&maze_id), None, 5, 100))
+        .await
+        .expect("record maze score");
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:9"), 3, 100))
+        .await
+        .expect("record challenge score");
+
+    store.delete_maze(&alice, &maze_id).await.expect("delete_maze");
+
+    assert!(store
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0)
+        .await
+        .unwrap()
+        .is_empty());
+    // The curated challenge row has no maze parent — it survives.
+    assert_eq!(
+        store.challenge_leaderboard("c:9", HIGHEST, 10, 0).await.unwrap().len(),
+        1
+    );
+}
+
+pub async fn score_delete_user_cascades_boards_of_owned_mazes(store: &mut Box<dyn Store>) {
+    let (alice, bob) = fixture_two_users(store).await;
+    // Alice owns the maze; Bob plays it (boards aggregate every player).
+    let maze_id = fixture_maze(store, &alice, "alice-maze").await;
+    store
+        .record_score(&score_entry(bob.id, Some(&maze_id), None, 7, 2_000))
+        .await
+        .expect("record bob's run on alice's maze");
+    assert_eq!(store.maze_leaderboard(&maze_id, HIGHEST, 10, 0).await.unwrap().len(), 1);
+
+    // Deleting Alice deletes her maze, and thus its board — including Bob's run.
+    store.delete_user(alice.id).await.expect("delete_user");
+    assert!(store
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(store.user_history(bob.id, 10, 0).await.unwrap().is_empty());
 }

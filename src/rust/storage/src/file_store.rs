@@ -392,9 +392,10 @@ impl FileStore {
         Ok(entries)
     }
 
-    // The maze ids owned by `user_id` — the file stems under the user's mazes
-    // directory. Used to cascade-delete those mazes' score boards when the user
-    // (and thus their mazes) is deleted.
+    // The maze ids owned by `user_id`. A FileStore maze id is its full file
+    // name (`"<name>.json"`, per `make_maze_id`), so this uses `file_name`, not
+    // `file_stem`. Used to cascade-delete those mazes' score boards when the
+    // user (and thus their mazes) is deleted.
     fn user_maze_ids(&self, user_id: Uuid) -> Vec<String> {
         let mazes_dir = Path::new(&self.user_dir_path(user_id)).join("mazes");
         let Ok(read) = fs::read_dir(&mazes_dir) else {
@@ -405,7 +406,7 @@ impl FileStore {
             if !path.is_file() {
                 return None;
             }
-            Some(path.file_stem()?.to_str()?.to_string())
+            Some(path.file_name()?.to_str()?.to_string())
         })
         .collect()
     }
