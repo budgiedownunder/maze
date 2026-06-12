@@ -16,16 +16,16 @@ pub(crate) struct ModeText;
 
 pub(crate) fn spawn_statusbar(commands: &mut Commands, window: &Query<&Window>, config: &GameConfig) {
     // `statusbar_resize_system` repositions both nodes each frame so window
-    // resizes track the top-left corner.
+    // resizes track the bottom-left corner.
     let (sb_x, sb_y) = window
         .single()
         .map(|w| {
             (
                 -w.width() / 2.0 + STATUSBAR_MARGIN + STATUSBAR_BG_W / 2.0,
-                w.height() / 2.0 - STATUSBAR_MARGIN - STATUSBAR_BG_H / 2.0,
+                -w.height() / 2.0 + STATUSBAR_MARGIN + STATUSBAR_BG_H / 2.0,
             )
         })
-        .unwrap_or((-500.0, 330.0));
+        .unwrap_or((-500.0, -330.0));
     commands.spawn((
         StatusBar,
         Sprite {
@@ -51,7 +51,7 @@ pub(crate) fn statusbar_resize_system(
 ) {
     let Ok(win) = window.single() else { return; };
     let target_x = -win.width() / 2.0 + STATUSBAR_MARGIN + STATUSBAR_BG_W / 2.0;
-    let target_y = win.height() / 2.0 - STATUSBAR_MARGIN - STATUSBAR_BG_H / 2.0;
+    let target_y = -win.height() / 2.0 + STATUSBAR_MARGIN + STATUSBAR_BG_H / 2.0;
     for mut t in &mut bg {
         t.translation.x = target_x;
         t.translation.y = target_y;

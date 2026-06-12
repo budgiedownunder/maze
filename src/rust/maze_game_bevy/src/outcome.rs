@@ -30,10 +30,13 @@ pub(crate) fn outcome_watcher_system(
     }
     if !state.won && state.game.is_complete() {
         state.won = true;
-        win::spawn_win_overlay(&mut commands);
+        let elapsed_ms = (clock.elapsed_secs * 1000.0) as u64;
+        let score = state.game.score();
+        win::spawn_win_overlay(&mut commands, score, elapsed_ms);
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Win,
-            elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+            elapsed_ms,
+            score,
             difficulty: config.difficulty.clone(),
             rows: state.grid.len() as u32,
             cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
@@ -52,6 +55,7 @@ pub(crate) fn outcome_watcher_system(
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Lose,
             elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+            score: state.game.score(),
             difficulty: config.difficulty.clone(),
             rows: state.grid.len() as u32,
             cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,

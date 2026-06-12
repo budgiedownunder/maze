@@ -495,6 +495,7 @@ pub(crate) fn spawn_world(
         &mut images,
     );
     hud::clock::spawn_clock_hud(&mut commands, &window);
+    hud::score::spawn_score_hud(&mut commands, &window);
     hud::statusbar::spawn_statusbar(&mut commands, &window, &config);
     hud::bag::spawn_bag_hud(&mut commands, &window, &mut images);
     hud::hp::spawn_hp_hud(

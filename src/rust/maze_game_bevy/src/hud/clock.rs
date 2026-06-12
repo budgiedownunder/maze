@@ -70,6 +70,7 @@ pub(crate) fn tick_clock_system(
     dispatch_game_result(&GameResult {
         outcome: GameOutcome::Lose,
         elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+        score: state.game.score(),
         difficulty: config.difficulty.clone(),
         rows: state.grid.len() as u32,
         cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,

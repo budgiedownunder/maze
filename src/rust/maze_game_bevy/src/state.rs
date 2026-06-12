@@ -534,6 +534,7 @@ pub enum GameOutcome {
 pub struct GameResult {
     pub outcome: GameOutcome,
     pub elapsed_ms: u64,
+    pub score: u64,
     pub difficulty: Option<String>,
     pub rows: u32,
     pub cols: u32,
@@ -606,6 +607,23 @@ mod tests {
             elapsed,
             duration,
         }
+    }
+
+    #[test]
+    fn game_result_serializes_score_as_camel_case_number() {
+        let result = GameResult {
+            outcome: GameOutcome::Win,
+            elapsed_ms: 83_456,
+            score: 5,
+            difficulty: None,
+            rows: 3,
+            cols: 3,
+            seed: None,
+            extras: std::collections::BTreeMap::new(),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"score\":5"), "score missing from {json}");
+        assert!(json.contains("\"elapsedMs\":83456"));
     }
 
     #[test]
