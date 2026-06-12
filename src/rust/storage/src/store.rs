@@ -276,8 +276,8 @@ pub struct ScoreEntry {
     pub score: u64,
     /// Elapsed run time in milliseconds.
     pub elapsed_ms: u64,
-    /// When the run completed.
-    pub completed_at: DateTime<Utc>,
+    /// When the run was recorded (server-stamped at record time).
+    pub recorded_at: DateTime<Utc>,
 }
 
 /// The metric a leaderboard ranks by.
@@ -300,7 +300,7 @@ pub enum SortDirection {
 
 /// Ordering for a leaderboard query: the primary `metric` sorted in
 /// `direction`, with a fixed sensible tie-break (the *other* metric — faster /
-/// higher among equal primaries) followed by `completed_at` / `id` as
+/// higher among equal primaries) followed by `recorded_at` / `id` as
 /// deterministic final keys. Only the primary direction follows `direction`
 /// (normal table-sort behaviour — the tie-breaks stay fixed so a UI column
 /// toggle reads naturally and pagination stays deterministic). The clauses are
@@ -347,7 +347,7 @@ pub trait ScoreStore {
         offset: u32,
     ) -> Result<Vec<ScoreEntry>, Error>;
     /// A page of a player's own run history, most recent first
-    /// (`completed_at` descending, `id` descending).
+    /// (`recorded_at` descending, `id` descending).
     async fn user_history(
         &self,
         user_id: Uuid,

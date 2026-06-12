@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS score_history (
     challenge     VARCHAR(64),
     score         BIGINT      NOT NULL,
     elapsed_ms    BIGINT      NOT NULL,
-    completed_at  VARCHAR(32) NOT NULL,
+    recorded_at   VARCHAR(32) NOT NULL,
     CONSTRAINT fk_score_history_user
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_score_history_maze
@@ -41,4 +41,4 @@ CREATE TABLE IF NOT EXISTS score_history (
 CREATE INDEX idx_score_history_maze ON score_history (maze_id);
 CREATE INDEX idx_score_history_challenge ON score_history (challenge);
 CREATE INDEX idx_score_history_user ON score_history (user_id);
-CREATE INDEX idx_score_history_completed_at ON score_history (completed_at);
+CREATE INDEX idx_score_history_recorded_at ON score_history (recorded_at);

@@ -3161,7 +3161,7 @@ impl EmailAuditLog for FileStore {
 
 /// Comparator mirroring the SqlStore `ORDER BY`: the primary metric in the
 /// requested direction, then the other metric in its fixed best direction
-/// (score DESC / elapsed_ms ASC), then `completed_at` ASC and `id` ASC.
+/// (score DESC / elapsed_ms ASC), then `recorded_at` ASC and `id` ASC.
 fn score_cmp(ordering: ScoreOrdering, a: &ScoreEntry, b: &ScoreEntry) -> std::cmp::Ordering {
     let primary = match ordering.metric {
         ScoreMetric::Time => a.elapsed_ms.cmp(&b.elapsed_ms),
@@ -3177,7 +3177,7 @@ fn score_cmp(ordering: ScoreOrdering, a: &ScoreEntry, b: &ScoreEntry) -> std::cm
     };
     primary
         .then(secondary)
-        .then(a.completed_at.cmp(&b.completed_at))
+        .then(a.recorded_at.cmp(&b.recorded_at))
         .then(a.id.cmp(&b.id))
 }
 
@@ -3255,8 +3255,8 @@ impl ScoreStore for FileStore {
             .into_iter()
             .filter(|e| e.user_id == user_id)
             .collect();
-        // Recent first: completed_at DESC, id DESC.
-        matched.sort_by(|a, b| b.completed_at.cmp(&a.completed_at).then(b.id.cmp(&a.id)));
+        // Recent first: recorded_at DESC, id DESC.
+        matched.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at).then(b.id.cmp(&a.id)));
         Ok(matched
             .into_iter()
             .skip(offset as usize)
@@ -3338,7 +3338,7 @@ mod tests {
             challenge: Some(challenge.to_string()),
             score,
             elapsed_ms,
-            completed_at: chrono::Utc::now(),
+            recorded_at: chrono::Utc::now(),
         }
     }
 

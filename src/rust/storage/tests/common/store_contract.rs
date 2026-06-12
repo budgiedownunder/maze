@@ -1922,7 +1922,7 @@ fn score_entry(
         elapsed_ms,
         // Millisecond precision so the value round-trips identically through the
         // SQL backends (which store RFC 3339 to millis) and FileStore.
-        completed_at: Utc::now().trunc_subsecs(3),
+        recorded_at: Utc::now().trunc_subsecs(3),
     }
 }
 
@@ -2050,20 +2050,20 @@ pub async fn score_user_history_is_recent_first_and_pages(store: &mut Box<dyn St
     // Three runs at increasing completion times — newest must come first.
     for secs in [0i64, 1, 2] {
         let mut e = score_entry(alice.id, None, Some("c:1"), 1, 1_000);
-        e.completed_at = base + Duration::seconds(secs);
+        e.recorded_at = base + Duration::seconds(secs);
         store.record_score(&e).await.expect("record_score");
     }
     let all = store
         .user_history(alice.id, 10, 0)
         .await
         .expect("user_history");
-    let ts: Vec<_> = all.iter().map(|e| e.completed_at).collect();
+    let ts: Vec<_> = all.iter().map(|e| e.recorded_at).collect();
     assert!(ts[0] > ts[1] && ts[1] > ts[2], "must be most-recent first");
     // Paging: one row per page.
     let first = store.user_history(alice.id, 1, 0).await.expect("first");
     let second = store.user_history(alice.id, 1, 1).await.expect("second");
-    assert_eq!(first[0].completed_at, ts[0]);
-    assert_eq!(second[0].completed_at, ts[1]);
+    assert_eq!(first[0].recorded_at, ts[0]);
+    assert_eq!(second[0].recorded_at, ts[1]);
 }
 
 pub async fn score_boards_are_empty_for_unknown_subject(store: &mut Box<dyn Store>) {

@@ -3915,7 +3915,7 @@ impl EmailAuditLog for SqlStore {
 
 /// The `ORDER BY` clause for a leaderboard ordering. The primary metric takes
 /// the requested direction; the secondary (the other metric) and the
-/// `completed_at` / `id` final keys are fixed. Built from fixed column names
+/// `recorded_at` / `id` final keys are fixed. Built from fixed column names
 /// (never user input), so it is safe to interpolate into the query.
 fn score_order_by_clause(ordering: ScoreOrdering) -> String {
     let primary = match ordering.direction {
@@ -3924,10 +3924,10 @@ fn score_order_by_clause(ordering: ScoreOrdering) -> String {
     };
     match ordering.metric {
         ScoreMetric::Time => {
-            format!("elapsed_ms {primary}, score DESC, completed_at ASC, id ASC")
+            format!("elapsed_ms {primary}, score DESC, recorded_at ASC, id ASC")
         }
         ScoreMetric::Score => {
-            format!("score {primary}, elapsed_ms ASC, completed_at ASC, id ASC")
+            format!("score {primary}, elapsed_ms ASC, recorded_at ASC, id ASC")
         }
     }
 }
@@ -3943,8 +3943,8 @@ fn score_entry_from_row(row: &AnyRow) -> Result<ScoreEntry, Error> {
     let challenge: Option<String> = row.try_get("challenge").map_err(map_sqlx_err)?;
     let score: i64 = row.try_get("score").map_err(map_sqlx_err)?;
     let elapsed_ms: i64 = row.try_get("elapsed_ms").map_err(map_sqlx_err)?;
-    let completed_at_str: String = row.try_get("completed_at").map_err(map_sqlx_err)?;
-    let completed_at = datetime_from_sql(&completed_at_str)?;
+    let recorded_at_str: String = row.try_get("recorded_at").map_err(map_sqlx_err)?;
+    let recorded_at = datetime_from_sql(&recorded_at_str)?;
     Ok(ScoreEntry {
         id,
         user_id,
@@ -3952,7 +3952,7 @@ fn score_entry_from_row(row: &AnyRow) -> Result<ScoreEntry, Error> {
         challenge,
         score: score as u64,
         elapsed_ms: elapsed_ms as u64,
-        completed_at,
+        recorded_at,
     })
 }
 
@@ -3996,7 +3996,7 @@ impl ScoreStore for SqlStore {
     /// let entry = ScoreEntry {
     ///     id: Uuid::new_v4(), user_id: user.id,
     ///     maze_id: None, challenge: Some("hard:42".to_string()),
-    ///     score: 5, elapsed_ms: 83_456, completed_at: chrono::Utc::now(),
+    ///     score: 5, elapsed_ms: 83_456, recorded_at: chrono::Utc::now(),
     /// };
     /// store.record_score(&entry).await.expect("record_score");
     ///
@@ -4020,7 +4020,7 @@ impl ScoreStore for SqlStore {
         sqlx::query(&q(
             self.kind,
             "INSERT INTO score_history \
-                 (id, user_id, maze_id, challenge, score, elapsed_ms, completed_at) \
+                 (id, user_id, maze_id, challenge, score, elapsed_ms, recorded_at) \
              VALUES (?, ?, ?, ?, ?, ?, ?)",
         ))
         .bind(entry.id.to_string())
@@ -4029,7 +4029,7 @@ impl ScoreStore for SqlStore {
         .bind(entry.challenge.as_deref())
         .bind(entry.score as i64)
         .bind(entry.elapsed_ms as i64)
-        .bind(datetime_to_sql(entry.completed_at))
+        .bind(datetime_to_sql(entry.recorded_at))
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -4087,7 +4087,7 @@ impl ScoreStore for SqlStore {
         let rows = sqlx::query(&q(
             self.kind,
             "SELECT * FROM score_history WHERE user_id = ? \
-             ORDER BY completed_at DESC, id DESC LIMIT ? OFFSET ?",
+             ORDER BY recorded_at DESC, id DESC LIMIT ? OFFSET ?",
         ))
         .bind(user_id.to_string())
         .bind(i64::from(limit))
@@ -4190,7 +4190,7 @@ mod tests {
             challenge: Some(challenge.to_string()),
             score,
             elapsed_ms,
-            completed_at: Utc::now(),
+            recorded_at: Utc::now(),
         }
     }
 
