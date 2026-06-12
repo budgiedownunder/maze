@@ -9,6 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -118,6 +119,7 @@ mod test_definitions {
         users: HashMap<Uuid, MockUser>,
         tokens: HashMap<Uuid, OneTimeToken>,
         audit_entries: HashMap<Uuid, EmailAuditEntry>,
+        scores: Vec<ScoreEntry>,
     }
 
     impl MockStore {
@@ -126,6 +128,7 @@ mod test_definitions {
                 users: new_users_map(user_defs),
                 tokens: HashMap::new(),
                 audit_entries: HashMap::new(),
+                scores: Vec::new(),
             }
         }
 
@@ -721,6 +724,15 @@ mod test_definitions {
     #[async_trait]
     impl ScoreStore for MockStore {
         async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, StoreError> {
+            // Mirror the real stores' subject invariant (exactly one of
+            // maze_id / challenge) so the handler's 400 path is exercised.
+            // `is_some() == is_some()` is true when both or neither are set.
+            if entry.maze_id.is_some() == entry.challenge.is_some() {
+                return Err(StoreError::Other(
+                    "score entry must set exactly one of maze_id / challenge".to_string(),
+                ));
+            }
+            self.scores.push(entry.clone());
             Ok(entry.id)
         }
         async fn maze_leaderboard(
@@ -6855,5 +6867,124 @@ mod test_definitions {
             .to_request();
         let renew_resp = test::call_service(&app, renew_req).await;
         assert_eq!(renew_resp.status(), StatusCode::OK, "OAuth-issued token must work with /login/renew");
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /api/v1/scores
+    // -----------------------------------------------------------------------
+
+    /// Resolves the user id the mock store allocated for a username, so the
+    /// score tests can assert the server set `user_id` from the session.
+    fn caller_user_id(mock_users: &HashMap<Uuid, MockUser>, username: &str) -> Uuid {
+        mock_users
+            .values()
+            .find(|u| u.user.username == username)
+            .expect("caller present in mock store")
+            .user
+            .id
+    }
+
+    #[tokio::test]
+    async fn record_score_with_maze_subject_succeeds() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("My Maze.json".to_string()),
+            challenge: None,
+            score: 7,
+            elapsed_ms: 42_137,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let bytes = test::read_body(resp).await;
+        let recorded: ScoreResponse = serde_json::from_slice(&bytes).expect("ScoreResponse");
+        assert_eq!(recorded.maze_id.as_deref(), Some("My Maze.json"));
+        assert_eq!(recorded.challenge, None);
+        assert_eq!(recorded.score, 7);
+        assert_eq!(recorded.elapsed_ms, 42_137);
+        // Server-owned identity: user_id comes from the session, not the body.
+        assert_eq!(recorded.user_id, caller_user_id(&mock_users, VALID_USERNAME_1));
+        assert_ne!(recorded.id, Uuid::nil());
+    }
+
+    #[tokio::test]
+    async fn record_score_with_challenge_subject_succeeds() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: None,
+            challenge: Some("hard:12345".to_string()),
+            score: 3,
+            elapsed_ms: 9_001,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let bytes = test::read_body(resp).await;
+        let recorded: ScoreResponse = serde_json::from_slice(&bytes).expect("ScoreResponse");
+        assert_eq!(recorded.maze_id, None);
+        assert_eq!(recorded.challenge.as_deref(), Some("hard:12345"));
+    }
+
+    #[tokio::test]
+    async fn record_score_with_both_subjects_is_bad_request() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("My Maze.json".to_string()),
+            challenge: Some("hard:12345".to_string()),
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn record_score_with_no_subject_is_bad_request() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: None,
+            challenge: None,
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // No api key, no login token → the auth middleware rejects before the
+    // handler runs. As elsewhere in this suite, a middleware-level rejection
+    // surfaces through `call_service` as a panic (the guarded scope returns an
+    // `Err`, not a response), so this is asserted via `should_panic`.
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn record_score_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("My Maze.json".to_string()),
+            challenge: None,
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", None, None, Some(&body));
+        test::call_service(&app, req).await;
     }
 }

@@ -1,6 +1,6 @@
 use actix_web::web;
 use actix_web::middleware::from_fn;
-use crate::api::v1::endpoints::{auth_reset, email_verification, handlers, user_emails};
+use crate::api::v1::endpoints::{auth_reset, email_verification, handlers, scores, user_emails};
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -33,6 +33,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::solve_maze)
                 .service(handlers::generate_maze)
                 .service(handlers::update_maze)
+                // Scores
+                .service(scores::record_score)
                 // Users (self-service) - must come BEFORE /users/{id}
                 .service(handlers::change_password_me)
                 .service(handlers::update_profile_me)
