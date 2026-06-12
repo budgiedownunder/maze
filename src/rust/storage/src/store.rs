@@ -1,5 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -244,6 +245,115 @@ pub trait EmailAuditLog {
         user_id: Uuid,
         limit: u32,
     ) -> Result<Vec<EmailAuditEntry>, Error>;
+}
+
+/// One completed-run score record. A run's subject is one of two — exactly
+/// one of `maze_id` / `challenge` is set (an app-layer invariant; there is no
+/// portable cross-column CHECK under SQLx-Any / MySQL):
+///
+///   * a stored **user maze** → `maze_id` (FK `mazes(id)`), or
+///   * a **curated / shared game** → `challenge` = `"<difficulty>:<seed>"`.
+///
+/// `user_id` is the **player** (not the maze owner), so boards aggregate every
+/// player of a subject. `score` / `elapsed_ms` are `u64` here (matching the
+/// engine + the game-result wire) and stored as `i64` / `BIGINT`.
+///
+/// No `ToSchema` derive — the typed `Uuid` fields would require utoipa's
+/// `uuid`/`chrono` features; the OpenAPI wire shape is defined by the server
+/// layer (which owns the response DTO).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct ScoreEntry {
+    /// Row id.
+    pub id: Uuid,
+    /// The player who recorded the run.
+    pub user_id: Uuid,
+    /// The stored maze played, or `None` for a curated/shared game.
+    pub maze_id: Option<String>,
+    /// The curated/shared game played (`"<difficulty>:<seed>"`), or `None` for
+    /// a user maze.
+    pub challenge: Option<String>,
+    /// Final score at completion.
+    pub score: u64,
+    /// Elapsed run time in milliseconds.
+    pub elapsed_ms: u64,
+    /// When the run completed.
+    pub completed_at: DateTime<Utc>,
+}
+
+/// The metric a leaderboard ranks by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScoreMetric {
+    /// Completion time (`elapsed_ms`).
+    Time,
+    /// Final score.
+    Score,
+}
+
+/// Sort direction for a leaderboard's primary metric.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortDirection {
+    /// Smallest first.
+    Ascending,
+    /// Largest first.
+    Descending,
+}
+
+/// Ordering for a leaderboard query: the primary `metric` sorted in
+/// `direction`, with a fixed sensible tie-break (the *other* metric — faster /
+/// higher among equal primaries) followed by `completed_at` / `id` as
+/// deterministic final keys. Only the primary direction follows `direction`
+/// (normal table-sort behaviour — the tie-breaks stay fixed so a UI column
+/// toggle reads naturally and pagination stays deterministic). The clauses are
+/// built from fixed column names — never user input.
+///
+/// "Best first" depends on the metric: `Time` + `Ascending` (fastest first)
+/// and `Score` + `Descending` (highest first) are the two canonical board
+/// views; the opposite directions surface the worst runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScoreOrdering {
+    /// Which metric to rank by.
+    pub metric: ScoreMetric,
+    /// The primary metric's sort direction.
+    pub direction: SortDirection,
+}
+
+/// Per-completed-run score history: records a won run and serves the
+/// leaderboards (per-maze, per-curated-challenge) and personal history over
+/// them. One row per completed run — "best" is a query, not a stored flag.
+/// The board/history reads are **paged** (`limit` + `offset`); callers cap
+/// `limit` to a sane maximum.
+#[async_trait]
+pub trait ScoreStore {
+    /// Records a completed run. The caller supplies a fully-populated
+    /// [`ScoreEntry`]. Rejects with [`Error::Other`] when the subject invariant
+    /// is violated (neither or both of `maze_id` / `challenge` set). Returns the
+    /// row id on success.
+    async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error>;
+    /// A page of the leaderboard for a user maze, ranked by `ordering`.
+    async fn maze_leaderboard(
+        &self,
+        maze_id: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error>;
+    /// A page of the leaderboard for a curated/shared challenge, ranked by
+    /// `ordering`.
+    async fn challenge_leaderboard(
+        &self,
+        challenge: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error>;
+    /// A page of a player's own run history, most recent first
+    /// (`completed_at` descending, `id` descending).
+    async fn user_history(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error>;
 }
 
 // Store management

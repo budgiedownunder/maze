@@ -11,7 +11,10 @@
 //! range queries (`WHERE expires_at < ?`, `ORDER BY last_seen_at DESC`)
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
-use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
+use crate::store::{
+    EmailAuditLog, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore,
+    SortDirection, TokenStore, UserStore,
+};
 use crate::{
     validation::{validate_email_format, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_user_fields},
     Error, MazeItem, Store,
@@ -1196,6 +1199,21 @@ impl UserStore for SqlStore {
             .execute(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
+        // The user's own score history, plus the boards of the mazes about to be
+        // deleted below (other players' runs on those mazes). Runs before the
+        // `mazes` delete so the subquery still sees them. FK cascade is a
+        // backstop; we delete explicitly so the behaviour is uniform across
+        // backends (SQLite FK enforcement is pragma-gated).
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM score_history \
+             WHERE user_id = ? OR maze_id IN (SELECT id FROM mazes WHERE owner_id = ?)",
+        ))
+        .bind(id.to_string())
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM mazes WHERE owner_id = ?"))
             .bind(id.to_string())
             .execute(&self.pool)
@@ -1259,7 +1277,8 @@ impl UserStore for SqlStore {
             return Err(Error::UserIdMissing());
         }
         // True hard-delete. ON DELETE CASCADE on user_logins, oauth_identities,
-        // user_emails, and mazes clears every related row. Reachable in two
+        // user_emails, mazes, and score_history clears every related row.
+        // Reachable in two
         // legitimate cases: (1) the row is already soft-deleted and operations
         // is purging it; (2) right-to-erasure called directly on an active
         // user. The trait does not require a prior soft-delete, so the
@@ -2755,6 +2774,14 @@ impl MazeStore for SqlStore {
         if result.rows_affected() == 0 {
             return Err(Error::MazeIdNotFound(id.to_string()));
         }
+        // Drop the maze's leaderboard now that the maze is gone (FK cascade is a
+        // backstop; deleting explicitly keeps the behaviour uniform across
+        // backends). Idempotent if the FK already cascaded the rows.
+        sqlx::query(&q(self.kind, "DELETE FROM score_history WHERE maze_id = ?"))
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -3154,6 +3181,7 @@ impl Manage for SqlStore {
         // SET NULL fanning out across every audit row when users go.
         for sql in [
             "DELETE FROM email_audit_log",
+            "DELETE FROM score_history",
             "DELETE FROM user_logins",
             "DELETE FROM oauth_identities",
             "DELETE FROM one_time_tokens",
@@ -3885,6 +3913,198 @@ impl EmailAuditLog for SqlStore {
     }
 }
 
+/// The `ORDER BY` clause for a leaderboard ordering. The primary metric takes
+/// the requested direction; the secondary (the other metric) and the
+/// `completed_at` / `id` final keys are fixed. Built from fixed column names
+/// (never user input), so it is safe to interpolate into the query.
+fn score_order_by_clause(ordering: ScoreOrdering) -> String {
+    let primary = match ordering.direction {
+        SortDirection::Ascending => "ASC",
+        SortDirection::Descending => "DESC",
+    };
+    match ordering.metric {
+        ScoreMetric::Time => {
+            format!("elapsed_ms {primary}, score DESC, completed_at ASC, id ASC")
+        }
+        ScoreMetric::Score => {
+            format!("score {primary}, elapsed_ms ASC, completed_at ASC, id ASC")
+        }
+    }
+}
+
+/// Deserialises a `score_history` row into a [`ScoreEntry`]. `score` /
+/// `elapsed_ms` come back as `i64` (BIGINT) and widen to the struct's `u64`.
+fn score_entry_from_row(row: &AnyRow) -> Result<ScoreEntry, Error> {
+    let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
+    let id = parse_uuid("score id", &id_str)?;
+    let user_id_str: String = row.try_get("user_id").map_err(map_sqlx_err)?;
+    let user_id = parse_uuid("score user_id", &user_id_str)?;
+    let maze_id: Option<String> = row.try_get("maze_id").map_err(map_sqlx_err)?;
+    let challenge: Option<String> = row.try_get("challenge").map_err(map_sqlx_err)?;
+    let score: i64 = row.try_get("score").map_err(map_sqlx_err)?;
+    let elapsed_ms: i64 = row.try_get("elapsed_ms").map_err(map_sqlx_err)?;
+    let completed_at_str: String = row.try_get("completed_at").map_err(map_sqlx_err)?;
+    let completed_at = datetime_from_sql(&completed_at_str)?;
+    Ok(ScoreEntry {
+        id,
+        user_id,
+        maze_id,
+        challenge,
+        score: score as u64,
+        elapsed_ms: elapsed_ms as u64,
+        completed_at,
+    })
+}
+
+#[async_trait]
+impl ScoreStore for SqlStore {
+    /// Inserts a completed-run row. Enforces the subject invariant (exactly one
+    /// of `maze_id` / `challenge`) before the write.
+    ///
+    /// # Examples
+    ///
+    /// Record a curated-game run and read it back from the challenge board
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{
+    ///     ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore, SortDirection,
+    ///     SqlStore, SqlStoreConfig, UserStore,
+    /// };
+    /// use data_model::{User, UserEmail};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // The player must exist for the user_id FK.
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    ///
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: None, challenge: Some("hard:42".to_string()),
+    ///     score: 5, elapsed_ms: 83_456, completed_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// let highest = ScoreOrdering {
+    ///     metric: ScoreMetric::Score,
+    ///     direction: SortDirection::Descending,
+    /// };
+    /// let board = store
+    ///     .challenge_leaderboard("hard:42", highest, 10, 0)
+    ///     .await
+    ///     .expect("challenge_leaderboard");
+    /// assert_eq!(board.len(), 1);
+    /// assert_eq!(board[0].score, 5);
+    /// # });
+    /// ```
+    async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error> {
+        if entry.id.is_nil() {
+            return Err(Error::Other("score entry id must not be nil".to_string()));
+        }
+        // The dual-keyed subject invariant: exactly one of maze_id / challenge.
+        // `is_some() == is_some()` is true when both are set or both are unset.
+        if entry.maze_id.is_some() == entry.challenge.is_some() {
+            return Err(Error::Other(
+                "score entry must set exactly one of maze_id / challenge".to_string(),
+            ));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO score_history \
+                 (id, user_id, maze_id, challenge, score, elapsed_ms, completed_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(entry.id.to_string())
+        .bind(entry.user_id.to_string())
+        .bind(entry.maze_id.as_deref())
+        .bind(entry.challenge.as_deref())
+        .bind(entry.score as i64)
+        .bind(entry.elapsed_ms as i64)
+        .bind(datetime_to_sql(entry.completed_at))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(entry.id)
+    }
+
+    async fn maze_leaderboard(
+        &self,
+        maze_id: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error> {
+        let sql = format!(
+            "SELECT * FROM score_history WHERE maze_id = ? ORDER BY {} LIMIT ? OFFSET ?",
+            score_order_by_clause(ordering)
+        );
+        let rows = sqlx::query(&q(self.kind, &sql))
+            .bind(maze_id)
+            .bind(i64::from(limit))
+            .bind(i64::from(offset))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        rows.iter().map(score_entry_from_row).collect()
+    }
+
+    async fn challenge_leaderboard(
+        &self,
+        challenge: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error> {
+        let sql = format!(
+            "SELECT * FROM score_history WHERE challenge = ? ORDER BY {} LIMIT ? OFFSET ?",
+            score_order_by_clause(ordering)
+        );
+        let rows = sqlx::query(&q(self.kind, &sql))
+            .bind(challenge)
+            .bind(i64::from(limit))
+            .bind(i64::from(offset))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        rows.iter().map(score_entry_from_row).collect()
+    }
+
+    async fn user_history(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM score_history WHERE user_id = ? \
+             ORDER BY completed_at DESC, id DESC LIMIT ? OFFSET ?",
+        ))
+        .bind(user_id.to_string())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter().map(score_entry_from_row).collect()
+    }
+}
+
 impl Store for SqlStore {}
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3936,6 +4156,105 @@ mod tests {
     fn datetime_from_sql_rejects_bad_input() {
         assert!(datetime_from_sql("not a timestamp").is_err());
         assert!(datetime_from_sql("").is_err());
+    }
+
+    // ── score_history smoke tests (in-memory SQLite). The full cross-backend
+    //    contract suite lives in tests/. ──────────────────────────────────────
+
+    async fn mem_store_with_user() -> (SqlStore, data_model::User) {
+        let mut store = SqlStore::new(SqlStoreConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("in-memory SqlStore");
+        let mut user = data_model::User {
+            id: Uuid::nil(),
+            is_admin: false,
+            username: "alice".into(),
+            full_name: "Alice".into(),
+            emails: vec![data_model::UserEmail::new_primary_verified("alice@example.com")],
+            password_hash: "hash".into(),
+            api_key: Uuid::nil(),
+            logins: vec![],
+            oauth_identities: vec![],
+            deleted_at: None,
+            created_at: Utc::now(),
+            last_sign_in_at: None,
+        };
+        store.create_user(&mut user).await.expect("create_user");
+        (store, user)
+    }
+
+    fn challenge_score(user_id: Uuid, challenge: &str, score: u64, elapsed_ms: u64) -> ScoreEntry {
+        ScoreEntry {
+            id: Uuid::new_v4(),
+            user_id,
+            maze_id: None,
+            challenge: Some(challenge.to_string()),
+            score,
+            elapsed_ms,
+            completed_at: Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn challenge_leaderboard_orders_and_pages() {
+        let (mut store, user) = mem_store_with_user().await;
+        // Three runs: (score, elapsed_ms) = (10, 5000), (2, 1000), (6, 3000).
+        store.record_score(&challenge_score(user.id, "hard:1", 10, 5000)).await.unwrap();
+        store.record_score(&challenge_score(user.id, "hard:1", 2, 1000)).await.unwrap();
+        store.record_score(&challenge_score(user.id, "hard:1", 6, 3000)).await.unwrap();
+
+        let fastest = ScoreOrdering {
+            metric: ScoreMetric::Time,
+            direction: SortDirection::Ascending,
+        };
+        let slowest = ScoreOrdering {
+            metric: ScoreMetric::Time,
+            direction: SortDirection::Descending,
+        };
+        let highest = ScoreOrdering {
+            metric: ScoreMetric::Score,
+            direction: SortDirection::Descending,
+        };
+
+        let fast = store.challenge_leaderboard("hard:1", fastest, 10, 0).await.unwrap();
+        assert_eq!(fast.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>(), vec![1000, 3000, 5000]);
+
+        // Reversed direction surfaces the slowest first.
+        let slow = store.challenge_leaderboard("hard:1", slowest, 10, 0).await.unwrap();
+        assert_eq!(slow.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>(), vec![5000, 3000, 1000]);
+
+        let high = store.challenge_leaderboard("hard:1", highest, 10, 0).await.unwrap();
+        assert_eq!(high.iter().map(|e| e.score).collect::<Vec<_>>(), vec![10, 6, 2]);
+
+        // Paging: limit 1, offset 1 of fastest → the middle (3000 ms) run.
+        let page = store.challenge_leaderboard("hard:1", fastest, 1, 1).await.unwrap();
+        assert_eq!(page.len(), 1);
+        assert_eq!(page[0].elapsed_ms, 3000);
+    }
+
+    #[tokio::test]
+    async fn record_score_enforces_the_subject_invariant() {
+        let (mut store, user) = mem_store_with_user().await;
+        let mut both = challenge_score(user.id, "easy:1", 1, 100);
+        both.maze_id = Some("m1".to_string()); // both subjects set → rejected
+        assert!(store.record_score(&both).await.is_err());
+        let mut neither = challenge_score(user.id, "easy:1", 1, 100);
+        neither.challenge = None; // neither subject set → rejected
+        assert!(store.record_score(&neither).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn delete_user_cascades_score_history() {
+        let (mut store, user) = mem_store_with_user().await;
+        store.record_score(&challenge_score(user.id, "easy:1", 1, 100)).await.unwrap();
+        assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 1);
+        store.delete_user(user.id).await.unwrap();
+        assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 0);
     }
 
     #[tokio::test]
