@@ -287,11 +287,52 @@
         console.error('[game-result] bridge forward failed', err);
       }
 
+      // Record the run on the server when the player won. Fire-and-forget so a
+      // failed submit never blocks the Play Again affordance below.
+      submitScoreOnWin(e.detail);
+
       // Offer a "Play Again" affordance — reloads /game/ with the same query
       // string (difficulty / seed preserved). Works in both the React browser
       // tab and the MAUI WebView.
       showPlayAgain();
     });
+
+    // Records a won 3D run against the server leaderboard. Only wins are
+    // recorded (no loss/quit). The subject is the user maze (?id) when present,
+    // otherwise the curated challenge "<difficulty>:<seed>" assembled from the
+    // result detail — which carries both fields for curated runs. Runs with no
+    // stable subject (the demo / no-config path: no id, no difficulty) are not
+    // recorded. Server-owned fields (the player and the record timestamp) are
+    // set by the endpoint, never sent from here.
+    function submitScoreOnWin(detail) {
+      if (!detail || detail.outcome !== 'win') return;
+
+      var params = new URLSearchParams(location.search);
+      var auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
+      var token = (auth && auth.token) || params.get('t');
+      if (!token) return;
+
+      var body = { score: detail.score, elapsed_ms: detail.elapsedMs };
+      var mazeId = params.get('id');
+      if (mazeId) {
+        body.maze_id = mazeId;
+      } else if (detail.difficulty != null && detail.seed != null) {
+        body.challenge = detail.difficulty + ':' + detail.seed;
+      } else {
+        return; // no stable subject — nothing to record
+      }
+
+      fetch('/api/v1/scores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token,
+        },
+        body: JSON.stringify(body),
+      }).catch(function (err) {
+        console.error('[score] submit failed', err);
+      });
+    }
 
     function showPlayAgain() {
       if (document.getElementById('play-again')) return;
@@ -394,7 +435,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=76';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=80';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
