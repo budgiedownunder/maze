@@ -50,9 +50,10 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Adaptive FOV** — the camera's vertical FOV is configured at 60° for the reference 16:9 viewport (≈91° horizontal at that aspect). On viewports narrower than the reference (phone portrait, tall windows), the vertical FOV grows so the horizontal FOV stays constant — a perpendicular opening that's visible on desktop is still visible on a phone in portrait. Capped at 100° vertical to prevent fisheye on extreme-portrait viewports.
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted gold.
-- Status bar overlay (top-left corner) — a row container that displays the configured `mode` label.
+- **Score overlay** (top-left corner) — a live readout of the run's score (`MazeGame::score()`), updated each frame as the player progresses.
+- Status bar overlay (bottom-left corner) — a row container that displays the configured `mode` label.
 - **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
-- **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
+- **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen, showing the run's final score and its elapsed time to millisecond precision (`M:SS.mmm`). The on-screen clock only shows the remaining countdown to whole seconds, so the win panel is where the precise completion time surfaces.
 - Gold-leaf rain — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
 - **Lose overlay** — on not completing in time, or on reaching 0 HP from enemy collisions, movement stops and a "You Lose!" panel appears centred on screen.
 - Rain-Lightning — on lose, rain sprites spawn continuously across the full screen width and fall accompanied by periodic lightning flashes.
@@ -219,7 +220,8 @@ src/
 ├── hud/                    HUD overlays
 │   ├── mod.rs              module declarations
 │   ├── minimap.rs          top-right minimap overlay
-│   ├── statusbar.rs        top-left mode label
+│   ├── statusbar.rs        bottom-left mode label
+│   ├── score.rs            top-left live score readout (MazeGame::score())
 │   ├── clock.rs            top-centre countdown clock + lose-state trigger
 │   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change
 │   └── bag/                bottom-centre inventory HUD
@@ -239,7 +241,7 @@ asset bundles (`walls`, `floor`, `decorations`, `objects`), runs a per-cell
 loop calling each domain's `spawn_*_for_cell` (including the door leaves,
 enemy rigs, and health-pickup rigs, which are spawned alongside the loop
 because they borrow either the cell's wall material or the per-config rig
-choice), and finishes with the HUD (clock, status bar, minimap, HP, bag) +
+choice), and finishes with the HUD (clock, score, status bar, minimap, HP, bag) +
 paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, and the public types `GameConfig`,
 `Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
