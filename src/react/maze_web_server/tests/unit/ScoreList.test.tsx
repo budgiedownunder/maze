@@ -26,7 +26,7 @@ const base = {
 }
 
 describe('ScoreList', () => {
-  it('renders a player column with usernames and "You" for the caller', () => {
+  it('shows each player by username and highlights the caller row', () => {
     render(
       <ScoreList
         {...base}
@@ -39,11 +39,12 @@ describe('ScoreList', () => {
       />,
     )
     expect(screen.getByText('alice')).toBeInTheDocument()
-    expect(screen.getByText('You')).toBeInTheDocument()
-    // The caller's row is not labelled by their username.
-    expect(screen.queryByText('bob')).not.toBeInTheDocument()
-    // Formatted time appears.
+    // The caller is shown by their username, not "You".
+    expect(screen.getByText('bob')).toBeInTheDocument()
+    expect(screen.queryByText('You')).not.toBeInTheDocument()
     expect(screen.getByText('0:42.137')).toBeInTheDocument()
+    // The caller's row carries the highlight class.
+    expect(screen.getByText('bob').closest('tr')).toHaveClass('score-row--me')
   })
 
   it('never renders a raw user_id', () => {
@@ -58,8 +59,8 @@ describe('ScoreList', () => {
     expect(container.textContent).not.toContain('super-secret-user-id')
   })
 
-  it('omits the player column when showPlayer is false', () => {
-    render(
+  it('omits the player column and does not highlight when showPlayer is false', () => {
+    const { container } = render(
       <ScoreList
         {...base}
         showPlayer={false}
@@ -69,6 +70,8 @@ describe('ScoreList', () => {
     )
     expect(screen.queryByText('Player')).not.toBeInTheDocument()
     expect(screen.queryByText('You')).not.toBeInTheDocument()
+    // No per-row highlight on an all-caller (My-Mazes) board.
+    expect(container.querySelector('.score-row--me')).toBeNull()
   })
 
   it('labels the timestamp column "Completed" and shows a date-time', () => {
@@ -81,7 +84,7 @@ describe('ScoreList', () => {
 
   it('shows an empty state when there are no rows', () => {
     render(<ScoreList {...base} showPlayer rows={[]} />)
-    expect(screen.getByText(/no win scores yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/no winning scores yet/i)).toBeInTheDocument()
   })
 
   it('shows Load more only when hasMore and fires the callback', async () => {

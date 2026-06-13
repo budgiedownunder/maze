@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
-import { MyScoresPage } from '../../src/pages/MyScoresPage'
+import { ScoresPage } from '../../src/pages/ScoresPage'
 import { server } from '../../src/mocks/server'
 import type { ScoreEntry } from '../../src/types/api'
 
@@ -39,7 +39,7 @@ function renderPage() {
   return render(
     <MemoryRouter>
       <ThemeProvider>
-        <MyScoresPage />
+        <ScoresPage />
       </ThemeProvider>
     </MemoryRouter>,
   )
@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('MyScoresPage', () => {
+describe('ScoresPage', () => {
   it('defaults to the most-recent subject and renders its board', async () => {
     server.use(
       // History: most recent run is on maze m1.json.
@@ -116,8 +116,9 @@ describe('MyScoresPage', () => {
     await userEvent.selectOptions(screen.getByLabelText('Game Type'), 'play3d')
 
     await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
-    // The caller's own row reads "You", and the difficulty board shows the Player column.
-    expect(screen.getByText('You')).toBeInTheDocument()
+    // The caller's own row shows their username (not "You"), on the Player column.
+    expect(screen.getByText('bob')).toBeInTheDocument()
+    expect(screen.queryByText('You')).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Player' })).toBeInTheDocument()
   })
 })

@@ -670,6 +670,18 @@
   font-size: 1.1rem;
 }
 
+.app-header-title--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.app-header-title-icon {
+  height: 1.5em;
+  width: auto;
+  display: block;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -842,10 +854,19 @@
 .home-tile-img {
   width: 140px;
   height: 140px;
+  box-sizing: border-box;
   object-fit: cover;
   flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 0.375rem;
+}
+
+/* Raster tile art (Play 3D, Mazes) fills its square edge-to-edge; inset it so
+   it floats within the framed box, matching the trophy icon's whitespace.
+   (Fixed px, not %: padding percentages resolve against the parent's width.) */
+.home-tile-img--photo {
+  padding: 1.75rem;
+  object-fit: contain;
 }
 
 .home-tile-text {
@@ -871,6 +892,9 @@
   .home-tile-img {
     width: 96px;
     height: 96px;
+  }
+  .home-tile-img--photo {
+    padding: 1.125rem;
   }
   .home-tile-title {
     font-size: 1.2rem;
@@ -1551,32 +1575,55 @@
   background-position: 0 0, 0 100%, 0 0, 100% 0;
 }
 
-/* My Scores / leaderboard */
-.my-scores-main {
+/* Scores / leaderboard */
+.scores-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.scores-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Safety scroll for very short viewports; normally the table region below
+     flex-fills and scrolls internally so the page itself doesn't scroll. */
+  overflow: auto;
   padding: 16px;
-  max-width: 720px;
-  margin: 0 auto;
+}
+/* Board view + list flex-fill the space under the selector so the table region
+   reaches the bottom of the page (Load more, when present, sits below it). */
+.score-board-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.score-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .subject-selector {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
-.subject-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-.subject-field select {
+.subject-select {
   padding: 6px 8px;
   border: 1px solid var(--border-input);
   border-radius: 6px;
   background: var(--surface, #fff);
   color: var(--text, inherit);
   font-size: 0.95rem;
+}
+.subject-arrow {
+  color: var(--text-muted);
+  font-size: 1.1rem;
 }
 .score-metric-tabs {
   display: flex;
@@ -1597,9 +1644,20 @@
   border-color: var(--accent);
   color: #fff;
 }
+/* Dedicated scroll region for the table: a clean, padding-free sticky context
+   (the page-level scroll container's padding made the sticky header leak rows
+   above it). Scrolls vertically for tall boards + horizontally for wide ones. */
+.score-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
 .score-table {
   width: 100%;
-  border-collapse: collapse;
+  /* `separate` (not `collapse`) so the sticky header doesn't let body rows
+     bleed over it as they scroll under. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.95rem;
 }
 .score-table th,
@@ -1607,16 +1665,26 @@
   text-align: left;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border, #ccc);
+  white-space: nowrap;
 }
 .score-table th {
   font-weight: 600;
   color: var(--text-muted);
 }
+/* Header row stays put while the data scrolls under it (within .scores-main).
+   box-shadow draws the divider so it survives border-collapse during scroll. */
+.score-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
 .score-col-rank { width: 3ch; color: var(--text-muted); }
 .score-col-time, .score-col-score { font-variant-numeric: tabular-nums; }
-.score-row--me {
-  background: var(--accent-soft, rgba(120, 160, 240, 0.12));
-  font-weight: 600;
+/* The signed-in player's own rows, softly tinted lime-green. */
+.score-row--me td {
+  background: rgba(50, 205, 50, 0.18);
 }
 .score-load-more {
   margin-top: 12px;

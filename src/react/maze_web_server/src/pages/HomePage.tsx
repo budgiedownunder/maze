@@ -6,6 +6,7 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import appIcon from '../assets/app.png'
 import play3dIcon from '../assets/play3d.png'
+import scoresIcon from '../assets/scores.svg'
 
 export function HomePage() {
   const menuVariant = useMenuVariant()
@@ -25,6 +26,10 @@ export function HomePage() {
 
   function handleMyMazes() {
     navigate('/mazes')
+  }
+
+  function handleScores() {
+    navigate('/scores')
   }
 
   return (
@@ -48,17 +53,24 @@ export function HomePage() {
       <main className="home-main">
         <section className="home-tiles">
           <button type="button" className="home-tile" onClick={handlePlay3d}>
-            <img src={play3dIcon} className="home-tile-img" alt="" aria-hidden="true" />
+            <img src={play3dIcon} className="home-tile-img home-tile-img--photo" alt="" aria-hidden="true" />
             <div className="home-tile-text">
               <h2 className="home-tile-title">Play 3D</h2>
               <p className="home-tile-desc">Play in easy, tricky or hard mode</p>
             </div>
           </button>
           <button type="button" className="home-tile" onClick={handleMyMazes}>
-            <img src={appIcon} className="home-tile-img" alt="" aria-hidden="true" />
+            <img src={appIcon} className="home-tile-img home-tile-img--photo" alt="" aria-hidden="true" />
             <div className="home-tile-text">
-              <h2 className="home-tile-title">Design &amp; Play</h2>
+              <h2 className="home-tile-title">Mazes</h2>
               <p className="home-tile-desc">Design and play your own mazes</p>
+            </div>
+          </button>
+          <button type="button" className="home-tile" onClick={handleScores}>
+            <img src={scoresIcon} className="home-tile-img" alt="" aria-hidden="true" />
+            <div className="home-tile-text">
+              <h2 className="home-tile-title">Scores</h2>
+              <p className="home-tile-desc">See your times and how you rank</p>
             </div>
           </button>
         </section>

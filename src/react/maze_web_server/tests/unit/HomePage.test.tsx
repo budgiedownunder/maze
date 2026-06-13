@@ -45,10 +45,11 @@ afterEach(() => {
 })
 
 describe('HomePage', () => {
-  it('renders both tile titles', () => {
+  it('renders the tile titles', () => {
     renderHomePage()
     expect(screen.getByRole('heading', { name: /play 3d/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /design & play/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^mazes$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^scores$/i })).toBeInTheDocument()
   })
 
   it('clicking Play 3D opens the difficulty modal (no navigation yet)', async () => {
@@ -100,9 +101,15 @@ describe('HomePage', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('clicking Design & Play navigates to /mazes', async () => {
+  it('clicking Mazes navigates to /mazes', async () => {
     renderHomePage()
-    await userEvent.click(screen.getByRole('button', { name: /design & play/i }))
+    await userEvent.click(screen.getByRole('button', { name: /mazes/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/mazes')
+  })
+
+  it('clicking Scores navigates to /scores', async () => {
+    renderHomePage()
+    await userEvent.click(screen.getByRole('button', { name: /your times and how you rank/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/scores')
   })
 })

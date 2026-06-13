@@ -8,10 +8,10 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/$/)
 }
 
-test('My Scores opens from the menu and shows the default board', async ({ page }) => {
+test('Scores opens from the menu and shows the default board', async ({ page }) => {
   await login(page)
   await page.getByRole('button', { name: /open menu/i }).click()
-  await page.getByRole('menuitem', { name: /my scores/i }).click()
+  await page.getByRole('menuitem', { name: /^scores$/i }).click()
   await expect(page).toHaveURL(/\/scores$/)
   // Default subject is the most-recently played maze (Alpha) → its time shows.
   await expect(page.getByText('0:42.137')).toBeVisible()
@@ -22,8 +22,8 @@ test('switching to Play 3D shows a global board with usernames', async ({ page }
   await page.goto('/scores')
   await expect(page.getByLabel('Game Type')).toBeVisible()
   await page.getByLabel('Game Type').selectOption('play3d')
-  // The curated board resolves its seed + lists other players by name, with the
-  // caller's own row labelled You.
+  // The curated board resolves its seed + lists every player by username,
+  // including the signed-in user (testuser).
   await expect(page.getByText('alice')).toBeVisible()
-  await expect(page.getByText('You')).toBeVisible()
+  await expect(page.getByText('testuser')).toBeVisible()
 })

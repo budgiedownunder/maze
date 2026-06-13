@@ -53,41 +53,45 @@ export function SubjectSelector({ playedMazes, value, onChange }: SubjectSelecto
 
   return (
     <div className="subject-selector">
-      <label className="subject-field">
-        <span>Game Type</span>
+      <select
+        className="subject-select"
+        aria-label="Game Type"
+        value={gameType}
+        onChange={e => handleGameTypeChange(e.target.value as GameType)}
+      >
+        {GAME_TYPES.map(t => (
+          <option key={t.value} value={t.value}>{t.label}</option>
+        ))}
+      </select>
+      <span className="subject-arrow" aria-hidden="true">→</span>
+      {gameType === 'play3d' ? (
         <select
-          value={gameType}
-          onChange={e => handleGameTypeChange(e.target.value as GameType)}
+          className="subject-select"
+          aria-label="Game"
+          value={gameValue}
+          onChange={e => handleGameChange(e.target.value)}
         >
-          {GAME_TYPES.map(t => (
-            <option key={t.value} value={t.value}>{t.label}</option>
+          {PLAY3D_DIFFICULTIES.map(d => (
+            <option key={d} value={d}>{titleCase(d)}</option>
           ))}
         </select>
-      </label>
-      <label className="subject-field">
-        <span>Game</span>
-        {gameType === 'play3d' ? (
-          <select value={gameValue} onChange={e => handleGameChange(e.target.value)}>
-            {PLAY3D_DIFFICULTIES.map(d => (
-              <option key={d} value={d}>{titleCase(d)}</option>
-            ))}
-          </select>
-        ) : (
-          <select
-            value={gameValue}
-            onChange={e => handleGameChange(e.target.value)}
-            disabled={playedMazes.length === 0}
-          >
-            {playedMazes.length === 0 ? (
-              <option value="">(no mazes played)</option>
-            ) : (
-              playedMazes.map(m => (
-                <option key={m.mazeId} value={m.mazeId}>{m.name}</option>
-              ))
-            )}
-          </select>
-        )}
-      </label>
+      ) : (
+        <select
+          className="subject-select"
+          aria-label="Game"
+          value={gameValue}
+          onChange={e => handleGameChange(e.target.value)}
+          disabled={playedMazes.length === 0}
+        >
+          {playedMazes.length === 0 ? (
+            <option value="">(no mazes played)</option>
+          ) : (
+            playedMazes.map(m => (
+              <option key={m.mazeId} value={m.mazeId}>{m.name}</option>
+            ))
+          )}
+        </select>
+      )}
     </div>
   )
 }

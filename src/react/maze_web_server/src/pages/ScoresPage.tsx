@@ -9,6 +9,7 @@ import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getPlay3dConfig } from '../api/client'
 import { buildChallenge } from '../utils/scores'
 import type { ScoreEntry } from '../types/api'
+import scoresIcon from '../assets/scores.svg'
 
 // Cap on history pages scanned to discover the player's played mazes — bounds
 // the work for a very active player; the server caps each page at 100.
@@ -17,6 +18,26 @@ const DISCOVERY_PAGE = 100
 
 function parseDifficulty(challenge: string): string {
   return challenge.split(':')[0]
+}
+
+function basename(id: string): string {
+  return id.split(/[\\/]/).pop() ?? id
+}
+
+// A display label for a maze subject. FileStore ids are full file paths, so a
+// score's stored maze_id may not byte-match the current id from getMazes (e.g.
+// a different path prefix). Resolve by exact id, then by filename (recovers the
+// real name across path differences), else a clean label off the filename.
+function mazeLabel(
+  mazeId: string,
+  nameById: Map<string, string>,
+  nameByBasename: Map<string, string>,
+): string {
+  return (
+    nameById.get(mazeId) ??
+    nameByBasename.get(basename(mazeId)) ??
+    basename(mazeId).replace(/\.json$/i, '')
+  )
 }
 
 // The board to show first: the subject of the player's most recent run, else a
@@ -28,7 +49,7 @@ function defaultSelection(mostRecent: ScoreEntry | undefined, played: PlayedMaze
   return { gameType: 'play3d', difficulty: 'easy' }
 }
 
-export function MyScoresPage() {
+export function ScoresPage() {
   const menuVariant = useMenuVariant()
   const { theme, toggleTheme } = useTheme()
   const token = useToken()
@@ -70,8 +91,9 @@ export function MyScoresPage() {
         const mazes = await getMazes(token, false)
         if (cancelled) return
         const nameById = new Map(mazes.map(m => [m.id, m.name]))
+        const nameByBasename = new Map(mazes.map(m => [basename(m.id), m.name]))
         const played: PlayedMaze[] = [...mazeIds]
-          .map(id => ({ mazeId: id, name: nameById.get(id) ?? id }))
+          .map(id => ({ mazeId: id, name: mazeLabel(id, nameById, nameByBasename) }))
           .sort((a, b) => a.name.localeCompare(b.name))
         setPlayedMazes(played)
         setSelection(defaultSelection(mostRecent, played))
@@ -119,12 +141,15 @@ export function MyScoresPage() {
   const showPlayer = selection?.gameType === 'play3d'
 
   return (
-    <div className="my-scores-page">
+    <div className="scores-page">
       <header className="app-header">
         <div className="header-actions">
           {menuVariant === 'hamburger' && <HamburgerMenu />}
         </div>
-        <span className="app-header-title">My Scores</span>
+        <span className="app-header-title app-header-title--with-icon">
+          <img src={scoresIcon} className="app-header-title-icon" alt="" aria-hidden="true" />
+          Scores
+        </span>
         <div className="header-actions">
           <button
             className="theme-toggle"
@@ -136,7 +161,7 @@ export function MyScoresPage() {
           </button>
         </div>
       </header>
-      <main className="my-scores-main">
+      <main className="scores-main">
         {isLoadingSubjects && <p aria-label="Loading">Loading…</p>}
         {!isLoadingSubjects && subjectsError && (
           <p className="error-msg" role="alert">{subjectsError}</p>
@@ -160,7 +185,7 @@ export function MyScoresPage() {
               />
             )}
             {!resolveError && !isResolving && !boardSubject && (
-              <p className="score-empty">No win scores yet</p>
+              <p className="score-empty">No winning scores yet</p>
             )}
           </>
         )}

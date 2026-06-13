@@ -68,10 +68,10 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/account')
   })
 
-  it('navigates to /scores when My Scores is clicked', async () => {
+  it('navigates to /scores when Scores is clicked', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /my scores/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^scores$/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/scores')
   })
 
@@ -82,10 +82,10 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/')
   })
 
-  it('navigates to /mazes when Design & Play is clicked', async () => {
+  it('navigates to /mazes when Mazes is clicked', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /design & play/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^mazes$/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/mazes')
   })
 
@@ -142,10 +142,10 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('renders two separators dividing nav / account / about groups', async () => {
+  it('renders three separators dividing home / nav / account / about groups', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    expect(screen.getAllByRole('separator')).toHaveLength(2)
+    expect(screen.getAllByRole('separator')).toHaveLength(3)
   })
 
   it('calls logout and navigates to /login on Sign Out', async () => {
