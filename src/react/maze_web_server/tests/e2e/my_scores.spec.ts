@@ -1,0 +1,29 @@
+import { test, expect, type Page } from '@playwright/test'
+
+async function login(page: Page) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('test@example.com')
+  await page.getByLabel('Password', { exact: true }).fill('Password1!')
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).toHaveURL(/\/$/)
+}
+
+test('My Scores opens from the menu and shows the default board', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /my scores/i }).click()
+  await expect(page).toHaveURL(/\/scores$/)
+  // Default subject is the most-recently played maze (Alpha) → its time shows.
+  await expect(page.getByText('0:42.137')).toBeVisible()
+})
+
+test('switching to Play 3D shows a global board with usernames', async ({ page }) => {
+  await login(page)
+  await page.goto('/scores')
+  await expect(page.getByLabel('Game Type')).toBeVisible()
+  await page.getByLabel('Game Type').selectOption('play3d')
+  // The curated board resolves its seed + lists other players by name, with the
+  // caller's own row labelled You.
+  await expect(page.getByText('alice')).toBeVisible()
+  await expect(page.getByText('You')).toBeVisible()
+})

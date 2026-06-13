@@ -69,6 +69,11 @@ export function HamburgerMenu() {
             </li>
             <li role="separator" className="menu-separator" />
             <li role="none">
+              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/scores') }}>
+                My Scores
+              </button>
+            </li>
+            <li role="none">
               <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/account') }}>
                 My Account
               </button>

@@ -19,3 +19,18 @@ export type SortDirection = (typeof SORT_DIRECTIONS)[number]
 export function buildChallenge(difficulty: string, seed: number): string {
   return `${difficulty}:${seed}`
 }
+
+// Formats an elapsed-run duration as "m:ss.mmm" (e.g. 42137 → "0:42.137"),
+// matching the Bevy win-overlay format.
+export function formatElapsedMs(ms: number): string {
+  const total = Math.max(0, Math.floor(ms))
+  const minutes = Math.floor(total / 60000)
+  const seconds = Math.floor((total % 60000) / 1000)
+  const millis = total % 1000
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`
+}
+
+// The curated 3D difficulties, in display order. The board for each is keyed by
+// the difficulty's fixed seed (resolved via `getPlay3dConfig`).
+export const PLAY3D_DIFFICULTIES = ['easy', 'tricky', 'hard'] as const
+export type Play3dDifficulty = (typeof PLAY3D_DIFFICULTIES)[number]

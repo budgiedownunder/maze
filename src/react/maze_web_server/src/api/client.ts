@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, RenewResponse, SaveMazeRequest, ScoreBoardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, SaveMazeRequest, ScoreBoardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -263,4 +263,10 @@ export function getScoreHistory(token: string, query: HistoryQuery = {}): Promis
   return request<ScoreBoardResponse>(`/scores/me${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(token),
   })
+}
+
+// Reads a curated difficulty's preset (unauthenticated). The leaderboard UI
+// uses its fixed `seed` to build the challenge board key.
+export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
+  return request<Play3dConfig>(`/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`)
 }

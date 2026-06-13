@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, RenewResponse, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreBoardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -412,5 +412,35 @@ export const handlers = [
     if (!exists) return new HttpResponse(null, { status: 404 })
     mockMazes = mockMazes.filter(m => m.id !== params.id)
     return new HttpResponse(null, { status: 200 })
+  }),
+
+  // Scores — curated preset (for the leaderboard seed), personal history, and
+  // the leaderboard itself.
+  http.get(`${BASE}/game/play3d-config`, ({ request }) => {
+    const difficulty = new URL(request.url).searchParams.get('difficulty') ?? 'easy'
+    const seeds: Record<string, number> = { easy: 111, tricky: 222, hard: 333 }
+    return HttpResponse.json<Play3dConfig>({ difficulty, seed: seeds[difficulty] ?? 999 })
+  }),
+
+  http.get(`${BASE}/scores/me`, () => {
+    // Most recent first — the page picks scores[0] as the default subject.
+    const scores: ScoreEntry[] = [
+      { id: 'sh1', user_id: mockProfile.id, maze_id: 'maze-0001', challenge: null, score: 7, elapsed_ms: 42137, recorded_at: '2025-04-02T10:00:00.000Z' },
+      { id: 'sh2', user_id: mockProfile.id, maze_id: null, challenge: 'easy:111', score: 5, elapsed_ms: 51020, recorded_at: '2025-04-01T10:00:00.000Z' },
+    ]
+    return HttpResponse.json<ScoreBoardResponse>({ scores, limit: 100, offset: 0, has_more: false })
+  }),
+
+  http.get(`${BASE}/scores`, ({ request }) => {
+    const url = new URL(request.url)
+    const mazeId = url.searchParams.get('maze_id')
+    const challenge = url.searchParams.get('challenge')
+    const withNames = url.searchParams.get('include_usernames') !== 'false'
+    const subject = { maze_id: mazeId, challenge }
+    const scores: ScoreEntry[] = [
+      { id: 'lb1', user_id: 'other-1', ...subject, score: 9, elapsed_ms: 31204, recorded_at: '2025-04-02T09:00:00.000Z', username: withNames ? 'alice' : undefined },
+      { id: 'lb2', user_id: mockProfile.id, ...subject, score: 7, elapsed_ms: 42137, recorded_at: '2025-04-02T10:00:00.000Z', username: withNames ? mockProfile.username : undefined },
+    ]
+    return HttpResponse.json<ScoreBoardResponse>({ scores, limit: 20, offset: 0, has_more: false })
   }),
 ]

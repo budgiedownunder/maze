@@ -120,3 +120,11 @@ export interface ScoreBoardResponse {
   offset: number
   has_more: boolean
 }
+
+// The subset of the server's Play3dConfigResponse the client consumes: the
+// curated difficulty's fixed maze seed, used to key its leaderboard
+// (`challenge = "<difficulty>:<seed>"`).
+export interface Play3dConfig {
+  difficulty: string
+  seed: number
+}
