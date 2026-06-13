@@ -1,7 +1,7 @@
 // Scoreboard vocabulary + helpers shared across the score API client and the
 // leaderboard UI. The metric / direction string unions are the single
 // as-const source (the server accepts the same query-string values); the
-// pure DTO types (`ScoreEntry`, `ScoreBoardResponse`) live in `types/api.ts`
+// pure DTO types (`ScoreEntry`, `ScoreboardResponse`) live in `types/api.ts`
 // and re-export the unions declared here.
 
 // The metric a leaderboard ranks by — sent as the `metric` query param.

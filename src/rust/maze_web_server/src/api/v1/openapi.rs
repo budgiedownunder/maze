@@ -15,7 +15,7 @@ use crate::api::v1::endpoints::handlers::{
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
-use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreBoardResponse, ScoreResponse};
+use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
 
@@ -127,7 +127,7 @@ impl utoipa::Modify for LoginTokenAuth {
             UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm,
-            RecordScoreRequest, ScoreResponse, ScoreBoardResponse),
+            RecordScoreRequest, ScoreResponse, ScoreboardResponse),
 
     ),
     servers(

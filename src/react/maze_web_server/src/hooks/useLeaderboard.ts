@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ScoreBoardResponse, ScoreEntry } from '../types/api'
+import type { ScoreboardResponse, ScoreEntry } from '../types/api'
 
 const PAGE_SIZE = 20
 
@@ -27,7 +27,7 @@ interface LoadedBoard {
 // drives reloads.
 export function useLeaderboard(
   key: string | null,
-  fetchPage: (limit: number, offset: number) => Promise<ScoreBoardResponse>,
+  fetchPage: (limit: number, offset: number) => Promise<ScoreboardResponse>,
 ): UseLeaderboard {
   const [loaded, setLoaded] = useState<LoadedBoard | null>(null)
   const [errorFor, setErrorFor] = useState<{ key: string; message: string } | null>(null)

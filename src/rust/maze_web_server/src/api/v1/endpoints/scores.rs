@@ -225,10 +225,10 @@ fn parse_direction(raw: Option<&str>, metric: ScoreMetric) -> Result<SortDirecti
 /// Trims an over-fetched page (`limit + 1` rows requested) down to `limit`,
 /// deriving `has_more` from whether the extra row was present — avoids a
 /// separate COUNT query. Each row carries its (optionally resolved) username.
-fn build_board(mut rows: Vec<ScoreboardEntry>, limit: u32, offset: u32) -> ScoreBoardResponse {
+fn build_board(mut rows: Vec<ScoreboardEntry>, limit: u32, offset: u32) -> ScoreboardResponse {
     let has_more = rows.len() as u32 > limit;
     rows.truncate(limit as usize);
-    ScoreBoardResponse {
+    ScoreboardResponse {
         scores: rows.into_iter().map(ScoreResponse::from).collect(),
         limit,
         offset,
@@ -261,7 +261,7 @@ pub struct HistoryQuery {
 /// *effective* (server-capped) page size, and `has_more` tells the client
 /// whether a further page exists.
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
-pub struct ScoreBoardResponse {
+pub struct ScoreboardResponse {
     /// The page of entries, already ordered by the request's metric/direction
     /// (or recency, for personal history).
     pub scores: Vec<ScoreResponse>,
@@ -297,7 +297,7 @@ pub struct ScoreBoardResponse {
         ("include_usernames" = Option<bool>, Query, description = "Resolve + include each row's player username (default true; set false for personal boards)")
     ),
     responses(
-        (status = 200, description = "A leaderboard page", body = ScoreBoardResponse),
+        (status = 200, description = "A leaderboard page", body = ScoreboardResponse),
         (status = 400, description = "Invalid request (must set exactly one of maze_id / challenge; or bad metric/direction)"),
         (status = 401, description = "Unauthorized request")
     ),
@@ -368,7 +368,7 @@ pub async fn get_leaderboard(
         ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
     ),
     responses(
-        (status = 200, description = "A page of the caller's run history", body = ScoreBoardResponse),
+        (status = 200, description = "A page of the caller's run history", body = ScoreboardResponse),
         (status = 401, description = "Unauthorized request")
     ),
     security(

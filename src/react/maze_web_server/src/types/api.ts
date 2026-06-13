@@ -112,9 +112,9 @@ export interface ScoreEntry {
 }
 
 // A page of a leaderboard or personal history. Mirrors the server's
-// `ScoreBoardResponse`: `limit` is the effective (server-capped) page size and
+// `ScoreboardResponse`: `limit` is the effective (server-capped) page size and
 // `has_more` says whether a further page exists.
-export interface ScoreBoardResponse {
+export interface ScoreboardResponse {
   scores: ScoreEntry[]
   limit: number
   offset: number

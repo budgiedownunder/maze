@@ -9,7 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreBoardResponse, ScoreResponse};
+    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -7101,12 +7101,12 @@ mod test_definitions {
         url: &str,
         api_key: Option<Uuid>,
         login_id: Option<Uuid>,
-    ) -> ScoreBoardResponse {
+    ) -> ScoreboardResponse {
         let req = create_test_get_request(url, api_key, login_id);
         let resp = test::call_service(app, req).await;
         assert_eq!(resp.status(), StatusCode::OK, "GET {url}");
         let bytes = test::read_body(resp).await;
-        serde_json::from_slice(&bytes).expect("ScoreBoardResponse")
+        serde_json::from_slice(&bytes).expect("ScoreboardResponse")
     }
 
     #[tokio::test]

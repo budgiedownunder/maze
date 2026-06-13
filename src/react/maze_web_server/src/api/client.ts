@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, SaveMazeRequest, ScoreBoardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -237,7 +237,7 @@ export interface HistoryQuery {
 // Reads a page of a leaderboard, ranked by `metric` / `direction` (the server
 // defaults to fastest-time-first when omitted). Exactly one subject — a stored
 // `mazeId` or a curated `challenge` — must be set.
-export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<ScoreBoardResponse> {
+export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<ScoreboardResponse> {
   if ((query.mazeId == null) === (query.challenge == null)) {
     throw new Error('getLeaderboard requires exactly one of mazeId / challenge')
   }
@@ -249,18 +249,18 @@ export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<
   if (query.limit != null) params.set('limit', String(query.limit))
   if (query.offset != null) params.set('offset', String(query.offset))
   if (query.includeUsernames != null) params.set('include_usernames', String(query.includeUsernames))
-  return request<ScoreBoardResponse>(`/scores?${params.toString()}`, {
+  return request<ScoreboardResponse>(`/scores?${params.toString()}`, {
     headers: authHeaders(token),
   })
 }
 
 // Reads a page of the authenticated player's own run history (most recent first).
-export function getScoreHistory(token: string, query: HistoryQuery = {}): Promise<ScoreBoardResponse> {
+export function getScoreHistory(token: string, query: HistoryQuery = {}): Promise<ScoreboardResponse> {
   const params = new URLSearchParams()
   if (query.limit != null) params.set('limit', String(query.limit))
   if (query.offset != null) params.set('offset', String(query.offset))
   const qs = params.toString()
-  return request<ScoreBoardResponse>(`/scores/me${qs ? `?${qs}` : ''}`, {
+  return request<ScoreboardResponse>(`/scores/me${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(token),
   })
 }

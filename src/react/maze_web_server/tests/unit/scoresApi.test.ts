@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { getLeaderboard, getScoreHistory } from '../../src/api/client'
-import type { ScoreBoardResponse } from '../../src/types/api'
+import type { ScoreboardResponse } from '../../src/types/api'
 
 const TOKEN = 'test-token'
 
-const EMPTY_BOARD: ScoreBoardResponse = { scores: [], limit: 20, offset: 0, has_more: false }
+const EMPTY_BOARD: ScoreboardResponse = { scores: [], limit: 20, offset: 0, has_more: false }
 
 // Captures the request the client makes so the test can assert on the assembled
 // query string + headers, then returns a canned board.
@@ -75,7 +75,7 @@ describe('getLeaderboard', () => {
   })
 
   it('parses a row username off the board response', async () => {
-    const board: ScoreBoardResponse = {
+    const board: ScoreboardResponse = {
       scores: [
         {
           id: 'a',
@@ -98,7 +98,7 @@ describe('getLeaderboard', () => {
   })
 
   it('parses the board response', async () => {
-    const board: ScoreBoardResponse = {
+    const board: ScoreboardResponse = {
       scores: [
         {
           id: 'a',

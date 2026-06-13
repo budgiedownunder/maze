@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useLeaderboard } from '../../src/hooks/useLeaderboard'
-import type { ScoreBoardResponse, ScoreEntry } from '../../src/types/api'
+import type { ScoreboardResponse, ScoreEntry } from '../../src/types/api'
 
 function entry(id: string): ScoreEntry {
   return { id, user_id: 'u', maze_id: null, challenge: 'c', score: 1, elapsed_ms: 1, recorded_at: '2025-01-01T00:00:00Z' }
 }
-function page(ids: string[], hasMore: boolean): ScoreBoardResponse {
+function page(ids: string[], hasMore: boolean): ScoreboardResponse {
   return { scores: ids.map(entry), limit: 20, offset: 0, has_more: hasMore }
 }
 

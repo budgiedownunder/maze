@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreBoardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -428,7 +428,7 @@ export const handlers = [
       { id: 'sh1', user_id: mockProfile.id, maze_id: 'maze-0001', challenge: null, score: 7, elapsed_ms: 42137, recorded_at: '2025-04-02T10:00:00.000Z' },
       { id: 'sh2', user_id: mockProfile.id, maze_id: null, challenge: 'easy:111', score: 5, elapsed_ms: 51020, recorded_at: '2025-04-01T10:00:00.000Z' },
     ]
-    return HttpResponse.json<ScoreBoardResponse>({ scores, limit: 100, offset: 0, has_more: false })
+    return HttpResponse.json<ScoreboardResponse>({ scores, limit: 100, offset: 0, has_more: false })
   }),
 
   http.get(`${BASE}/scores`, ({ request }) => {
@@ -441,6 +441,6 @@ export const handlers = [
       { id: 'lb1', user_id: 'other-1', ...subject, score: 9, elapsed_ms: 31204, recorded_at: '2025-04-02T09:00:00.000Z', username: withNames ? 'alice' : undefined },
       { id: 'lb2', user_id: mockProfile.id, ...subject, score: 7, elapsed_ms: 42137, recorded_at: '2025-04-02T10:00:00.000Z', username: withNames ? mockProfile.username : undefined },
     ]
-    return HttpResponse.json<ScoreBoardResponse>({ scores, limit: 20, offset: 0, has_more: false })
+    return HttpResponse.json<ScoreboardResponse>({ scores, limit: 20, offset: 0, has_more: false })
   }),
 ]
