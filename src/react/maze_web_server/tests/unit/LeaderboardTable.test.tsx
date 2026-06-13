@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ScoreList } from '../../src/components/ScoreList'
+import { LeaderboardTable } from '../../src/components/LeaderboardTable'
 import type { ScoreEntry } from '../../src/types/api'
 
 function row(over: Partial<ScoreEntry>): ScoreEntry {
@@ -25,10 +25,10 @@ const base = {
   onLoadMore: vi.fn(),
 }
 
-describe('ScoreList', () => {
+describe('LeaderboardTable', () => {
   it('shows each player by username and highlights the caller row', () => {
     render(
-      <ScoreList
+      <LeaderboardTable
         {...base}
         showPlayer
         currentUserId="me"
@@ -44,12 +44,12 @@ describe('ScoreList', () => {
     expect(screen.queryByText('You')).not.toBeInTheDocument()
     expect(screen.getByText('0:42.137')).toBeInTheDocument()
     // The caller's row carries the highlight class.
-    expect(screen.getByText('bob').closest('tr')).toHaveClass('score-row--me')
+    expect(screen.getByText('bob').closest('tr')).toHaveClass('leaderboard-row--me')
   })
 
   it('never renders a raw user_id', () => {
     const { container } = render(
-      <ScoreList
+      <LeaderboardTable
         {...base}
         showPlayer
         currentUserId="me"
@@ -61,7 +61,7 @@ describe('ScoreList', () => {
 
   it('omits the player column and does not highlight when showPlayer is false', () => {
     const { container } = render(
-      <ScoreList
+      <LeaderboardTable
         {...base}
         showPlayer={false}
         currentUserId="me"
@@ -71,11 +71,11 @@ describe('ScoreList', () => {
     expect(screen.queryByText('Player')).not.toBeInTheDocument()
     expect(screen.queryByText('You')).not.toBeInTheDocument()
     // No per-row highlight on an all-caller (My-Mazes) board.
-    expect(container.querySelector('.score-row--me')).toBeNull()
+    expect(container.querySelector('.leaderboard-row--me')).toBeNull()
   })
 
   it('labels the timestamp column "Completed" and shows a date-time', () => {
-    render(<ScoreList {...base} showPlayer rows={[row({ recorded_at: '2025-04-01T12:00:00Z' })]} />)
+    render(<LeaderboardTable {...base} showPlayer rows={[row({ recorded_at: '2025-04-01T12:00:00Z' })]} />)
     expect(screen.getByRole('columnheader', { name: 'Completed' })).toBeInTheDocument()
     // The cell renders the localised date+time of the recorded_at instant.
     const expected = new Date('2025-04-01T12:00:00Z').toLocaleString()
@@ -83,19 +83,19 @@ describe('ScoreList', () => {
   })
 
   it('shows an empty state when there are no rows', () => {
-    render(<ScoreList {...base} showPlayer rows={[]} />)
+    render(<LeaderboardTable {...base} showPlayer rows={[]} />)
     expect(screen.getByText(/no winning scores yet/i)).toBeInTheDocument()
   })
 
   it('shows Load more only when hasMore and fires the callback', async () => {
     const onLoadMore = vi.fn()
     const { rerender } = render(
-      <ScoreList {...base} showPlayer rows={[row({ id: '1' })]} hasMore={false} onLoadMore={onLoadMore} />,
+      <LeaderboardTable {...base} showPlayer rows={[row({ id: '1' })]} hasMore={false} onLoadMore={onLoadMore} />,
     )
     expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument()
 
     rerender(
-      <ScoreList {...base} showPlayer rows={[row({ id: '1' })]} hasMore onLoadMore={onLoadMore} />,
+      <LeaderboardTable {...base} showPlayer rows={[row({ id: '1' })]} hasMore onLoadMore={onLoadMore} />,
     )
     await userEvent.click(screen.getByRole('button', { name: /load more/i }))
     expect(onLoadMore).toHaveBeenCalledOnce()

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { SubjectSelector, type PlayedMaze, type SubjectSelection } from '../components/SubjectSelector'
-import { ScoreBoard, type BoardSubject } from '../components/ScoreBoard'
+import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { useTheme } from '../context/ThemeContext'
@@ -9,7 +9,7 @@ import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getPlay3dConfig } from '../api/client'
 import { buildChallenge } from '../utils/scores'
 import type { ScoreEntry } from '../types/api'
-import scoresIcon from '../assets/scores.svg'
+import leaderboardsIcon from '../assets/leaderboards.svg'
 
 // Cap on history pages scanned to discover the player's played mazes — bounds
 // the work for a very active player; the server caps each page at 100.
@@ -49,7 +49,7 @@ function defaultSelection(mostRecent: ScoreEntry | undefined, played: PlayedMaze
   return { gameType: 'play3d', difficulty: 'easy' }
 }
 
-export function ScoresPage() {
+export function LeaderboardsPage() {
   const menuVariant = useMenuVariant()
   const { theme, toggleTheme } = useTheme()
   const token = useToken()
@@ -141,14 +141,14 @@ export function ScoresPage() {
   const showPlayer = selection?.gameType === 'play3d'
 
   return (
-    <div className="scores-page">
+    <div className="leaderboards-page">
       <header className="app-header">
         <div className="header-actions">
           {menuVariant === 'hamburger' && <HamburgerMenu />}
         </div>
         <span className="app-header-title app-header-title--with-icon">
-          <img src={scoresIcon} className="app-header-title-icon" alt="" aria-hidden="true" />
-          Scores
+          <img src={leaderboardsIcon} className="app-header-title-icon" alt="" aria-hidden="true" />
+          Leaderboards
         </span>
         <div className="header-actions">
           <button
@@ -161,7 +161,7 @@ export function ScoresPage() {
           </button>
         </div>
       </header>
-      <main className="scores-main">
+      <main className="leaderboards-main">
         {isLoadingSubjects && <p aria-label="Loading">Loading…</p>}
         {!isLoadingSubjects && subjectsError && (
           <p className="error-msg" role="alert">{subjectsError}</p>
@@ -176,7 +176,7 @@ export function ScoresPage() {
             {resolveError && <p className="error-msg" role="alert">{resolveError}</p>}
             {!resolveError && isResolving && <p aria-label="Loading">Loading…</p>}
             {!resolveError && !isResolving && boardSubject && token && (
-              <ScoreBoard
+              <Leaderboard
                 token={token}
                 subject={boardSubject}
                 currentUserId={profile?.id}
@@ -185,7 +185,7 @@ export function ScoresPage() {
               />
             )}
             {!resolveError && !isResolving && !boardSubject && (
-              <p className="score-empty">No winning scores yet</p>
+              <p className="leaderboard-empty">No winning scores yet</p>
             )}
           </>
         )}

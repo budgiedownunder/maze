@@ -6,7 +6,7 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import appIcon from '../assets/app.png'
 import play3dIcon from '../assets/play3d.png'
-import scoresIcon from '../assets/scores.svg'
+import leaderboardsIcon from '../assets/leaderboards.svg'
 
 export function HomePage() {
   const menuVariant = useMenuVariant()
@@ -28,8 +28,8 @@ export function HomePage() {
     navigate('/mazes')
   }
 
-  function handleScores() {
-    navigate('/scores')
+  function handleLeaderboards() {
+    navigate('/leaderboards')
   }
 
   return (
@@ -66,10 +66,10 @@ export function HomePage() {
               <p className="home-tile-desc">Design and play your own mazes</p>
             </div>
           </button>
-          <button type="button" className="home-tile" onClick={handleScores}>
-            <img src={scoresIcon} className="home-tile-img" alt="" aria-hidden="true" />
+          <button type="button" className="home-tile" onClick={handleLeaderboards}>
+            <img src={leaderboardsIcon} className="home-tile-img" alt="" aria-hidden="true" />
             <div className="home-tile-text">
-              <h2 className="home-tile-title">Scores</h2>
+              <h2 className="home-tile-title">Leaderboards</h2>
               <p className="home-tile-desc">See your times and how you rank</p>
             </div>
           </button>

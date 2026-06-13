@@ -1,7 +1,7 @@
 import type { ScoreEntry } from '../types/api'
 import { formatElapsedMs } from '../utils/scores'
 
-interface ScoreListProps {
+interface LeaderboardTableProps {
   rows: ScoreEntry[]
   currentUserId?: string
   // Show the Player column. True for global boards (Play 3D); false for
@@ -19,7 +19,7 @@ function formatCompleted(iso: string): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString()
 }
 
-export function ScoreList({
+export function LeaderboardTable({
   rows,
   currentUserId,
   showPlayer,
@@ -28,7 +28,7 @@ export function ScoreList({
   error,
   hasMore,
   onLoadMore,
-}: ScoreListProps) {
+}: LeaderboardTableProps) {
   if (error) {
     return <p className="error-msg" role="alert">{error}</p>
   }
@@ -36,20 +36,20 @@ export function ScoreList({
     return <p aria-label="Loading">Loading…</p>
   }
   if (rows.length === 0) {
-    return <p className="score-empty">No winning scores yet</p>
+    return <p className="leaderboard-empty">No winning scores yet</p>
   }
 
   return (
-    <div className="score-board">
-      <div className="score-table-scroll">
-        <table className="score-table">
+    <div className="leaderboard-board">
+      <div className="leaderboard-table-scroll">
+        <table className="leaderboard-table">
           <thead>
             <tr>
-              <th scope="col" className="score-col-rank">#</th>
-              {showPlayer && <th scope="col" className="score-col-player">Player</th>}
-              <th scope="col" className="score-col-time">Time</th>
-              <th scope="col" className="score-col-score">Score</th>
-              <th scope="col" className="score-col-date">Completed</th>
+              <th scope="col" className="leaderboard-col-rank">#</th>
+              {showPlayer && <th scope="col" className="leaderboard-col-player">Player</th>}
+              <th scope="col" className="leaderboard-col-time">Time</th>
+              <th scope="col" className="leaderboard-col-score">Score</th>
+              <th scope="col" className="leaderboard-col-date">Completed</th>
             </tr>
           </thead>
           <tbody>
@@ -59,14 +59,14 @@ export function ScoreList({
               // My-Mazes board every row is the caller, so it would just be noise.
               const highlight = isMe && showPlayer
               return (
-                <tr key={row.id} className={highlight ? 'score-row score-row--me' : 'score-row'}>
-                  <td className="score-col-rank">{i + 1}</td>
+                <tr key={row.id} className={highlight ? 'leaderboard-row leaderboard-row--me' : 'leaderboard-row'}>
+                  <td className="leaderboard-col-rank">{i + 1}</td>
                   {showPlayer && (
-                    <td className="score-col-player">{row.username ?? '—'}</td>
+                    <td className="leaderboard-col-player">{row.username ?? '—'}</td>
                   )}
-                  <td className="score-col-time">{formatElapsedMs(row.elapsed_ms)}</td>
-                  <td className="score-col-score">{row.score}</td>
-                  <td className="score-col-date">{formatCompleted(row.recorded_at)}</td>
+                  <td className="leaderboard-col-time">{formatElapsedMs(row.elapsed_ms)}</td>
+                  <td className="leaderboard-col-score">{row.score}</td>
+                  <td className="leaderboard-col-date">{formatCompleted(row.recorded_at)}</td>
                 </tr>
               )
             })}
@@ -76,7 +76,7 @@ export function ScoreList({
       {hasMore && (
         <button
           type="button"
-          className="btn-secondary score-load-more"
+          className="btn-secondary leaderboard-load-more"
           onClick={onLoadMore}
           disabled={isLoadingMore}
         >

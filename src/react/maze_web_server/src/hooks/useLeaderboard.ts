@@ -3,7 +3,7 @@ import type { ScoreBoardResponse, ScoreEntry } from '../types/api'
 
 const PAGE_SIZE = 20
 
-export interface UseScoreBoard {
+export interface UseLeaderboard {
   rows: ScoreEntry[]
   isLoading: boolean
   isLoadingMore: boolean
@@ -25,10 +25,10 @@ interface LoadedBoard {
 // effect); results from a superseded board are discarded by key. `fetchPage`'s
 // identity may churn between renders, so it's read through a ref and only `key`
 // drives reloads.
-export function useScoreBoard(
+export function useLeaderboard(
   key: string | null,
   fetchPage: (limit: number, offset: number) => Promise<ScoreBoardResponse>,
-): UseScoreBoard {
+): UseLeaderboard {
   const [loaded, setLoaded] = useState<LoadedBoard | null>(null)
   const [errorFor, setErrorFor] = useState<{ key: string; message: string } | null>(null)
   const [loadingMoreKey, setLoadingMoreKey] = useState<string | null>(null)

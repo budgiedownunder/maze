@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useScoreBoard } from '../../src/hooks/useScoreBoard'
+import { useLeaderboard } from '../../src/hooks/useLeaderboard'
 import type { ScoreBoardResponse, ScoreEntry } from '../../src/types/api'
 
 function entry(id: string): ScoreEntry {
@@ -10,10 +10,10 @@ function page(ids: string[], hasMore: boolean): ScoreBoardResponse {
   return { scores: ids.map(entry), limit: 20, offset: 0, has_more: hasMore }
 }
 
-describe('useScoreBoard', () => {
+describe('useLeaderboard', () => {
   it('loads the first page', async () => {
     const fetchPage = vi.fn().mockResolvedValueOnce(page(['1', '2'], true))
-    const { result } = renderHook(() => useScoreBoard('k1', fetchPage))
+    const { result } = renderHook(() => useLeaderboard('k1', fetchPage))
 
     expect(result.current.isLoading).toBe(true)
     await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -26,7 +26,7 @@ describe('useScoreBoard', () => {
     const fetchPage = vi.fn()
       .mockResolvedValueOnce(page(['1'], true))
       .mockResolvedValueOnce(page(['2'], false))
-    const { result } = renderHook(() => useScoreBoard('k1', fetchPage))
+    const { result } = renderHook(() => useLeaderboard('k1', fetchPage))
     await waitFor(() => expect(result.current.rows).toHaveLength(1))
 
     act(() => { result.current.loadMore() })
@@ -39,7 +39,7 @@ describe('useScoreBoard', () => {
     const fetchPage = vi.fn()
       .mockResolvedValueOnce(page(['a'], false))
       .mockResolvedValueOnce(page(['b'], false))
-    const { result, rerender } = renderHook(({ k }) => useScoreBoard(k, fetchPage), {
+    const { result, rerender } = renderHook(({ k }) => useLeaderboard(k, fetchPage), {
       initialProps: { k: 'k1' },
     })
     await waitFor(() => expect(result.current.rows.map(r => r.id)).toEqual(['a']))
@@ -53,7 +53,7 @@ describe('useScoreBoard', () => {
 
   it('does not fetch when the key is null', () => {
     const fetchPage = vi.fn()
-    const { result } = renderHook(() => useScoreBoard(null, fetchPage))
+    const { result } = renderHook(() => useLeaderboard(null, fetchPage))
     expect(result.current.isLoading).toBe(false)
     expect(result.current.rows).toEqual([])
     expect(fetchPage).not.toHaveBeenCalled()
@@ -61,7 +61,7 @@ describe('useScoreBoard', () => {
 
   it('surfaces a fetch error', async () => {
     const fetchPage = vi.fn().mockRejectedValueOnce(new Error('boom'))
-    const { result } = renderHook(() => useScoreBoard('k1', fetchPage))
+    const { result } = renderHook(() => useLeaderboard('k1', fetchPage))
     await waitFor(() => expect(result.current.error).toBe('boom'))
     expect(result.current.isLoading).toBe(false)
   })

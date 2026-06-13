@@ -1576,13 +1576,13 @@
 }
 
 /* Scores / leaderboard */
-.scores-page {
+.leaderboards-page {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
-.scores-main {
+.leaderboards-main {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1594,13 +1594,13 @@
 }
 /* Board view + list flex-fill the space under the selector so the table region
    reaches the bottom of the page (Load more, when present, sits below it). */
-.score-board-view {
+.leaderboard-board-view {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.score-board {
+.leaderboard-board {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1625,12 +1625,12 @@
   color: var(--text-muted);
   font-size: 1.1rem;
 }
-.score-metric-tabs {
+.leaderboard-metric-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
 }
-.score-tab {
+.leaderboard-tab {
   padding: 6px 14px;
   border: 1px solid var(--border-input);
   border-radius: 999px;
@@ -1639,7 +1639,7 @@
   cursor: pointer;
   font-size: 0.9rem;
 }
-.score-tab--active {
+.leaderboard-tab--active {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -1647,12 +1647,12 @@
 /* Dedicated scroll region for the table: a clean, padding-free sticky context
    (the page-level scroll container's padding made the sticky header leak rows
    above it). Scrolls vertically for tall boards + horizontally for wide ones. */
-.score-table-scroll {
+.leaderboard-table-scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
-.score-table {
+.leaderboard-table {
   width: 100%;
   /* `separate` (not `collapse`) so the sticky header doesn't let body rows
      bleed over it as they scroll under. */
@@ -1660,35 +1660,35 @@
   border-spacing: 0;
   font-size: 0.95rem;
 }
-.score-table th,
-.score-table td {
+.leaderboard-table th,
+.leaderboard-table td {
   text-align: left;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border, #ccc);
   white-space: nowrap;
 }
-.score-table th {
+.leaderboard-table th {
   font-weight: 600;
   color: var(--text-muted);
 }
-/* Header row stays put while the data scrolls under it (within .scores-main).
+/* Header row stays put while the data scrolls under it (within .leaderboards-main).
    box-shadow draws the divider so it survives border-collapse during scroll. */
-.score-table thead th {
+.leaderboard-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--surface);
   box-shadow: inset 0 -1px 0 var(--border);
 }
-.score-col-rank { width: 3ch; color: var(--text-muted); }
-.score-col-time, .score-col-score { font-variant-numeric: tabular-nums; }
+.leaderboard-col-rank { width: 3ch; color: var(--text-muted); }
+.leaderboard-col-time, .leaderboard-col-score { font-variant-numeric: tabular-nums; }
 /* The signed-in player's own rows, softly tinted lime-green. */
-.score-row--me td {
+.leaderboard-row--me td {
   background: rgba(50, 205, 50, 0.18);
 }
-.score-load-more {
+.leaderboard-load-more {
   margin-top: 12px;
 }
-.score-empty {
+.leaderboard-empty {
   color: var(--text-muted);
 }

@@ -49,7 +49,7 @@ describe('HomePage', () => {
     renderHomePage()
     expect(screen.getByRole('heading', { name: /play 3d/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^mazes$/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^scores$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^leaderboards$/i })).toBeInTheDocument()
   })
 
   it('clicking Play 3D opens the difficulty modal (no navigation yet)', async () => {
@@ -107,9 +107,9 @@ describe('HomePage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/mazes')
   })
 
-  it('clicking Scores navigates to /scores', async () => {
+  it('clicking Leaderboards navigates to /leaderboards', async () => {
     renderHomePage()
     await userEvent.click(screen.getByRole('button', { name: /your times and how you rank/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/scores')
+    expect(mockNavigate).toHaveBeenCalledWith('/leaderboards')
   })
 })

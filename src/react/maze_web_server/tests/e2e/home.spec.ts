@@ -12,7 +12,7 @@ test('successful sign-in lands on the Home page with the tiles visible', async (
   await login(page)
   await expect(page.getByRole('heading', { name: /play 3d/i })).toBeVisible()
   await expect(page.getByRole('heading', { name: /^mazes$/i })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /^scores$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^leaderboards$/i })).toBeVisible()
 })
 
 test('clicking Mazes tile navigates to /mazes', async ({ page }) => {
@@ -21,8 +21,8 @@ test('clicking Mazes tile navigates to /mazes', async ({ page }) => {
   await expect(page).toHaveURL(/\/mazes$/)
 })
 
-test('clicking Scores tile navigates to /scores', async ({ page }) => {
+test('clicking Leaderboards tile navigates to /leaderboards', async ({ page }) => {
   await login(page)
   await page.getByRole('button', { name: /your times and how you rank/i }).click()
-  await expect(page).toHaveURL(/\/scores$/)
+  await expect(page).toHaveURL(/\/leaderboards$/)
 })

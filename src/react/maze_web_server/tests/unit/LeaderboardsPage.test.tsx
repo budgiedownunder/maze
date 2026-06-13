@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
-import { ScoresPage } from '../../src/pages/ScoresPage'
+import { LeaderboardsPage } from '../../src/pages/LeaderboardsPage'
 import { server } from '../../src/mocks/server'
 import type { ScoreEntry } from '../../src/types/api'
 
@@ -39,7 +39,7 @@ function renderPage() {
   return render(
     <MemoryRouter>
       <ThemeProvider>
-        <ScoresPage />
+        <LeaderboardsPage />
       </ThemeProvider>
     </MemoryRouter>,
   )
@@ -49,7 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('ScoresPage', () => {
+describe('LeaderboardsPage', () => {
   it('defaults to the most-recent subject and renders its board', async () => {
     server.use(
       // History: most recent run is on maze m1.json.
