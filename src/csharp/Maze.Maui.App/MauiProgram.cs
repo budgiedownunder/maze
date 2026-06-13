@@ -85,6 +85,8 @@ namespace Maze.Maui.App
                 builder.Services.AddSingleton<IMazeService, MockMazeService>();
             else
                 builder.Services.AddSingleton<IMazeService, MazeHttpClientService>();
+            builder.Services.AddSingleton<IScoresService, ScoresHttpClientService>();
+            builder.Services.AddSingleton<IGameConfigService, GameConfigHttpClientService>();
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
             builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());

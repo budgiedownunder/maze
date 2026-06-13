@@ -1,0 +1,190 @@
+using System.Text.Json;
+using Maze.Maui.App.Models;
+using Maze.Maui.App.Services;
+using Xunit;
+
+namespace Maze.Maui.App.Tests.Services
+{
+    /// <summary>
+    /// Tests for the pure request-path helpers in <see cref="ScoreRequestPaths"/>
+    /// plus the score DTO contract. The HTTP send path itself is not unit-tested
+    /// here (as with the other client services — behaviour is covered via the
+    /// service interface at the ViewModel layer); these tests pin the query-string
+    /// assembly, the subject-exclusivity guard, the challenge convention, and the
+    /// snake_case JSON mapping.
+    /// </summary>
+    public class ScoresHttpClientServiceTests
+    {
+        [Fact]
+        public void BuildLeaderboardPath_MazeSubject_OnlySetsMazeId()
+        {
+            string path = ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: "abc", challenge: null, metric: null, direction: null, limit: null, offset: null, includeUsernames: null);
+
+            Assert.Equal("scores?maze_id=abc", path);
+        }
+
+        [Fact]
+        public void BuildLeaderboardPath_ChallengeSubject_OnlySetsChallenge()
+        {
+            string path = ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: null, challenge: "easy:42", metric: null, direction: null, limit: null, offset: null, includeUsernames: null);
+
+            // ':' is percent-encoded by Uri.EscapeDataString.
+            Assert.Equal("scores?challenge=easy%3A42", path);
+        }
+
+        [Fact]
+        public void BuildLeaderboardPath_EncodesPathLikeMazeId()
+        {
+            // FileStore maze ids are Windows file paths — they must be encoded.
+            string path = ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: @"C:\data\Maze_1.json", challenge: null, metric: null, direction: null, limit: null, offset: null, includeUsernames: null);
+
+            Assert.Equal("scores?maze_id=C%3A%5Cdata%5CMaze_1.json", path);
+        }
+
+        [Fact]
+        public void BuildLeaderboardPath_AppendsAllOptionalParams()
+        {
+            string path = ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: null, challenge: "hard:7",
+                metric: ScoreMetric.Score, direction: SortDirection.Descending,
+                limit: 20, offset: 40, includeUsernames: true);
+
+            Assert.Equal("scores?challenge=hard%3A7&metric=score&direction=desc&limit=20&offset=40&include_usernames=true", path);
+        }
+
+        [Fact]
+        public void BuildLeaderboardPath_TimeAscendingAndExcludeUsernames()
+        {
+            string path = ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: "m1", challenge: null,
+                metric: ScoreMetric.Time, direction: SortDirection.Ascending,
+                limit: null, offset: null, includeUsernames: false);
+
+            Assert.Equal("scores?maze_id=m1&metric=time&direction=asc&include_usernames=false", path);
+        }
+
+        [Fact]
+        public void BuildLeaderboardPath_ThrowsWhenNeitherSubjectSet()
+        {
+            Assert.Throws<ArgumentException>(() => ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: null, challenge: null, metric: null, direction: null, limit: null, offset: null, includeUsernames: null));
+        }
+
+        [Fact]
+        public void BuildLeaderboardPath_ThrowsWhenBothSubjectsSet()
+        {
+            Assert.Throws<ArgumentException>(() => ScoreRequestPaths.BuildLeaderboardPath(
+                mazeId: "m1", challenge: "easy:1", metric: null, direction: null, limit: null, offset: null, includeUsernames: null));
+        }
+
+        [Fact]
+        public void BuildHistoryPath_NoParams_IsBare()
+        {
+            Assert.Equal("scores/me", ScoreRequestPaths.BuildHistoryPath(null, null));
+        }
+
+        [Fact]
+        public void BuildHistoryPath_AppendsPaging()
+        {
+            Assert.Equal("scores/me?limit=20&offset=20", ScoreRequestPaths.BuildHistoryPath(20, 20));
+        }
+
+        [Fact]
+        public void BuildHistoryPath_OffsetOnly()
+        {
+            Assert.Equal("scores/me?offset=5", ScoreRequestPaths.BuildHistoryPath(null, 5));
+        }
+
+        [Theory]
+        [InlineData(ScoreMetric.Time, "time")]
+        [InlineData(ScoreMetric.Score, "score")]
+        public void ScoreMetric_ToQueryValue(ScoreMetric metric, string expected)
+        {
+            Assert.Equal(expected, metric.ToQueryValue());
+        }
+
+        [Theory]
+        [InlineData(SortDirection.Ascending, "asc")]
+        [InlineData(SortDirection.Descending, "desc")]
+        public void SortDirection_ToQueryValue(SortDirection direction, string expected)
+        {
+            Assert.Equal(expected, direction.ToQueryValue());
+        }
+
+        [Fact]
+        public void BuildChallenge_FormatsDifficultyAndSeed()
+        {
+            Assert.Equal("tricky:8080808", ScoreSubject.BuildChallenge("tricky", 8080808ul));
+        }
+
+        [Fact]
+        public void ForCuratedGame_SetsChallengeNotMazeId()
+        {
+            var subject = ScoreSubject.ForCuratedGame("easy", 42ul);
+
+            Assert.Null(subject.MazeId);
+            Assert.Equal("easy:42", subject.Challenge);
+        }
+
+        [Fact]
+        public void ForMaze_SetsMazeIdNotChallenge()
+        {
+            var subject = ScoreSubject.ForMaze("m1");
+
+            Assert.Equal("m1", subject.MazeId);
+            Assert.Null(subject.Challenge);
+        }
+
+        [Fact]
+        public void ScoreboardResponse_DeserializesSnakeCaseJson()
+        {
+            const string json = """
+                {
+                  "scores": [
+                    {"id":"r1","user_id":"u1","maze_id":null,"challenge":"easy:42","score":7,"elapsed_ms":12345,"recorded_at":"2026-06-13T12:00:00Z","username":"alice"},
+                    {"id":"r2","user_id":"u2","maze_id":"m9","challenge":null,"score":3,"elapsed_ms":60000,"recorded_at":"2026-06-13T12:01:00Z"}
+                  ],
+                  "limit": 20,
+                  "offset": 0,
+                  "has_more": true
+                }
+                """;
+
+            var board = JsonSerializer.Deserialize<ScoreboardResponse>(json);
+
+            Assert.NotNull(board);
+            Assert.Equal(20, board!.Limit);
+            Assert.Equal(0, board.Offset);
+            Assert.True(board.HasMore);
+            Assert.Equal(2, board.Scores.Count);
+
+            var first = board.Scores[0];
+            Assert.Equal("r1", first.Id);
+            Assert.Equal("u1", first.UserId);
+            Assert.Null(first.MazeId);
+            Assert.Equal("easy:42", first.Challenge);
+            Assert.Equal(7ul, first.Score);
+            Assert.Equal(12345, first.ElapsedMs);
+            Assert.Equal("alice", first.Username);
+
+            // The second row omits `username` entirely → null.
+            Assert.Null(board.Scores[1].Username);
+            Assert.Equal("m9", board.Scores[1].MazeId);
+        }
+
+        [Fact]
+        public void Play3dConfig_DeserializesSeed()
+        {
+            const string json = """{"difficulty":"hard","seed":12345678,"rows":25,"cols":25}""";
+
+            var config = JsonSerializer.Deserialize<Play3dConfig>(json);
+
+            Assert.NotNull(config);
+            Assert.Equal("hard", config!.Difficulty);
+            Assert.Equal(12345678ul, config.Seed);
+        }
+    }
+}
