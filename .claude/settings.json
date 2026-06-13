@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "PowerShell(npm run lint:*)",
+      "PowerShell(npm test:*)",
+      "PowerShell(npx playwright test:*)",
+      "PowerShell(Set-Location src/react/maze_web_server; npx playwright test:*)",
+      "Bash(npx playwright test:*)",
+      "PowerShell(dotnet format:*)",
+      "PowerShell(dotnet test:*)",
+      "PowerShell(dotnet build:*)",
+      "PowerShell(Set-Location src/csharp; dotnet format:*)",
+      "PowerShell(Set-Location src/csharp; dotnet test:*)",
+      "PowerShell(Set-Location src/csharp; dotnet build:*)",
+      "PowerShell(cargo clippy:*)",
+      "PowerShell(cargo test:*)",
+      "PowerShell(cargo build:*)",
+      "PowerShell(cargo check:*)",
+      "PowerShell(Set-Location src/rust; cargo clippy:*)",
+      "PowerShell(Set-Location src/rust; cargo test:*)",
+      "PowerShell(Set-Location src/rust; cargo build:*)",
+      "PowerShell(Set-Location src/rust; cargo check:*)",
+      "Bash(Get-ChildItem -Path \"c:\\\\projects\\\\repos\\\\maze\" -Recurse -Name)",
+      "Bash(Get-ChildItem -Path \"c:\\\\projects\\\\repos\\\\maze\\\\src\\\\react\\\\maze_web_server\\\\\" -Recurse -File | Select-Object FullName | head -50)",
+      "Bash(xargs ls -la)",
+      "Bash(Get-ChildItem -Path \"c:\\\\projects\\\\repos\\\\maze\\\\src\\\\rust\" -Recurse -Name)",
+      "Bash(Get-ChildItem -Path \"c:\\\\projects\\\\repos\\\\maze\\\\src\\\\react\\\\maze_web_server\\\\src\" -Recurse -Directory)",
+      "Bash(Get-ChildItem -Path \"c:\\\\projects\\\\repos\\\\maze\\\\src\\\\csharp\\\\Maze.Maui.App\\\\\" -Recurse -Directory | Select-Object -ExpandProperty FullName | head -30)"
+    ]
+  }
+}

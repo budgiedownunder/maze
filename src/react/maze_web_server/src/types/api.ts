@@ -1,5 +1,8 @@
 import type { CanonicalMazeDefinition } from './cellEntities'
 import type { MazeGameSettings } from '../utils/mazeGameSettings'
+// Re-export score metrics so consumers can pull the DTO types and
+// the query vocabulary from one place.
+export type { ScoreMetric, SortDirection } from '../utils/scores'
 
 export interface UserEmail {
   email: string
@@ -92,4 +95,27 @@ export interface GenerateOptions {
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
   enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
   healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
+}
+
+// A recorded run, as returned by the score endpoints. Mirrors the server's
+// `ScoreResponse` (snake_case keys; exactly one of `maze_id` / `challenge` is
+// set). `recorded_at` is an RFC 3339 timestamp string.
+export interface ScoreEntry {
+  id: string
+  user_id: string
+  maze_id: string | null
+  challenge: string | null
+  score: number
+  elapsed_ms: number
+  recorded_at: string
+}
+
+// A page of a leaderboard or personal history. Mirrors the server's
+// `ScoreBoardResponse`: `limit` is the effective (server-capped) page size and
+// `has_more` says whether a further page exists.
+export interface ScoreBoardResponse {
+  scores: ScoreEntry[]
+  limit: number
+  offset: number
+  has_more: boolean
 }

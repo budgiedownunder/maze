@@ -317,6 +317,9 @@
       if (mazeId) {
         body.maze_id = mazeId;
       } else if (detail.difficulty != null && detail.seed != null) {
+        // "<difficulty>:<seed>" — canonical definition is buildChallenge() in
+        // src/utils/scores.ts; duplicated inline here because this vanilla host
+        // can't import the TS module.
         body.challenge = detail.difficulty + ':' + detail.seed;
       } else {
         return; // no stable subject — nothing to record

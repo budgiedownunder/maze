@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, RenewResponse, SaveMazeRequest, ScoreBoardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -212,6 +212,53 @@ export function updateMaze(token: string, id: string, body: SaveMazeRequest): Pr
 export function deleteMaze(token: string, id: string): Promise<void> {
   return requestEmpty(`/mazes/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// --- Scores -----------------------------------------------------------------
+
+export interface LeaderboardQuery {
+  // Exactly one subject (mazeId or challenge) must be set.
+  mazeId?: string
+  challenge?: string
+  metric?: ScoreMetric
+  direction?: SortDirection
+  limit?: number
+  offset?: number
+}
+
+export interface HistoryQuery {
+  limit?: number
+  offset?: number
+}
+
+// Reads a page of a leaderboard, ranked by `metric` / `direction` (the server
+// defaults to fastest-time-first when omitted). Exactly one subject — a stored
+// `mazeId` or a curated `challenge` — must be set.
+export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<ScoreBoardResponse> {
+  if ((query.mazeId == null) === (query.challenge == null)) {
+    throw new Error('getLeaderboard requires exactly one of mazeId / challenge')
+  }
+  const params = new URLSearchParams()
+  if (query.mazeId != null) params.set('maze_id', query.mazeId)
+  if (query.challenge != null) params.set('challenge', query.challenge)
+  if (query.metric != null) params.set('metric', query.metric)
+  if (query.direction != null) params.set('direction', query.direction)
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  return request<ScoreBoardResponse>(`/scores?${params.toString()}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// Reads a page of the authenticated player's own run history (most recent first).
+export function getScoreHistory(token: string, query: HistoryQuery = {}): Promise<ScoreBoardResponse> {
+  const params = new URLSearchParams()
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  const qs = params.toString()
+  return request<ScoreBoardResponse>(`/scores/me${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(token),
   })
 }
