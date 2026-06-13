@@ -17,6 +17,7 @@ pub use store::Manage;
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::ScoreEntry;
+pub use store::ScoreboardEntry;
 pub use store::ScoreMetric;
 pub use store::ScoreOrdering;
 pub use store::ScoreStore;

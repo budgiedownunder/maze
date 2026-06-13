@@ -23,8 +23,7 @@ use actix_web::{
 use chrono::{DateTime, Utc};
 use data_model::User;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use storage::{Error as StoreError, ScoreEntry, ScoreMetric, ScoreOrdering, SharedStore, SortDirection};
+use storage::{Error as StoreError, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreboardEntry, SharedStore, SortDirection};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -88,6 +87,15 @@ impl From<ScoreEntry> for ScoreResponse {
             elapsed_ms: entry.elapsed_ms,
             recorded_at: entry.recorded_at,
             username: None,
+        }
+    }
+}
+
+impl From<ScoreboardEntry> for ScoreResponse {
+    fn from(row: ScoreboardEntry) -> Self {
+        Self {
+            username: row.username,
+            ..ScoreResponse::from(row.entry)
         }
     }
 }
@@ -216,12 +224,12 @@ fn parse_direction(raw: Option<&str>, metric: ScoreMetric) -> Result<SortDirecti
 
 /// Trims an over-fetched page (`limit + 1` rows requested) down to `limit`,
 /// deriving `has_more` from whether the extra row was present — avoids a
-/// separate COUNT query.
-fn build_board(mut entries: Vec<ScoreEntry>, limit: u32, offset: u32) -> ScoreBoardResponse {
-    let has_more = entries.len() as u32 > limit;
-    entries.truncate(limit as usize);
+/// separate COUNT query. Each row carries its (optionally resolved) username.
+fn build_board(mut rows: Vec<ScoreboardEntry>, limit: u32, offset: u32) -> ScoreBoardResponse {
+    let has_more = rows.len() as u32 > limit;
+    rows.truncate(limit as usize);
     ScoreBoardResponse {
-        scores: entries.into_iter().map(ScoreResponse::from).collect(),
+        scores: rows.into_iter().map(ScoreResponse::from).collect(),
         limit,
         offset,
         has_more,
@@ -317,12 +325,17 @@ pub async fn get_leaderboard(
     // Over-fetch one extra row so `build_board` can report `has_more` without a
     // COUNT query.
     let fetch = limit + 1;
+    let include_usernames = q.include_usernames.unwrap_or(true);
 
     let store_lock = store.read().await;
     let result = match (q.maze_id.as_deref(), q.challenge.as_deref()) {
-        (Some(maze_id), None) => store_lock.maze_leaderboard(maze_id, ordering, fetch, offset).await,
+        (Some(maze_id), None) => {
+            store_lock.maze_leaderboard(maze_id, ordering, fetch, offset, include_usernames).await
+        }
         (None, Some(challenge)) => {
-            store_lock.challenge_leaderboard(challenge, ordering, fetch, offset).await
+            store_lock
+                .challenge_leaderboard(challenge, ordering, fetch, offset, include_usernames)
+                .await
         }
         _ => {
             return Err(ErrorBadRequest(
@@ -331,35 +344,13 @@ pub async fn get_leaderboard(
         }
     };
 
-    let entries = match result {
-        Ok(entries) => entries,
+    match result {
+        Ok(rows) => Ok(HttpResponse::Ok().json(build_board(rows, limit, offset))),
         Err(err) => {
             log::warn!("leaderboard store error: {err}");
-            return Err(ErrorInternalServerError("Failed to read leaderboard"));
-        }
-    };
-
-    let mut board = build_board(entries, limit, offset);
-
-    // Resolve player usernames for the trimmed page when requested (the
-    // default). Personal/unshared boards pass `include_usernames=false` since
-    // every row is the caller. The lookup is over the page's distinct user ids
-    // (≤ the page size), via the existing user store.
-    if q.include_usernames.unwrap_or(true) {
-        let mut usernames: HashMap<Uuid, String> = HashMap::new();
-        for row in &board.scores {
-            if let std::collections::hash_map::Entry::Vacant(slot) = usernames.entry(row.user_id) {
-                if let Ok(user) = store_lock.get_user(row.user_id).await {
-                    slot.insert(user.username);
-                }
-            }
-        }
-        for row in &mut board.scores {
-            row.username = usernames.get(&row.user_id).cloned();
+            Err(ErrorInternalServerError("Failed to read leaderboard"))
         }
     }
-
-    Ok(HttpResponse::Ok().json(board))
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +392,14 @@ pub async fn get_my_history(
 
     let store_lock = store.read().await;
     match store_lock.user_history(user.id, fetch, offset).await {
-        Ok(entries) => Ok(HttpResponse::Ok().json(build_board(entries, limit, offset))),
+        Ok(entries) => {
+            // History rows are always the caller — no usernames to resolve.
+            let rows = entries
+                .into_iter()
+                .map(|entry| ScoreboardEntry { entry, username: None })
+                .collect();
+            Ok(HttpResponse::Ok().json(build_board(rows, limit, offset)))
+        }
         Err(err) => {
             log::warn!("user_history store error: {err}");
             Err(ErrorInternalServerError("Failed to read run history"))

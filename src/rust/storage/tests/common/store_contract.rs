@@ -16,7 +16,7 @@ use data_model::{
     EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User,
     UserEmail, UserLogin,
 };
-use storage::{Error, ScoreEntry, ScoreMetric, ScoreOrdering, SortDirection, Store};
+use storage::{Error, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreboardEntry, SortDirection, Store};
 use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1965,16 +1965,16 @@ pub async fn score_record_round_trips_for_both_subjects(store: &mut Box<dyn Stor
     assert_eq!(challenge_row, on_challenge.id);
 
     let board = store
-        .maze_leaderboard(&maze_id, HIGHEST, 10, 0)
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
         .await
         .expect("maze_leaderboard");
-    assert_eq!(board, vec![on_maze.clone()]);
+    assert_eq!(board, vec![ScoreboardEntry { entry: on_maze.clone(), username: None }]);
 
     let challenge_board = store
-        .challenge_leaderboard("hard:7", HIGHEST, 10, 0)
+        .challenge_leaderboard("hard:7", HIGHEST, 10, 0, false)
         .await
         .expect("challenge_leaderboard");
-    assert_eq!(challenge_board, vec![on_challenge.clone()]);
+    assert_eq!(challenge_board, vec![ScoreboardEntry { entry: on_challenge.clone(), username: None }]);
 
     // Personal history aggregates a player's runs across both subjects.
     let history = store
@@ -2004,16 +2004,17 @@ pub async fn score_maze_leaderboard_orders_by_metric_and_direction(store: &mut B
             .await
             .expect("record_score");
     }
-    let elapsed = |rows: Vec<ScoreEntry>| rows.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>();
-    let scores = |rows: Vec<ScoreEntry>| rows.iter().map(|e| e.score).collect::<Vec<_>>();
+    let elapsed =
+        |rows: Vec<ScoreboardEntry>| rows.iter().map(|e| e.entry.elapsed_ms).collect::<Vec<_>>();
+    let scores = |rows: Vec<ScoreboardEntry>| rows.iter().map(|e| e.entry.score).collect::<Vec<_>>();
 
-    let fastest = store.maze_leaderboard(&maze_id, FASTEST, 10, 0).await.expect("fastest");
+    let fastest = store.maze_leaderboard(&maze_id, FASTEST, 10, 0, false).await.expect("fastest");
     assert_eq!(elapsed(fastest), vec![1_000, 3_000, 5_000]);
-    let slowest = store.maze_leaderboard(&maze_id, SLOWEST, 10, 0).await.expect("slowest");
+    let slowest = store.maze_leaderboard(&maze_id, SLOWEST, 10, 0, false).await.expect("slowest");
     assert_eq!(elapsed(slowest), vec![5_000, 3_000, 1_000]);
-    let highest = store.maze_leaderboard(&maze_id, HIGHEST, 10, 0).await.expect("highest");
+    let highest = store.maze_leaderboard(&maze_id, HIGHEST, 10, 0, false).await.expect("highest");
     assert_eq!(scores(highest), vec![10, 6, 2]);
-    let lowest = store.maze_leaderboard(&maze_id, LOWEST, 10, 0).await.expect("lowest");
+    let lowest = store.maze_leaderboard(&maze_id, LOWEST, 10, 0, false).await.expect("lowest");
     assert_eq!(scores(lowest), vec![2, 6, 10]);
 }
 
@@ -2027,18 +2028,18 @@ pub async fn score_challenge_leaderboard_orders_and_pages(store: &mut Box<dyn St
     }
     // Highest first: 10, 8, 6, 2. Page of 2 from offset 0, then offset 2.
     let page1 = store
-        .challenge_leaderboard("c:1", HIGHEST, 2, 0)
+        .challenge_leaderboard("c:1", HIGHEST, 2, 0, false)
         .await
         .expect("page1");
-    assert_eq!(page1.iter().map(|e| e.score).collect::<Vec<_>>(), vec![10, 8]);
+    assert_eq!(page1.iter().map(|e| e.entry.score).collect::<Vec<_>>(), vec![10, 8]);
     let page2 = store
-        .challenge_leaderboard("c:1", HIGHEST, 2, 2)
+        .challenge_leaderboard("c:1", HIGHEST, 2, 2, false)
         .await
         .expect("page2");
-    assert_eq!(page2.iter().map(|e| e.score).collect::<Vec<_>>(), vec![6, 2]);
+    assert_eq!(page2.iter().map(|e| e.entry.score).collect::<Vec<_>>(), vec![6, 2]);
     // Offset past the end yields an empty page.
     let page3 = store
-        .challenge_leaderboard("c:1", HIGHEST, 2, 4)
+        .challenge_leaderboard("c:1", HIGHEST, 2, 4, false)
         .await
         .expect("page3");
     assert!(page3.is_empty());
@@ -2068,12 +2069,12 @@ pub async fn score_user_history_is_recent_first_and_pages(store: &mut Box<dyn St
 
 pub async fn score_boards_are_empty_for_unknown_subject(store: &mut Box<dyn Store>) {
     assert!(store
-        .maze_leaderboard("does-not-exist", FASTEST, 10, 0)
+        .maze_leaderboard("does-not-exist", FASTEST, 10, 0, false)
         .await
         .expect("maze_leaderboard")
         .is_empty());
     assert!(store
-        .challenge_leaderboard("nope:0", HIGHEST, 10, 0)
+        .challenge_leaderboard("nope:0", HIGHEST, 10, 0, false)
         .await
         .expect("challenge_leaderboard")
         .is_empty());
@@ -2110,13 +2111,13 @@ pub async fn score_delete_maze_cascades_its_board_not_challenge_rows(store: &mut
     store.delete_maze(&alice, &maze_id).await.expect("delete_maze");
 
     assert!(store
-        .maze_leaderboard(&maze_id, HIGHEST, 10, 0)
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
         .await
         .unwrap()
         .is_empty());
     // The curated challenge row has no maze parent — it survives.
     assert_eq!(
-        store.challenge_leaderboard("c:9", HIGHEST, 10, 0).await.unwrap().len(),
+        store.challenge_leaderboard("c:9", HIGHEST, 10, 0, false).await.unwrap().len(),
         1
     );
 }
@@ -2129,14 +2130,47 @@ pub async fn score_delete_user_cascades_boards_of_owned_mazes(store: &mut Box<dy
         .record_score(&score_entry(bob.id, Some(&maze_id), None, 7, 2_000))
         .await
         .expect("record bob's run on alice's maze");
-    assert_eq!(store.maze_leaderboard(&maze_id, HIGHEST, 10, 0).await.unwrap().len(), 1);
+    assert_eq!(store.maze_leaderboard(&maze_id, HIGHEST, 10, 0, false).await.unwrap().len(), 1);
 
     // Deleting Alice deletes her maze, and thus its board — including Bob's run.
     store.delete_user(alice.id).await.expect("delete_user");
     assert!(store
-        .maze_leaderboard(&maze_id, HIGHEST, 10, 0)
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
         .await
         .unwrap()
         .is_empty());
     assert!(store.user_history(bob.id, 10, 0).await.unwrap().is_empty());
+}
+
+/// `include_usernames` resolves each player's name on a board; omitting it
+/// leaves `username` unset — regardless of backend (SqlStore joins `users`,
+/// FileStore reads the player files).
+pub async fn score_leaderboard_includes_usernames_when_requested(store: &mut Box<dyn Store>) {
+    let (alice, bob) = fixture_two_users(store).await;
+    // Both players post a run on the same curated challenge board.
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 5, 1_000))
+        .await
+        .expect("alice run");
+    store
+        .record_score(&score_entry(bob.id, None, Some("c:1"), 9, 2_000))
+        .await
+        .expect("bob run");
+
+    // include_usernames = true → both names resolved.
+    let named = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, true)
+        .await
+        .expect("named board");
+    assert_eq!(named.len(), 2);
+    let mut names: Vec<String> = named.iter().filter_map(|e| e.username.clone()).collect();
+    names.sort();
+    assert_eq!(names, vec![alice.username.clone(), bob.username.clone()]);
+
+    // include_usernames = false → no names resolved.
+    let anon = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, false)
+        .await
+        .expect("anon board");
+    assert!(anon.iter().all(|e| e.username.is_none()));
 }

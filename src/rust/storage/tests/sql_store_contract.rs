@@ -833,3 +833,9 @@ async fn score_delete_user_cascades_boards_of_owned_mazes() {
     let mut s = fresh_store().await;
     contract::score_delete_user_cascades_boards_of_owned_mazes(&mut s).await;
 }
+
+#[tokio::test]
+async fn score_leaderboard_includes_usernames_when_requested() {
+    let mut s = fresh_store().await;
+    contract::score_leaderboard_includes_usernames_when_requested(&mut s).await;
+}

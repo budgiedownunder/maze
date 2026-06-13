@@ -322,6 +322,19 @@ pub struct ScoreOrdering {
 /// them. One row per completed run — "best" is a query, not a stored flag.
 /// The board/history reads are **paged** (`limit` + `offset`); callers cap
 /// `limit` to a sane maximum.
+/// A leaderboard row: a recorded run plus the player's `username` when the
+/// caller asked for it (`include_usernames`). `username` is `None` when names
+/// weren't requested, or when the player can't be resolved. The username is
+/// resolved by the storage layer (each backend picks its strategy — e.g.
+/// SqlStore joins `users` in the board query) rather than by callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScoreboardEntry {
+    /// The recorded run.
+    pub entry: ScoreEntry,
+    /// The player's username, when resolved.
+    pub username: Option<String>,
+}
+
 #[async_trait]
 pub trait ScoreStore {
     /// Records a completed run. The caller supplies a fully-populated
@@ -329,25 +342,30 @@ pub trait ScoreStore {
     /// is violated (neither or both of `maze_id` / `challenge` set). Returns the
     /// row id on success.
     async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error>;
-    /// A page of the leaderboard for a user maze, ranked by `ordering`.
+    /// A page of the leaderboard for a user maze, ranked by `ordering`. When
+    /// `include_usernames` is set, each row carries the player's username
+    /// (resolved by the backend); otherwise `username` is `None`.
     async fn maze_leaderboard(
         &self,
         maze_id: &str,
         ordering: ScoreOrdering,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<ScoreEntry>, Error>;
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error>;
     /// A page of the leaderboard for a curated/shared challenge, ranked by
-    /// `ordering`.
+    /// `ordering`. `include_usernames` behaves as for [`maze_leaderboard`].
     async fn challenge_leaderboard(
         &self,
         challenge: &str,
         ordering: ScoreOrdering,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<ScoreEntry>, Error>;
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error>;
     /// A page of a player's own run history, most recent first
-    /// (`recorded_at` descending, `id` descending).
+    /// (`recorded_at` descending, `id` descending). No usernames — every row is
+    /// the caller.
     async fn user_history(
         &self,
         user_id: Uuid,

@@ -13,7 +13,7 @@
 
 use crate::store::{
     EmailAuditLog, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore,
-    SortDirection, TokenStore, UserStore,
+    ScoreboardEntry, SortDirection, TokenStore, UserStore,
 };
 use crate::{
     validation::{validate_email_format, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_user_fields},
@@ -3922,13 +3922,36 @@ fn score_order_by_clause(ordering: ScoreOrdering) -> String {
         SortDirection::Ascending => "ASC",
         SortDirection::Descending => "DESC",
     };
+    // Columns are `s.`-qualified: the board queries alias `score_history` as
+    // `s`, and the `id` tiebreaker is otherwise ambiguous when the optional
+    // `LEFT JOIN users u` is present.
     match ordering.metric {
         ScoreMetric::Time => {
-            format!("elapsed_ms {primary}, score DESC, recorded_at ASC, id ASC")
+            format!("s.elapsed_ms {primary}, s.score DESC, s.recorded_at ASC, s.id ASC")
         }
         ScoreMetric::Score => {
-            format!("score {primary}, elapsed_ms ASC, recorded_at ASC, id ASC")
+            format!("s.score {primary}, s.elapsed_ms ASC, s.recorded_at ASC, s.id ASC")
         }
+    }
+}
+
+/// Builds the board SELECT for a single `WHERE` column (`maze_id` or
+/// `challenge`). When `include_usernames` is set, joins `users` so each row
+/// carries the player's `username` in one round-trip; otherwise selects the
+/// score columns alone.
+fn score_board_sql(where_col: &str, ordering: ScoreOrdering, include_usernames: bool) -> String {
+    let order = score_order_by_clause(ordering);
+    if include_usernames {
+        format!(
+            "SELECT s.*, u.username FROM score_history s \
+             LEFT JOIN users u ON u.id = s.user_id \
+             WHERE s.{where_col} = ? ORDER BY {order} LIMIT ? OFFSET ?"
+        )
+    } else {
+        format!(
+            "SELECT s.* FROM score_history s \
+             WHERE s.{where_col} = ? ORDER BY {order} LIMIT ? OFFSET ?"
+        )
     }
 }
 
@@ -3954,6 +3977,19 @@ fn score_entry_from_row(row: &AnyRow) -> Result<ScoreEntry, Error> {
         elapsed_ms: elapsed_ms as u64,
         recorded_at,
     })
+}
+
+/// Deserialises a board row into a [`ScoreboardEntry`]. Reads the joined
+/// `username` column only when `with_username` is set (it is absent from the
+/// SELECT otherwise).
+fn scoreboard_entry_from_row(row: &AnyRow, with_username: bool) -> Result<ScoreboardEntry, Error> {
+    let entry = score_entry_from_row(row)?;
+    let username = if with_username {
+        row.try_get::<Option<String>, _>("username").map_err(map_sqlx_err)?
+    } else {
+        None
+    };
+    Ok(ScoreboardEntry { entry, username })
 }
 
 #[async_trait]
@@ -4005,11 +4041,12 @@ impl ScoreStore for SqlStore {
     ///     direction: SortDirection::Descending,
     /// };
     /// let board = store
-    ///     .challenge_leaderboard("hard:42", highest, 10, 0)
+    ///     .challenge_leaderboard("hard:42", highest, 10, 0, true)
     ///     .await
     ///     .expect("challenge_leaderboard");
     /// assert_eq!(board.len(), 1);
-    /// assert_eq!(board[0].score, 5);
+    /// assert_eq!(board[0].entry.score, 5);
+    /// assert_eq!(board[0].username.as_deref(), Some("alice"));
     /// # });
     /// ```
     async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error> {
@@ -4042,11 +4079,9 @@ impl ScoreStore for SqlStore {
         ordering: ScoreOrdering,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<ScoreEntry>, Error> {
-        let sql = format!(
-            "SELECT * FROM score_history WHERE maze_id = ? ORDER BY {} LIMIT ? OFFSET ?",
-            score_order_by_clause(ordering)
-        );
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error> {
+        let sql = score_board_sql("maze_id", ordering, include_usernames);
         let rows = sqlx::query(&q(self.kind, &sql))
             .bind(maze_id)
             .bind(i64::from(limit))
@@ -4054,7 +4089,7 @@ impl ScoreStore for SqlStore {
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-        rows.iter().map(score_entry_from_row).collect()
+        rows.iter().map(|r| scoreboard_entry_from_row(r, include_usernames)).collect()
     }
 
     async fn challenge_leaderboard(
@@ -4063,11 +4098,9 @@ impl ScoreStore for SqlStore {
         ordering: ScoreOrdering,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<ScoreEntry>, Error> {
-        let sql = format!(
-            "SELECT * FROM score_history WHERE challenge = ? ORDER BY {} LIMIT ? OFFSET ?",
-            score_order_by_clause(ordering)
-        );
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error> {
+        let sql = score_board_sql("challenge", ordering, include_usernames);
         let rows = sqlx::query(&q(self.kind, &sql))
             .bind(challenge)
             .bind(i64::from(limit))
@@ -4075,7 +4108,7 @@ impl ScoreStore for SqlStore {
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-        rows.iter().map(score_entry_from_row).collect()
+        rows.iter().map(|r| scoreboard_entry_from_row(r, include_usernames)).collect()
     }
 
     async fn user_history(
@@ -4215,20 +4248,26 @@ mod tests {
             direction: SortDirection::Descending,
         };
 
-        let fast = store.challenge_leaderboard("hard:1", fastest, 10, 0).await.unwrap();
-        assert_eq!(fast.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>(), vec![1000, 3000, 5000]);
+        let fast = store.challenge_leaderboard("hard:1", fastest, 10, 0, false).await.unwrap();
+        assert_eq!(fast.iter().map(|e| e.entry.elapsed_ms).collect::<Vec<_>>(), vec![1000, 3000, 5000]);
 
         // Reversed direction surfaces the slowest first.
-        let slow = store.challenge_leaderboard("hard:1", slowest, 10, 0).await.unwrap();
-        assert_eq!(slow.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>(), vec![5000, 3000, 1000]);
+        let slow = store.challenge_leaderboard("hard:1", slowest, 10, 0, false).await.unwrap();
+        assert_eq!(slow.iter().map(|e| e.entry.elapsed_ms).collect::<Vec<_>>(), vec![5000, 3000, 1000]);
 
-        let high = store.challenge_leaderboard("hard:1", highest, 10, 0).await.unwrap();
-        assert_eq!(high.iter().map(|e| e.score).collect::<Vec<_>>(), vec![10, 6, 2]);
+        let high = store.challenge_leaderboard("hard:1", highest, 10, 0, false).await.unwrap();
+        assert_eq!(high.iter().map(|e| e.entry.score).collect::<Vec<_>>(), vec![10, 6, 2]);
+        // No usernames requested → none resolved.
+        assert!(high.iter().all(|e| e.username.is_none()));
 
         // Paging: limit 1, offset 1 of fastest → the middle (3000 ms) run.
-        let page = store.challenge_leaderboard("hard:1", fastest, 1, 1).await.unwrap();
+        let page = store.challenge_leaderboard("hard:1", fastest, 1, 1, false).await.unwrap();
         assert_eq!(page.len(), 1);
-        assert_eq!(page[0].elapsed_ms, 3000);
+        assert_eq!(page[0].entry.elapsed_ms, 3000);
+
+        // include_usernames=true joins the player's name in.
+        let named = store.challenge_leaderboard("hard:1", highest, 10, 0, true).await.unwrap();
+        assert!(named.iter().all(|e| e.username.as_deref() == Some("alice")));
     }
 
     #[tokio::test]

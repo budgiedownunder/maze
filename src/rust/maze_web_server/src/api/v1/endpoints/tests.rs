@@ -24,7 +24,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreboardEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -144,6 +144,26 @@ mod test_definitions {
                 return Ok(mock_user);
             }
             Err(StoreError::UserIdNotFound(id.to_string()))
+        }
+
+        /// Wraps a board page into `ScoreboardEntry`s, resolving each row's
+        /// username from the mock users when requested (mirrors the real
+        /// stores' storage-owned resolution).
+        fn attach_mock_usernames(
+            &self,
+            page: Vec<ScoreEntry>,
+            include_usernames: bool,
+        ) -> Vec<ScoreboardEntry> {
+            page.into_iter()
+                .map(|entry| {
+                    let username = if include_usernames {
+                        self.users.get(&entry.user_id).map(|u| u.user.username.clone())
+                    } else {
+                        None
+                    };
+                    ScoreboardEntry { entry, username }
+                })
+                .collect()
         }
 
         /// Find the api key to use for a given username. If the username does not exist,
@@ -741,14 +761,16 @@ mod test_definitions {
             ordering: ScoreOrdering,
             limit: u32,
             offset: u32,
-        ) -> Result<Vec<ScoreEntry>, StoreError> {
-            Ok(mock_paged_board(
+            include_usernames: bool,
+        ) -> Result<Vec<ScoreboardEntry>, StoreError> {
+            let page = mock_paged_board(
                 &self.scores,
                 |e| e.maze_id.as_deref() == Some(maze_id),
                 ordering,
                 limit,
                 offset,
-            ))
+            );
+            Ok(self.attach_mock_usernames(page, include_usernames))
         }
         async fn challenge_leaderboard(
             &self,
@@ -756,14 +778,16 @@ mod test_definitions {
             ordering: ScoreOrdering,
             limit: u32,
             offset: u32,
-        ) -> Result<Vec<ScoreEntry>, StoreError> {
-            Ok(mock_paged_board(
+            include_usernames: bool,
+        ) -> Result<Vec<ScoreboardEntry>, StoreError> {
+            let page = mock_paged_board(
                 &self.scores,
                 |e| e.challenge.as_deref() == Some(challenge),
                 ordering,
                 limit,
                 offset,
-            ))
+            );
+            Ok(self.attach_mock_usernames(page, include_usernames))
         }
         async fn user_history(
             &self,

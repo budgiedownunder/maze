@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -15,7 +16,7 @@ use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{
     EmailAuditLog, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore,
-    SortDirection, TokenStore, UserStore,
+    ScoreboardEntry, SortDirection, TokenStore, UserStore,
 };
 use crate::{
     file_store_migration,
@@ -3199,6 +3200,40 @@ fn paged_board(
         .collect()
 }
 
+impl FileStore {
+    /// Wraps a board page into [`ScoreboardEntry`]s, resolving each row's
+    /// player username when `include_usernames` is set. Reads each distinct
+    /// player once (`load_user_if_present` — `None` for an absent player) and
+    /// caches it. Deleted players never reach here: the delete cascade removes
+    /// their score rows first.
+    fn attach_usernames(
+        &self,
+        page: Vec<ScoreEntry>,
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error> {
+        if !include_usernames {
+            return Ok(page
+                .into_iter()
+                .map(|entry| ScoreboardEntry { entry, username: None })
+                .collect());
+        }
+        let mut cache: HashMap<Uuid, Option<String>> = HashMap::new();
+        let mut out = Vec::with_capacity(page.len());
+        for entry in page {
+            let username = match cache.get(&entry.user_id) {
+                Some(name) => name.clone(),
+                None => {
+                    let name = self.load_user_if_present(entry.user_id)?.map(|u| u.username);
+                    cache.insert(entry.user_id, name.clone());
+                    name
+                }
+            };
+            out.push(ScoreboardEntry { entry, username });
+        }
+        Ok(out)
+    }
+}
+
 #[async_trait]
 impl ScoreStore for FileStore {
     async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error> {
@@ -3216,15 +3251,17 @@ impl ScoreStore for FileStore {
         ordering: ScoreOrdering,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<ScoreEntry>, Error> {
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error> {
         let all = self.read_all_score_entries()?;
-        Ok(paged_board(
+        let page = paged_board(
             all,
             |e| e.maze_id.as_deref() == Some(maze_id),
             ordering,
             limit,
             offset,
-        ))
+        );
+        self.attach_usernames(page, include_usernames)
     }
 
     async fn challenge_leaderboard(
@@ -3233,15 +3270,17 @@ impl ScoreStore for FileStore {
         ordering: ScoreOrdering,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<ScoreEntry>, Error> {
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error> {
         let all = self.read_all_score_entries()?;
-        Ok(paged_board(
+        let page = paged_board(
             all,
             |e| e.challenge.as_deref() == Some(challenge),
             ordering,
             limit,
             offset,
-        ))
+        );
+        self.attach_usernames(page, include_usernames)
     }
 
     async fn user_history(
@@ -3353,15 +3392,20 @@ mod tests {
         let fastest = ScoreOrdering { metric: ScoreMetric::Time, direction: SortDirection::Ascending };
         let highest = ScoreOrdering { metric: ScoreMetric::Score, direction: SortDirection::Descending };
 
-        let fast = store.challenge_leaderboard("hard:1", fastest, 10, 0).await.unwrap();
-        assert_eq!(fast.iter().map(|e| e.elapsed_ms).collect::<Vec<_>>(), vec![1000, 3000, 5000]);
-        let high = store.challenge_leaderboard("hard:1", highest, 10, 0).await.unwrap();
-        assert_eq!(high.iter().map(|e| e.score).collect::<Vec<_>>(), vec![10, 6, 2]);
+        let fast = store.challenge_leaderboard("hard:1", fastest, 10, 0, false).await.unwrap();
+        assert_eq!(fast.iter().map(|e| e.entry.elapsed_ms).collect::<Vec<_>>(), vec![1000, 3000, 5000]);
+        let high = store.challenge_leaderboard("hard:1", highest, 10, 0, false).await.unwrap();
+        assert_eq!(high.iter().map(|e| e.entry.score).collect::<Vec<_>>(), vec![10, 6, 2]);
+        assert!(high.iter().all(|e| e.username.is_none()));
 
         // Paging: limit 1, offset 1 of fastest → the middle (3000 ms) run.
-        let page = store.challenge_leaderboard("hard:1", fastest, 1, 1).await.unwrap();
+        let page = store.challenge_leaderboard("hard:1", fastest, 1, 1, false).await.unwrap();
         assert_eq!(page.len(), 1);
-        assert_eq!(page[0].elapsed_ms, 3000);
+        assert_eq!(page[0].entry.elapsed_ms, 3000);
+
+        // include_usernames=true resolves the player's name.
+        let named = store.challenge_leaderboard("hard:1", highest, 10, 0, true).await.unwrap();
+        assert!(named.iter().all(|e| e.username.as_deref() == Some("alice")));
     }
 
     #[tokio::test]
