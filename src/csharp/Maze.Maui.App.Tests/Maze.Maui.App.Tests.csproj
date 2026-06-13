@@ -75,6 +75,16 @@
              Link="LinkedSource\Models\ScoreSubject.cs" />
     <Compile Include="..\Maze.Maui.App\Services\ScoreRequestPaths.cs"
              Link="LinkedSource\Services\ScoreRequestPaths.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IScoresService.cs"
+             Link="LinkedSource\Services\IScoresService.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IGameConfigService.cs"
+             Link="LinkedSource\Services\IGameConfigService.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\LeaderboardRow.cs"
+             Link="LinkedSource\Models\LeaderboardRow.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\LeaderboardSelection.cs"
+             Link="LinkedSource\ViewModels\LeaderboardSelection.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\LeaderboardsViewModel.cs"
+             Link="LinkedSource\ViewModels\LeaderboardsViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\Messages\MazesInvalidatedMessage.cs"
              Link="LinkedSource\Messages\MazesInvalidatedMessage.cs" />
     <Compile Include="..\Maze.Maui.App\Messages\NewMazeItemMessage.cs"

@@ -98,6 +98,7 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<ForgotPasswordViewModel>();
             builder.Services.AddSingleton<HomeViewModel>();
             builder.Services.AddSingleton<MazesViewModel>();
+            builder.Services.AddTransient<LeaderboardsViewModel>();
             builder.Services.AddTransient<MazeViewModel>();
             builder.Services.AddTransient<MazeGameViewModel>();
             builder.Services.AddSingleton<AccountViewModel>();
