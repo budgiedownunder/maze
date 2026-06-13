@@ -117,8 +117,8 @@ namespace Maze.Maui.App.Views
                 if (_logger.IsEnabled(LogLevel.Information))
                 {
                     _logger.LogInformation(
-                        "Play3dGamePage: GameResult outcome={Outcome} elapsedMs={ElapsedMs} difficulty={Difficulty} rows={Rows} cols={Cols} seed={Seed}",
-                        result.Outcome, result.ElapsedMs, result.Difficulty ?? "(none)", result.Rows, result.Cols, result.Seed);
+                        "Play3dGamePage: GameResult outcome={Outcome} elapsedMs={ElapsedMs} score={Score} difficulty={Difficulty} rows={Rows} cols={Cols} seed={Seed}",
+                        result.Outcome, result.ElapsedMs, result.Score, result.Difficulty ?? "(none)", result.Rows, result.Cols, result.Seed);
                 }
             });
         }
