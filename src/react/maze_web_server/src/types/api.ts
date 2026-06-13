@@ -108,6 +108,7 @@ export interface ScoreEntry {
   score: number
   elapsed_ms: number
   recorded_at: string
+  username?: string | null
 }
 
 // A page of a leaderboard or personal history. Mirrors the server's

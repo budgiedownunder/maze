@@ -61,6 +61,40 @@ describe('getLeaderboard', () => {
     expect(url.searchParams.has('direction')).toBe(false)
     expect(url.searchParams.has('limit')).toBe(false)
     expect(url.searchParams.has('offset')).toBe(false)
+    expect(url.searchParams.has('include_usernames')).toBe(false)
+  })
+
+  it('forwards includeUsernames as the include_usernames param', async () => {
+    const capTrue = captureBoard('/scores')
+    await getLeaderboard(TOKEN, { challenge: 'easy:1', includeUsernames: true })
+    expect(capTrue.url().searchParams.get('include_usernames')).toBe('true')
+
+    const capFalse = captureBoard('/scores')
+    await getLeaderboard(TOKEN, { mazeId: 'maze-1', includeUsernames: false })
+    expect(capFalse.url().searchParams.get('include_usernames')).toBe('false')
+  })
+
+  it('parses a row username off the board response', async () => {
+    const board: ScoreBoardResponse = {
+      scores: [
+        {
+          id: 'a',
+          user_id: 'u',
+          maze_id: null,
+          challenge: 'easy:1',
+          score: 5,
+          elapsed_ms: 1000,
+          recorded_at: '2025-04-01T12:00:00Z',
+          username: 'alice',
+        },
+      ],
+      limit: 20,
+      offset: 0,
+      has_more: false,
+    }
+    server.use(http.get('/api/v1/scores', () => HttpResponse.json(board)))
+    const result = await getLeaderboard(TOKEN, { challenge: 'easy:1', includeUsernames: true })
+    expect(result.scores[0].username).toBe('alice')
   })
 
   it('parses the board response', async () => {

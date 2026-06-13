@@ -226,6 +226,7 @@ export interface LeaderboardQuery {
   direction?: SortDirection
   limit?: number
   offset?: number
+  includeUsernames?: boolean
 }
 
 export interface HistoryQuery {
@@ -247,6 +248,7 @@ export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<
   if (query.direction != null) params.set('direction', query.direction)
   if (query.limit != null) params.set('limit', String(query.limit))
   if (query.offset != null) params.set('offset', String(query.offset))
+  if (query.includeUsernames != null) params.set('include_usernames', String(query.includeUsernames))
   return request<ScoreBoardResponse>(`/scores?${params.toString()}`, {
     headers: authHeaders(token),
   })
