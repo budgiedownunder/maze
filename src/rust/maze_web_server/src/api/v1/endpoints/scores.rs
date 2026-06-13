@@ -23,6 +23,7 @@ use actix_web::{
 use chrono::{DateTime, Utc};
 use data_model::User;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use storage::{Error as StoreError, ScoreEntry, ScoreMetric, ScoreOrdering, SharedStore, SortDirection};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -71,6 +72,9 @@ pub struct ScoreResponse {
     /// When the run was recorded (server-stamped).
     #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
     pub recorded_at: DateTime<Utc>,
+    /// Optional player username
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
 }
 
 impl From<ScoreEntry> for ScoreResponse {
@@ -83,6 +87,7 @@ impl From<ScoreEntry> for ScoreResponse {
             score: entry.score,
             elapsed_ms: entry.elapsed_ms,
             recorded_at: entry.recorded_at,
+            username: None,
         }
     }
 }
@@ -234,6 +239,7 @@ pub struct LeaderboardQuery {
     pub direction: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+    pub include_usernames: Option<bool>,
 }
 
 /// Query parameters for the personal-history endpoint.
@@ -279,7 +285,8 @@ pub struct ScoreBoardResponse {
         ("metric" = Option<String>, Query, description = "Ranking metric: 'time' (default) or 'score'"),
         ("direction" = Option<String>, Query, description = "Sort direction: 'asc' or 'desc' (defaults to best-first for the metric)"),
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
-        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
+        ("include_usernames" = Option<bool>, Query, description = "Resolve + include each row's player username (default true; set false for personal boards)")
     ),
     responses(
         (status = 200, description = "A leaderboard page", body = ScoreBoardResponse),
@@ -324,13 +331,35 @@ pub async fn get_leaderboard(
         }
     };
 
-    match result {
-        Ok(entries) => Ok(HttpResponse::Ok().json(build_board(entries, limit, offset))),
+    let entries = match result {
+        Ok(entries) => entries,
         Err(err) => {
             log::warn!("leaderboard store error: {err}");
-            Err(ErrorInternalServerError("Failed to read leaderboard"))
+            return Err(ErrorInternalServerError("Failed to read leaderboard"));
+        }
+    };
+
+    let mut board = build_board(entries, limit, offset);
+
+    // Resolve player usernames for the trimmed page when requested (the
+    // default). Personal/unshared boards pass `include_usernames=false` since
+    // every row is the caller. The lookup is over the page's distinct user ids
+    // (≤ the page size), via the existing user store.
+    if q.include_usernames.unwrap_or(true) {
+        let mut usernames: HashMap<Uuid, String> = HashMap::new();
+        for row in &board.scores {
+            if let std::collections::hash_map::Entry::Vacant(slot) = usernames.entry(row.user_id) {
+                if let Ok(user) = store_lock.get_user(row.user_id).await {
+                    slot.insert(user.username);
+                }
+            }
+        }
+        for row in &mut board.scores {
+            row.username = usernames.get(&row.user_id).cloned();
         }
     }
+
+    Ok(HttpResponse::Ok().json(board))
 }
 
 // ---------------------------------------------------------------------------

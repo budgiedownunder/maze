@@ -7247,4 +7247,88 @@ mod test_definitions {
         let req = create_test_get_request("/api/v1/scores/me", None, None);
         test::call_service(&app, req).await;
     }
+
+    // -----------------------------------------------------------------------
+    // GET /api/v1/scores — player usernames (include_usernames)
+    // -----------------------------------------------------------------------
+
+    /// The api key the mock store allocated for a username, so a test can post a
+    /// run as a player other than the caller.
+    fn api_key_for(mock_users: &HashMap<Uuid, MockUser>, username: &str) -> Uuid {
+        mock_users
+            .values()
+            .find(|u| u.user.username == username)
+            .expect("user present in mock store")
+            .user
+            .api_key
+    }
+
+    async fn post_challenge_score(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+        challenge: &str,
+        score: u64,
+        elapsed_ms: u64,
+    ) {
+        let body = RecordScoreRequest {
+            maze_id: None,
+            challenge: Some(challenge.to_string()),
+            score,
+            elapsed_ms,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        assert_eq!(test::call_service(app, req).await.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_includes_usernames_for_multiple_players() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 2, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let user2_key = api_key_for(&mock_users, VALID_USERNAME_2);
+
+        // user_1 (the caller) posts via login token; user_2 posts via api key.
+        post_challenge_score(&app, api_key, login_id, "easy:1", 5, 1000).await;
+        post_challenge_score(&app, Some(user2_key), None, "easy:1", 9, 2000).await;
+
+        // Default (param omitted) → usernames resolved + present for both players.
+        let board = read_board(&app, "/api/v1/scores?challenge=easy:1", api_key, login_id).await;
+        assert_eq!(board.scores.len(), 2);
+        let names: std::collections::HashSet<String> =
+            board.scores.iter().filter_map(|s| s.username.clone()).collect();
+        assert!(names.contains(VALID_USERNAME_1), "caller username present: {names:?}");
+        assert!(names.contains(VALID_USERNAME_2), "other player username present: {names:?}");
+    }
+
+    #[tokio::test]
+    async fn leaderboard_omits_usernames_when_excluded() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 2, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let user2_key = api_key_for(&mock_users, VALID_USERNAME_2);
+        post_challenge_score(&app, api_key, login_id, "easy:1", 5, 1000).await;
+        post_challenge_score(&app, Some(user2_key), None, "easy:1", 9, 2000).await;
+
+        // include_usernames=false → every row's username is absent.
+        let board = read_board(
+            &app,
+            "/api/v1/scores?challenge=easy:1&include_usernames=false",
+            api_key,
+            login_id,
+        )
+        .await;
+        assert_eq!(board.scores.len(), 2);
+        assert!(board.scores.iter().all(|s| s.username.is_none()));
+
+        // Explicit include_usernames=true → present (parity with the default).
+        let board_true = read_board(
+            &app,
+            "/api/v1/scores?challenge=easy:1&include_usernames=true",
+            api_key,
+            login_id,
+        )
+        .await;
+        assert!(board_true.scores.iter().all(|s| s.username.is_some()));
+    }
 }
