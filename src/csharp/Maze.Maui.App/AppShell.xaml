@@ -46,6 +46,8 @@
     <MenuItem Text="Design &amp; Play"
               IconImageSource="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
               Clicked="OnDesignAndPlayMenuItemClicked" />
+    <MenuItem Text="Leaderboards"
+              Clicked="OnLeaderboardsMenuItemClicked" />
     <MenuItem IsEnabled="False"
               Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
     <MenuItem Text="My Account"

@@ -26,6 +26,11 @@
     <Color x:Key="Fail">#DC2626</Color>
     <Color x:Key="FailDark">#F87171</Color>
 
+    <!-- Leaderboard "your row" highlight on multi-player (Play 3D) boards.
+         Soft lime-green tint marking the caller's own entries. -->
+    <Color x:Key="LeaderboardHighlight">#EAF6D0</Color>
+    <Color x:Key="LeaderboardHighlightDark">#36441E</Color>
+
     <Color x:Key="White">White</Color>
     <Color x:Key="Black">Black</Color>
     <Color x:Key="Magenta">#D600AA</Color>

@@ -38,6 +38,7 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(ForgotPasswordPage), typeof(ForgotPasswordPage));
             Routing.RegisterRoute(nameof(AccountPage), typeof(AccountPage));
             Routing.RegisterRoute(nameof(MazesPage), typeof(MazesPage));
+            Routing.RegisterRoute(nameof(LeaderboardsPage), typeof(LeaderboardsPage));
         }
 
         /// <summary>
@@ -75,6 +76,15 @@ namespace Maze.Maui.App
         {
             FlyoutIsPresented = false;
             await GoToAsync(nameof(MazesPage));
+        }
+
+        /// <summary>
+        /// Navigates to the Leaderboards page.
+        /// </summary>
+        private async void OnLeaderboardsMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync(nameof(LeaderboardsPage));
         }
 
         /// <summary>

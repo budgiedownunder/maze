@@ -111,6 +111,7 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<AppShell>();
             builder.Services.AddSingleton<HomePage>();
             builder.Services.AddSingleton<MazesPage>();
+            builder.Services.AddTransient<LeaderboardsPage>();
             builder.Services.AddTransient<MazePage>();
             builder.Services.AddTransient<MazeGamePage>();
             builder.Services.AddTransient<Play3dGamePage>();
