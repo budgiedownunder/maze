@@ -1613,6 +1613,13 @@
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
+/* Match the leaderboard table-header font combination (.leaderboard-table th). */
+.subject-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
 .subject-select {
   padding: 6px 8px;
   border: 1px solid var(--border-input);

@@ -185,6 +185,7 @@ export function LeaderboardsPage() {
         )}
         {!isLoadingSubjects && !subjectsError && (
           <>
+            <span className="subject-label" aria-hidden="true">Game</span>
             <SubjectSelector
               mazes={mazes}
               value={selection}
