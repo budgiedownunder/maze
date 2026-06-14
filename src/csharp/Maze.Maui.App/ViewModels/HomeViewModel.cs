@@ -46,13 +46,25 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <summary>
-        /// Navigates to the maze list page (Design and Play).
+        /// Navigates to the maze list page.
         /// </summary>
         /// <returns>Task</returns>
         [RelayCommand]
-        async Task GoToDesignAndPlayAsync()
+        async Task GoToMazesAsync()
         {
+            // String route (not nameof) — the test project file-links this view
+            // model but not the Page types, so the symbols aren't in scope there.
             await _navigationService.GoToAsync("MazesPage");
+        }
+
+        /// <summary>
+        /// Navigates to the Leaderboards page.
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        async Task GoToLeaderboardsAsync()
+        {
+            await _navigationService.GoToAsync("LeaderboardsPage");
         }
     }
 }

@@ -1,23 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:Maze.Maui.App.Converters"
              xmlns:model="clr-namespace:Maze.Maui.App.Models"
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
              x:DataType="viewmodel:LeaderboardsViewModel"
              x:Class="Maze.Maui.App.Views.LeaderboardsPage"
              Title="{Binding Title}">
 
+    <ContentPage.Resources>
+        <converters:BoolToGridLengthConverter x:Key="BoolToGridLength" />
+    </ContentPage.Resources>
+
     <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="10" RowSpacing="8">
 
         <!-- Subject selector: Game Type -> Game -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,*" ColumnSpacing="6" VerticalOptions="Center">
+        <!-- Subject selector — left-aligned, each picker sized to its content
+             (Auto columns), mirroring the web's content-sized <select> row. -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="10"
+              HorizontalOptions="Start" VerticalOptions="Center">
             <Picker Grid.Column="0"
+                    MinimumWidthRequest="110"
                     ItemsSource="{Binding GameTypes}"
                     ItemDisplayBinding="{Binding Label}"
                     SelectedItem="{Binding SelectedGameType}" />
             <Label Grid.Column="1" Text="→" FontSize="18" VerticalOptions="Center" />
             <Picker Grid.Column="2"
                     x:Name="GamePicker"
+                    MinimumWidthRequest="110"
                     ItemsSource="{Binding Games}"
                     ItemDisplayBinding="{Binding Label}"
                     SelectedItem="{Binding SelectedGame}"
@@ -28,7 +38,8 @@
              background is driven purely by our DataTrigger — the default Button
              visual-state manager would otherwise re-apply its own colour and
              stop the inactive tab from reverting. -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="6">
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="6"
+              HorizontalOptions="Start" WidthRequest="326">
             <Border Grid.Column="0" StrokeThickness="0" StrokeShape="RoundRectangle 6"
                     BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
                 <Border.Triggers>
@@ -78,8 +89,15 @@
             <ScrollView Orientation="Horizontal">
                 <Grid RowDefinitions="Auto,*" HorizontalOptions="Start">
                     <Grid Grid.Row="0"
-                          ColumnDefinitions="44,140,96,64,160" ColumnSpacing="8" Padding="6,6"
+                          ColumnSpacing="8" Padding="6,6"
                           BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="{Binding ShowPlayerColumn, Converter={StaticResource BoolToGridLength}, ConverterParameter=140}" />
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="160" />
+                        </Grid.ColumnDefinitions>
                         <Label Grid.Column="0" Text="#" FontAttributes="Bold" />
                         <Label Grid.Column="1" Text="Player" FontAttributes="Bold" IsVisible="{Binding ShowPlayerColumn}" />
                         <Label Grid.Column="2" Text="Time" FontAttributes="Bold" />
@@ -92,7 +110,14 @@
                                     SelectionMode="None">
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="model:LeaderboardRow">
-                                <Grid ColumnDefinitions="44,140,96,64,160" ColumnSpacing="8" Padding="6,6">
+                                <Grid ColumnSpacing="8" Padding="6,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="{Binding ShowPlayer, Converter={StaticResource BoolToGridLength}, ConverterParameter=140}" />
+                                        <ColumnDefinition Width="96" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="160" />
+                                    </Grid.ColumnDefinitions>
                                     <Grid.Triggers>
                                         <DataTrigger TargetType="Grid" Binding="{Binding IsHighlighted}" Value="True">
                                             <Setter Property="BackgroundColor"
@@ -102,7 +127,7 @@
                                     <Label Grid.Column="0" Text="{Binding Rank}" />
                                     <Label Grid.Column="1" Text="{Binding Player}" LineBreakMode="TailTruncation"
                                            ToolTipProperties.Text="{Binding Player}"
-                                           IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:LeaderboardsViewModel}}, Path=ShowPlayerColumn}" />
+                                           IsVisible="{Binding ShowPlayer}" />
                                     <Label Grid.Column="2" Text="{Binding Time}" />
                                     <Label Grid.Column="3" Text="{Binding Score}" />
                                     <Label Grid.Column="4" Text="{Binding Completed}" LineBreakMode="TailTruncation"
@@ -126,10 +151,14 @@
                                HorizontalOptions="Center" VerticalOptions="Center" />
         </Grid>
 
-        <!-- Load more -->
+        <!-- Load more: left-aligned, fills the content width up to a cap and
+             shrinks on narrow screens (width computed in the code-behind). -->
         <Button Grid.Row="3"
+                x:Name="LoadMoreButton"
                 Text="Load more"
                 Command="{Binding LoadMoreCommand}"
-                IsVisible="{Binding HasMore}" />
+                IsVisible="{Binding HasMore}"
+                HorizontalOptions="Start" />
+
     </Grid>
 </ContentPage>

@@ -27,13 +27,18 @@ namespace Maze.Maui.App.Models
         /// <summary>Whether this row is the caller's on a multi-player board.</summary>
         public bool IsHighlighted { get; }
 
+        /// <summary>Whether the Player column is shown for this board (Play-3D
+        /// only). Drives both the cell visibility and the column's width collapse.</summary>
+        public bool ShowPlayer { get; }
+
         /// <summary>
         /// Builds a display row from a recorded entry.
         /// </summary>
         /// <param name="rank">1-based board position</param>
         /// <param name="entry">The recorded run</param>
         /// <param name="isHighlighted">Whether to highlight this as the caller's row</param>
-        public LeaderboardRow(int rank, ScoreEntry entry, bool isHighlighted)
+        /// <param name="showPlayer">Whether the board shows the Player column</param>
+        public LeaderboardRow(int rank, ScoreEntry entry, bool isHighlighted, bool showPlayer)
         {
             Rank = rank;
             Player = string.IsNullOrEmpty(entry.Username) ? "—" : entry.Username!;
@@ -41,6 +46,7 @@ namespace Maze.Maui.App.Models
             Score = entry.Score.ToString(CultureInfo.CurrentCulture);
             Completed = entry.RecordedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
             IsHighlighted = isHighlighted;
+            ShowPlayer = showPlayer;
         }
 
         /// <summary>

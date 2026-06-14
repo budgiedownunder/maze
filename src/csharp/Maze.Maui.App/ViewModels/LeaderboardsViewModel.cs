@@ -278,7 +278,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 rank++;
                 bool highlight = ShowPlayerColumn && _currentUserId is not null && entry.UserId == _currentUserId;
-                Rows.Add(new LeaderboardRow(rank, entry, highlight));
+                Rows.Add(new LeaderboardRow(rank, entry, highlight, ShowPlayerColumn));
             }
             HasMore = resp.HasMore;
         }

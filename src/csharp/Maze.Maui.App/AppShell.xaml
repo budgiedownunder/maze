@@ -40,13 +40,16 @@
          between groups. -->
     <MenuItem Text="Home"
               Clicked="OnHomeMenuItemClicked" />
+    <MenuItem IsEnabled="False"
+              Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
     <MenuItem Text="Play 3D"
               IconImageSource="{OnPlatform 'icon_play_3d.png', iOS='icon_play_3d_ios.png', MacCatalyst='icon_play_3d_ios.png'}"
               Clicked="OnPlay3dMenuItemClicked" />
-    <MenuItem Text="Design &amp; Play"
+    <MenuItem Text="Mazes"
               IconImageSource="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
-              Clicked="OnDesignAndPlayMenuItemClicked" />
+              Clicked="OnMazesMenuItemClicked" />
     <MenuItem Text="Leaderboards"
+              IconImageSource="icon_leaderboards.png"
               Clicked="OnLeaderboardsMenuItemClicked" />
     <MenuItem IsEnabled="False"
               Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />

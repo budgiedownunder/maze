@@ -70,9 +70,9 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
-        /// Navigates to the maze list (Design and Play).
+        /// Navigates to the maze list.
         /// </summary>
-        private async void OnDesignAndPlayMenuItemClicked(object sender, EventArgs e)
+        private async void OnMazesMenuItemClicked(object sender, EventArgs e)
         {
             FlyoutIsPresented = false;
             await GoToAsync(nameof(MazesPage));
