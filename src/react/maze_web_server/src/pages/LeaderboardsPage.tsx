@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { HamburgerMenu } from '../components/HamburgerMenu'
-import { SubjectSelector, type PlayedMaze, type SubjectSelection } from '../components/SubjectSelector'
+import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useBusyCursor } from '../hooks/useBusyCursor'
@@ -8,13 +8,10 @@ import { useTheme } from '../context/ThemeContext'
 import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getPlay3dConfig } from '../api/client'
 import { buildChallenge } from '../utils/scores'
-import type { ScoreEntry } from '../types/api'
+import { launchPlay3dWithSettings, launchPlay3dCurated } from '../utils/play3dLaunch'
+import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
+import type { Maze, ScoreEntry } from '../types/api'
 import leaderboardsIcon from '../assets/leaderboards.svg'
-
-// Cap on history pages scanned to discover the player's played mazes — bounds
-// the work for a very active player; the server caps each page at 100.
-const MAX_DISCOVERY_PAGES = 25
-const DISCOVERY_PAGE = 100
 
 function parseDifficulty(challenge: string): string {
   return challenge.split(':')[0]
@@ -24,28 +21,26 @@ function basename(id: string): string {
   return id.split(/[\\/]/).pop() ?? id
 }
 
-// A display label for a maze subject. FileStore ids are full file paths, so a
-// score's stored maze_id may not byte-match the current id from getMazes (e.g.
-// a different path prefix). Resolve by exact id, then by filename (recovers the
-// real name across path differences), else a clean label off the filename.
-function mazeLabel(
-  mazeId: string,
-  nameById: Map<string, string>,
-  nameByBasename: Map<string, string>,
-): string {
-  return (
-    nameById.get(mazeId) ??
-    nameByBasename.get(basename(mazeId)) ??
-    basename(mazeId).replace(/\.json$/i, '')
-  )
+// Resolve a history maze_id to a maze in the list. FileStore ids are full file
+// paths, so a score row's stored maze_id may not byte-match the current id from
+// getMazes — match by exact id first, then by filename.
+function resolveMazeId(historyId: string, mazes: MazeOption[]): string | undefined {
+  const exact = mazes.find(m => m.mazeId === historyId)
+  if (exact) return exact.mazeId
+  const bn = basename(historyId)
+  return mazes.find(m => basename(m.mazeId) === bn)?.mazeId
 }
 
-// The board to show first: the subject of the player's most recent run, else a
-// usable default (the Easy global board) so the page is never inert.
-function defaultSelection(mostRecent: ScoreEntry | undefined, played: PlayedMaze[]): SubjectSelection {
-  if (mostRecent?.maze_id) return { gameType: 'my-mazes', mazeId: mostRecent.maze_id }
+// The board to show first: the subject of the player's most recent run (when it
+// maps to a current maze / difficulty), else the first maze, else the Easy
+// global board — so the page is never inert.
+function defaultSelection(mostRecent: ScoreEntry | undefined, mazes: MazeOption[]): SubjectSelection {
+  if (mostRecent?.maze_id) {
+    const id = resolveMazeId(mostRecent.maze_id, mazes)
+    if (id) return { gameType: 'my-mazes', mazeId: id }
+  }
   if (mostRecent?.challenge) return { gameType: 'play3d', difficulty: parseDifficulty(mostRecent.challenge) }
-  if (played.length > 0) return { gameType: 'my-mazes', mazeId: played[0].mazeId }
+  if (mazes.length > 0) return { gameType: 'my-mazes', mazeId: mazes[0].mazeId }
   return { gameType: 'play3d', difficulty: 'easy' }
 }
 
@@ -55,7 +50,10 @@ export function LeaderboardsPage() {
   const token = useToken()
   const { profile } = useAuth()
 
-  const [playedMazes, setPlayedMazes] = useState<PlayedMaze[]>([])
+  const [mazes, setMazes] = useState<MazeOption[]>([])
+  // Full maze records (with game_settings) kept so the Play button can launch a
+  // personal maze in 3D with its saved settings.
+  const [allMazes, setAllMazes] = useState<Maze[]>([])
   const [selection, setSelection] = useState<SubjectSelection | null>(null)
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(true)
   const [subjectsError, setSubjectsError] = useState<string | null>(null)
@@ -64,13 +62,16 @@ export function LeaderboardsPage() {
   const [isResolving, setIsResolving] = useState(false)
   const [resolveError, setResolveError] = useState<string | null>(null)
   const [isBoardLoading, setIsBoardLoading] = useState(false)
+  // Whether the caller has a run on the current board → Play vs "Play Again".
+  const [hasPlayed, setHasPlayed] = useState(false)
   // Busy cursor while any of the page's loads are in flight; cleared on
   // completion or failure.
   useBusyCursor(isLoadingSubjects || isResolving || isBoardLoading)
   // difficulty → fixed seed; the seeds don't change, so resolve each once.
   const seedCache = useRef<Map<string, number>>(new Map())
 
-  // Discover the player's played mazes + pick the initial subject.
+  // List all the player's mazes (the Mazes dropdown shows every maze, scored or
+  // not) + pick the initial subject from their most-recent run.
   useEffect(() => {
     if (!token) return
     let cancelled = false
@@ -78,25 +79,16 @@ export function LeaderboardsPage() {
     setSubjectsError(null)
     ;(async () => {
       try {
-        const mazeIds = new Set<string>()
-        let mostRecent: ScoreEntry | undefined
-        let offset = 0
-        for (let page = 0; page < MAX_DISCOVERY_PAGES; page++) {
-          const resp = await getScoreHistory(token, { limit: DISCOVERY_PAGE, offset })
-          if (page === 0) mostRecent = resp.scores[0]
-          for (const row of resp.scores) if (row.maze_id) mazeIds.add(row.maze_id)
-          if (!resp.has_more) break
-          offset += DISCOVERY_PAGE
-        }
-        const mazes = await getMazes(token, false)
+        // `true` → mazes carry game_settings, needed by the Play button.
+        const loaded = await getMazes(token, true)
+        const history = await getScoreHistory(token, { limit: 1 })
         if (cancelled) return
-        const nameById = new Map(mazes.map(m => [m.id, m.name]))
-        const nameByBasename = new Map(mazes.map(m => [basename(m.id), m.name]))
-        const played: PlayedMaze[] = [...mazeIds]
-          .map(id => ({ mazeId: id, name: mazeLabel(id, nameById, nameByBasename) }))
+        const options: MazeOption[] = loaded
+          .map(m => ({ mazeId: m.id, name: m.name }))
           .sort((a, b) => a.name.localeCompare(b.name))
-        setPlayedMazes(played)
-        setSelection(defaultSelection(mostRecent, played))
+        setAllMazes(loaded)
+        setMazes(options)
+        setSelection(defaultSelection(history.scores[0], options))
       } catch (err) {
         if (!cancelled) setSubjectsError((err as Error).message || 'Failed to load your scores')
       } finally {
@@ -138,7 +130,22 @@ export function LeaderboardsPage() {
     return () => { cancelled = true }
   }, [selection])
 
+  // Launch the selected subject in 3D: a personal maze with its saved settings,
+  // or a curated difficulty (server resolves the preset). No prompt.
+  function handlePlay() {
+    if (selection == null) return
+    if (selection.gameType === 'play3d') {
+      launchPlay3dCurated(selection.difficulty)
+      return
+    }
+    const maze = allMazes.find(m => m.id === selection.mazeId)
+    launchPlay3dWithSettings(selection.mazeId, normalizeMazeGameSettings(maze?.game_settings ?? {}))
+  }
+
   const showPlayer = selection?.gameType === 'play3d'
+  // Nothing to launch when the Mazes type is selected but the player has none
+  // (the maze id is empty); a Play-3D difficulty is always playable.
+  const canPlay = selection != null && (selection.gameType === 'play3d' || selection.mazeId !== '')
 
   return (
     <div className="leaderboards-page">
@@ -169,10 +176,14 @@ export function LeaderboardsPage() {
         {!isLoadingSubjects && !subjectsError && (
           <>
             <SubjectSelector
-              playedMazes={playedMazes}
+              mazes={mazes}
               value={selection}
               onChange={setSelection}
-            />
+            >
+              <button type="button" className="btn-primary leaderboard-play" onClick={handlePlay} disabled={!canPlay}>
+                {hasPlayed ? '↻ Play Again' : 'Play'}
+              </button>
+            </SubjectSelector>
             {resolveError && <p className="error-msg" role="alert">{resolveError}</p>}
             {!resolveError && isResolving && <p aria-label="Loading">Loading…</p>}
             {!resolveError && !isResolving && boardSubject && token && (
@@ -182,6 +193,7 @@ export function LeaderboardsPage() {
                 currentUserId={profile?.id}
                 showPlayer={!!showPlayer}
                 onLoadingChange={setIsBoardLoading}
+                onHasPlayedChange={setHasPlayed}
               />
             )}
             {!resolveError && !isResolving && !boardSubject && (

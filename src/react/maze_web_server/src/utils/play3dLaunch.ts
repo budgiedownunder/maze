@@ -11,3 +11,9 @@ export function launchPlay3dWithSettings(mazeId: string, settings: MazeGameSetti
   saveMazeGameSettings(settings)
   window.location.href = '/game/?id=' + encodeURIComponent(mazeId)
 }
+
+/// Launches a curated Play-3D game by difficulty — the server resolves the
+/// fixed preset/seed. No per-maze settings handoff (presets are server-owned).
+export function launchPlay3dCurated(difficulty: string): void {
+  window.location.href = '/game/?difficulty=' + encodeURIComponent(difficulty)
+}

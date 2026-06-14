@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react'
 import { PLAY3D_DIFFICULTIES } from '../utils/scores'
 
-export interface PlayedMaze {
+export interface MazeOption {
   mazeId: string
   name: string
 }
@@ -14,13 +15,15 @@ export type SubjectSelection =
 type GameType = SubjectSelection['gameType']
 
 interface SubjectSelectorProps {
-  playedMazes: PlayedMaze[]
+  mazes: MazeOption[]
   value: SubjectSelection | null
   onChange: (selection: SubjectSelection) => void
+  // Optional trailing content rendered in the selector row (e.g. a Play button).
+  children?: ReactNode
 }
 
 const GAME_TYPES: { value: GameType; label: string }[] = [
-  { value: 'my-mazes', label: 'My Mazes' },
+  { value: 'my-mazes', label: 'Mazes' },
   { value: 'play3d', label: 'Play 3D' },
 ]
 
@@ -29,9 +32,9 @@ function titleCase(s: string): string {
 }
 
 // Cascading Game Type → game selector. Game Type is a fixed set; the game
-// dropdown is the player's played mazes (My Mazes) or the fixed curated
-// difficulties (Play 3D).
-export function SubjectSelector({ playedMazes, value, onChange }: SubjectSelectorProps) {
+// dropdown is all the player's mazes (Mazes) or the fixed curated difficulties
+// (Play 3D).
+export function SubjectSelector({ mazes, value, onChange, children }: SubjectSelectorProps) {
   const gameType: GameType = value?.gameType ?? 'my-mazes'
   const gameValue = value == null ? '' : value.gameType === 'play3d' ? value.difficulty : value.mazeId
 
@@ -39,7 +42,7 @@ export function SubjectSelector({ playedMazes, value, onChange }: SubjectSelecto
     if (next === 'play3d') {
       onChange({ gameType: 'play3d', difficulty: PLAY3D_DIFFICULTIES[0] })
     } else {
-      onChange({ gameType: 'my-mazes', mazeId: playedMazes[0]?.mazeId ?? '' })
+      onChange({ gameType: 'my-mazes', mazeId: mazes[0]?.mazeId ?? '' })
     }
   }
 
@@ -81,17 +84,18 @@ export function SubjectSelector({ playedMazes, value, onChange }: SubjectSelecto
           aria-label="Game"
           value={gameValue}
           onChange={e => handleGameChange(e.target.value)}
-          disabled={playedMazes.length === 0}
+          disabled={mazes.length === 0}
         >
-          {playedMazes.length === 0 ? (
-            <option value="">(no mazes played)</option>
+          {mazes.length === 0 ? (
+            <option value="">(no mazes)</option>
           ) : (
-            playedMazes.map(m => (
+            mazes.map(m => (
               <option key={m.mazeId} value={m.mazeId}>{m.name}</option>
             ))
           )}
         </select>
       )}
+      {children}
     </div>
   )
 }

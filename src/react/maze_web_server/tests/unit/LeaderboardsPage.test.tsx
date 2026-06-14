@@ -6,7 +6,13 @@ import { http, HttpResponse } from 'msw'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { LeaderboardsPage } from '../../src/pages/LeaderboardsPage'
 import { server } from '../../src/mocks/server'
+import { launchPlay3dWithSettings, launchPlay3dCurated } from '../../src/utils/play3dLaunch'
 import type { ScoreEntry } from '../../src/types/api'
+
+vi.mock('../../src/utils/play3dLaunch', () => ({
+  launchPlay3dWithSettings: vi.fn(),
+  launchPlay3dCurated: vi.fn(),
+}))
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -120,5 +126,63 @@ describe('LeaderboardsPage', () => {
     expect(screen.getByText('bob')).toBeInTheDocument()
     expect(screen.queryByText('You')).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Player' })).toBeInTheDocument()
+  })
+
+  it('Play launches the selected maze in 3D with its settings', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [row({ id: 's1', maze_id: 'm1.json', user_id: 'me', elapsed_ms: 42137 })], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    renderPage()
+    // The caller has a run on this maze → the button offers "Play Again".
+    await waitFor(() => expect(screen.getByRole('button', { name: '↻ Play Again' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: '↻ Play Again' }))
+
+    expect(launchPlay3dWithSettings).toHaveBeenCalledWith('m1.json', expect.any(Object))
+    expect(launchPlay3dCurated).not.toHaveBeenCalled()
+  })
+
+  it('Play launches the selected difficulty for a Play 3D subject', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', challenge: 'easy:42', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () => HttpResponse.json([])),
+      http.get('/api/v1/game/play3d-config', () => HttpResponse.json({ difficulty: 'easy', seed: 42 })),
+      http.get('/api/v1/scores', () => HttpResponse.json({ scores: [], limit: 20, offset: 0, has_more: false })),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+
+    expect(launchPlay3dCurated).toHaveBeenCalledWith('easy')
+    expect(launchPlay3dWithSettings).not.toHaveBeenCalled()
+  })
+
+  it('disables Play when the Mazes game type has no mazes', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', challenge: 'easy:42', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () => HttpResponse.json([])),
+      http.get('/api/v1/game/play3d-config', () => HttpResponse.json({ difficulty: 'easy', seed: 42 })),
+      http.get('/api/v1/scores', () => HttpResponse.json({ scores: [], limit: 20, offset: 0, has_more: false })),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByLabelText('Game Type')).toBeInTheDocument())
+
+    // Switch to Mazes — the player has none → nothing to launch → Play disabled.
+    await userEvent.selectOptions(screen.getByLabelText('Game Type'), 'my-mazes')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled())
   })
 })

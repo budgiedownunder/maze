@@ -1630,6 +1630,19 @@
   gap: 8px;
   margin-bottom: 12px;
 }
+/* The Play button sits at the right edge of the subject-selector row, recoloured
+   to match the in-game "Play Again" button (green bg, white text) rather than the
+   purple accent — keeping the .btn-primary shape/padding. */
+.leaderboard-play {
+  margin-left: auto;
+  background: #2f9e44;
+  border-color: #2f9e44;
+  color: #fff;
+}
+.leaderboard-play:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .leaderboard-tab {
   padding: 6px 14px;
   border: 1px solid var(--border-input);

@@ -3,20 +3,22 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SubjectSelector, type SubjectSelection } from '../../src/components/SubjectSelector'
 
-const PLAYED = [
+const MAZES = [
   { mazeId: 'a.json', name: 'Alpha' },
   { mazeId: 'b.json', name: 'Beta' },
 ]
 
 describe('SubjectSelector', () => {
-  it('lists played maze names for My Mazes', () => {
+  it('labels the Mazes game type and lists maze names', () => {
     render(
       <SubjectSelector
-        playedMazes={PLAYED}
+        mazes={MAZES}
         value={{ gameType: 'my-mazes', mazeId: 'a.json' }}
         onChange={vi.fn()}
       />,
     )
+    const gameType = screen.getByLabelText('Game Type') as HTMLSelectElement
+    expect([...gameType.options].map(o => o.textContent)).toEqual(['Mazes', 'Play 3D'])
     const game = screen.getByLabelText('Game') as HTMLSelectElement
     const labels = [...game.options].map(o => o.textContent)
     expect(labels).toEqual(['Alpha', 'Beta'])
@@ -26,7 +28,7 @@ describe('SubjectSelector', () => {
   it('lists Easy/Tricky/Hard for Play 3D', () => {
     render(
       <SubjectSelector
-        playedMazes={PLAYED}
+        mazes={MAZES}
         value={{ gameType: 'play3d', difficulty: 'easy' }}
         onChange={vi.fn()}
       />,
@@ -39,7 +41,7 @@ describe('SubjectSelector', () => {
     const onChange = vi.fn()
     render(
       <SubjectSelector
-        playedMazes={PLAYED}
+        mazes={MAZES}
         value={{ gameType: 'my-mazes', mazeId: 'a.json' }}
         onChange={onChange}
       />,
@@ -52,7 +54,7 @@ describe('SubjectSelector', () => {
     const onChange = vi.fn()
     render(
       <SubjectSelector
-        playedMazes={PLAYED}
+        mazes={MAZES}
         value={{ gameType: 'my-mazes', mazeId: 'a.json' }}
         onChange={onChange}
       />,
@@ -61,16 +63,16 @@ describe('SubjectSelector', () => {
     expect(onChange).toHaveBeenCalledWith({ gameType: 'my-mazes', mazeId: 'b.json' } satisfies SubjectSelection)
   })
 
-  it('shows a placeholder + disables the game dropdown when no mazes were played', () => {
+  it('shows a placeholder + disables the game dropdown when there are no mazes', () => {
     render(
       <SubjectSelector
-        playedMazes={[]}
+        mazes={[]}
         value={{ gameType: 'my-mazes', mazeId: '' }}
         onChange={vi.fn()}
       />,
     )
     const game = screen.getByLabelText('Game') as HTMLSelectElement
     expect(game.disabled).toBe(true)
-    expect(game.options[0].textContent).toBe('(no mazes played)')
+    expect(game.options[0].textContent).toBe('(no mazes)')
   })
 })

@@ -16,6 +16,9 @@ interface LeaderboardProps {
   showPlayer: boolean
   // Reports the first-page load state so a host can show a busy cursor.
   onLoadingChange?: (loading: boolean) => void
+  // Reports whether the caller has a run on the currently loaded board, so a
+  // host can label its Play button "Play Again".
+  onHasPlayedChange?: (hasPlayed: boolean) => void
 }
 
 const METRIC_TABS: { metric: ScoreMetric; label: string }[] = [
@@ -29,7 +32,7 @@ function subjectKey(subject: BoardSubject): string {
 
 // Reusable board view: ranking-metric tabs over a single subject's paged
 // leaderboard. Switching the metric (or the subject) reloads from the top.
-export function Leaderboard({ token, subject, currentUserId, showPlayer, onLoadingChange }: LeaderboardProps) {
+export function Leaderboard({ token, subject, currentUserId, showPlayer, onLoadingChange, onHasPlayedChange }: LeaderboardProps) {
   const [metric, setMetric] = useState<ScoreMetric>('time')
   const key = `${metric}|${subjectKey(subject)}`
 
@@ -46,6 +49,12 @@ export function Leaderboard({ token, subject, currentUserId, showPlayer, onLoadi
   // Surface the first-page load to the host (busy cursor), and clear it on unmount.
   useEffect(() => { onLoadingChange?.(board.isLoading) }, [board.isLoading, onLoadingChange])
   useEffect(() => () => onLoadingChange?.(false), [onLoadingChange])
+
+  // Report whether the caller appears on the loaded board (drives the host's
+  // Play / Play Again label).
+  const hasPlayed = currentUserId != null && board.rows.some(r => r.user_id === currentUserId)
+  useEffect(() => { onHasPlayedChange?.(hasPlayed) }, [hasPlayed, onHasPlayedChange])
+  useEffect(() => () => onHasPlayedChange?.(false), [onHasPlayedChange])
 
   return (
     <div className="leaderboard-board-view">
