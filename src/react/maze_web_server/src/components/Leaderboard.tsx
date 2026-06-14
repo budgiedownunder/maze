@@ -14,6 +14,9 @@ interface LeaderboardProps {
   // True for global (Play 3D) boards → request + show usernames; false for
   // My-Mazes boards where every row is the caller.
   showPlayer: boolean
+  // Bumping this re-fetches the current board (folded into the board key) — used
+  // by the host's Refresh button. Unchanged across a normal selection.
+  reloadNonce?: number
   // Reports the first-page load state so a host can show a busy cursor.
   onLoadingChange?: (loading: boolean) => void
   // Reports whether the caller has a run on the currently loaded board, so a
@@ -32,9 +35,9 @@ function subjectKey(subject: BoardSubject): string {
 
 // Reusable board view: ranking-metric tabs over a single subject's paged
 // leaderboard. Switching the metric (or the subject) reloads from the top.
-export function Leaderboard({ token, subject, currentUserId, showPlayer, onLoadingChange, onHasPlayedChange }: LeaderboardProps) {
+export function Leaderboard({ token, subject, currentUserId, showPlayer, reloadNonce, onLoadingChange, onHasPlayedChange }: LeaderboardProps) {
   const [metric, setMetric] = useState<ScoreMetric>('time')
-  const key = `${metric}|${subjectKey(subject)}`
+  const key = `${metric}|${subjectKey(subject)}|${reloadNonce ?? 0}`
 
   const fetchPage = useCallback(
     (limit: number, offset: number) => {

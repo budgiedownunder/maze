@@ -185,4 +185,27 @@ describe('LeaderboardsPage', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled())
   })
+
+  it('Refresh reloads the current board', async () => {
+    let scoresHits = 0
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/scores', () => {
+        scoresHits++
+        return HttpResponse.json({ scores: [row({ id: 's1', maze_id: 'm1.json', user_id: 'me', elapsed_ms: 42137 })], limit: 20, offset: 0, has_more: false })
+      }),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
+    const before = scoresHits
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    await waitFor(() => expect(scoresHits).toBeGreaterThan(before))
+  })
 })

@@ -64,6 +64,8 @@ export function LeaderboardsPage() {
   const [isBoardLoading, setIsBoardLoading] = useState(false)
   // Whether the caller has a run on the current board → Play vs "Play Again".
   const [hasPlayed, setHasPlayed] = useState(false)
+  // Bumped by the Refresh button to force the current board to re-fetch.
+  const [refreshNonce, setRefreshNonce] = useState(0)
   // Busy cursor while any of the page's loads are in flight; cleared on
   // completion or failure.
   useBusyCursor(isLoadingSubjects || isResolving || isBoardLoading)
@@ -160,6 +162,14 @@ export function LeaderboardsPage() {
         <div className="header-actions">
           <button
             className="theme-toggle"
+            onClick={() => setRefreshNonce(n => n + 1)}
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            ↻
+          </button>
+          <button
+            className="theme-toggle"
             onClick={toggleTheme}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -192,6 +202,7 @@ export function LeaderboardsPage() {
                 subject={boardSubject}
                 currentUserId={profile?.id}
                 showPlayer={!!showPlayer}
+                reloadNonce={refreshNonce}
                 onLoadingChange={setIsBoardLoading}
                 onHasPlayedChange={setHasPlayed}
               />
