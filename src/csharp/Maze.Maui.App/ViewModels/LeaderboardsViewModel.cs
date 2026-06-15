@@ -171,6 +171,14 @@ namespace Maze.Maui.App.ViewModels
         [RelayCommand]
         private Task ReloadBoardAsync() => ReloadWithBusyAsync(force: false);
 
+        /// <summary>
+        /// Re-fetches the current board for the current selection (toolbar Refresh),
+        /// resetting to the first page. Force-reloads past the same-key no-op.
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        private Task RefreshAsync() => ReloadWithBusyAsync(force: true);
+
         /// <summary>Selects the Fastest Time metric and reloads.</summary>
         /// <returns>Task</returns>
         [RelayCommand]

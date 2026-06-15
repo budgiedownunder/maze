@@ -216,6 +216,19 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public async Task Refresh_RefetchesCurrentBoard()
+        {
+            var (vm, scores, _, _, _, _) = BuildVm();
+            await vm.InitializeCommand.ExecuteAsync(null);   // play3d easy → board loaded once
+
+            await vm.RefreshCommand.ExecuteAsync(null);
+
+            // Same subject/metric, but force-reloaded → the page-1 fetch runs again.
+            scores.Verify(s => s.GetLeaderboardAsync(It.IsAny<ScoreSubject>(), It.IsAny<ScoreMetric?>(),
+                It.IsAny<SortDirection?>(), It.IsAny<int?>(), 0, It.IsAny<bool?>()), Times.Exactly(2));
+        }
+
+        [Fact]
         public async Task MetricSwitch_ReloadsWithNewMetric()
         {
             var (vm, scores, _, _, _, _) = BuildVm();
