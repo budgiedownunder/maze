@@ -162,16 +162,16 @@
                                 </Grid>
                             </DataTemplate>
                         </CollectionView.ItemTemplate>
-                        <CollectionView.EmptyView>
-                            <Grid Padding="20">
-                                <Label Text="{Binding StatusMessage}"
-                                       IsVisible="{Binding ShowStatusMessage}"
-                                       HorizontalOptions="Center" VerticalOptions="Center" />
-                            </Grid>
-                        </CollectionView.EmptyView>
                     </CollectionView>
                 </Grid>
             </ScrollView>
+
+            <!-- Empty/error status overlaid on the board area rather than via
+                 CollectionView.EmptyView — the EmptyView doesn't inherit the
+                 page BindingContext on Android, so its bindings silently fail. -->
+            <Label Text="{Binding StatusMessage}"
+                   IsVisible="{Binding ShowStatusMessage}"
+                   HorizontalOptions="Center" VerticalOptions="Center" />
 
             <ActivityIndicator IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
