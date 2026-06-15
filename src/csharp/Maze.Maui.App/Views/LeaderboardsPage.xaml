@@ -14,25 +14,46 @@
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="10" RowSpacing="8">
 
-        <!-- Subject selector: Game Type -> Game -->
-        <!-- Subject selector — left-aligned, each picker sized to its content
-             (Auto columns), mirroring the web's content-sized <select> row. -->
-        <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="10"
-              HorizontalOptions="Start" VerticalOptions="Center">
-            <Picker Grid.Column="0"
-                    MinimumWidthRequest="110"
-                    ItemsSource="{Binding GameTypes}"
-                    ItemDisplayBinding="{Binding Label}"
-                    SelectedItem="{Binding SelectedGameType}" />
-            <Label Grid.Column="1" Text="→" FontSize="18" VerticalOptions="Center" />
-            <Picker Grid.Column="2"
-                    x:Name="GamePicker"
-                    MinimumWidthRequest="110"
-                    ItemsSource="{Binding Games}"
-                    ItemDisplayBinding="{Binding Label}"
-                    SelectedItem="{Binding SelectedGame}"
-                    SelectedIndexChanged="OnGameSelectionChanged" />
-        </Grid>
+        <!-- Subject selector: a "Game" label (styled like the board column
+             headers) above the cascading Game Type → Game pickers (left, each
+             sized to its content), with the Play button right-aligned in the
+             same row. -->
+        <VerticalStackLayout Grid.Row="0" Spacing="6">
+            <Label Text="Game" FontAttributes="Bold" />
+            <Grid ColumnDefinitions="Auto,*" VerticalOptions="Center">
+                <HorizontalStackLayout Grid.Column="0" Spacing="10" VerticalOptions="Center">
+                    <Picker MinimumWidthRequest="110"
+                            ItemsSource="{Binding GameTypes}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedGameType}" />
+                    <Label Text="→" FontSize="18" VerticalOptions="Center" />
+                    <Picker x:Name="GamePicker"
+                            MinimumWidthRequest="110"
+                            ItemsSource="{Binding Games}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedGame}"
+                            SelectedIndexChanged="OnGameSelectionChanged" />
+                </HorizontalStackLayout>
+                <Button Grid.Column="1"
+                        Text="{Binding PlayLabel}"
+                        Command="{Binding PlayCommand}"
+                        HorizontalOptions="End"
+                        VerticalOptions="Center"
+                        BackgroundColor="{StaticResource PlayButton}"
+                        TextColor="White">
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup x:Name="CommonStates">
+                            <VisualState x:Name="Normal" />
+                            <VisualState x:Name="Disabled">
+                                <VisualState.Setters>
+                                    <Setter Property="Opacity" Value="0.5" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </Button>
+            </Grid>
+        </VerticalStackLayout>
 
         <!-- Ranking-metric toggle. Borders (not Buttons) so the active/inactive
              background is driven purely by our DataTrigger — the default Button

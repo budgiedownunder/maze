@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
+using Maze.Maui.App.Views;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -16,10 +17,6 @@ namespace Maze.Maui.App.ViewModels
     /// </summary>
     public partial class LeaderboardsViewModel : BaseViewModel
     {
-        // Bound the discovery scan for a very active player; the server caps each
-        // history page at 100.
-        private const int MaxDiscoveryPages = 25;
-        private const int DiscoveryPageSize = 100;
         private const int BoardPageSize = 20;
         private const string EmptyMessage = "No winning scores yet";
 
@@ -27,10 +24,11 @@ namespace Maze.Maui.App.ViewModels
         private readonly IGameConfigService _gameConfigService;
         private readonly IMazeService _mazeService;
         private readonly IAuthService _authService;
+        private readonly INavigationService _navigationService;
 
         // difficulty → fixed seed; the seeds don't change, so resolve each once.
         private readonly Dictionary<Difficulty, ulong> _seedCache = new();
-        private List<PlayedMaze> _playedMazes = new();
+        private List<MazeOption> _mazes = new();
         private ScoreEntry? _mostRecent;
         private string? _currentUserId;
 
@@ -44,7 +42,7 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>The Game Type picker options (fixed).</summary>
         public ObservableCollection<GameTypeOption> GameTypes { get; } = new()
         {
-            new GameTypeOption(LeaderboardGameType.MyMazes, "My Mazes"),
+            new GameTypeOption(LeaderboardGameType.MyMazes, "Mazes"),
             new GameTypeOption(LeaderboardGameType.Play3d, "Play 3D"),
         };
 
@@ -60,6 +58,8 @@ namespace Maze.Maui.App.ViewModels
 
         /// <summary>The selected Game (second cascade level).</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanPlay))]
+        [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
         private GameOption? selectedGame;
 
         /// <summary>Whether a further board page exists.</summary>
@@ -91,24 +91,41 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool isScoreMetricSelected;
 
+        /// <summary>Whether the caller already has a run on the loaded board
+        /// (drives the Play / Play-Again label).</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(PlayLabel))]
+        private bool hasPlayed;
+
+        /// <summary>Play-button label: "▶ Play" for a subject the caller hasn't
+        /// run, "↻ Play Again" once they have a row on the loaded board.</summary>
+        public string PlayLabel => HasPlayed ? "↻ Play Again" : "▶ Play";
+
+        /// <summary>Whether the Play button can launch — true when a game subject
+        /// is selected (false e.g. for the Mazes type when the player has none).</summary>
+        public bool CanPlay => SelectedGame is not null;
+
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="scoresService">Injected scores service</param>
         /// <param name="gameConfigService">Injected game-config service (curated seeds)</param>
-        /// <param name="mazeService">Injected maze service (maze names)</param>
+        /// <param name="mazeService">Injected maze service (maze names + Play launch)</param>
         /// <param name="authService">Injected auth service (caller identity)</param>
+        /// <param name="navigationService">Injected navigation service (Play → 3D game)</param>
         public LeaderboardsViewModel(
             IScoresService scoresService,
             IGameConfigService gameConfigService,
             IMazeService mazeService,
-            IAuthService authService)
+            IAuthService authService,
+            INavigationService navigationService)
         {
             Title = "Leaderboards";
             _scoresService = scoresService;
             _gameConfigService = gameConfigService;
             _mazeService = mazeService;
             _authService = authService;
+            _navigationService = navigationService;
         }
 
         // Repopulating the Game list is synchronous; the board reload is driven by
@@ -191,6 +208,42 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// Launches the selected subject in 3D — a personal maze with its saved
+        /// settings, or a curated difficulty (server resolves the preset). Direct
+        /// launch, no prompt.
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommand(CanExecute = nameof(CanPlay))]
+        private async Task PlayAsync()
+        {
+            GameOption? game = SelectedGame;
+            if (game is null)
+                return;
+
+            if (game.Difficulty is Difficulty difficulty)
+            {
+                await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
+                {
+                    { "difficulty", difficulty.ToQueryValue() },
+                });
+                return;
+            }
+
+            if (game.MazeId is not null)
+            {
+                // Load the full maze for its saved settings; Play3dGamePage appends
+                // them to the /game/?id= URL (the MAUI WebView can't read the SPA's
+                // localStorage, so settings ride the query string).
+                MazeItem full = await _mazeService.GetMazeItem(game.MazeId) ?? new MazeItem { ID = game.MazeId };
+                await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
+                {
+                    { "MazeItem", full },
+                    { "LaunchSettings", full.GameSettings ?? new MazeGameSettings() },
+                });
+            }
+        }
+
         private async Task SetMetricAsync(ScoreMetric metric)
         {
             if (_metric == metric)
@@ -235,6 +288,7 @@ namespace Maze.Maui.App.ViewModels
             ShowPlayerColumn = SelectedGameType?.Kind == LeaderboardGameType.Play3d;
             Rows.Clear();
             HasMore = false;
+            HasPlayed = false;
 
             if (subject is null)
             {
@@ -277,67 +331,62 @@ namespace Maze.Maui.App.ViewModels
             foreach (ScoreEntry entry in resp.Scores)
             {
                 rank++;
-                bool highlight = ShowPlayerColumn && _currentUserId is not null && entry.UserId == _currentUserId;
-                Rows.Add(new LeaderboardRow(rank, entry, highlight, ShowPlayerColumn));
+                bool isMe = _currentUserId is not null && entry.UserId == _currentUserId;
+                if (isMe)
+                    HasPlayed = true;
+                Rows.Add(new LeaderboardRow(rank, entry, isMe && ShowPlayerColumn, ShowPlayerColumn));
             }
             HasMore = resp.HasMore;
         }
 
         private async Task DiscoverSubjectsAsync()
         {
-            var orderedIds = new List<string>();
-            var seen = new HashSet<string>();
-            _mostRecent = null;
-
-            int offset = 0;
-            for (int page = 0; page < MaxDiscoveryPages; page++)
-            {
-                ScoreboardResponse resp = await _scoresService.GetScoreHistoryAsync(DiscoveryPageSize, offset);
-                if (page == 0)
-                    _mostRecent = resp.Scores.FirstOrDefault();
-                foreach (ScoreEntry row in resp.Scores)
-                {
-                    if (row.MazeId is not null && seen.Add(row.MazeId))
-                        orderedIds.Add(row.MazeId);
-                }
-                if (!resp.HasMore)
-                    break;
-                offset += DiscoveryPageSize;
-            }
-
+            // The Mazes game type lists ALL the player's mazes (scored or not),
+            // mirroring the Play-3D list showing every difficulty.
             List<MazeItem> mazes = await _mazeService.GetMazeItems(false);
-            var nameById = new Dictionary<string, string>();
-            var nameByBasename = new Dictionary<string, string>();
-            foreach (MazeItem maze in mazes)
-            {
-                nameById[maze.ID] = maze.Name;
-                nameByBasename[Basename(maze.ID)] = maze.Name;
-            }
-
-            _playedMazes = orderedIds
-                .Select(id => new PlayedMaze(id, MazeLabel(id, nameById, nameByBasename)))
+            _mazes = mazes
+                .Select(maze => new MazeOption(maze.ID, maze.Name))
                 .OrderBy(m => m.Name, StringComparer.CurrentCulture)
                 .ToList();
+
+            // Only the most-recent run is needed — to pick the default subject.
+            ScoreboardResponse history = await _scoresService.GetScoreHistoryAsync(1, 0);
+            _mostRecent = history.Scores.FirstOrDefault();
         }
 
         private void ApplyDefaultSelection()
         {
             if (_mostRecent?.MazeId is not null)
             {
-                SelectMaze(_mostRecent.MazeId);
+                string? resolved = ResolveMazeId(_mostRecent.MazeId);
+                if (resolved is not null)
+                {
+                    SelectMaze(resolved);
+                    return;
+                }
             }
-            else if (_mostRecent?.Challenge is not null)
+            if (_mostRecent?.Challenge is not null)
             {
                 SelectDifficulty(ParseDifficulty(_mostRecent.Challenge));
+                return;
             }
-            else if (_playedMazes.Count > 0)
+            if (_mazes.Count > 0)
             {
-                SelectMaze(_playedMazes[0].MazeId);
+                SelectMaze(_mazes[0].MazeId);
+                return;
             }
-            else
-            {
-                SelectDifficulty(Difficulty.Easy);
-            }
+            SelectDifficulty(Difficulty.Easy);
+        }
+
+        // Resolve a history maze_id to a maze in the list — exact id, then by
+        // filename (FileStore ids are paths that may differ between a score row
+        // and the maze list).
+        private string? ResolveMazeId(string historyId)
+        {
+            if (_mazes.Any(m => m.MazeId == historyId))
+                return historyId;
+            string basename = Basename(historyId);
+            return _mazes.FirstOrDefault(m => Basename(m.MazeId) == basename)?.MazeId;
         }
 
         private void SelectMaze(string mazeId)
@@ -362,7 +411,7 @@ namespace Maze.Maui.App.ViewModels
             }
             else
             {
-                foreach (PlayedMaze maze in _playedMazes)
+                foreach (MazeOption maze in _mazes)
                     Games.Add(GameOption.ForMaze(maze.MazeId, maze.Name));
             }
             SelectedGame = Games.FirstOrDefault();
@@ -414,16 +463,6 @@ namespace Maze.Maui.App.ViewModels
         {
             int idx = Math.Max(id.LastIndexOf('/'), id.LastIndexOf('\\'));
             return idx >= 0 ? id[(idx + 1)..] : id;
-        }
-
-        private static string MazeLabel(string id, Dictionary<string, string> nameById, Dictionary<string, string> nameByBasename)
-        {
-            if (nameById.TryGetValue(id, out string? name))
-                return name;
-            string basename = Basename(id);
-            if (nameByBasename.TryGetValue(basename, out string? byBasename))
-                return byBasename;
-            return basename.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? basename[..^5] : basename;
         }
     }
 }

@@ -77,10 +77,9 @@ namespace Maze.Maui.App.ViewModels
     }
 
     /// <summary>
-    /// A stored maze the player has played, with a display name resolved from the
-    /// maze list (robust to FileStore path ids).
+    /// One of the player's mazes, with a display name from the maze list.
     /// </summary>
-    public class PlayedMaze
+    public class MazeOption
     {
         /// <summary>The stored maze id.</summary>
         public string MazeId { get; }
@@ -93,7 +92,7 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="mazeId">The maze id</param>
         /// <param name="name">Display name</param>
-        public PlayedMaze(string mazeId, string name)
+        public MazeOption(string mazeId, string name)
         {
             MazeId = mazeId;
             Name = name;

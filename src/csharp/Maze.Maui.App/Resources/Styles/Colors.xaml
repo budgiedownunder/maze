@@ -31,6 +31,9 @@
     <Color x:Key="LeaderboardHighlight">#EAF6D0</Color>
     <Color x:Key="LeaderboardHighlightDark">#36441E</Color>
 
+    <!-- Leaderboard Play button — green, matching the in-game "Play Again" button. -->
+    <Color x:Key="PlayButton">#2F9E44</Color>
+
     <Color x:Key="White">White</Color>
     <Color x:Key="Black">Black</Color>
     <Color x:Key="Magenta">#D600AA</Color>
