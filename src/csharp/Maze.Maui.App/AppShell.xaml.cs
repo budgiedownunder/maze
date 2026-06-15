@@ -30,6 +30,12 @@ namespace Maze.Maui.App
             _dialogService = dialogService;
             _accountViewModel = accountViewModel;
             InitializeComponent();
+            // The flyout header binds to the account view model's Username.
+            FlyoutHeaderRoot.BindingContext = _accountViewModel;
+            // Apply the header's accent background once the App-level colour
+            // resources are available (they are not yet merged at Shell-parse
+            // time — see OnShellLoaded).
+            Loaded += OnShellLoaded;
             Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
             Routing.RegisterRoute(nameof(MazeGamePage), typeof(MazeGamePage));
             Routing.RegisterRoute(nameof(Play3dGamePage), typeof(Play3dGamePage));
@@ -39,6 +45,58 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(AccountPage), typeof(AccountPage));
             Routing.RegisterRoute(nameof(MazesPage), typeof(MazesPage));
             Routing.RegisterRoute(nameof(LeaderboardsPage), typeof(LeaderboardsPage));
+        }
+
+        /// <summary>
+        /// Applies the flyout header's accent background once the Shell is
+        /// loaded, by which point the App-level <c>Colors.xaml</c> resources
+        /// (<c>Primary</c> / <c>PrimaryDark</c>) have been merged. Referencing
+        /// them via <c>StaticResource</c> in the Shell XAML fails at parse time
+        /// because the Shell is constructed before <c>App.InitializeComponent</c>
+        /// merges them.
+        /// </summary>
+        private void OnShellLoaded(object? sender, EventArgs e)
+        {
+            if (Application.Current?.Resources is { } resources
+                && resources.TryGetValue("Primary", out var light) && light is Color lightColor
+                && resources.TryGetValue("PrimaryDark", out var dark) && dark is Color darkColor)
+            {
+                FlyoutHeaderRoot.SetAppThemeColor(VisualElement.BackgroundColorProperty, lightColor, darkColor);
+            }
+        }
+
+        /// <summary>
+        /// When the flyout is opened, ensure the header shows the signed-in
+        /// user's name — loaded once per session (the sign-out flow clears it
+        /// via <see cref="AccountViewModel.ClearProfile"/>, so a fresh sign-in
+        /// re-loads it on the next flyout open).
+        /// </summary>
+        protected override void OnPropertyChanged(string? propertyName = null)
+        {
+            base.OnPropertyChanged(propertyName);
+            if (propertyName == nameof(FlyoutIsPresented) && FlyoutIsPresented)
+            {
+                _ = EnsureFlyoutUsernameAsync();
+            }
+        }
+
+        private async Task EnsureFlyoutUsernameAsync()
+        {
+            if (!string.IsNullOrEmpty(_accountViewModel.Username))
+                return;
+            if (!await _authService.IsAuthenticatedAsync())
+                return;
+            if (_accountViewModel.LoadProfileCommand.CanExecute(null))
+                await _accountViewModel.LoadProfileCommand.ExecuteAsync(null);
+        }
+
+        /// <summary>
+        /// Opens the Account page when the flyout header (the username) is tapped.
+        /// </summary>
+        private async void OnFlyoutHeaderTapped(object sender, TappedEventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync(nameof(AccountPage));
         }
 
         /// <summary>

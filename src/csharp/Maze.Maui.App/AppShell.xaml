@@ -4,7 +4,37 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:views="clr-namespace:Maze.Maui.App.Views"
+    xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
     FlyoutBehavior="Flyout">
+
+    <!-- Flyout header: the signed-in user's name; tapping it opens the Account
+         page. Its BindingContext (the AccountViewModel) and its accent
+         background are set in code-behind — the background is applied on the
+         Shell's Loaded event, because the App-level Colors.xaml resources
+         (Primary / PrimaryDark) are not yet merged when this Shell is parsed
+         (the Shell is constructed as a ctor argument to App, before App runs
+         its own InitializeComponent). The code-behind also loads the profile
+         when the flyout is opened. -->
+    <Shell.FlyoutHeader>
+        <Grid x:Name="FlyoutHeaderRoot"
+              x:DataType="viewmodel:AccountViewModel"
+              Padding="20,28,20,16">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnFlyoutHeaderTapped" />
+            </Grid.GestureRecognizers>
+            <VerticalStackLayout Spacing="2">
+                <Label Text="Signed in as"
+                       FontSize="12"
+                       TextColor="White"
+                       Opacity="0.85" />
+                <Label Text="{Binding Username}"
+                       FontSize="18"
+                       FontAttributes="Bold"
+                       TextColor="White"
+                       LineBreakMode="TailTruncation" />
+            </VerticalStackLayout>
+        </Grid>
+    </Shell.FlyoutHeader>
 
     <Shell.Resources>
         <!-- Per-item override for visual-only separator rows in the flyout.
