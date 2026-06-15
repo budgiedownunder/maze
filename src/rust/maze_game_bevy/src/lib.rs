@@ -68,6 +68,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, lose::lightning_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
@@ -210,6 +211,21 @@ mod tests {
         let mut app = make_title_app();
         let count = app.world_mut().query::<&Text2d>().iter(app.world()).count();
         assert!(count >= 2, "expected at least 2 text entities, got {count}");
+    }
+
+    #[test]
+    fn minimap_dimensions_readout_matches_demo_grid() {
+        use crate::hud::minimap::MinimapDimensions;
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = format!("{} x {}", grid[0].len(), grid.len());
+        let labels: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&Text2d, With<MinimapDimensions>>()
+            .iter(app.world())
+            .map(|t| t.0.clone())
+            .collect();
+        assert_eq!(labels, vec![expected], "one dimensions readout, cols x rows");
     }
 
     #[test]

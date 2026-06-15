@@ -52,7 +52,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - Start cell highlighted green; finish cell highlighted gold.
 - **Score overlay** (top-left corner) — a live readout of the run's score (`MazeGame::score()`), updated each frame as the player progresses.
 - Status bar overlay (bottom-left corner) — a row container that displays the configured `mode` label.
-- **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
+- **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. A muted footer strip directly below it shows the maze's dimensions as `width x height` (columns × rows). The whole panel (footer included) re-anchors to the window's top-right corner on resize.
 - **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen, showing the run's final score and its elapsed time to millisecond precision (`M:SS.mmm`). The on-screen clock only shows the remaining countdown to whole seconds, so the win panel is where the precise completion time surfaces.
 - Gold-leaf rain — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
 - **Lose overlay** — on not completing in time, or on reaching 0 HP from enemy collisions, movement stops and a "You Lose!" panel appears centred on screen.

@@ -490,6 +490,7 @@ pub(crate) fn spawn_world(
         &mut commands,
         &window,
         &config,
+        (grid.len(), grid.first().map_or(0, |row| row.len())),
         &mut meshes,
         &mut color_materials,
         &mut images,

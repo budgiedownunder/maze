@@ -28,6 +28,15 @@ const COLOR_MINIMAP_PLAYER: Color = Color::srgb(0.95, 0.15, 0.15);
 const COLOR_MINIMAP_WATER: Color = Color::srgb(0.18, 0.45, 0.92);
 const COLOR_MINIMAP_LAVA: Color = Color::srgb(1.0, 0.42, 0.08);
 
+// Maze-dimensions readout, anchored as a strip just below the minimap. Muted
+// fill + text (echoing the status-bar mode label) so it reads as quiet
+// secondary info rather than competing with the minimap for attention.
+const COLOR_MINIMAP_DIM_BG: Color = Color::srgba(0.10, 0.10, 0.14, 0.80);
+const COLOR_MINIMAP_DIM_TEXT: Color = Color::srgb(0.67, 0.60, 0.92);
+const MINIMAP_DIM_FONT: f32 = 18.0;
+const MINIMAP_DIM_STRIP_H: f32 = 22.0;
+const MINIMAP_DIM_GAP: f32 = 2.0;
+
 /// How a minimap cell should render: a flat colour, or the iron-fence look —
 /// the steel-teal base overlaid with thin black vertical bars.
 #[derive(Debug, PartialEq)]
@@ -100,6 +109,9 @@ pub(crate) struct MinimapPlayer;
 pub(crate) struct MinimapBackground;
 
 #[derive(Component)]
+pub(crate) struct MinimapDimensions;
+
+#[derive(Component)]
 pub(crate) struct MinimapCell {
     pub(crate) dr: i32,
     pub(crate) dc: i32,
@@ -119,6 +131,8 @@ pub(crate) fn spawn_minimap(
     commands: &mut Commands,
     window: &Query<&Window>,
     config: &GameConfig,
+    // `(rows, cols)` of the complete maze grid, shown in the minimap footer.
+    dims: (usize, usize),
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     color_materials: &mut Option<ResMut<Assets<ColorMaterial>>>,
     images: &mut Option<ResMut<Assets<Image>>>,
@@ -204,6 +218,41 @@ pub(crate) fn spawn_minimap(
             commands.spawn((Transform::from_xyz(center_x, center_y, 1.0), MinimapPlayer));
         }
     }
+
+    // Maze-dimensions footer ("{cols} x {rows}") on a dark strip directly below
+    // the minimap. Both nodes are tagged `MinimapDimensions` so
+    // `minimap_dimensions_resize_system` keeps them under the panel on resize.
+    let (rows, cols) = dims;
+    let strip_y = minimap_dimensions_y(center_y, map_size);
+    commands.spawn((
+        MinimapDimensions,
+        Sprite {
+            color: COLOR_MINIMAP_DIM_BG,
+            custom_size: Some(Vec2::new(map_size + 4.0, MINIMAP_DIM_STRIP_H)),
+            ..default()
+        },
+        Transform::from_xyz(center_x, strip_y, 8.8),
+    ));
+    commands.spawn((
+        MinimapDimensions,
+        Text2d::new(dimensions_label(rows, cols)),
+        TextFont { font_size: MINIMAP_DIM_FONT, ..default() },
+        TextColor(COLOR_MINIMAP_DIM_TEXT),
+        Transform::from_xyz(center_x, strip_y, 9.0),
+    ));
+}
+
+/// The minimap-footer label for a maze of `rows` × `cols` — rendered width ×
+/// height, so a 6-row, 5-column grid reads "5 x 6".
+pub(crate) fn dimensions_label(rows: usize, cols: usize) -> String {
+    format!("{cols} x {rows}")
+}
+
+/// The y of the dimensions strip: centred just below the minimap's dark
+/// background (which is `map_size + 4` tall, centred on `center_y`), with a
+/// small gap.
+fn minimap_dimensions_y(center_y: f32, map_size: f32) -> f32 {
+    center_y - (map_size + 4.0) / 2.0 - MINIMAP_DIM_GAP - MINIMAP_DIM_STRIP_H / 2.0
 }
 
 pub(crate) fn minimap_system(
@@ -298,12 +347,47 @@ pub(crate) fn minimap_resize_system(
     // minimap_system, so it picks up the new centre automatically.
 }
 
+pub(crate) fn minimap_dimensions_resize_system(
+    window: Query<&Window>,
+    game_config: Res<GameConfig>,
+    mut last_size: Local<(f32, f32)>,
+    mut dims: Query<&mut Transform, With<MinimapDimensions>>,
+) {
+    let Ok(win) = window.single() else { return; };
+    let w = win.width();
+    let h = win.height();
+    if (w - last_size.0).abs() < 0.5 && (h - last_size.1).abs() < 0.5 {
+        return;
+    }
+    *last_size = (w, h);
+
+    let cell_px = game_config.minimap_cell_px as f32;
+    let radius = game_config.minimap_radius as i32;
+    let map_size = (radius * 2 + 1) as f32 * cell_px;
+    let center_x = w / 2.0 - MAP_MARGIN - map_size / 2.0;
+    let center_y = h / 2.0 - MAP_MARGIN - map_size / 2.0;
+    let strip_y = minimap_dimensions_y(center_y, map_size);
+
+    for mut t in &mut dims {
+        t.translation.x = center_x;
+        t.translation.y = strip_y;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn entity(json: &str) -> CellEntity {
         serde_json::from_str(json).expect("valid cell-entity JSON")
+    }
+
+    #[test]
+    fn dimensions_label_is_width_by_height() {
+        // cols × rows: a 6-row, 5-column maze reads "5 x 6".
+        assert_eq!(dimensions_label(6, 5), "5 x 6");
+        assert_eq!(dimensions_label(10, 10), "10 x 10");
+        assert_eq!(dimensions_label(1, 20), "20 x 1");
     }
 
     #[test]
