@@ -47,10 +47,11 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     app.init_resource::<GameConfig>();
     app.insert_resource(PendingMazeJson(maze_json.map(String::from)))
         .init_state::<AppState>()
-        .insert_resource(TitleTimer(Timer::from_seconds(2.0, TimerMode::Once)))
+        .insert_resource(TitleTimer(Timer::from_seconds(3.0, TimerMode::Once)))
         .insert_resource(ClearColor(Color::BLACK))
         .add_systems(OnEnter(AppState::TitleScreen), title::setup_title)
         .add_systems(Update, title::tick_title.run_if(in_state(AppState::TitleScreen)))
+        .add_systems(Update, title::update_title_countdown.run_if(in_state(AppState::TitleScreen)))
         .add_systems(Update, title::title_resize_system.run_if(in_state(AppState::TitleScreen)))
         .add_systems(OnExit(AppState::TitleScreen), title::teardown_title)
         .add_systems(OnEnter(AppState::Playing), spawn_world)
