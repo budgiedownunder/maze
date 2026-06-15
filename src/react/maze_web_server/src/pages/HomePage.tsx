@@ -1,16 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { Play3dDifficultyModal } from '../components/Play3dDifficultyModal'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { useTheme } from '../context/ThemeContext'
 import appIcon from '../assets/app.png'
 import play3dIcon from '../assets/play3d.png'
 import leaderboardsIcon from '../assets/leaderboards.svg'
 
 export function HomePage() {
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const [showDifficultyModal, setShowDifficultyModal] = useState(false)
 
@@ -34,22 +30,7 @@ export function HomePage() {
 
   return (
     <div className="home-page">
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">Home</span>
-        <div className="header-actions">
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title="Home" />
       <main className="home-main">
         <section className="home-tiles">
           <button type="button" className="home-tile" onClick={handlePlay3d}>

@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
-import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useBusyCursor } from '../hooks/useBusyCursor'
-import { useTheme } from '../context/ThemeContext'
 import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getPlay3dConfig } from '../api/client'
 import { buildChallenge } from '../utils/scores'
@@ -45,8 +43,6 @@ function defaultSelection(mostRecent: ScoreEntry | undefined, mazes: MazeOption[
 }
 
 export function LeaderboardsPage() {
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
   const token = useToken()
   const { profile } = useAuth()
 
@@ -151,33 +147,16 @@ export function LeaderboardsPage() {
 
   return (
     <div className="leaderboards-page">
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title app-header-title--with-icon">
-          <img src={leaderboardsIcon} className="app-header-title-icon" alt="" aria-hidden="true" />
-          Leaderboards
-        </span>
-        <div className="header-actions">
-          <button
-            className="theme-toggle"
-            onClick={() => setRefreshNonce(n => n + 1)}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            ↻
-          </button>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title="Leaderboards" titleIcon={leaderboardsIcon}>
+        <button
+          className="theme-toggle"
+          onClick={() => setRefreshNonce(n => n + 1)}
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          ↻
+        </button>
+      </AppHeader>
       <main className="leaderboards-main">
         {isLoadingSubjects && <p aria-label="Loading">Loading…</p>}
         {!isLoadingSubjects && subjectsError && (

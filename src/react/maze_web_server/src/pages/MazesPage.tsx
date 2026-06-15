@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
 import { Play3dLaunchChooser } from '../components/Play3dLaunchChooser'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
 import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
@@ -16,8 +14,6 @@ import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
 
 export function MazesPage() {
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
   const token = useToken()
   const navigate = useNavigate()
 
@@ -194,38 +190,24 @@ export function MazesPage() {
           }}
         />
       )}
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">Mazes</span>
-        <div className="header-actions">
-          <button
-            className="btn-icon"
-            onClick={() => navigate('/mazes/new')}
-            aria-label="New maze"
-            title="New maze"
-          >
-            <img src="/images/icons/icon_new.png" alt="New maze" style={{ width: '1.1rem', height: '1.1rem' }} />
-          </button>
-          <button
-            className="btn-icon"
-            onClick={() => setRefreshCount(c => c + 1)}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
-          </button>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title="Mazes">
+        <button
+          className="btn-icon"
+          onClick={() => navigate('/mazes/new')}
+          aria-label="New maze"
+          title="New maze"
+        >
+          <img src="/images/icons/icon_new.png" alt="New maze" style={{ width: '1.1rem', height: '1.1rem' }} />
+        </button>
+        <button
+          className="btn-icon"
+          onClick={() => setRefreshCount(c => c + 1)}
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
+        </button>
+      </AppHeader>
       <main className="maze-list-page">
         {isLoading && <p aria-label="Loading">Loading…</p>}
         {!isLoading && error && (

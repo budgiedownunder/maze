@@ -2,11 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
 import { getBag, getHp, getMaxHp, getGameGrid, getGameCellOverrides, MazeGameLoseReason } from '../wasm/mazeWasm'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { MazeGrid } from '../components/MazeGrid'
 import { GameResultPopup } from '../components/GameResultPopup'
 import { PausePopup } from '../components/PausePopup'
@@ -22,8 +20,6 @@ const KEY_MAP: Record<string, MazeGameDirection> = {
 export function MazeGamePage() {
   const { id } = useParams<{ id: string }>()
   const token = useToken()
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
 
   const [maze, setMaze] = useState<Maze | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -117,22 +113,7 @@ export function MazeGamePage() {
 
   return (
     <div className="maze-game-page">
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">{maze?.name ?? ''}</span>
-        <div className="header-actions">
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title={maze?.name ?? ''} />
 
       <div className="maze-game-content">
         {loadError && <p className="error-msg" role="alert">{loadError}</p>}

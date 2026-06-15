@@ -703,6 +703,28 @@
   background: var(--surface-hover);
 }
 
+/* Signed-in username in the header — a quiet link to the account page. */
+.header-username {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  line-height: 1;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-username:hover {
+  background: var(--surface-hover);
+  text-decoration: underline;
+}
+
 .auth-theme-toggle {
   position: fixed;
   top: 1rem;

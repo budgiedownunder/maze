@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { ChangePasswordModal } from '../components/ChangePasswordModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { EmailAddressesPanel } from '../components/EmailAddressesPanel'
@@ -17,8 +15,6 @@ export function AccountPage() {
   const { logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
 
   // Read the one-shot `welcome` flag from navigation state. Set by
   // `OAuthCallbackPage` for first-time OAuth signups so users notice
@@ -121,22 +117,7 @@ export function AccountPage() {
           onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <h1 className="app-header-title">My Account</h1>
-        <div className="header-actions">
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title="My Account" titleAs="h1" />
       <main className="account-main">
         {welcome && (
           <p role="status" className="account-welcome-banner">

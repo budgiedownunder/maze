@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -121,10 +121,14 @@ describe('LeaderboardsPage', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Game Type'), 'play3d')
 
-    await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
+    // Scope username assertions to the board table — the caller's username also
+    // appears in the page header (the account link), so a page-wide query is
+    // ambiguous.
+    const board = await screen.findByRole('table')
+    await waitFor(() => expect(within(board).getByText('alice')).toBeInTheDocument())
     // The caller's own row shows their username (not "You"), on the Player column.
-    expect(screen.getByText('bob')).toBeInTheDocument()
-    expect(screen.queryByText('You')).not.toBeInTheDocument()
+    expect(within(board).getByText('bob')).toBeInTheDocument()
+    expect(within(board).queryByText('You')).not.toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Player' })).toBeInTheDocument()
   })
 

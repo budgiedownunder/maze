@@ -26,7 +26,8 @@ test('switching to Play 3D shows a global board with usernames', async ({ page }
   await expect(page.getByLabel('Game Type')).toBeVisible()
   await page.getByLabel('Game Type').selectOption('play3d')
   // The curated board resolves its seed + lists every player by username,
-  // including the signed-in user (testuser).
-  await expect(page.getByText('alice')).toBeVisible()
-  await expect(page.getByText('testuser')).toBeVisible()
+  // including the signed-in user (testuser). Scope to board cells — the
+  // signed-in username also appears in the page header (the account link).
+  await expect(page.getByRole('cell', { name: 'alice' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'testuser' })).toBeVisible()
 })

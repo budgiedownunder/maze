@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useParams, useNavigate, useBlocker } from 'react-router-dom'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { MazeGrid } from '../components/MazeGrid'
 import { CellOverridePanel } from '../components/CellOverridePanel'
 import { ConfirmModal } from '../components/ConfirmModal'
@@ -15,8 +15,6 @@ import type { GenerateOptions, SaveMazeRequest } from '../types/api'
 import type { FeatureChar } from '../types/cellEntities'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { useToken } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
-import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
 import { useWalkAnimation } from '../hooks/useWalkAnimation'
 import { useWalkSpeed } from '../hooks/useWalkSpeed'
@@ -38,8 +36,6 @@ export function MazePage() {
   const { id } = useParams<{ id?: string }>()
   const token = useToken()
   const navigate = useNavigate()
-  const { theme, toggleTheme } = useTheme()
-  const menuVariant = useMenuVariant()
   const gridRef = useRef<HTMLDivElement>(null)
 
   const isNew = id === undefined
@@ -638,42 +634,28 @@ export function MazePage() {
         />
       )}
 
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">{headerTitle}</span>
-        <div className="header-actions">
-          {!isNew && (
-            <button
-              className="btn-icon"
-              aria-label="Refresh"
-              title="Refresh"
-              disabled={!canRefresh || isBusy}
-              onClick={() => setShowRefreshConfirm(true)}
-            >
-              <img src="/images/maze/refresh.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
-            </button>
-          )}
+      <AppHeader title={headerTitle}>
+        {!isNew && (
           <button
             className="btn-icon"
-            aria-label="Save"
-            title="Save"
-            disabled={!canSave || isBusy}
-            onClick={handleSaveClick}
+            aria-label="Refresh"
+            title="Refresh"
+            disabled={!canRefresh || isBusy}
+            onClick={() => setShowRefreshConfirm(true)}
           >
-            <img src="/images/icons/icon_save.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
+            <img src="/images/maze/refresh.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
           </button>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+        )}
+        <button
+          className="btn-icon"
+          aria-label="Save"
+          title="Save"
+          disabled={!canSave || isBusy}
+          onClick={handleSaveClick}
+        >
+          <img src="/images/icons/icon_save.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
+        </button>
+      </AppHeader>
 
       <main className="maze-page-content">
         {isLoading && <p aria-label="Loading">Loading…</p>}
