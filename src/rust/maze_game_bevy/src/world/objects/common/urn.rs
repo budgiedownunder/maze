@@ -1,4 +1,4 @@
-use super::{build_emissive_material, spawn_with_outline, DeadEndAssets};
+use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -75,7 +75,7 @@ pub(crate) fn build_dark_terracotta_material(
     build_emissive_material(materials, BAND_EMISSIVE)
 }
 
-pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32, z: f32) {
+pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32) {
     let body = assets.urn_mat.clone();
     let band = assets.dark_terracotta_mat.clone();
     // The urn deliberately skips the inverted-hull outline: the stacked
@@ -91,6 +91,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     // Body stack.
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         body.clone(),
         outline(),
@@ -99,6 +100,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         body.clone(),
         outline(),
@@ -107,6 +109,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         body.clone(),
         outline(),
@@ -115,6 +118,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         body.clone(),
         outline(),
@@ -123,6 +127,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         body,
         outline(),
@@ -133,6 +138,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     // Rim + two pattern bands all share the darker terracotta material.
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         band.clone(),
         outline(),
@@ -141,6 +147,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         band.clone(),
         outline(),
@@ -149,6 +156,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         band.clone(),
         outline(),
@@ -161,6 +169,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     // the join with the narrower cylinder above is invisible.
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         band.clone(),
         outline(),
@@ -170,6 +179,7 @@ pub(crate) fn spawn_urn(commands: &mut Commands, assets: &DeadEndAssets, x: f32,
     );
     spawn_with_outline(
         commands,
+        None,
         mesh(),
         band,
         outline(),

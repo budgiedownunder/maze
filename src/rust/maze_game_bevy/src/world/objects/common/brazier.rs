@@ -1,5 +1,4 @@
-use super::{spawn_with_outline, BrazierBowl, DeadEndAssets};
-use super::build_emissive_material;
+use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
 use crate::palette::EMISSIVE_ONLY_BASE;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
@@ -45,6 +44,13 @@ pub(crate) const FLICKER_AMPLITUDE: f32 = 0.25;
 /// to break visible periodicity without using a PRNG.
 pub(crate) const FLICKER_DETUNE_RATIO: f32 = 1.7;
 
+/// Marker for brazier bowls. Queried by [`brazier_flicker_system`] to
+/// modulate the shared glow material each frame. Halo entities don't
+/// carry this marker — the halo uses a separate, steady material that
+/// frames the flickering bowl.
+#[derive(Component)]
+pub(crate) struct BrazierBowl;
+
 pub(crate) fn build_stone_material(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> Option<Handle<StandardMaterial>> {
@@ -71,8 +77,7 @@ pub(crate) fn build_halo_material(
 
 /// Returns the per-frame multiplier applied to [`GLOW_EMISSIVE`] for the
 /// brazier bowl. Pure function so unit tests can sweep `t` without
-/// booting Bevy; the live system in `dead_end::brazier_flicker_system`
-/// reads this each frame.
+/// booting Bevy; the live [`brazier_flicker_system`] reads this each frame.
 pub(crate) fn flicker_factor(t: f32) -> f32 {
     let primary = (t * TAU * FLICKER_RATE_HZ).sin();
     let detuned = (t * TAU * FLICKER_RATE_HZ * FLICKER_DETUNE_RATIO).sin();
@@ -80,10 +85,11 @@ pub(crate) fn flicker_factor(t: f32) -> f32 {
     1.0 + FLICKER_AMPLITUDE * phase * 0.5
 }
 
-pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &DeadEndAssets, x: f32, z: f32) {
+pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32) {
     // Stone column — steady, no flicker.
     spawn_with_outline(
         commands,
+        None,
         assets.cylinder.clone(),
         assets.stone_mat.clone(),
         assets.outline_mat.clone(),
@@ -94,6 +100,7 @@ pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &DeadEndAssets, x: 
     // system can find its shared glow material handle.
     spawn_with_outline(
         commands,
+        None,
         assets.cylinder.clone(),
         assets.glow_mat.clone(),
         assets.outline_mat.clone(),
@@ -105,10 +112,64 @@ pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &DeadEndAssets, x: 
     // than competing with it.
     spawn_with_outline(
         commands,
+        None,
         assets.cylinder.clone(),
         assets.halo_mat.clone(),
         assets.outline_mat.clone(),
         Transform::from_translation(Vec3::new(x, HALO_Y, z)).with_scale(HALO_SCALE),
         (),
     );
+}
+
+/// Modulates the shared brazier glow material's emissive each frame
+/// with two slightly detuned sine waves, giving a non-uniform flicker
+/// without an explicit PRNG. Every brazier in the maze shares the same
+/// `glow_mat` handle, so a single material update animates them all in
+/// lockstep — finding any [`BrazierBowl`] entity is enough to get the
+/// handle.
+pub(crate) fn brazier_flicker_system(
+    time: Res<Time>,
+    bowls: Query<&MeshMaterial3d<StandardMaterial>, With<BrazierBowl>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+) {
+    // `Assets<StandardMaterial>` only exists when the PBR / asset plugins are
+    // loaded. Tests using `MinimalPlugins` don't have it, so the parameter is
+    // `Option<ResMut<…>>` and the system no-ops.
+    let Some(mut materials) = materials else { return };
+    let Some(handle) = bowls.iter().next() else {
+        return;
+    };
+    let Some(mat) = materials.get_mut(&handle.0) else {
+        return;
+    };
+    let factor = flicker_factor(time.elapsed_secs());
+    mat.emissive = LinearRgba::new(
+        GLOW_EMISSIVE.red * factor,
+        GLOW_EMISSIVE.green * factor,
+        GLOW_EMISSIVE.blue * factor,
+        1.0,
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flicker_factor_stays_within_amplitude_envelope() {
+        // The phase term `sin(a) + 0.4 * sin(b)` is bounded in [-1.4, 1.4];
+        // `factor = 1 + AMPLITUDE * phase * 0.5` is therefore bounded in
+        // `[1 - 0.7*AMP, 1 + 0.7*AMP]`. Sweep `t` to spot-check.
+        let max_phase = 1.4_f32;
+        let upper = 1.0 + FLICKER_AMPLITUDE * max_phase * 0.5;
+        let lower = 1.0 - FLICKER_AMPLITUDE * max_phase * 0.5;
+        for i in 0..2000 {
+            let t = i as f32 * 0.013;
+            let f = flicker_factor(t);
+            assert!(
+                f <= upper + 1e-4 && f >= lower - 1e-4,
+                "factor {f} out of envelope [{lower}, {upper}] at t={t}"
+            );
+        }
+    }
 }

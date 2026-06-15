@@ -1,4 +1,4 @@
-use super::{build_emissive_material, spawn_with_outline, DeadEndAssets};
+use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 
@@ -106,6 +106,9 @@ const LID_BINDING_LEFT_RIGHT_SCALE: Vec3 = Vec3::new(
     STRAP_WIDTH,
 );
 
+/// Apex height of the chest — the top of the lid bindings.
+pub(crate) const TOP_Y: f32 = LID_BINDING_Y + LID_BINDING_THICKNESS * 0.5;
+
 // Lock — cone (apex up, base down → triangle widens DOWNWARD from the
 // front) plus a small circle hiding the cone's narrow tip. Both pieces
 // are deliberately VERY THIN in Z and sit flush with the strap face so
@@ -171,7 +174,7 @@ pub(crate) fn build_lock_material(
 /// local-frame transform. Only the X/Z components rotate; Y stays put,
 /// so vertical stacking inside the chest is preserved. Used by every
 /// `spawn_with_outline` call inside `spawn_chest` so the whole chest
-/// can pivot to face the dead-end's open neighbour.
+/// can pivot to face its open neighbour.
 fn apply_yaw(x: f32, z: f32, yaw: f32, local: Transform) -> Transform {
     let yaw_rot = Quat::from_rotation_y(yaw);
     let centre = Vec3::new(x, 0.0, z);
@@ -185,7 +188,7 @@ fn apply_yaw(x: f32, z: f32, yaw: f32, local: Transform) -> Transform {
 
 pub(crate) fn spawn_chest(
     commands: &mut Commands,
-    assets: &DeadEndAssets,
+    assets: &CommonObjectAssets,
     x: f32,
     z: f32,
     yaw: f32,
@@ -198,6 +201,7 @@ pub(crate) fn spawn_chest(
     // Body cuboid.
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         assets.chest_mat.clone(),
         outline(),
@@ -209,6 +213,7 @@ pub(crate) fn spawn_chest(
     // chest's local X. Bottom half is buried inside the body.
     spawn_with_outline(
         commands,
+        None,
         assets.cylinder.clone(),
         assets.lid_mat.clone(),
         outline(),
@@ -223,6 +228,7 @@ pub(crate) fn spawn_chest(
     // Horizontal hinge band wrapping mid-height across all 4 side faces.
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         assets.hinge_mat.clone(),
         outline(),
@@ -235,6 +241,7 @@ pub(crate) fn spawn_chest(
     let leather = assets.leather_mat.clone();
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         leather.clone(),
         outline(),
@@ -246,6 +253,7 @@ pub(crate) fn spawn_chest(
     );
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         leather.clone(),
         outline(),
@@ -257,6 +265,7 @@ pub(crate) fn spawn_chest(
     );
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         leather.clone(),
         outline(),
@@ -268,6 +277,7 @@ pub(crate) fn spawn_chest(
     );
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         leather.clone(),
         outline(),
@@ -283,6 +293,7 @@ pub(crate) fn spawn_chest(
     // opposite strap's outer face so each loop reads as continuous.
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         leather.clone(),
         outline(),
@@ -294,6 +305,7 @@ pub(crate) fn spawn_chest(
     );
     spawn_with_outline(
         commands,
+        None,
         cuboid(),
         leather,
         outline(),
@@ -314,6 +326,7 @@ pub(crate) fn spawn_chest(
     let lock_cone_z = STRAP_FRONT_BACK_Z + STRAP_THICKNESS * 0.5 + LOCK_FRONT_OFFSET;
     spawn_with_outline(
         commands,
+        None,
         assets.cone.clone(),
         lock.clone(),
         outline(),
@@ -327,6 +340,7 @@ pub(crate) fn spawn_chest(
     // viewer of the lock face.
     spawn_with_outline(
         commands,
+        None,
         assets.cylinder.clone(),
         lock,
         outline(),

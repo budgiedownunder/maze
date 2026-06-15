@@ -26,7 +26,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::world::{
         objects::{
             self,
-            dead_end::brazier_flicker_system,
+            common::brazier::brazier_flicker_system,
             door::door_animation_system,
             enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
             health::health_animation_system,
@@ -110,7 +110,8 @@ mod tests {
         floor::FloorCell,
         initial_facing,
         objects::{
-            dead_end::{BrazierBowl, DeadEndObject},
+            common::brazier::BrazierBowl,
+            dead_end::DeadEndObject,
             door::DoorMarker,
             enemy::EnemyMarker,
             finish::orb::FinishOrb,

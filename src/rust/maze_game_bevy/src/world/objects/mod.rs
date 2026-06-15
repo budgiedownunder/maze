@@ -1,3 +1,4 @@
+pub(crate) mod common;
 pub(crate) mod dead_end;
 pub(crate) mod door;
 pub(crate) mod enemy;
@@ -12,7 +13,10 @@ use maze::CellEntity;
 
 pub(crate) struct ObjectAssets {
     pub(crate) finish: finish::FinishAssets,
-    pub(crate) dead_end: dead_end::DeadEndAssets,
+    /// Shared decorative-prop assets (brazier / urn / pillar / chest + the
+    /// inverted-hull primitives), consumed by both the dead-end landmarks and
+    /// the key holder.
+    pub(crate) common: common::CommonObjectAssets,
     pub(crate) key_holder: key_holder::KeyHolderAssets,
     /// Door slab assets. Doors are spawned by `spawn_world` (not
     /// `spawn_objects_for_cell`) because their panel borrows the cell's wall
@@ -29,7 +33,7 @@ pub(crate) fn build_object_assets(
 ) -> ObjectAssets {
     ObjectAssets {
         finish: finish::build_finish_assets(meshes, materials),
-        dead_end: dead_end::build_dead_end_assets(meshes, materials),
+        common: common::build_common_object_assets(meshes, materials),
         key_holder: key_holder::build_key_holder_assets(meshes, materials),
         door: door::build_door_assets(meshes, materials),
         enemy: enemy::build_enemy_assets(meshes, materials, images),
@@ -55,19 +59,20 @@ pub(crate) fn spawn_objects_for_cell(
     enemy_id: u32,
 ) {
     finish::spawn_finish_for_cell(commands, &assets.finish, cell, r, c);
-    dead_end::spawn_dead_end_object_for_cell(
+    dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config);
+    let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
+    let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
+    let health_style = overrides::resolve_health_style(cell_entity, config.health_style);
+    key_holder::spawn_key_holder_for_cell(
         commands,
-        &assets.dead_end,
+        &assets.key_holder,
+        &assets.common,
+        key_holder,
         grid,
         cell,
         r,
         c,
-        config,
     );
-    let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
-    let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
-    let health_style = overrides::resolve_health_style(cell_entity, config.health_style);
-    key_holder::spawn_key_holder_for_cell(commands, &assets.key_holder, key_holder, cell, r, c);
     enemy::spawn_enemy_for_cell(commands, &assets.enemy, enemy_type, cell, r, c, enemy_id);
     health::spawn_health_for_cell(commands, &assets.health, health_style, cell, r, c);
 }
