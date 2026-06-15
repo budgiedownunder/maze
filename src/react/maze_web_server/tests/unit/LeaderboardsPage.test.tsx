@@ -160,9 +160,9 @@ describe('LeaderboardsPage', () => {
       http.get('/api/v1/scores', () => HttpResponse.json({ scores: [], limit: 20, offset: 0, has_more: false })),
     )
     renderPage()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Play' })).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await userEvent.click(screen.getByRole('button', { name: '▶ Play' }))
 
     expect(launchPlay3dCurated).toHaveBeenCalledWith('easy')
     expect(launchPlay3dWithSettings).not.toHaveBeenCalled()
@@ -183,7 +183,7 @@ describe('LeaderboardsPage', () => {
     // Switch to Mazes — the player has none → nothing to launch → Play disabled.
     await userEvent.selectOptions(screen.getByLabelText('Game Type'), 'my-mazes')
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: '▶ Play' })).toBeDisabled())
   })
 
   it('Refresh reloads the current board', async () => {

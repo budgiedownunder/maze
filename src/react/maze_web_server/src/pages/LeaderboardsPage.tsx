@@ -192,7 +192,7 @@ export function LeaderboardsPage() {
               onChange={setSelection}
             >
               <button type="button" className="btn-primary leaderboard-play" onClick={handlePlay} disabled={!canPlay}>
-                {hasPlayed ? '↻ Play Again' : 'Play'}
+                {hasPlayed ? '↻ Play Again' : '▶ Play'}
               </button>
             </SubjectSelector>
             {resolveError && <p className="error-msg" role="alert">{resolveError}</p>}
