@@ -610,6 +610,20 @@ In addition, `GET /api/v1/features` returns an `oauth_providers` array describin
 
 The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
 
+## Leaderboards
+
+Completed 3D runs are recorded per player and surfaced as leaderboards (per maze and per curated difficulty) plus a personal history. Only **won** runs are recorded; the server takes the player from the session and stamps the record time, so neither can be spoofed by the client.
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `POST` | `/api/v1/scores` | Either | Record a completed (won) run. The body carries the run's `score` and `elapsed_ms` plus its subject — exactly one of a stored `maze_id` or a curated `challenge` (`"<difficulty>:<seed>"`). The server sets `user_id` from the session and stamps `recorded_at`; neither is trusted from the client. |
+| `GET`  | `/api/v1/scores` | Either | A leaderboard page for one subject. Query: `maze_id` **or** `challenge` (exactly one); `metric` (`time` \| `score`, default `time`); `direction` (`asc` \| `desc`, default best-first for the metric); `limit` / `offset` (server-capped paging); `include_usernames` (default `true` — resolves each row's player username; pass `false` for personal boards). |
+| `GET`  | `/api/v1/scores/me` | Either | The caller's own run history, most recent first; paged via `limit` / `offset`. |
+
+- A run's **subject** is dual-keyed: a stored user maze (`maze_id`) or a curated game (`challenge = "<difficulty>:<seed>"`). Exactly one is set, so a board aggregates everyone who played that subject — the row's `user_id` is the player, not the maze owner.
+- The two canonical orderings are **fastest time** (`elapsed_ms` ascending) and **highest score** (`score` descending); `direction` flips the primary metric, with the secondary metric and record time held as fixed tie-breaks for stable paging.
+- `score` is the engine's running total at completion (currently the count of keys collected during the run); `elapsed_ms` is the run duration measured by the game, excluding paused time.
+
 ## Game
 
 The 3D maze game (Bevy / WASM, served from `/game/`) fetches its session config at startup from the server, so a single edit to `config.toml` propagates to every client without a rebuild:

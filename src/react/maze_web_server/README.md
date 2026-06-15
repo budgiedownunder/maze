@@ -32,6 +32,11 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   single-finger canvas gestures: swipe left / right to turn, swipe up / down
   to tilt, press-and-hold to move forward. Spacebar (desktop) or the D-pad
   pause button toggles a "PAUSED" overlay that freezes the timer and movement.
+- **Leaderboards** — a "Leaderboards" page (with a Home tile and nav entry) showing
+  per-maze and per-curated-difficulty boards over completed 3D runs, with fastest-time /
+  highest-score tabs, your own runs highlighted, your personal score history, and a green
+  Play / Play Again button that launches the selected maze or difficulty in 3D. Mazes
+  with no scores yet still appear and are launchable
 - **In-browser WASM** — maze generation, solving, and game logic run locally via the
   `maze_wasm` WebAssembly module with no server round-trip
 
