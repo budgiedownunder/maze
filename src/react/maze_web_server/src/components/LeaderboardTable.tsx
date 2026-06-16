@@ -1,5 +1,6 @@
 import type { ScoreEntry } from '../types/api'
 import { formatElapsedMs } from '../utils/scores'
+import { Avatar } from './Avatar'
 
 interface LeaderboardTableProps {
   rows: ScoreEntry[]
@@ -62,7 +63,17 @@ export function LeaderboardTable({
                 <tr key={row.id} className={highlight ? 'leaderboard-row leaderboard-row--me' : 'leaderboard-row'}>
                   <td className="leaderboard-col-rank">{i + 1}</td>
                   {showPlayer && (
-                    <td className="leaderboard-col-player">{row.username ?? '—'}</td>
+                    <td className="leaderboard-col-player">
+                      <span className="leaderboard-player">
+                        <Avatar
+                          userId={row.user_id}
+                          avatarUpdatedAt={row.avatar_updated_at}
+                          size={24}
+                          alt=""
+                        />
+                        <span>{row.username ?? '—'}</span>
+                      </span>
+                    </td>
                   )}
                   <td className="leaderboard-col-time">{formatElapsedMs(row.elapsed_ms)}</td>
                   <td className="leaderboard-col-score">{row.score}</td>

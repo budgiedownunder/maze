@@ -19,6 +19,7 @@ export interface UserProfile {
   emails: UserEmail[]
   is_admin: boolean
   has_password: boolean
+  avatar_updated_at?: string | null
 }
 
 export interface UserEmailsResponse {
@@ -109,6 +110,7 @@ export interface ScoreEntry {
   elapsed_ms: number
   recorded_at: string
   username?: string | null
+  avatar_updated_at?: string | null
 }
 
 // A page of a leaderboard or personal history. Mirrors the server's

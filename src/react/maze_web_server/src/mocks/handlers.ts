@@ -272,6 +272,10 @@ export const handlers = [
     return HttpResponse.json(mockProfile)
   }),
 
+  http.get(`${BASE}/users/:id/avatar`, () => {
+    return new HttpResponse(null, { status: 404 })
+  }),
+
   http.put(`${BASE}/users/me/profile`, async ({ request }) => {
     const body = await request.json() as UpdateProfileRequest
     return HttpResponse.json({ ...mockProfile, ...body })

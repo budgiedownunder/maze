@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from './HamburgerMenu'
+import { Avatar } from './Avatar'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useAuth } from '../context/AuthContext'
@@ -45,16 +46,6 @@ export function AppHeader({ title, titleIcon, titleAs = 'span', children }: AppH
       </TitleTag>
       <div className="header-actions">
         {children}
-        {isAuthenticated && profile && (
-          <button
-            type="button"
-            className="header-username"
-            onClick={() => navigate('/account')}
-            title="My Account"
-          >
-            {profile.username}
-          </button>
-        )}
         <button
           className="theme-toggle"
           onClick={toggleTheme}
@@ -63,6 +54,21 @@ export function AppHeader({ title, titleIcon, titleAs = 'span', children }: AppH
         >
           {theme === 'dark' ? '☀' : '☾'}
         </button>
+        {isAuthenticated && profile && (
+          <button
+            type="button"
+            className="header-avatar-link"
+            onClick={() => navigate('/account')}
+            title={profile.username}
+          >
+            <Avatar
+              userId={profile.id}
+              avatarUpdatedAt={profile.avatar_updated_at}
+              size={28}
+              alt={profile.username}
+            />
+          </button>
+        )}
       </div>
     </header>
   )

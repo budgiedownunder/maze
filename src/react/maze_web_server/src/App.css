@@ -703,26 +703,40 @@
   background: var(--surface-hover);
 }
 
-/* Signed-in username in the header — a quiet link to the account page. */
-.header-username {
+/* Signed-in user's avatar in the header — a quiet link to the account page.
+   The username is surfaced as the hover tooltip (and the avatar's accessible
+   name), not as visible text. */
+.header-avatar-link {
+  display: inline-flex;
+  align-items: center;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--accent);
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  line-height: 1;
-  max-width: 12rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 0;
 }
 
-.header-username:hover {
+.header-avatar-link:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Circular user avatar (header, leaderboard rows, account page). The image is
+   square; the round frame + cover keep any aspect ratio looking right. */
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
   background: var(--surface-hover);
-  text-decoration: underline;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Player cell on a leaderboard: avatar + name on one line. */
+.leaderboard-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .auth-theme-toggle {

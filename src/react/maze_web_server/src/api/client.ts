@@ -78,6 +78,26 @@ export function getMe(token: string): Promise<UserProfile> {
   })
 }
 
+// Builds the avatar request path for a user, appending the `avatar_updated_at`
+// marker as a `?v=` cache-buster when known. This is the URL `fetchUserAvatar`
+// requests — NOT an `<img src>`: the route is guarded, so the image is loaded
+// via an authenticated fetch (a bare `<img>` can't carry the bearer token).
+export function avatarUrl(userId: string, updatedAt?: string | null): string {
+  const base = `${BASE}/users/${encodeURIComponent(userId)}/avatar`
+  return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
+}
+
+// Fetches a user's avatar image as a Blob over an authenticated request.
+// Resolves to the Blob on success and throws (with a `.status`) on a non-OK
+// response — callers treat a 404 as "no avatar" and fall back to the placeholder.
+export async function fetchUserAvatar(token: string, userId: string, updatedAt?: string | null): Promise<Blob> {
+  const response = await fetch(avatarUrl(userId, updatedAt), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) await throwForStatus(response)
+  return response.blob()
+}
+
 export function updateProfile(token: string, body: UpdateProfileRequest): Promise<UserProfile> {
   return request<UserProfile>('/users/me/profile', {
     method: 'PUT',
