@@ -360,6 +360,15 @@ mod test_definitions {
         async fn init_default_admin_user(&mut self, _username: &str, _email: &str, _password_hash: &str) -> Result<User, StoreError> {
             Err(StoreError::Other("init_default_admin_user() not implemented for MockStore".to_string()))
         }
+        async fn set_user_avatar(&mut self, _id: Uuid, _png_bytes: Vec<u8>) -> Result<(), StoreError> {
+            Err(StoreError::Other("set_user_avatar() not implemented for MockStore".to_string()))
+        }
+        async fn get_user_avatar(&self, _id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+            Err(StoreError::Other("get_user_avatar() not implemented for MockStore".to_string()))
+        }
+        async fn clear_user_avatar(&mut self, _id: Uuid) -> Result<(), StoreError> {
+            Err(StoreError::Other("clear_user_avatar() not implemented for MockStore".to_string()))
+        }
         /// Adds a new user to the store and sets the allocated `id` within the user object
         async fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             let mock_user = MockUser::new_from_user(user);
@@ -4290,6 +4299,7 @@ mod test_definitions {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         };
         {
             let mut store_lock = shared_store.write().await;

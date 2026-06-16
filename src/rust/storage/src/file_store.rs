@@ -540,6 +540,17 @@ impl FileStore {
             .to_string()
     }
 
+    // Returns the file path for a given user's avatar image. The avatar is
+    // always a PNG (the server canonicalises uploads), stored alongside
+    // `user.json` in the user's directory so a hard-delete of that directory
+    // removes the image with it.
+    fn avatar_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.user_dir_path(id))
+            .join("avatar.png")
+            .to_string_lossy()
+            .to_string()
+    }
+
     // Returns whether a given user exists
     fn user_exists(&self, id: Uuid) -> bool {
         file_exists(&self.user_file_path(id))
@@ -776,6 +787,7 @@ impl FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     ///
@@ -962,6 +974,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1021,6 +1034,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1146,6 +1160,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// store.create_user(&mut user).await.expect("create_user");
@@ -1214,6 +1229,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1289,6 +1305,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1355,6 +1372,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1424,6 +1442,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1502,6 +1521,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1581,6 +1601,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1663,6 +1684,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1741,6 +1763,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1816,6 +1839,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the admin user within the file store
@@ -1974,6 +1998,7 @@ impl UserStore for FileStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let row = store
@@ -2046,6 +2071,7 @@ impl UserStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -2104,6 +2130,7 @@ impl UserStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -2154,6 +2181,7 @@ impl UserStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
@@ -2170,6 +2198,163 @@ impl UserStore for FileStore {
         user.emails[idx].verified = true;
         user.emails[idx].verified_at = Some(generate_now_millis());
         self.write_user_file(&user, true)?;
+        Ok(())
+    }
+    /// Stores (or replaces) the user's avatar PNG at `users/<id>/avatar.png`
+    /// and stamps [`data_model::User::avatar_updated_at`]. The bytes are
+    /// written via tempfile + rename so a concurrent reader never sees a
+    /// half-written image, and the marker is stamped only after the bytes
+    /// land so the "has an avatar" signal is never set without bytes behind
+    /// it. The bytes are stored verbatim — the caller is responsible for
+    /// having canonicalised them to a PNG.
+    ///
+    /// # Examples
+    ///
+    /// Create a user, set an avatar, and read it back
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    ///
+    /// store.set_user_avatar(user.id, vec![0x89, 0x50, 0x4E, 0x47]).await.unwrap();
+    /// let bytes = store.get_user_avatar(user.id).await.unwrap();
+    /// assert_eq!(bytes, Some(vec![0x89, 0x50, 0x4E, 0x47]));
+    /// assert!(store.get_user(user.id).await.unwrap().avatar_updated_at.is_some());
+    /// # });
+    /// ```
+    async fn set_user_avatar(&mut self, id: Uuid, png_bytes: Vec<u8>) -> Result<(), Error> {
+        // `read_user` applies the soft-delete filter, so an unknown or
+        // soft-deleted id surfaces UserIdNotFound here before any bytes land.
+        let mut user = self.read_user(id)?;
+        let target = self.avatar_file_path(id);
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(&png_bytes)?;
+        }
+        fs::rename(&tmp, &target)?;
+        user.avatar_updated_at = Some(generate_now_millis());
+        self.write_user_file(&user, true)?;
+        Ok(())
+    }
+    /// Loads the user's avatar bytes, or `None` when no avatar file is
+    /// present (never set, since cleared, or no such user directory).
+    ///
+    /// # Examples
+    ///
+    /// A freshly-created user has no avatar
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    ///
+    /// assert_eq!(store.get_user_avatar(user.id).await.unwrap(), None);
+    /// # });
+    /// ```
+    async fn get_user_avatar(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+        let path = self.avatar_file_path(id);
+        if !file_exists(&path) {
+            return Ok(None);
+        }
+        Ok(Some(fs::read(&path)?))
+    }
+    /// Removes the user's avatar file if present and clears
+    /// [`data_model::User::avatar_updated_at`]. Idempotent — clearing a user
+    /// with no avatar (or no such user) is a successful no-op.
+    ///
+    /// # Examples
+    ///
+    /// Setting then clearing leaves no avatar behind
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    /// store.set_user_avatar(user.id, vec![1, 2, 3]).await.unwrap();
+    ///
+    /// store.clear_user_avatar(user.id).await.unwrap();
+    /// assert_eq!(store.get_user_avatar(user.id).await.unwrap(), None);
+    /// assert!(store.get_user(user.id).await.unwrap().avatar_updated_at.is_none());
+    /// # });
+    /// ```
+    async fn clear_user_avatar(&mut self, id: Uuid) -> Result<(), Error> {
+        let path = self.avatar_file_path(id);
+        if file_exists(&path) {
+            delete_file(&path);
+        }
+        // Clear the marker only when an active user currently advertises one,
+        // avoiding a needless user.json rewrite on the common no-op path.
+        if let Ok(mut user) = self.read_user(id)
+            && user.avatar_updated_at.is_some()
+        {
+            user.avatar_updated_at = None;
+            self.write_user_file(&user, true)?;
+        }
         Ok(())
     }
 }
@@ -2746,6 +2931,7 @@ impl TokenStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2792,6 +2978,7 @@ impl TokenStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2832,6 +3019,7 @@ impl TokenStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2888,6 +3076,7 @@ impl TokenStore for FileStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for _ in 0..2 {
@@ -3346,6 +3535,7 @@ mod tests {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 

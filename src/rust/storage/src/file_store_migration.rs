@@ -86,6 +86,7 @@ impl LegacyUser {
             deleted_at: None,
             created_at: Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 }
@@ -836,6 +837,7 @@ mod tests {
             deleted_at: None,
             created_at: Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 

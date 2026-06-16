@@ -334,8 +334,54 @@ impl SqlStore {
         // value the UPDATEs match zero rows.
         backfill_user_timestamps_if_null(&pool, kind).await?;
 
+        // Create the `user_avatars` table. Done here per-backend rather than
+        // in a static migration because its binary column type is the one
+        // piece of the schema with no portable spelling across all three
+        // backends — see `create_user_avatars_table`.
+        create_user_avatars_table(&pool, kind).await?;
+
         Ok(Self { pool, kind })
     }
+}
+
+/// Creates the `user_avatars` table if it does not already exist.
+///
+/// Lives here rather than in a static `migrations/` file because the binary
+/// `image_data` column has no portable spelling: PostgreSQL has only `BYTEA`,
+/// MySQL only `BLOB`/`LONGBLOB`, and SQLite takes `BLOB` — a single
+/// `sqlx::migrate!` SQL string applied verbatim to every backend can't
+/// satisfy all three. The avatar *value* round-trips uniformly through
+/// SQLx-Any (`Vec<u8>` ⇄ `AnyValueKind::Blob` on every driver), so only the
+/// DDL needs per-backend dispatch — the read/write code in
+/// `set_user_avatar` / `get_user_avatar` / `clear_user_avatar` is shared.
+/// This mirrors the per-backend approach `retire_legacy_users_email_column`
+/// takes for DDL the portable migration dialect can't express.
+///
+/// `image_data` holds the canonical avatar PNG (one row per user, keyed by
+/// `user_id`). The FK `ON DELETE CASCADE` makes a hard-delete of the owning
+/// user remove the avatar row; the cascade is also issued explicitly in
+/// `empty`, matching the `score_history` backstop. Idempotent via
+/// `CREATE TABLE IF NOT EXISTS` (SQLx tracks no version for it, so it simply
+/// no-ops once the table exists).
+async fn create_user_avatars_table(pool: &AnyPool, kind: SqlBackend) -> Result<(), Error> {
+    let blob_type = match kind {
+        SqlBackend::Postgres => "BYTEA",
+        SqlBackend::MySql => "LONGBLOB",
+        SqlBackend::Sqlite => "BLOB",
+    };
+    let sql = format!(
+        "CREATE TABLE IF NOT EXISTS user_avatars (\
+             user_id VARCHAR(36) NOT NULL PRIMARY KEY, \
+             image_data {blob_type} NOT NULL, \
+             CONSTRAINT fk_user_avatars_user_id \
+                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE\
+         )"
+    );
+    sqlx::query(&sql)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::Other(format!("create_user_avatars_table failed: sqlx: {e}")))?;
+    Ok(())
 }
 
 /// Backfills `users.created_at` and `users.last_sign_in_at` for any row
@@ -605,17 +651,18 @@ async fn retire_legacy_users_email_column(
                     full_name       VARCHAR(255) NOT NULL,\
                     password_hash   VARCHAR(255) NOT NULL,\
                     api_key         VARCHAR(36)  NOT NULL UNIQUE,\
-                    deleted_at      VARCHAR(32),\
-                    created_at      VARCHAR(32),\
-                    last_sign_in_at VARCHAR(32)\
+                    deleted_at        VARCHAR(32),\
+                    created_at        VARCHAR(32),\
+                    last_sign_in_at   VARCHAR(32),\
+                    avatar_updated_at VARCHAR(32)\
                 )",
             )
             .execute(&mut *conn)
             .await
             .map_err(|e| err("CREATE TABLE users_new", e))?;
             sqlx::query(
-                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key, deleted_at, created_at, last_sign_in_at) \
-                 SELECT id, is_admin, username, full_name, password_hash, api_key, deleted_at, created_at, last_sign_in_at FROM users",
+                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key, deleted_at, created_at, last_sign_in_at, avatar_updated_at) \
+                 SELECT id, is_admin, username, full_name, password_hash, api_key, deleted_at, created_at, last_sign_in_at, avatar_updated_at FROM users",
             )
             .execute(&mut *conn)
             .await
@@ -786,6 +833,11 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
         Some(s) => Some(datetime_from_sql(&s)?),
         None => None,
     };
+    let avatar_updated_at_str: Option<String> = row.try_get("avatar_updated_at").map_err(map_sqlx_err)?;
+    let avatar_updated_at = match avatar_updated_at_str {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
     Ok(User {
         id,
         is_admin: int_to_bool(is_admin_raw),
@@ -799,6 +851,7 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
         deleted_at,
         created_at,
         last_sign_in_at,
+        avatar_updated_at,
     })
 }
 
@@ -1042,6 +1095,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1125,6 +1179,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1262,6 +1317,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// store.create_user(&mut user).await.expect("create_user");
@@ -1329,6 +1385,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1447,6 +1504,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1528,6 +1586,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1615,6 +1674,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1732,6 +1792,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1825,6 +1886,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1926,6 +1988,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -2019,6 +2082,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -2100,6 +2164,7 @@ impl UserStore for SqlStore {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Create the admin user within the SQL store
@@ -2272,6 +2337,7 @@ impl UserStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let row = store
@@ -2355,6 +2421,7 @@ impl UserStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -2444,6 +2511,7 @@ impl UserStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -2515,6 +2583,7 @@ impl UserStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
@@ -2540,6 +2609,210 @@ impl UserStore for SqlStore {
         if result.rows_affected() == 0 {
             return Err(Error::UserEmailNotFound(email.to_string()));
         }
+        Ok(())
+    }
+    /// Stores (or replaces) the user's avatar PNG in `user_avatars` and stamps
+    /// `users.avatar_updated_at`. The bytes are bound as a blob and stored
+    /// verbatim (the caller has canonicalised them to a PNG). Rejects with
+    /// [`Error::UserIdNotFound`] when no active user has the given id.
+    ///
+    /// # Examples
+    ///
+    /// Create a user, set an avatar, and read it back
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    ///
+    /// store.set_user_avatar(user.id, vec![0x89, 0x50, 0x4E, 0x47]).await.unwrap();
+    /// assert_eq!(
+    ///     store.get_user_avatar(user.id).await.unwrap(),
+    ///     Some(vec![0x89, 0x50, 0x4E, 0x47])
+    /// );
+    /// assert!(store.get_user(user.id).await.unwrap().avatar_updated_at.is_some());
+    /// # });
+    /// ```
+    async fn set_user_avatar(&mut self, id: Uuid, png_bytes: Vec<u8>) -> Result<(), Error> {
+        // Stamp the marker first. The `deleted_at IS NULL` filter doubles as
+        // the existence/active check — zero rows affected means no such active
+        // user, so we stop before touching `user_avatars` (whose FK would
+        // reject the orphan anyway).
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE users SET avatar_updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+        ))
+        .bind(datetime_to_sql(canonical_now_millis()))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::UserIdNotFound(id.to_string()));
+        }
+        // Replace any existing avatar wholesale (DELETE + INSERT) — portable
+        // across all three backends without per-backend upsert syntax, and the
+        // same load-modify-save shape `update_user` uses for child rows.
+        sqlx::query(&q(self.kind, "DELETE FROM user_avatars WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO user_avatars (user_id, image_data) VALUES (?, ?)",
+        ))
+        .bind(id.to_string())
+        .bind(png_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+    /// Loads the user's avatar bytes, or `None` when the user has no avatar
+    /// row (never set, since cleared, or no such user).
+    ///
+    /// # Examples
+    ///
+    /// A freshly-created user has no avatar
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    ///
+    /// assert_eq!(store.get_user_avatar(user.id).await.unwrap(), None);
+    /// # });
+    /// ```
+    async fn get_user_avatar(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT image_data FROM user_avatars WHERE user_id = ?",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => Ok(Some(
+                row.try_get::<Vec<u8>, _>("image_data").map_err(map_sqlx_err)?,
+            )),
+            None => Ok(None),
+        }
+    }
+    /// Removes the user's avatar row if present and clears
+    /// `users.avatar_updated_at`. Idempotent — clearing a user with no avatar
+    /// (or no such user) is a successful no-op.
+    ///
+    /// # Examples
+    ///
+    /// Setting then clearing leaves no avatar behind
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    /// store.set_user_avatar(user.id, vec![1, 2, 3]).await.unwrap();
+    ///
+    /// store.clear_user_avatar(user.id).await.unwrap();
+    /// assert_eq!(store.get_user_avatar(user.id).await.unwrap(), None);
+    /// assert!(store.get_user(user.id).await.unwrap().avatar_updated_at.is_none());
+    /// # });
+    /// ```
+    async fn clear_user_avatar(&mut self, id: Uuid) -> Result<(), Error> {
+        // Both statements are harmless no-ops when there's no avatar / no such
+        // user, so clearing is always Ok (idempotent).
+        sqlx::query(&q(self.kind, "DELETE FROM user_avatars WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE users SET avatar_updated_at = NULL WHERE id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         Ok(())
     }
 }
@@ -3186,6 +3459,7 @@ impl Manage for SqlStore {
             "DELETE FROM oauth_identities",
             "DELETE FROM one_time_tokens",
             "DELETE FROM mazes",
+            "DELETE FROM user_avatars",
             "DELETE FROM users",
         ] {
             sqlx::query(sql)
@@ -3284,6 +3558,7 @@ impl TokenStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -3357,6 +3632,7 @@ impl TokenStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -3416,6 +3692,7 @@ impl TokenStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -3509,6 +3786,7 @@ impl TokenStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for _ in 0..2 {
@@ -3873,6 +4151,7 @@ impl EmailAuditLog for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for template in ["password_reset", "email_verification"] {
@@ -4026,6 +4305,7 @@ impl ScoreStore for SqlStore {
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
     ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     ///
@@ -4210,6 +4490,7 @@ mod tests {
             deleted_at: None,
             created_at: Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         };
         store.create_user(&mut user).await.expect("create_user");
         (store, user)
@@ -4602,6 +4883,7 @@ mod tests {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         };
         store.create_user(&mut user).await.expect("seed owner");
         user

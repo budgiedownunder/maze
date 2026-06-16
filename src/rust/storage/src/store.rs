@@ -122,6 +122,24 @@ pub trait UserStore {
         user_id: Uuid,
         email: &str,
     ) -> Result<(), Error>;
+    /// Stores (or replaces) the user's avatar image. `png_bytes` is the
+    /// canonical avatar the caller has already produced — the store treats it
+    /// as opaque and performs no decoding, re-encoding, or format validation.
+    /// The server canonicalises every upload to a 256×256 PNG before calling
+    /// this, so a stored avatar is always a PNG and no content-type is
+    /// persisted. Stamps [`data_model::User::avatar_updated_at`] so the
+    /// "has an avatar" signal and the cache-buster move in lock-step with the
+    /// bytes. Rejects with [`Error::UserIdNotFound`] when no active user has
+    /// the given id.
+    async fn set_user_avatar(&mut self, id: Uuid, png_bytes: Vec<u8>) -> Result<(), Error>;
+    /// Loads the user's avatar bytes, or `None` when the user has no avatar
+    /// (never set, or since cleared, or no such user). A stored avatar is
+    /// always a PNG; the caller owns the `Content-Type` on the way out.
+    async fn get_user_avatar(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    /// Removes the user's avatar if present and clears
+    /// [`data_model::User::avatar_updated_at`]. Idempotent — clearing a user
+    /// that has no avatar (or no such user) is a successful no-op.
+    async fn clear_user_avatar(&mut self, id: Uuid) -> Result<(), Error>;
 }
 
 /// Contains the identifying details for a maze item and (optionally)

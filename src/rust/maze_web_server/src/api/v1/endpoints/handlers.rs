@@ -692,6 +692,7 @@ impl SignupRequest {
                 deleted_at: None,
                 created_at: chrono::Utc::now(),
                 last_sign_in_at: None,
+                avatar_updated_at: None,
             }
         )
     }
@@ -1789,6 +1790,7 @@ impl CreateUserRequest {
                 deleted_at: None,
                 created_at: chrono::Utc::now(),
                 last_sign_in_at: None,
+                avatar_updated_at: None,
             }
         )
     }

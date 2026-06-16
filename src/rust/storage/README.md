@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 128 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 128 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 135 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 135 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -117,6 +117,7 @@ data_dir/
   users/
     <uuid>/
       user.json              user record (multi-email shape)
+      avatar.png             avatar image (present only when set)
       mazes/
         <maze-id>.json
   one_time_tokens/
@@ -167,6 +168,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 | `one_time_tokens` | Single-use, time-bounded tokens for password-reset / invite / email-verification flows (added in `0005_one_time_tokens.sql`). FK to `users` with `ON DELETE CASCADE`. Single-use enforcement is application-driven via `UPDATE ... WHERE consumed_at IS NULL`. |
 | `email_audit_log` | Append-only log of every email send attempt (added in `0006_email_audit_log.sql`). Two FKs to `users` — `recipient_user_id` and `triggered_by_user_id` — both `ON DELETE SET NULL` so the audit history survives a hard-delete (`purge_user`) without re-identifying the user. Soft-delete leaves the FK untouched. |
 | `score_history` | One row per completed 3D run (added in `0009_score_history.sql`); serves the leaderboards (per-maze, per-curated-challenge) and personal history. Dual-keyed subject — exactly one of `maze_id` (FK `mazes`, `ON DELETE CASCADE`) or `challenge` (a `"<difficulty>:<seed>"` string, no FK) — plus `user_id` (the *player*, FK `users`, `ON DELETE CASCADE`). Both FK cascades are also enforced in app code (the delete paths `DELETE FROM score_history` explicitly, mirroring FileStore). |
+| `user_avatars` | One row per user holding the avatar image bytes (`image_data` BLOB) keyed by `user_id` (PK + FK `users`, `ON DELETE CASCADE`). The companion marker `users.avatar_updated_at` (added in `0010_user_avatars.sql`) is both the "has an avatar" signal and the cache-buster. **Not created by a migration file** — its binary column type has no portable spelling across the three backends (PostgreSQL `BYTEA`, MySQL `LONGBLOB`, SQLite `BLOB`), so it is created per-backend in `create_user_avatars_table` (`sql_store.rs`), run from `SqlStore::new` after the portable migrations — the same pattern `retire_legacy_users_email_column` uses. The avatar *value* round-trips uniformly through SQLx-Any (`Vec<u8>` ⇄ blob on every driver); only the table DDL is per-backend. The FK cascade is also issued explicitly in `empty`, matching the `score_history` backstop. |
 
 Plus the standard SQLx migration tracking table `_sqlx_migrations`, created automatically.
 
@@ -185,6 +187,7 @@ The migration files in [`migrations/`](./migrations/):
 | `0007_email_audit_log_error_message.sql` | Adds a nullable `error_message VARCHAR(2000)` column to `email_audit_log` for free-form diagnostic detail captured alongside `error_class` when a send fails (e.g. an Azure AD `AADSTS70011` body for token-mint failures, or the SMTP enhanced status response for SMTP send failures). `error_class` remains the stable, low-cardinality dashboard signal; `error_message` is the human-readable why. VARCHAR (not bare TEXT) per the rule in [`0001_initial.sql`](./migrations/0001_initial.sql) — SQLx-Any classifies MySQL TEXT as BLOB and breaks `Option<String>` decoding. Sized at 2000 (~8 KB at utf8mb4): well above the AAD JSON / SMTP responses this column actually stores, but small enough to leave ~24 KB of row-size headroom for future columns. The store layer truncates oversize values at write time via `data_model::truncate_email_audit_error_message` (with the `…[truncated]` marker), so an unusually verbose upstream body never fails the audit write — the audit row is only useful if it always lands. |
 | `0008_user_timestamps.sql` | Adds `users.created_at VARCHAR(32)` (RFC 3339 timestamp) and `users.last_sign_in_at VARCHAR(32)`. Both are added nullable for portability (MySQL rejects `ALTER TABLE ... ADD COLUMN ... NOT NULL` without a literal `DEFAULT` on a populated table). The backfill UPDATEs aren't in the static SQL file — they live in `backfill_user_timestamps_if_null` in `sql_store.rs` and run from `SqlStore::new` after `sqlx::migrate!()`. `created_at` is unconditionally backfilled with `Utc::now()` captured at startup (non-null required by the app, no more accurate value available). `last_sign_in_at` is backfilled to the timestamp of the user's most recent login row — the most accurate evidence we have of when they last signed in. The backfill iterates `(user_id, MAX(created_at))` from `user_logins` in Rust and issues one parameterised UPDATE per user rather than a single `UPDATE … (correlated subquery) WHERE …`; the correlated form is rejected by PostgreSQL with `syntax error at or near "WHERE"` despite being accepted by SQLite and MySQL. Users with no `user_logins` row stay at NULL so the welcome-banner trigger fires correctly on their first actual sign-in. The application's `User.created_at` is non-nullable; new users carry the real `Utc::now()` set at creation. `User.last_sign_in_at` is `Option<DateTime<Utc>>`; the welcome-banner trigger is `User::is_first_sign_in()` = `last_sign_in_at.is_none() && logins.is_empty()` (captured before the handler flips either field). |
 | `0009_score_history.sql` | Creates the `score_history` table (`id`, `user_id`, `maze_id`, `challenge`, `score BIGINT`, `elapsed_ms BIGINT`, `recorded_at`) plus four lookup indexes (`maze_id`, `challenge`, `user_id`, `recorded_at`). FKs `user_id` → `users(id)` and `maze_id` → `mazes(id)`, both `ON DELETE CASCADE`. The trait `ScoreStore` ([`store.rs`](./src/store.rs)) provides `record_score` (one row per won run) and the paged board/history reads (`maze_leaderboard`, `challenge_leaderboard`, `user_history` — each `limit` + `offset`). Board ordering is a metric (time / score) plus a direction; the secondary metric + `recorded_at` / `id` tie-breaks stay fixed. The two board reads take an `include_usernames` flag and return `ScoreboardEntry { entry, username }` — the backend owns username resolution (SqlStore joins `users` in the board query; FileStore reads the player files), so callers never N+1. `user_history` carries no username (every row is the caller). `score` / `elapsed_ms` are `BIGINT` (the engine score is `u64`, stored as `i64`). The cascade is also done in app code (the delete paths `DELETE FROM score_history` explicitly — the FK is a backstop, uniform across SQLite/PostgreSQL/MySQL/FileStore). |
+| `0010_user_avatars.sql` | Adds `users.avatar_updated_at VARCHAR(32)` (nullable RFC 3339 timestamp) — the "has an avatar" signal + cache-buster, kept off the hot path so loading a user never drags the image bytes. The companion `user_avatars` table (the `image_data` BLOB) is deliberately not created in this file as its binary column type has no portable spelling across the three backends (PostgreSQL `BYTEA` / MySQL `LONGBLOB` / SQLite `BLOB`).
 
 ### Soft-delete behaviour
 
@@ -210,6 +213,8 @@ The schema is written to MySQL's strict subset so the same file applies cleanly 
 5. **Every string column is `VARCHAR(N)`, not `TEXT`.** SQLx-Any classifies MySQL TEXT as `BLOB` (TEXT and BLOB share the wire type), breaking `String` decoding.
 
 PostgreSQL and SQLite accept all five rules transparently. **New migrations must follow the same rules** — adding a column or table that violates them will surface only when the migration runs against MySQL.
+
+**Binary (BLOB) columns have no portable DDL spelling.** PostgreSQL has only `BYTEA`, MySQL only `BLOB`/`LONGBLOB` (no `BYTEA`), and SQLite takes `BLOB` — there is no keyword common to all three, so a binary column *cannot* be declared in a static migration file applied verbatim to every backend. To overcome this, we create tables with blob columns per-backend in `SqlStore::new` (see `create_user_avatars_table`), choosing the column type by `self.kind`. This is a DDL-only constraint: the binary *value* binds and reads back uniformly through SQLx-Any (`Vec<u8>`/`&[u8]` ⇄ `AnyValueKind::Blob`, mapped to the native `BYTEA`/`BLOB`/`BLOB` encode+decode on each driver), so the read/write code stays backend-agnostic.
 
 ### Placeholder translation
 

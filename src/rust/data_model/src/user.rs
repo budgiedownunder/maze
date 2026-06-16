@@ -94,6 +94,20 @@ pub struct User {
     /// their next sign-in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_sign_in_at: Option<DateTime<Utc>>,
+    /// Timestamp of the user's most recent avatar upload, or `None` when the
+    /// user has no avatar. Doubles as the "has an avatar" signal and the
+    /// cache-buster for the avatar image URL. The avatar bytes themselves
+    /// live **outside** the `User` record (a file in the FileStore, a
+    /// `user_avatars` row in the SqlStore) so loading a user never drags the
+    /// image along; this lightweight marker is all the user-facing surfaces
+    /// (profile DTO, scoreboard rows) need to decide between rendering the
+    /// image and the generic placeholder. The storage layer keeps it in
+    /// lock-step with the stored bytes — `UserStore::set_user_avatar` stamps
+    /// it, `UserStore::clear_user_avatar` resets it to `None`.
+    /// `serde(default)` + `skip_serializing_if` keep older user JSON files
+    /// readable and omit the field for users without an avatar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar_updated_at: Option<DateTime<Utc>>,
 }
 
 impl User {
@@ -121,6 +135,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -150,6 +165,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -183,6 +199,7 @@ impl User {
             deleted_at: None,
             created_at: generate_now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
     /// Returns true if the user is active (i.e. not soft-deleted). Storage
@@ -344,6 +361,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -415,6 +433,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -482,6 +501,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Peform a login
@@ -527,6 +547,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Peform a login
@@ -568,6 +589,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// let login = user.create_login(24, None, None);
@@ -615,6 +637,7 @@ impl User {
     ///     deleted_at: None,
     ///     created_at: chrono::Utc::now(),
     ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
     /// };
     ///
     /// // Verify that the login is valid
@@ -871,6 +894,7 @@ mod tests {
             deleted_at: None,
             created_at: generate_now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 

@@ -572,6 +572,50 @@ async fn purge_user_returns_not_found_for_unknown_id() {
     contract::purge_user_returns_not_found_for_unknown_id(&mut s).await;
 }
 
+// ─── UserStore — avatars ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn set_user_avatar_round_trips_via_get_user_avatar() {
+    let mut s = fresh_store().await;
+    contract::set_user_avatar_round_trips_via_get_user_avatar(&mut s).await;
+}
+
+#[tokio::test]
+async fn get_user_avatar_returns_none_when_unset() {
+    let mut s = fresh_store().await;
+    contract::get_user_avatar_returns_none_when_unset(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_user_avatar_replaces_existing() {
+    let mut s = fresh_store().await;
+    contract::set_user_avatar_replaces_existing(&mut s).await;
+}
+
+#[tokio::test]
+async fn clear_user_avatar_removes_it() {
+    let mut s = fresh_store().await;
+    contract::clear_user_avatar_removes_it(&mut s).await;
+}
+
+#[tokio::test]
+async fn clear_user_avatar_is_idempotent_when_unset() {
+    let mut s = fresh_store().await;
+    contract::clear_user_avatar_is_idempotent_when_unset(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_user_avatar_returns_not_found_for_unknown_id() {
+    let mut s = fresh_store().await;
+    contract::set_user_avatar_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn purge_user_cascades_to_avatar() {
+    let mut s = fresh_store().await;
+    contract::purge_user_cascades_to_avatar(&mut s).await;
+}
+
 // ─── UserStore — has_active_admin_user ───────────────────────────────────
 
 #[tokio::test]

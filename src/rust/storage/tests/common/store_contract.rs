@@ -43,6 +43,7 @@ pub fn make_user(username: &str, email: &str) -> User {
         // the round-trip even though the stored value is correct.
         created_at: chrono::Utc::now().trunc_subsecs(3),
         last_sign_in_at: None,
+        avatar_updated_at: None,
     }
 }
 
@@ -1237,6 +1238,127 @@ pub async fn purge_user_returns_not_found_for_unknown_id(store: &mut Box<dyn Sto
     assert!(
         matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
         "got {err:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — avatars
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Sample PNG-ish bytes — the store treats them as opaque, so any byte
+/// sequence exercises the binary round-trip. Includes a zero byte and a
+/// high byte to catch any text/UTF-8 mishandling on a backend.
+fn sample_avatar_bytes() -> Vec<u8> {
+    vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x00, 0xFF]
+}
+
+pub async fn set_user_avatar_round_trips_via_get_user_avatar(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let bytes = sample_avatar_bytes();
+    store
+        .set_user_avatar(alice.id, bytes.clone())
+        .await
+        .expect("set_user_avatar");
+    let got = store.get_user_avatar(alice.id).await.expect("get_user_avatar");
+    assert_eq!(got, Some(bytes), "avatar bytes must round-trip unchanged");
+    // The marker on the users row must move in lock-step with the bytes.
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.avatar_updated_at.is_some(),
+        "set_user_avatar must stamp avatar_updated_at"
+    );
+}
+
+pub async fn get_user_avatar_returns_none_when_unset(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let got = store.get_user_avatar(alice.id).await.expect("get_user_avatar");
+    assert_eq!(got, None, "a user with no avatar must return None");
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.avatar_updated_at.is_none(),
+        "a user with no avatar must have avatar_updated_at = None"
+    );
+}
+
+pub async fn set_user_avatar_replaces_existing(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .set_user_avatar(alice.id, vec![1, 2, 3])
+        .await
+        .expect("first set");
+    store
+        .set_user_avatar(alice.id, vec![9, 8, 7, 6])
+        .await
+        .expect("second set replaces");
+    let got = store.get_user_avatar(alice.id).await.expect("get_user_avatar");
+    assert_eq!(got, Some(vec![9, 8, 7, 6]), "latest set must win");
+}
+
+pub async fn clear_user_avatar_removes_it(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .set_user_avatar(alice.id, sample_avatar_bytes())
+        .await
+        .expect("set_user_avatar");
+    store
+        .clear_user_avatar(alice.id)
+        .await
+        .expect("clear_user_avatar");
+    assert_eq!(
+        store.get_user_avatar(alice.id).await.expect("get_user_avatar"),
+        None,
+        "avatar must be gone after clear"
+    );
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.avatar_updated_at.is_none(),
+        "clear_user_avatar must reset avatar_updated_at to None"
+    );
+}
+
+pub async fn clear_user_avatar_is_idempotent_when_unset(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    // Clearing a user that never had an avatar is a successful no-op.
+    store
+        .clear_user_avatar(alice.id)
+        .await
+        .expect("clear with no avatar must succeed");
+    assert_eq!(
+        store.get_user_avatar(alice.id).await.expect("get_user_avatar"),
+        None
+    );
+}
+
+pub async fn set_user_avatar_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .set_user_avatar(id, sample_avatar_bytes())
+        .await
+        .expect_err("setting an avatar for an unknown user must fail");
+    assert!(
+        matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn purge_user_cascades_to_avatar(store: &mut Box<dyn Store>) {
+    // Hard-delete must take the avatar with it: the SqlStore FK
+    // `ON DELETE CASCADE` removes the user_avatars row, and the FileStore
+    // hard-delete removes the user directory (avatar.png included).
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .set_user_avatar(alice.id, sample_avatar_bytes())
+        .await
+        .expect("set_user_avatar");
+    assert!(
+        store.get_user_avatar(alice.id).await.expect("pre-purge get").is_some(),
+        "precondition: avatar present before purge"
+    );
+    store.purge_user(alice.id).await.expect("purge_user");
+    assert_eq!(
+        store.get_user_avatar(alice.id).await.expect("post-purge get"),
+        None,
+        "purge must remove the avatar"
     );
 }
 
