@@ -238,6 +238,20 @@ function mintToken(prefix: string): string {
   return `${prefix}-${tokenCounter}-${Date.now()}`
 }
 
+// In-memory avatar state: a tiny valid 1x1 PNG served as the stored image, plus
+// the `avatar_updated_at` marker. Upload stamps the marker (so GET /users/me
+// reflects it and the avatar GET serves bytes); remove clears it. Stateful so
+// the upload -> display flow works end-to-end through the service worker (e2e).
+const MOCK_AVATAR_PNG = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMEAYHEr8+/AAAAAElFTkSuQmCC'),
+  c => c.charCodeAt(0),
+)
+let mockAvatarUpdatedAt: string | null = null
+
+export function resetMockAvatar(): void {
+  mockAvatarUpdatedAt = null
+}
+
 export const handlers = [
   http.get(`${BASE}/features`, () => {
     return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [], email_enabled: true, max_maze_cells: null })
@@ -269,11 +283,24 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/users/me`, () => {
-    return HttpResponse.json(mockProfile)
+    return HttpResponse.json({ ...mockProfile, avatar_updated_at: mockAvatarUpdatedAt })
   }),
 
+  // Avatar serve — returns the stored bytes once an avatar is set, else 404
+  // (the client then shows the placeholder). Ignores the id (single mock user).
   http.get(`${BASE}/users/:id/avatar`, () => {
-    return new HttpResponse(null, { status: 404 })
+    if (mockAvatarUpdatedAt == null) return new HttpResponse(null, { status: 404 })
+    return new HttpResponse(MOCK_AVATAR_PNG, { headers: { 'Content-Type': 'image/png' } })
+  }),
+
+  http.post(`${BASE}/users/me/avatar`, () => {
+    mockAvatarUpdatedAt = new Date().toISOString()
+    return HttpResponse.json({ avatar_updated_at: mockAvatarUpdatedAt })
+  }),
+
+  http.delete(`${BASE}/users/me/avatar`, () => {
+    mockAvatarUpdatedAt = null
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.put(`${BASE}/users/me/profile`, async ({ request }) => {

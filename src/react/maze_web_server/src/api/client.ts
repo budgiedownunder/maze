@@ -98,6 +98,28 @@ export async function fetchUserAvatar(token: string, userId: string, updatedAt?:
   return response.blob()
 }
 
+// Uploads (or replaces) the caller's avatar. The server canonicalises the image
+// to a 256x256 PNG and returns the new `avatar_updated_at` marker. Note: no
+// `Content-Type` header — the browser sets `multipart/form-data` with the
+// correct boundary for a `FormData` body; `authHeaders` would wrongly force JSON.
+export function uploadAvatar(token: string, file: File): Promise<{ avatar_updated_at: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  return request<{ avatar_updated_at: string }>('/users/me/avatar', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+}
+
+// Removes the caller's avatar (idempotent server-side — 204 even if none set).
+export function deleteAvatar(token: string): Promise<void> {
+  return requestEmpty('/users/me/avatar', {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
 export function updateProfile(token: string, body: UpdateProfileRequest): Promise<UserProfile> {
   return request<UserProfile>('/users/me/profile', {
     method: 'PUT',

@@ -728,6 +728,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: var(--surface-hover);
+  border: 1px solid #000;
   flex-shrink: 0;
   vertical-align: middle;
 }
@@ -737,6 +738,29 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+/* Account page avatar section: an "Avatar" title above the row, with the large
+   avatar on the left and its action buttons stacked vertically to its right. */
+/* Section heading ("Profile"), matching the Email Addresses panel's title. */
+.account-section-title {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.account-avatar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.account-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .auth-theme-toggle {

@@ -99,6 +99,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { isFirstSignIn: response.is_first_sign_in }
   }, [setAuthFromTokenResponse])
 
+  const refreshProfile = useCallback(async () => {
+    const current = authStateRef.current
+    if (!current) return
+    const me = await api.getMe(current.token)
+    setProfile(me)
+  }, [])
+
   const logout = useCallback(async () => {
     const state = authState
     clearAuthState()
@@ -123,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         setAuthFromTokenResponse,
         logout,
+        refreshProfile,
       }}
     >
       {children}

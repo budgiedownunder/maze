@@ -61,6 +61,11 @@ export interface AuthContextValue {
    *  without making the original credential request itself. */
   setAuthFromTokenResponse: (token: string, expiresAt: string) => Promise<void>
   logout: () => Promise<void>
+  /** Re-fetch the signed-in user's profile from the server and update the
+   *  context, so UI that reads `profile` (e.g. the header avatar) reflects a
+   *  change made elsewhere (e.g. an avatar upload on the account page). No-op
+   *  when signed out. */
+  refreshProfile: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)
