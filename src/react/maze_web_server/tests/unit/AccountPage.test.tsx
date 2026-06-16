@@ -252,4 +252,12 @@ describe('AccountPage', () => {
     const img = container.querySelector('.account-avatar img') as HTMLImageElement
     await waitFor(() => expect(img.getAttribute('src')).toBe('/images/avatar-placeholder.png'))
   })
+
+  it('clicking the avatar image opens the file picker', async () => {
+    const { container } = renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    const clickSpy = vi.spyOn(accountFileInput(container), 'click').mockImplementation(() => {})
+    await userEvent.click(container.querySelector('.account-avatar-button') as HTMLElement)
+    expect(clickSpy).toHaveBeenCalled()
+  })
 })

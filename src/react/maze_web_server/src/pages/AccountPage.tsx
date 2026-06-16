@@ -179,7 +179,16 @@ export function AccountPage() {
 
         {!isLoading && saved && (
           <section className="account-avatar" aria-label="Avatar">
-            <Avatar userId={saved.id} avatarUpdatedAt={saved.avatar_updated_at} size={96} alt="Your avatar" />
+            <button
+              type="button"
+              className="account-avatar-button"
+              disabled={avatarBusy}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label={saved.avatar_updated_at ? 'Change avatar' : 'Upload avatar'}
+              title={saved.avatar_updated_at ? 'Change avatar' : 'Upload avatar'}
+            >
+              <Avatar userId={saved.id} avatarUpdatedAt={saved.avatar_updated_at} size={96} alt="Your avatar" />
+            </button>
             <div className="account-avatar-actions">
               <button
                 type="button"

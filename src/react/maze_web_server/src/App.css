@@ -756,6 +756,19 @@
   margin-bottom: 1.5rem;
 }
 
+.account-avatar-button {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.account-avatar-button:disabled {
+  cursor: default;
+}
+
 .account-avatar-actions {
   display: flex;
   flex-direction: column;
