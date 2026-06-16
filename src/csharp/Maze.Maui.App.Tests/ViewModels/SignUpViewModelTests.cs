@@ -19,7 +19,7 @@ namespace Maze.Maui.App.Tests.ViewModels
         private const string ValidPassword = "Pass1!aB";
 
         private static AccountViewModel BuildAccountVm()
-            => new(new Mock<IAuthService>().Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object);
+            => new(new Mock<IAuthService>().Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, new Mock<IAvatarService>().Object);
 
         private static (SignUpViewModel vm, Mock<IAuthService> auth, Mock<IAppFeaturesService> features, Mock<INavigationService> nav, AccountViewModel account)
             BuildVm(bool emailEnabled = true)

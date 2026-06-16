@@ -4,6 +4,7 @@
              xmlns:converters="clr-namespace:Maze.Maui.App.Converters"
              xmlns:model="clr-namespace:Maze.Maui.App.Models"
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
              x:DataType="viewmodel:LeaderboardsViewModel"
              x:Class="Maze.Maui.App.Views.LeaderboardsPage"
              Title="{Binding Title}">
@@ -152,9 +153,21 @@
                                         </DataTrigger>
                                     </Grid.Triggers>
                                     <Label Grid.Column="0" Text="{Binding Rank}" />
-                                    <Label Grid.Column="1" Text="{Binding Player}" LineBreakMode="TailTruncation"
-                                           ToolTipProperties.Text="{Binding Player}"
-                                           IsVisible="{Binding ShowPlayer}" />
+                                    <Grid Grid.Column="1" ColumnSpacing="6"
+                                          IsVisible="{Binding ShowPlayer}"
+                                          VerticalOptions="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <controls:AvatarView Grid.Column="0"
+                                                             Bytes="{Binding AvatarBytes}"
+                                                             Size="24"
+                                                             VerticalOptions="Center" />
+                                        <Label Grid.Column="1" Text="{Binding Player}" LineBreakMode="TailTruncation"
+                                               ToolTipProperties.Text="{Binding Player}"
+                                               VerticalOptions="Center" />
+                                    </Grid>
                                     <Label Grid.Column="2" Text="{Binding Time}" />
                                     <Label Grid.Column="3" Text="{Binding Score}" />
                                     <Label Grid.Column="4" Text="{Binding Completed}" LineBreakMode="TailTruncation"

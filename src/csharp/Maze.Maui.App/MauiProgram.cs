@@ -86,6 +86,7 @@ namespace Maze.Maui.App
             else
                 builder.Services.AddSingleton<IMazeService, MazeHttpClientService>();
             builder.Services.AddSingleton<IScoresService, ScoresHttpClientService>();
+            builder.Services.AddSingleton<IAvatarService, AvatarHttpClientService>();
             builder.Services.AddSingleton<IGameConfigService, GameConfigHttpClientService>();
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());

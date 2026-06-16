@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:views="clr-namespace:Maze.Maui.App.Views"
     xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+    xmlns:controls="clr-namespace:Maze.Maui.App"
     FlyoutBehavior="Flyout">
 
     <!-- Flyout header: the signed-in user's name; tapping it opens the Account
@@ -22,17 +23,22 @@
             <Grid.GestureRecognizers>
                 <TapGestureRecognizer Tapped="OnFlyoutHeaderTapped" />
             </Grid.GestureRecognizers>
-            <VerticalStackLayout Spacing="2">
-                <Label Text="Signed in as"
-                       FontSize="12"
-                       TextColor="White"
-                       Opacity="0.85" />
-                <Label Text="{Binding Username}"
-                       FontSize="18"
-                       FontAttributes="Bold"
-                       TextColor="White"
-                       LineBreakMode="TailTruncation" />
-            </VerticalStackLayout>
+            <HorizontalStackLayout Spacing="12">
+                <controls:AvatarView Bytes="{Binding AvatarBytes}"
+                                     Size="48"
+                                     VerticalOptions="Center" />
+                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                    <Label Text="Signed in as"
+                           FontSize="12"
+                           TextColor="White"
+                           Opacity="0.85" />
+                    <Label Text="{Binding Username}"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+            </HorizontalStackLayout>
         </Grid>
     </Shell.FlyoutHeader>
 

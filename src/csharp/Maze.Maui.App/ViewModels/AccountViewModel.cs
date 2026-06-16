@@ -17,9 +17,19 @@ namespace Maze.Maui.App.ViewModels
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
         private readonly INavigationService _navigationService;
+        private readonly IAvatarService _avatarService;
 
         private string _loadedUsername = "";
         private string _loadedFullName = "";
+
+        /// <summary>
+        /// The signed-in user's avatar PNG bytes, or <c>null</c> when they have
+        /// none (the avatar control then shows the generic placeholder). Bound
+        /// by the Shell flyout header so it reflects the current user. Bytes (not
+        /// a UI image type) so this view model stays free of MAUI runtime types.
+        /// </summary>
+        [ObservableProperty]
+        private byte[]? avatarBytes;
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
@@ -64,12 +74,14 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="navigationService">Injected navigation service</param>
-        public AccountViewModel(IAuthService authService, IDialogService dialogService, INavigationService navigationService)
+        /// <param name="avatarService">Injected avatar service</param>
+        public AccountViewModel(IAuthService authService, IDialogService dialogService, INavigationService navigationService, IAvatarService avatarService)
         {
             Title = "Account";
             _authService = authService;
             _dialogService = dialogService;
             _navigationService = navigationService;
+            _avatarService = avatarService;
             // Subscribe to in-process pub/sub so a successful Set/Change in
             // the password popup flips the local HasPassword without a
             // re-fetch. Singleton lifetime guarantees we outlive any sender.
@@ -97,6 +109,7 @@ namespace Maze.Maui.App.ViewModels
                 FullName = _loadedFullName = profile.FullName;
                 IsAdmin = profile.IsAdmin;
                 HasPassword = profile.HasPassword;
+                AvatarBytes = await _avatarService.TryLoadAvatarBytesAsync(profile.Id, profile.AvatarUpdatedAt);
                 LoadStatus = "";
             }
             catch
@@ -117,6 +130,7 @@ namespace Maze.Maui.App.ViewModels
             Username = _loadedUsername = "";
             FullName = _loadedFullName = "";
             IsAdmin = false;
+            AvatarBytes = null;
             ErrorMessage = "";
             LoadStatus = "Loading profile...";
         }

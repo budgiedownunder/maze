@@ -23,7 +23,8 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             var dialog = new Mock<IDialogService>();
             var nav = new Mock<INavigationService>();
-            var vm = new AccountViewModel(auth.Object, dialog.Object, nav.Object);
+            var avatar = new Mock<IAvatarService>();
+            var vm = new AccountViewModel(auth.Object, dialog.Object, nav.Object, avatar.Object);
             return (vm, auth, dialog, nav);
         }
 
@@ -58,6 +59,38 @@ namespace Maze.Maui.App.Tests.ViewModels
             await vm.LoadProfileCommand.ExecuteAsync(null);
 
             Assert.Contains("Failed to load profile", vm.ErrorMessage);
+        }
+
+        [Fact]
+        public async Task LoadProfile_SetsAvatarBytesFromAvatarService()
+        {
+            var auth = new Mock<IAuthService>();
+            var avatar = new Mock<IAvatarService>();
+            byte[] bytes = { 1, 2, 3 };
+            auth.Setup(a => a.GetMyProfileAsync())
+                .ReturnsAsync(new UserProfile { Id = "u1", Username = "alice", AvatarUpdatedAt = "2026-06-16T12:00:00Z" });
+            avatar.Setup(s => s.TryLoadAvatarBytesAsync("u1", "2026-06-16T12:00:00Z")).ReturnsAsync(bytes);
+            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object);
+
+            await vm.LoadProfileCommand.ExecuteAsync(null);
+
+            Assert.Same(bytes, vm.AvatarBytes);
+        }
+
+        [Fact]
+        public async Task LoadProfile_NoAvatar_LeavesAvatarBytesNull()
+        {
+            var auth = new Mock<IAuthService>();
+            var avatar = new Mock<IAvatarService>();
+            auth.Setup(a => a.GetMyProfileAsync())
+                .ReturnsAsync(new UserProfile { Id = "u1", Username = "alice", AvatarUpdatedAt = null });
+            // No marker → the service resolves to null (no fetch); the VM stores it.
+            avatar.Setup(s => s.TryLoadAvatarBytesAsync(It.IsAny<string>(), null)).ReturnsAsync((byte[]?)null);
+            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object);
+
+            await vm.LoadProfileCommand.ExecuteAsync(null);
+
+            Assert.Null(vm.AvatarBytes);
         }
 
         // ---- SaveProfile ----------------------------------------------------

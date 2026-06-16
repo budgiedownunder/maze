@@ -43,5 +43,11 @@ namespace Maze.Maui.App.Models
         /// <c>null</c> (the server omits it on personal boards).</summary>
         [JsonPropertyName("username")]
         public string? Username { get; set; }
+
+        /// <summary>The player's avatar cache-buster (RFC 3339 string), resolved
+        /// on the same board JOIN as <see cref="Username"/>; <c>null</c> when the
+        /// player has no avatar or names/avatars weren't requested.</summary>
+        [JsonPropertyName("avatar_updated_at")]
+        public string? AvatarUpdatedAt { get; set; }
     }
 }

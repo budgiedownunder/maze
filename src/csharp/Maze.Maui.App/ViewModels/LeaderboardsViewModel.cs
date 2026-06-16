@@ -25,6 +25,11 @@ namespace Maze.Maui.App.ViewModels
         private readonly IMazeService _mazeService;
         private readonly IAuthService _authService;
         private readonly INavigationService _navigationService;
+        private readonly IAvatarService _avatarService;
+
+        // Resolved avatar per player (user_id → PNG bytes or null when none),
+        // so a player appearing on multiple rows/pages is fetched once.
+        private readonly Dictionary<string, byte[]?> _avatarCache = new();
 
         // difficulty → fixed seed; the seeds don't change, so resolve each once.
         private readonly Dictionary<Difficulty, ulong> _seedCache = new();
@@ -113,12 +118,14 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="mazeService">Injected maze service (maze names + Play launch)</param>
         /// <param name="authService">Injected auth service (caller identity)</param>
         /// <param name="navigationService">Injected navigation service (Play → 3D game)</param>
+        /// <param name="avatarService">Injected avatar service (player avatars)</param>
         public LeaderboardsViewModel(
             IScoresService scoresService,
             IGameConfigService gameConfigService,
             IMazeService mazeService,
             IAuthService authService,
-            INavigationService navigationService)
+            INavigationService navigationService,
+            IAvatarService avatarService)
         {
             Title = "Leaderboards";
             _scoresService = scoresService;
@@ -126,6 +133,7 @@ namespace Maze.Maui.App.ViewModels
             _mazeService = mazeService;
             _authService = authService;
             _navigationService = navigationService;
+            _avatarService = avatarService;
         }
 
         // Repopulating the Game list is synchronous; the board reload is driven by
@@ -204,7 +212,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 var resp = await _scoresService.GetLeaderboardAsync(
                     _currentSubject.Value, _metric, null, BoardPageSize, Rows.Count, ShowPlayerColumn);
-                AppendRows(resp);
+                await LoadAvatarsForRowsAsync(AppendRows(resp));
             }
             catch (Exception ex)
             {
@@ -306,8 +314,9 @@ namespace Maze.Maui.App.ViewModels
 
             var resp = await _scoresService.GetLeaderboardAsync(
                 subject.Value, _metric, null, BoardPageSize, 0, ShowPlayerColumn);
-            AppendRows(resp);
+            List<LeaderboardRow> added = AppendRows(resp);
             SetStatusForRows();
+            await LoadAvatarsForRowsAsync(added);
         }
 
         private async Task<ScoreSubject?> ResolveSubjectAsync()
@@ -333,8 +342,9 @@ namespace Maze.Maui.App.ViewModels
             return null;
         }
 
-        private void AppendRows(ScoreboardResponse resp)
+        private List<LeaderboardRow> AppendRows(ScoreboardResponse resp)
         {
+            var added = new List<LeaderboardRow>();
             int rank = Rows.Count;
             foreach (ScoreEntry entry in resp.Scores)
             {
@@ -342,9 +352,40 @@ namespace Maze.Maui.App.ViewModels
                 bool isMe = _currentUserId is not null && entry.UserId == _currentUserId;
                 if (isMe)
                     HasPlayed = true;
-                Rows.Add(new LeaderboardRow(rank, entry, isMe && ShowPlayerColumn, ShowPlayerColumn));
+                var row = new LeaderboardRow(rank, entry, isMe && ShowPlayerColumn, ShowPlayerColumn);
+                Rows.Add(row);
+                added.Add(row);
             }
             HasMore = resp.HasMore;
+            return added;
+        }
+
+        /// <summary>
+        /// Resolves and swaps in player avatars for the given rows. Only runs on
+        /// boards that show the Player column; each player is fetched at most once
+        /// (cached by user id across rows and pages). Rows for players with no
+        /// avatar keep their <c>null</c> source, so the control shows the
+        /// placeholder.
+        /// </summary>
+        private async Task LoadAvatarsForRowsAsync(IReadOnlyList<LeaderboardRow> rows)
+        {
+            if (!ShowPlayerColumn)
+                return;
+
+            foreach (LeaderboardRow row in rows)
+            {
+                if (string.IsNullOrEmpty(row.AvatarUpdatedAt))
+                    continue;
+
+                if (!_avatarCache.TryGetValue(row.UserId, out byte[]? bytes))
+                {
+                    bytes = await _avatarService.TryLoadAvatarBytesAsync(row.UserId, row.AvatarUpdatedAt);
+                    _avatarCache[row.UserId] = bytes;
+                }
+
+                if (bytes is not null)
+                    row.AvatarBytes = bytes;
+            }
         }
 
         private async Task DiscoverSubjectsAsync()
