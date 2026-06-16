@@ -605,6 +605,9 @@ The following endpoints manage user identity:
 | `DELETE` | `/api/v1/users/me/emails/{email}` | Either | Remove an email; rejects with 409 if the address is the user's only email or their primary |
 | `PUT` | `/api/v1/users/me/emails/{email}/primary` | Either | Promote an email to primary; rejects with 409 if the target is unverified |
 | `POST` | `/api/v1/users/me/emails/{email}/verify` | Either | **Stub** — returns `501 Not Implemented` until the email-verification flow ships |
+| `POST` | `/api/v1/users/me/avatar` | Either | Upload/replace the caller's avatar (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB). The server centre-crops + resizes to a 256×256 PNG; returns `{ "avatar_updated_at": <timestamp> }` |
+| `DELETE` | `/api/v1/users/me/avatar` | Either | Remove the caller's avatar (idempotent — `204` even if none was set) |
+| `GET` | `/api/v1/users/{id}/avatar` | Either | Serve a user's avatar as `image/png`, or `404` when none. Requires auth, but readable for **any** user id (not just the caller) so a signed-in viewer sees other players' avatars on boards/headers; cache-bust with `?v=<avatar_updated_at>` |
 
 In addition, `GET /api/v1/features` returns an `oauth_providers` array describing the canonical name and human-readable display name of each provider currently enabled — clients render one button per entry.
 
@@ -679,6 +682,7 @@ The response is a `UserItem` carrying:
 - `email` — the **primary** email address (legacy single-field shape, preserved for backwards-compat)
 - `emails` — the full list of email rows: `{ email, is_primary, verified, verified_at }` per row. Always at least one row; exactly one is `is_primary`
 - `has_password` — `true` if a password is set, `false` for OAuth-only users who haven't yet added a password. Front-ends use this to choose between the "Change Password" and "Set Password" UI variants
+- `avatar_updated_at` — present (an RFC 3339 timestamp) when the user has an avatar, absent otherwise. Doubles as the "has an avatar" signal and the cache-buster: clients render `/api/v1/users/{id}/avatar?v=<avatar_updated_at>` when present, and the generic placeholder when absent
 
 ### Password set-or-change
 

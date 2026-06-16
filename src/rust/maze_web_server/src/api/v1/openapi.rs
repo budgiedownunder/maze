@@ -15,6 +15,7 @@ use crate::api::v1::endpoints::handlers::{
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
+use crate::api::v1::endpoints::avatar::AvatarUpdatedResponse;
 use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
@@ -89,6 +90,10 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::update_profile_me,
         crate::api::v1::endpoints::handlers::get_me,
         crate::api::v1::endpoints::handlers::delete_me,
+        // Self-service avatar
+        crate::api::v1::endpoints::avatar::upload_avatar,
+        crate::api::v1::endpoints::avatar::delete_avatar,
+        crate::api::v1::endpoints::avatar::get_avatar,
         // Self-service email management
         crate::api::v1::endpoints::user_emails::list_emails,
         crate::api::v1::endpoints::user_emails::add_email,
@@ -127,7 +132,8 @@ impl utoipa::Modify for LoginTokenAuth {
             UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm,
-            RecordScoreRequest, ScoreResponse, ScoreboardResponse),
+            RecordScoreRequest, ScoreResponse, ScoreboardResponse,
+            AvatarUpdatedResponse),
 
     ),
     servers(

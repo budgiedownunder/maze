@@ -1,6 +1,6 @@
 use actix_web::web;
 use actix_web::middleware::from_fn;
-use crate::api::v1::endpoints::{auth_reset, email_verification, handlers, scores, user_emails};
+use crate::api::v1::endpoints::{auth_reset, avatar, email_verification, handlers, scores, user_emails};
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -44,6 +44,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::delete_me)
                 .service(handlers::logout)
                 .service(handlers::renew)
+                // Users (self-service: avatar). The GET is guarded like the rest
+                // of the API but readable for ANY user id (not just the caller),
+                // so a signed-in viewer sees other players' avatars on boards.
+                .service(avatar::upload_avatar)
+                .service(avatar::delete_avatar)
+                .service(avatar::get_avatar)
                 // Users (self-service: email management)
                 .service(user_emails::list_emails)
                 .service(user_emails::add_email)

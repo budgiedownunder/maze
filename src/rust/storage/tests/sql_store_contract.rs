@@ -616,6 +616,12 @@ async fn purge_user_cascades_to_avatar() {
     contract::purge_user_cascades_to_avatar(&mut s).await;
 }
 
+#[tokio::test]
+async fn score_leaderboard_includes_avatar_updated_at_when_requested() {
+    let mut s = fresh_store().await;
+    contract::score_leaderboard_includes_avatar_updated_at_when_requested(&mut s).await;
+}
+
 // ─── UserStore — has_active_admin_user ───────────────────────────────────
 
 #[tokio::test]

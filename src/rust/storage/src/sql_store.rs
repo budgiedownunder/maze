@@ -4222,7 +4222,7 @@ fn score_board_sql(where_col: &str, ordering: ScoreOrdering, include_usernames: 
     let order = score_order_by_clause(ordering);
     if include_usernames {
         format!(
-            "SELECT s.*, u.username FROM score_history s \
+            "SELECT s.*, u.username, u.avatar_updated_at FROM score_history s \
              LEFT JOIN users u ON u.id = s.user_id \
              WHERE s.{where_col} = ? ORDER BY {order} LIMIT ? OFFSET ?"
         )
@@ -4263,12 +4263,26 @@ fn score_entry_from_row(row: &AnyRow) -> Result<ScoreEntry, Error> {
 /// SELECT otherwise).
 fn scoreboard_entry_from_row(row: &AnyRow, with_username: bool) -> Result<ScoreboardEntry, Error> {
     let entry = score_entry_from_row(row)?;
-    let username = if with_username {
-        row.try_get::<Option<String>, _>("username").map_err(map_sqlx_err)?
+    // Both columns ride the same `LEFT JOIN users`, so they're present together
+    // or absent together — gated by the one `with_username` flag.
+    let (username, avatar_updated_at) = if with_username {
+        let username = row.try_get::<Option<String>, _>("username").map_err(map_sqlx_err)?;
+        let avatar_str = row
+            .try_get::<Option<String>, _>("avatar_updated_at")
+            .map_err(map_sqlx_err)?;
+        let avatar_updated_at = match avatar_str {
+            Some(s) => Some(datetime_from_sql(&s)?),
+            None => None,
+        };
+        (username, avatar_updated_at)
     } else {
-        None
+        (None, None)
     };
-    Ok(ScoreboardEntry { entry, username })
+    Ok(ScoreboardEntry {
+        entry,
+        username,
+        avatar_updated_at,
+    })
 }
 
 #[async_trait]

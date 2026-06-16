@@ -79,6 +79,7 @@ mod test_definitions {
    struct MockUser {
         user: User,
         mazes: HashMap<String, MockMaze>,
+        avatar: Option<Vec<u8>>,
     }
 
     impl MockUser {
@@ -86,6 +87,7 @@ mod test_definitions {
             MockUser {
                 user: User::default(),
                 mazes: HashMap::new(),
+                avatar: None,
             }
         }
 
@@ -98,6 +100,7 @@ mod test_definitions {
                 email: self.user.email().to_string(),
                 emails: self.user.emails.clone(),
                 has_password: !self.user.password_hash.is_empty(),
+                avatar_updated_at: self.user.avatar_updated_at,
             }
         }
         
@@ -108,9 +111,10 @@ mod test_definitions {
             MockUser {
                 user: new_user,
                 mazes: HashMap::new(),
+                avatar: None,
             }
-        }        
-    } 
+        }
+    }
 
     /**************/
     /* Mock store */
@@ -156,12 +160,22 @@ mod test_definitions {
         ) -> Vec<ScoreboardEntry> {
             page.into_iter()
                 .map(|entry| {
-                    let username = if include_usernames {
-                        self.users.get(&entry.user_id).map(|u| u.user.username.clone())
+                    let (username, avatar_updated_at) = if include_usernames {
+                        match self.users.get(&entry.user_id) {
+                            Some(u) => (
+                                Some(u.user.username.clone()),
+                                u.user.avatar_updated_at,
+                            ),
+                            None => (None, None),
+                        }
                     } else {
-                        None
+                        (None, None)
                     };
-                    ScoreboardEntry { entry, username }
+                    ScoreboardEntry {
+                        entry,
+                        username,
+                        avatar_updated_at,
+                    }
                 })
                 .collect()
         }
@@ -360,14 +374,23 @@ mod test_definitions {
         async fn init_default_admin_user(&mut self, _username: &str, _email: &str, _password_hash: &str) -> Result<User, StoreError> {
             Err(StoreError::Other("init_default_admin_user() not implemented for MockStore".to_string()))
         }
-        async fn set_user_avatar(&mut self, _id: Uuid, _png_bytes: Vec<u8>) -> Result<(), StoreError> {
-            Err(StoreError::Other("set_user_avatar() not implemented for MockStore".to_string()))
+        async fn set_user_avatar(&mut self, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(id)?;
+            mock_user.avatar = Some(png_bytes);
+            // Stamp the marker in lock-step with the bytes, mirroring the real stores.
+            mock_user.user.avatar_updated_at = Some(chrono::Utc::now());
+            Ok(())
         }
-        async fn get_user_avatar(&self, _id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
-            Err(StoreError::Other("get_user_avatar() not implemented for MockStore".to_string()))
+        async fn get_user_avatar(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+            Ok(self.users.get(&id).and_then(|u| u.avatar.clone()))
         }
-        async fn clear_user_avatar(&mut self, _id: Uuid) -> Result<(), StoreError> {
-            Err(StoreError::Other("clear_user_avatar() not implemented for MockStore".to_string()))
+        async fn clear_user_avatar(&mut self, id: Uuid) -> Result<(), StoreError> {
+            // Idempotent: clearing an unknown user or one with no avatar is a no-op.
+            if let Some(mock_user) = self.users.get_mut(&id) {
+                mock_user.avatar = None;
+                mock_user.user.avatar_updated_at = None;
+            }
+            Ok(())
         }
         /// Adds a new user to the store and sets the allocated `id` within the user object
         async fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
@@ -1084,6 +1107,7 @@ mod test_definitions {
         MockUser {
             user,
             mazes: new_mazes_map(user_def.mazes.clone()),
+            avatar: None,
         }
     }
 
@@ -1445,6 +1469,7 @@ mod test_definitions {
                 email: self.email.clone(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 has_password: true,
+                avatar_updated_at: None,
             }
         }
 
@@ -1554,6 +1579,7 @@ mod test_definitions {
                 email: self.email.clone(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 has_password: true,
+                avatar_updated_at: None,
             }
         }
 
@@ -7364,5 +7390,241 @@ mod test_definitions {
         )
         .await;
         assert!(board_true.scores.iter().all(|s| s.username.is_some()));
+    }
+
+    // **************************************************************************************************
+    // Tests: avatar endpoints
+    //   POST   /api/v1/users/me/avatar
+    //   DELETE /api/v1/users/me/avatar
+    //   GET    /api/v1/users/{id}/avatar
+    // **************************************************************************************************
+
+    /// Encodes a tiny solid-colour image to the given format for upload tests.
+    fn encode_test_image(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+        let img = image::RgbImage::from_pixel(width, height, image::Rgb([20, 120, 200]));
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), format)
+            .expect("encode test image");
+        bytes
+    }
+
+    /// Builds a `multipart/form-data` body with a single `file` part, returning
+    /// the body bytes and the boundary to put on the Content-Type header.
+    fn multipart_file_body(filename: &str, content_type: &str, data: &[u8]) -> (Vec<u8>, String) {
+        let boundary = "avatartestboundary7f3c".to_string();
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n")
+                .as_bytes(),
+        );
+        body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
+        body.extend_from_slice(data);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        (body, boundary)
+    }
+
+    /// Builds an authenticated `POST /users/me/avatar` multipart request.
+    fn avatar_upload_request(
+        boundary: &str,
+        body: Vec<u8>,
+        login_id: Uuid,
+    ) -> actix_http::Request {
+        test::TestRequest::post()
+            .uri("/api/v1/users/me/avatar")
+            .insert_header(("Authorization", format!("Bearer {login_id}")))
+            .insert_header((
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            ))
+            .set_payload(body)
+            .to_request()
+    }
+
+    const PNG_SIGNATURE: [u8; 4] = [0x89, 0x50, 0x4E, 0x47];
+
+    #[actix_web::test]
+    async fn upload_avatar_stores_canonical_png_and_serves_it() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        // Upload a non-square PNG → 200 + the new marker.
+        let png = encode_test_image(10, 20, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("a.png", "image/png", &png);
+        let resp = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let _updated: crate::api::v1::endpoints::avatar::AvatarUpdatedResponse =
+            test::read_body_json(resp).await;
+
+        // The profile now carries the marker.
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+        assert!(
+            me.avatar_updated_at.is_some(),
+            "profile must carry avatar_updated_at after upload"
+        );
+
+        // GET the avatar as a signed-in viewer — any id is readable when authed.
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let content_type = get_resp
+            .headers()
+            .get(actix_web::http::header::CONTENT_TYPE)
+            .expect("content-type")
+            .to_str()
+            .expect("ascii content-type")
+            .to_string();
+        assert_eq!(content_type, "image/png");
+        let served = test::read_body(get_resp).await;
+        assert_eq!(&served[..4], &PNG_SIGNATURE, "served bytes must be a PNG");
+    }
+
+    #[actix_web::test]
+    async fn upload_avatar_converts_jpeg_to_png() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        let jpeg = encode_test_image(12, 12, image::ImageFormat::Jpeg);
+        let (body, boundary) = multipart_file_body("a.jpg", "image/jpeg", &jpeg);
+        let resp = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let served = test::read_body(get_resp).await;
+        assert_eq!(
+            &served[..4],
+            &PNG_SIGNATURE,
+            "a JPEG upload must be re-encoded and served as PNG"
+        );
+    }
+
+    #[actix_web::test]
+    async fn upload_avatar_rejects_non_image() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, _api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        // Bytes that aren't a decodable image — even though the part claims PNG,
+        // the server validates by decoding, so this is rejected.
+        let (body, boundary) = multipart_file_body("a.png", "image/png", b"this is not an image");
+        let resp = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn upload_avatar_unauthenticated_fails() {
+        // The auth middleware short-circuits unauthenticated guarded requests
+        // with an error, which `call_service` surfaces as a panic — the same
+        // convention the other `*_unauthenticated_fails` tests use.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, _api_key, _login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let png = encode_test_image(8, 8, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("a.png", "image/png", &png);
+        let req = test::TestRequest::post()
+            .uri("/api/v1/users/me/avatar")
+            .insert_header((
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            ))
+            .set_payload(body)
+            .to_request();
+        let _ = test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_avatar_clears_marker_and_image() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        // Upload, then delete.
+        let png = encode_test_image(8, 8, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("a.png", "image/png", &png);
+        let up = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(up.status(), StatusCode::OK);
+
+        let del = test::call_service(
+            &app,
+            create_test_delete_request("/api/v1/users/me/avatar", api_key, login_id),
+        )
+        .await;
+        assert_eq!(del.status(), StatusCode::NO_CONTENT);
+
+        // Marker gone from the profile.
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+        assert!(
+            me.avatar_updated_at.is_none(),
+            "avatar_updated_at must be cleared after delete"
+        );
+
+        // Image now 404s.
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn get_avatar_returns_404_when_unset() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn get_avatar_unauthenticated_fails() {
+        // The serve route is guarded like the rest of the API — an
+        // unauthenticated GET is rejected by the auth middleware (surfaced as a
+        // call_service panic, matching the other *_unauthenticated_fails tests).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, _api_key, _login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/api/v1/users/{}/avatar", Uuid::new_v4()))
+            .to_request();
+        let _ = test::call_service(&app, req).await;
     }
 }

@@ -3391,10 +3391,10 @@ fn paged_board(
 
 impl FileStore {
     /// Wraps a board page into [`ScoreboardEntry`]s, resolving each row's
-    /// player username when `include_usernames` is set. Reads each distinct
-    /// player once (`load_user_if_present` — `None` for an absent player) and
-    /// caches it. Deleted players never reach here: the delete cascade removes
-    /// their score rows first.
+    /// player `username` and `avatar_updated_at` when `include_usernames` is
+    /// set. Reads each distinct player once (`load_user_if_present` — `None`
+    /// for an absent player) and caches both fields. Deleted players never
+    /// reach here: the delete cascade removes their score rows first.
     fn attach_usernames(
         &self,
         page: Vec<ScoreEntry>,
@@ -3403,21 +3403,35 @@ impl FileStore {
         if !include_usernames {
             return Ok(page
                 .into_iter()
-                .map(|entry| ScoreboardEntry { entry, username: None })
+                .map(|entry| ScoreboardEntry {
+                    entry,
+                    username: None,
+                    avatar_updated_at: None,
+                })
                 .collect());
         }
-        let mut cache: HashMap<Uuid, Option<String>> = HashMap::new();
+        // Cache the (username, avatar_updated_at) pair per player — both come
+        // from the same player-file read, mirroring the SqlStore board JOIN.
+        type PlayerFields = (Option<String>, Option<chrono::DateTime<chrono::Utc>>);
+        let mut cache: HashMap<Uuid, PlayerFields> = HashMap::new();
         let mut out = Vec::with_capacity(page.len());
         for entry in page {
-            let username = match cache.get(&entry.user_id) {
-                Some(name) => name.clone(),
+            let (username, avatar_updated_at) = match cache.get(&entry.user_id) {
+                Some(fields) => fields.clone(),
                 None => {
-                    let name = self.load_user_if_present(entry.user_id)?.map(|u| u.username);
-                    cache.insert(entry.user_id, name.clone());
-                    name
+                    let fields = self
+                        .load_user_if_present(entry.user_id)?
+                        .map(|u| (Some(u.username), u.avatar_updated_at))
+                        .unwrap_or((None, None));
+                    cache.insert(entry.user_id, fields.clone());
+                    fields
                 }
             };
-            out.push(ScoreboardEntry { entry, username });
+            out.push(ScoreboardEntry {
+                entry,
+                username,
+                avatar_updated_at,
+            });
         }
         Ok(out)
     }

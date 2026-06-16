@@ -74,6 +74,11 @@ pub struct ScoreResponse {
     /// Optional player username
     #[serde(skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
+    /// The player's avatar timestamp. Omitted on the
+    /// record-score response and for players without an avatar.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
+    pub avatar_updated_at: Option<DateTime<Utc>>,
 }
 
 impl From<ScoreEntry> for ScoreResponse {
@@ -87,6 +92,7 @@ impl From<ScoreEntry> for ScoreResponse {
             elapsed_ms: entry.elapsed_ms,
             recorded_at: entry.recorded_at,
             username: None,
+            avatar_updated_at: None,
         }
     }
 }
@@ -95,6 +101,7 @@ impl From<ScoreboardEntry> for ScoreResponse {
     fn from(row: ScoreboardEntry) -> Self {
         Self {
             username: row.username,
+            avatar_updated_at: row.avatar_updated_at,
             ..ScoreResponse::from(row.entry)
         }
     }
@@ -396,7 +403,11 @@ pub async fn get_my_history(
             // History rows are always the caller — no usernames to resolve.
             let rows = entries
                 .into_iter()
-                .map(|entry| ScoreboardEntry { entry, username: None })
+                .map(|entry| ScoreboardEntry {
+                    entry,
+                    username: None,
+                    avatar_updated_at: None,
+                })
                 .collect();
             Ok(HttpResponse::Ok().json(build_board(rows, limit, offset)))
         }

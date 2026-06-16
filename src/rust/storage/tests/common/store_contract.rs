@@ -2090,13 +2090,13 @@ pub async fn score_record_round_trips_for_both_subjects(store: &mut Box<dyn Stor
         .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
         .await
         .expect("maze_leaderboard");
-    assert_eq!(board, vec![ScoreboardEntry { entry: on_maze.clone(), username: None }]);
+    assert_eq!(board, vec![ScoreboardEntry { entry: on_maze.clone(), username: None, avatar_updated_at: None }]);
 
     let challenge_board = store
         .challenge_leaderboard("hard:7", HIGHEST, 10, 0, false)
         .await
         .expect("challenge_leaderboard");
-    assert_eq!(challenge_board, vec![ScoreboardEntry { entry: on_challenge.clone(), username: None }]);
+    assert_eq!(challenge_board, vec![ScoreboardEntry { entry: on_challenge.clone(), username: None, avatar_updated_at: None }]);
 
     // Personal history aggregates a player's runs across both subjects.
     let history = store
@@ -2295,4 +2295,55 @@ pub async fn score_leaderboard_includes_usernames_when_requested(store: &mut Box
         .await
         .expect("anon board");
     assert!(anon.iter().all(|e| e.username.is_none()));
+}
+
+/// A board row carries the player's `avatar_updated_at` (resolved via the same
+/// lookup that resolves `username`): `Some` for a player with an avatar, `None`
+/// for one without and whenever `include_usernames` is false.
+pub async fn score_leaderboard_includes_avatar_updated_at_when_requested(
+    store: &mut Box<dyn Store>,
+) {
+    let (alice, bob) = fixture_two_users(store).await;
+    // Alice has an avatar; bob does not.
+    store
+        .set_user_avatar(alice.id, vec![0x89, 0x50, 0x4E, 0x47])
+        .await
+        .expect("set alice avatar");
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 5, 1_000))
+        .await
+        .expect("alice run");
+    store
+        .record_score(&score_entry(bob.id, None, Some("c:1"), 9, 2_000))
+        .await
+        .expect("bob run");
+
+    // include_usernames = true → avatars resolved alongside names.
+    let named = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, true)
+        .await
+        .expect("named board");
+    let alice_row = named
+        .iter()
+        .find(|e| e.entry.user_id == alice.id)
+        .expect("alice row");
+    let bob_row = named
+        .iter()
+        .find(|e| e.entry.user_id == bob.id)
+        .expect("bob row");
+    assert!(
+        alice_row.avatar_updated_at.is_some(),
+        "player with an avatar must resolve avatar_updated_at on the board"
+    );
+    assert!(
+        bob_row.avatar_updated_at.is_none(),
+        "player without an avatar must have avatar_updated_at = None"
+    );
+
+    // include_usernames = false → the avatar lookup is skipped too.
+    let anon = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, false)
+        .await
+        .expect("anon board");
+    assert!(anon.iter().all(|e| e.avatar_updated_at.is_none()));
 }

@@ -351,6 +351,14 @@ pub struct ScoreboardEntry {
     pub entry: ScoreEntry,
     /// The player's username, when resolved.
     pub username: Option<String>,
+    /// The player's [`User::avatar_updated_at`] marker, resolved from the same
+    /// lookup that resolves `username` (the SqlStore board JOIN / the FileStore
+    /// player-file read). `Some(ts)` means the player has an avatar and the
+    /// value is its cache-buster; `None` means no avatar (or names/avatars
+    /// weren't requested, or the player couldn't be resolved). Lets a board row
+    /// decide between rendering the player's image and the generic placeholder
+    /// without a per-row round-trip.
+    pub avatar_updated_at: Option<DateTime<Utc>>,
 }
 
 #[async_trait]

@@ -314,6 +314,11 @@ pub struct UserItem {
     /// variants of the password popup. The hash itself is never exposed.
     #[serde(default)]
     pub has_password: bool,
+    /// Cache-buster + "has an avatar" marker. Present (an RFC 3339 timestamp)
+    /// when the user has an avatar; absent when they don't.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
+    pub avatar_updated_at: Option<DateTime<Utc>>,
 }
 
 impl UserItem {
@@ -326,6 +331,7 @@ impl UserItem {
             email: user.email().to_string(),
             emails: user.emails.clone(),
             has_password: !user.password_hash.is_empty(),
+            avatar_updated_at: user.avatar_updated_at,
         }
     }
 }
