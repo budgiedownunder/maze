@@ -48,20 +48,20 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
-        /// Applies the flyout header's accent background once the Shell is
+        /// Applies the flyout header's pale-blue background once the Shell is
         /// loaded, by which point the App-level <c>Colors.xaml</c> resources
-        /// (<c>Primary</c> / <c>PrimaryDark</c>) have been merged. Referencing
-        /// them via <c>StaticResource</c> in the Shell XAML fails at parse time
-        /// because the Shell is constructed before <c>App.InitializeComponent</c>
-        /// merges them.
+        /// (<c>PrimaryButton</c>) have been merged. Referencing them via
+        /// <c>StaticResource</c> in the Shell XAML fails at parse time because
+        /// the Shell is constructed before <c>App.InitializeComponent</c>
+        /// merges them. The same pale-blue fill is used in both themes (its
+        /// navy text is set in XAML); mirrors the primary-button styling.
         /// </summary>
         private void OnShellLoaded(object? sender, EventArgs e)
         {
             if (Application.Current?.Resources is { } resources
-                && resources.TryGetValue("Primary", out var light) && light is Color lightColor
-                && resources.TryGetValue("PrimaryDark", out var dark) && dark is Color darkColor)
+                && resources.TryGetValue("PrimaryButton", out var fill) && fill is Color fillColor)
             {
-                FlyoutHeaderRoot.SetAppThemeColor(VisualElement.BackgroundColorProperty, lightColor, darkColor);
+                FlyoutHeaderRoot.SetAppThemeColor(VisualElement.BackgroundColorProperty, fillColor, fillColor);
             }
         }
 

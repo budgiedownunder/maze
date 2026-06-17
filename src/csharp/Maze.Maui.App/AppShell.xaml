@@ -28,6 +28,10 @@
                                      Size="48"
                                      VerticalOptions="Center" />
                 <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                    <!-- White text on the solid-blue header (matches the
+                         PrimaryButtonText colour key — hardcoded here because
+                         App-level Colors.xaml StaticResources aren't merged at
+                         Shell-parse time, see OnShellLoaded). -->
                     <Label Text="Signed in as"
                            FontSize="12"
                            TextColor="White"
