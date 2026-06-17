@@ -181,7 +181,7 @@
       z-index: 30;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 24px;
       padding: 20px 24px;
       background: rgba(0, 0, 0, 0.85);
       border: 2px solid #ac99ea;
@@ -191,8 +191,8 @@
     #pause-menu[hidden] { display: none; }
     #pause-menu button {
       min-width: 220px;
-      min-height: 48px;
-      padding: 12px 20px;
+      min-height: 72px;
+      padding: 18px 20px;
       font-size: 1rem;
       color: #fff;
       background: #2f9e44;
@@ -202,6 +202,12 @@
       font-family: inherit;
     }
     #pause-menu button.secondary { background: #495057; }
+    /* The menu shows one "view" at a time: the main button list, or the
+       Restart confirmation (a deliberate second tap, so a single mis-tap on
+       touch can't reset the game). Both stack like the original menu. */
+    #pm-main, #pm-confirm { display: flex; flex-direction: column; gap: 24px; }
+    #pm-main[hidden], #pm-confirm[hidden] { display: none; }
+    #pm-confirm p { margin: 0; color: #fff; text-align: center; font-family: inherit; }
   </style>
 </head>
 <body>
@@ -257,9 +263,16 @@
     </div>
   </div>
   <div id="pause-menu" hidden role="dialog" aria-label="Paused" aria-modal="true">
-    <button id="pm-resume" type="button">Resume</button>
-    <button id="pm-restart" type="button" class="secondary">Restart</button>
-    <button id="pm-dpad-toggle" type="button" class="secondary">Hide D-pad</button>
+    <div id="pm-main">
+      <button id="pm-resume" type="button">Resume</button>
+      <button id="pm-restart" type="button" class="secondary">Restart</button>
+      <button id="pm-dpad-toggle" type="button" class="secondary">Hide D-pad</button>
+    </div>
+    <div id="pm-confirm" hidden>
+      <p>Restart from the beginning?</p>
+      <button id="pm-restart-confirm" type="button" class="secondary">Restart</button>
+      <button id="pm-restart-cancel" type="button">Cancel</button>
+    </div>
   </div>
   <script>
     (function() {
@@ -360,7 +373,16 @@
       var resume = document.getElementById('pm-resume');
       var restart = document.getElementById('pm-restart');
       var dpadToggle = document.getElementById('pm-dpad-toggle');
+      var mainView = document.getElementById('pm-main');
+      var confirmView = document.getElementById('pm-confirm');
+      var restartConfirm = document.getElementById('pm-restart-confirm');
+      var restartCancel = document.getElementById('pm-restart-cancel');
       var canvas = document.getElementById('bevy-canvas');
+
+      function showMainView() {
+        confirmView.hidden = true;
+        mainView.hidden = false;
+      }
       // Both pause buttons share the same wiring and the same icon/label
       // swap: the D-pad pause button (#pause-btn, inside #controls and
       // only visible when the D-pad is shown) AND the persistent corner
@@ -397,6 +419,7 @@
         var paused = !!(e.detail && e.detail.paused);
         if (paused) {
           refreshDpadLabel();
+          showMainView(); // always reopen on the main list, never a stale confirm
           menu.hidden = false;
         } else {
           menu.hidden = true;
@@ -421,10 +444,21 @@
       });
 
       restart.addEventListener('click', function () {
+        // Don't restart on the first tap — show an in-overlay confirmation so
+        // a stray tap (easy on touch) can't reset the game. Default focus to
+        // Cancel, the safe choice.
+        mainView.hidden = true;
+        confirmView.hidden = false;
+        restartCancel.focus({ preventScroll: true });
+      });
+
+      restartConfirm.addEventListener('click', function () {
         // Preserves the current query string (difficulty / seed / id)
         // for parity with the post-game "Play Again" button.
         location.reload();
       });
+
+      restartCancel.addEventListener('click', showMainView);
 
       dpadToggle.addEventListener('click', function () {
         var hidden = document.body.classList.toggle('dpad-hidden');

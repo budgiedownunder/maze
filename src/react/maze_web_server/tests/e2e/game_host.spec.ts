@@ -52,14 +52,43 @@ test.describe('Game host pause menu', () => {
     await expect(page.locator('#pause-menu')).toBeHidden()
   })
 
-  test('Restart button reloads the page', async ({ page }) => {
+  test('Restart asks for confirmation before reloading', async ({ page }) => {
     await loadGameHostStubbed(page)
     await firePaused(page, true)
-    const reloadPromise = page.waitForEvent('load')
+    // First tap shows the confirmation view, not a reload.
     await page.locator('#pm-restart').click()
+    await expect(page.locator('#pm-confirm')).toBeVisible()
+    await expect(page.locator('#pm-main')).toBeHidden()
+    // Confirming reloads the page.
+    const reloadPromise = page.waitForEvent('load')
+    await page.locator('#pm-restart-confirm').click()
     await reloadPromise
     // After reload the menu is hidden again (no paused event yet).
     await expect(page.locator('#pause-menu')).toBeHidden()
+  })
+
+  test('Restart confirmation can be cancelled', async ({ page }) => {
+    await loadGameHostStubbed(page)
+    await firePaused(page, true)
+    await page.locator('#pm-restart').click()
+    await expect(page.locator('#pm-confirm')).toBeVisible()
+    // Cancel returns to the main button list without reloading.
+    await page.locator('#pm-restart-cancel').click()
+    await expect(page.locator('#pm-main')).toBeVisible()
+    await expect(page.locator('#pm-confirm')).toBeHidden()
+    await expect(page.locator('#pm-resume')).toBeVisible()
+  })
+
+  test('reopening the menu resets to the main view after a cancelled restart', async ({ page }) => {
+    await loadGameHostStubbed(page)
+    await firePaused(page, true)
+    await page.locator('#pm-restart').click()
+    await expect(page.locator('#pm-confirm')).toBeVisible()
+    // Resume out and pause again — the menu must reopen on the main list.
+    await firePaused(page, false)
+    await firePaused(page, true)
+    await expect(page.locator('#pm-main')).toBeVisible()
+    await expect(page.locator('#pm-confirm')).toBeHidden()
   })
 
 })
