@@ -11,6 +11,7 @@ mod maze_path_direction;
 mod maze_solution;
 mod maze_point_offset;
 mod solver;
+mod topology;
 
 // Re-export traits and structs
 pub use data_model::{CellEntity, EnemyType};
@@ -29,6 +30,7 @@ pub use maze_path_direction::MazePathDirection;
 pub use maze_point_offset::MazePointOffset;
 pub use maze_solution::MazeSolution;
 pub use solver::Solver;
+pub use topology::is_dead_end;
 
 /// Maximum combined count of `'K'` + `'D'` cells a maze may carry. The
 /// key-aware solver tracks each as a bit in a `u32` mask, so its search

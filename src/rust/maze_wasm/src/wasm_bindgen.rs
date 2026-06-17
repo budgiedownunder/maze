@@ -2570,6 +2570,7 @@ impl MazeWasm {
             spare_keys,
             enemy_count,
             health_count,
+            treasure_count: None,
         };
 
         let maze = Generator { options }

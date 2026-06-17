@@ -114,6 +114,8 @@ pub fn generate_maze_json(
         spare_keys: Some(spare_keys as usize),
         enemy_count: Some(enemy_count as usize),
         health_count: Some(health_count as usize),
+        // Treasure generation isn't wired into this in-app generate path yet.
+        treasure_count: None,
     };
     let maze = Generator { options }
         .generate()

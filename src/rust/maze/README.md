@@ -51,6 +51,8 @@ Spare placement preserves solvability by construction — decoys never sit on th
 
 `Generator` also **auto-places enemies and health pickups** via `GeneratorOptions.enemy_count` / `GeneratorOptions.health_count` (default `0` = none). Each pass picks uniformly at random from cells that are currently `' '` and at Manhattan distance > 1 from `S` (so the player has at least one safe step from start before the first encounter), so placement never lands on `S` / `F` / `K` / `D` or on a previously-placed `'E'` / `'H'`. The counts are clamped silently to `MAX_ENEMY_COUNT` / `MAX_HEALTH_COUNT` (both `8`) and then to the eligible-cell count. Enemies and health pickups are solver-blind (they map to `MazeCellState::Empty` in `solve()`), so placement cannot make the maze unsolvable — no re-validation is needed.
 
+`GeneratorOptions.treasure_count` (default `0` = none, clamped to `MAX_TREASURE_COUNT` = `12`) auto-places **treasure** (`'T'`) in a final pass, **dead-end-first**: dead-end cells (passable, exactly one open neighbour — `maze::is_dead_end`, the shared topology predicate the 3D renderer also uses to place its dead-end decorations) are claimed before other walkable `' '` cells, so treasure favours the ends of branches. Each placed treasure is assigned a rarity by weight (≈70% Common / 25% Uncommon / 5% Rare); non-Common cells carry a `TreasureOverride { rarity }` on the definition while Common stays a bare `'T'`. Treasure is also solver-blind, so it never affects solvability.
+
 ## Game Module
 
 The `game` module (`maze::game`) provides an interactive cell-based game session driven by player input.

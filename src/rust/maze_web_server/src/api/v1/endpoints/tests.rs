@@ -3320,6 +3320,7 @@ mod test_definitions {
             spare_keys: None,
             enemy_count: None,
             health_count: None,
+            treasure_count: None,
         }
     }
 

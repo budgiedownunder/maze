@@ -1069,6 +1069,7 @@ pub extern "C" fn maze_wasm_generate(
         spare_keys: Some(opts.spare_keys as usize),
         enemy_count: Some(opts.enemy_count as usize),
         health_count: Some(opts.health_count as usize),
+        treasure_count: None,
     };
 
     let generator = Generator { options: generator_options };
