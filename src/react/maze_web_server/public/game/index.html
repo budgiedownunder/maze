@@ -87,7 +87,7 @@
       }
       .game-dpad {
         display: grid;
-        grid-template-areas: "tiltdown up tiltup" "left pause right";
+        grid-template-areas: "tiltdown up tiltup" "left . right";
         gap: 4px;
         touch-action: none;
       }
@@ -257,9 +257,6 @@
       <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltdown" aria-label="Tilt down">
         <img src="/images/maze/tilt_down.png"  alt="" draggable="false">
       </button>
-      <button type="button" tabindex="-1" id="pause-btn" style="grid-area:pause" aria-label="Pause">
-        <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
-      </button>
     </div>
   </div>
   <div id="pause-menu" hidden role="dialog" aria-label="Paused" aria-modal="true">
@@ -364,8 +361,8 @@
     /* Pause-menu wiring — opens on Bevy's `maze-game-paused` event,
        offers Resume / Restart / D-pad-toggle controls suitable for
        touch use. Synthesises a Space keydown/keyup on the canvas to
-       toggle Bevy's pause state, matching the existing D-pad pause
-       button. Lives in a vanilla script so it survives WASM load
+       toggle Bevy's pause state, matching the corner pause button.
+       Lives in a vanilla script so it survives WASM load
        failures (the module script below uses top-level await and may
        throw if the WASM fetch fails). */
     (function () {
@@ -383,11 +380,11 @@
         confirmView.hidden = true;
         mainView.hidden = false;
       }
-      // Both pause buttons share the same wiring and the same icon/label
-      // swap: the D-pad pause button (#pause-btn, inside #controls and
-      // only visible when the D-pad is shown) AND the persistent corner
-      // button (#touch-pause-btn, always visible on touch devices).
-      var pauseButtonIds = ['pause-btn', 'touch-pause-btn'];
+      // The persistent corner button (#touch-pause-btn, always visible on
+      // touch devices) is the only on-screen pause control — deliberately
+      // off the D-pad so it can't be hit mid-move. Kept as an array so the
+      // pointer wiring and the paused-state icon/label swap below stay generic.
+      var pauseButtonIds = ['touch-pause-btn'];
 
       function fire(key, type) {
         canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
@@ -434,7 +431,7 @@
       });
 
       resume.addEventListener('click', function () {
-        // Same code path as the corner / D-pad pause buttons — Bevy
+        // Same code path as the corner pause button — Bevy
         // toggles paused=false, the `maze-game-paused` listener above
         // then hides the menu. Re-focus the canvas so subsequent
         // keyboard input goes to Bevy rather than the (now hidden)
