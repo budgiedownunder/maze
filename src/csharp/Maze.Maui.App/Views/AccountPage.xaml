@@ -18,10 +18,9 @@
           HorizontalOptions="Fill">
 
         <ScrollView VerticalOptions="Fill">
-            <VerticalStackLayout Padding="30"
+            <VerticalStackLayout Padding="16"
                                  Spacing="16"
-                                 MaximumWidthRequest="400"
-                                 HorizontalOptions="Center">
+                                 HorizontalOptions="Fill">
 
                 <!-- Welcome banner shown only when the page was auto-navigated
                      to after a brand-new OAuth sign-up. Cleared on page
