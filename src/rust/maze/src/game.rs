@@ -1,5 +1,8 @@
 use crate::MAX_TOTAL_FEATURES;
-use data_model::{CellEntity, EnemyOverride, EnemyType, HealthOverride, MazeDefinition};
+use data_model::{
+    CellEntity, EnemyOverride, EnemyType, HealthOverride, MazeDefinition, TreasureOverride,
+    TreasureRarity, TreasureStyle,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -223,6 +226,18 @@ pub enum GameEvent {
         cell: (usize, usize),
         /// Stable id of the collected key.
         id: u32,
+    },
+    /// The player walked onto a treasure cell and it was auto-collected. `cell`
+    /// is the `(row, col)` of the treasure that was consumed so renderers can
+    /// despawn the matching visual entity directly from the event; `style` is
+    /// its visual rig and `value` the score the collection added.
+    TreasureCollected {
+        /// The treasure cell that was consumed.
+        cell: (usize, usize),
+        /// Visual style of the collected treasure.
+        style: TreasureStyle,
+        /// Score value added by collecting it.
+        value: u32,
     },
 }
 
@@ -508,6 +523,9 @@ pub struct MazeGame {
     /// this only ever grows, so the score is a true progress measure. `u64` for
     /// headroom as future reward sources fold into the score.
     keys_collected: u64,
+    /// Monotonic running sum of collected treasure `value`s — the other half of
+    /// [`MazeGame::score`] alongside `keys_collected`. Only ever grows.
+    treasure_value_collected: u64,
     /// Events produced synchronously by [`MazeGame::move_player`]
     /// (`PlayerHealed` from an auto-pickup, `PlayerDamaged` from stepping into
     /// an enemy-occupied cell) that surface on the next [`MazeGame::tick`]
@@ -559,6 +577,44 @@ fn health_override_at(
         Some(CellEntity::Health(over)) => Some(over),
         _ => None,
     }
+}
+
+/// Default reward value for a treasure cell of each rarity, awarded when the
+/// cell carries no explicit `value` override. Rarer tiers are worth more.
+const TREASURE_VALUE_COMMON: u32 = 10;
+const TREASURE_VALUE_UNCOMMON: u32 = 25;
+const TREASURE_VALUE_RARE: u32 = 100;
+
+/// Returns the treasure override on a cell, if its (single, for now) entity is
+/// a treasure. Cells without an entry, or whose entity is a different kind,
+/// yield `None`.
+fn treasure_override_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> Option<&TreasureOverride> {
+    match cell_entities.get(&cell).and_then(|entities| entities.first()) {
+        Some(CellEntity::Treasure(over)) => Some(over),
+        _ => None,
+    }
+}
+
+/// Resolves a treasure cell's effective visual style and reward value from its
+/// (optional) override. Style defaults to `Silver` and rarity to `Common`; the
+/// value is the explicit `value` override if set, otherwise the rarity-derived
+/// default. Style is purely cosmetic and does not influence the value.
+fn treasure_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> (TreasureStyle, u32) {
+    let over = treasure_override_at(cell_entities, cell);
+    let style = over.and_then(|o| o.style).unwrap_or_default();
+    let rarity = over.and_then(|o| o.rarity).unwrap_or_default();
+    let value = over.and_then(|o| o.value).unwrap_or(match rarity {
+        TreasureRarity::Common => TREASURE_VALUE_COMMON,
+        TreasureRarity::Uncommon => TREASURE_VALUE_UNCOMMON,
+        TreasureRarity::Rare => TREASURE_VALUE_RARE,
+    });
+    (style, value)
 }
 
 impl MazeGame {
@@ -719,6 +775,7 @@ impl MazeGame {
             hp: starting_hp,
             max_hp,
             keys_collected: 0,
+            treasure_value_collected: 0,
             pending_events: Vec::new(),
         })
     }
@@ -888,6 +945,25 @@ impl MazeGame {
                         id,
                     });
                 }
+                self.apply_collision_at_player_cell()
+                    .unwrap_or(MoveResult::Moved)
+            }
+            'T' => {
+                self.player_row = new_row;
+                self.player_col = new_col;
+                self.visited.push((new_row, new_col));
+                // Treasure is auto-collected on walk-over: clear the cell, fold
+                // its value into the running treasure total, and queue an event
+                // so renderers can despawn the rig and surface the reward.
+                let (style, value) = treasure_at(&self.cell_entities, (new_row, new_col));
+                self.grid[new_row][new_col] = ' ';
+                self.treasure_value_collected =
+                    self.treasure_value_collected.saturating_add(value as u64);
+                self.pending_events.push(GameEvent::TreasureCollected {
+                    cell: (new_row, new_col),
+                    style,
+                    value,
+                });
                 self.apply_collision_at_player_cell()
                     .unwrap_or(MoveResult::Moved)
             }
@@ -1631,9 +1707,10 @@ impl MazeGame {
     /// The run's current score — the single source of truth for both the live
     /// readout and the value recorded on completion.
     ///
-    /// The exact determination is internal to the engine and provisional: today
-    /// it is the number of keys collected this run, but it is expected to fold in
-    /// further reward sources over time. Callers should read this getter rather
+    /// The exact determination is internal to the engine and provisional, but
+    /// today it is the number of keys collected this run **plus** the total
+    /// value of treasure collected (each treasure's per-cell `value` override,
+    /// else its rarity-derived default). Callers should read this getter rather
     /// than recomputing a score, so every surface stays in agreement when the
     /// formula changes.
     ///
@@ -1648,7 +1725,7 @@ impl MazeGame {
     /// assert_eq!(game.score(), 1);
     /// ```
     pub fn score(&self) -> u64 {
-        self.keys_collected
+        self.keys_collected + self.treasure_value_collected
     }
 }
 
@@ -2136,6 +2213,64 @@ mod tests {
         game.move_player(Direction::Right); // onto the door — key consumed
         assert!(game.bag().is_empty());
         assert_eq!(game.score(), 1); // score holds despite the empty bag
+    }
+
+    // ── treasure ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn score_climbs_by_treasure_value() {
+        // A bare `T` is a default-tier (Common) treasure worth 10.
+        let json = r#"{"grid":[["S","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.score(), 0);
+        game.move_player(Direction::Right); // onto the treasure — auto-collected
+        assert_eq!(game.score(), 10);
+        assert_eq!(game.grid()[0][1], ' '); // cell cleared
+    }
+
+    #[test]
+    fn treasure_value_override_scores_the_explicit_value() {
+        // An explicit per-cell `value` wins over the rarity-derived default.
+        let json = r#"{"grid":[["S",[{"type":"T","value":250}],"F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        assert_eq!(game.score(), 250);
+    }
+
+    #[test]
+    fn treasure_value_defaults_from_rarity() {
+        // No explicit value → the rarity-derived default (Rare = 100). Style is
+        // irrelevant to the value.
+        let json = r#"{"grid":[["S",[{"type":"T","rarity":"rare"}],"F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        assert_eq!(game.score(), 100);
+    }
+
+    #[test]
+    fn score_adds_keys_and_treasure() {
+        // Additive: a collected key (+1) plus a default treasure (+10) = 11.
+        let json = r#"{"grid":[["S","K","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // key → +1
+        assert_eq!(game.score(), 1);
+        game.move_player(Direction::Right); // treasure → +10
+        assert_eq!(game.score(), 11);
+    }
+
+    #[test]
+    fn walking_onto_treasure_queues_treasure_collected_event() {
+        let json = r#"{"grid":[["S","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // step onto the treasure — auto-collected
+        assert_eq!(
+            game.tick(0.0),
+            vec![GameEvent::TreasureCollected {
+                cell: (0, 1),
+                style: TreasureStyle::Silver,
+                value: 10
+            }]
+        );
     }
 
     // ── doors — tick / opening ───────────────────────────────────────────────────

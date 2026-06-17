@@ -259,6 +259,13 @@ fn to_js_game_event_obj(event: &maze::GameEvent) -> Object {
             Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
             Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
         }
+        maze::GameEvent::TreasureCollected { cell: (row, col), style, value } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("treasureCollected")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("style"), &JsValue::from_str(style.as_wire_str())).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("value"), &JsValue::from_f64(*value as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
     }
     obj
 }

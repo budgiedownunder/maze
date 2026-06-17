@@ -21,6 +21,7 @@
 //! - [`maze::GameEvent::KeyCollected`] → tags the matching `KeyMarker` with
 //!   `CollectingKey`, so `key_collection_system` plays the rise-and-shrink
 //!   flourish and despawns the holder.
+//! - [`maze::GameEvent::TreasureCollected`] → no-op here for now.
 
 use crate::state::GameState;
 use crate::world::objects::door::DoorMarker;
@@ -92,6 +93,9 @@ pub(crate) fn game_tick_system(
                         commands.entity(entity).insert(CollectingKey::default());
                     }
                 }
+            }
+            GameEvent::TreasureCollected { .. } => {
+                // No-op for now
             }
         }
     }

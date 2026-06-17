@@ -1550,6 +1550,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event(
         maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
         maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
         maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
+        maze::GameEvent::TreasureCollected { cell: (r, c), .. } => (6u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
@@ -1598,6 +1599,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event_payload(
             maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
         },
         maze::GameEvent::KeyCollected { id, .. } => *id,
+        maze::GameEvent::TreasureCollected { value, .. } => *value,
     };
     unsafe {
         if !out_payload.is_null() {
