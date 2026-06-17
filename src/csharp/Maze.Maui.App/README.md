@@ -8,6 +8,7 @@ At the moment, it allows the user to:
 
 - Sign in/up using `email`+`password` or via `OAuth` (Google, GitHub, Facebook - when enabled server-side) 
 - View and edit their account profile (username, full name)
+- Set a profile avatar (shown in the flyout header and on leaderboards)
 - Manage their email addresses (add, set primary, remove)
 - Change or set their password (set-initial flow for OAuth-only users)
 - Delete their account

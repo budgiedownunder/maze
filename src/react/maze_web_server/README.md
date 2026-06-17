@@ -6,7 +6,7 @@
 
 Browser-based UI for the `maze_web_server` REST API. Features:
 
-- **User accounts** — sign up/in/out, edit profile, change password, manage email addresses, delete account, plus OAuth sign-in (Google, GitHub, Facebook) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured. When signed in, the username shows in the page header and links to the account page
+- **User accounts** — sign up/in/out, edit profile, set a profile avatar, change password, manage email addresses, delete account, plus OAuth sign-in (Google, GitHub, Facebook) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured. When signed in, the user's avatar shows in the page header (username as hover text) and links to the account page; avatars also appear on leaderboard rows
 - **Maze list** — create, open, rename, duplicate, delete, and play mazes
 - **Maze editor** — cell-by-cell editing (walls, start, finish, keys, doors, enemies, health
   pickups), multi-cell range selection, structural editing (insert/delete rows and columns),
@@ -28,10 +28,11 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   Run" with one-off tweaks — then navigates the browser to `/game/?id={mazeId}` on the Rust server, which serves the
   [`Bevy`](https://bevyengine.org/) WebAssembly module ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md))
   that runs the first-person 3D game entirely in-browser. On touch devices
-  the game accepts both a six-button D-pad (turn / move / tilt / pause) and
+  the game accepts both a five-button D-pad (turn / move / tilt) and
   single-finger canvas gestures: swipe left / right to turn, swipe up / down
-  to tilt, press-and-hold to move forward. Spacebar (desktop) or the D-pad
-  pause button toggles a "PAUSED" overlay that freezes the timer and movement.
+  to tilt, press-and-hold to move forward. Spacebar (desktop) or the on-screen
+  pause button (bottom-right corner) toggles a "PAUSED" overlay that freezes
+  the timer and movement.
 - **Leaderboards** — a "Leaderboards" page (with a Home tile and nav entry) showing
   per-maze and per-curated-difficulty boards over completed 3D runs, with fastest-time /
   highest-score tabs, your own runs highlighted, your personal score history, and a green
