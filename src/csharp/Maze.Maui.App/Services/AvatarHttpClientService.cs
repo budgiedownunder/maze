@@ -1,3 +1,7 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json.Serialization;
+
 namespace Maze.Maui.App.Services
 {
     /// <summary>
@@ -46,6 +50,53 @@ namespace Maze.Maui.App.Services
             {
                 return null; // network failure => placeholder
             }
+        }
+
+        /// <inheritdoc/>
+        public async Task<string?> UploadAvatarAsync(byte[] bytes, string contentType)
+        {
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(bytes);
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue(
+                    string.IsNullOrEmpty(contentType) ? "application/octet-stream" : contentType);
+                // Part name "file" matches the server's multipart field.
+                content.Add(fileContent, "file", "avatar");
+
+                using var response = await _httpClient.PostAsync("users/me/avatar", content);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+                var dto = await response.Content.ReadFromJsonAsync<AvatarUpdatedResponse>();
+                return dto?.AvatarUpdatedAt;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<bool> DeleteAvatarAsync()
+        {
+            try
+            {
+                using var response = await _httpClient.DeleteAsync("users/me/avatar");
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // Server response for a successful avatar upload — just the new marker.
+        private sealed class AvatarUpdatedResponse
+        {
+            [JsonPropertyName("avatar_updated_at")]
+            public string? AvatarUpdatedAt { get; set; }
         }
     }
 }

@@ -24,7 +24,8 @@ namespace Maze.Maui.App.Tests.ViewModels
             var dialog = new Mock<IDialogService>();
             var nav = new Mock<INavigationService>();
             var avatar = new Mock<IAvatarService>();
-            var vm = new AccountViewModel(auth.Object, dialog.Object, nav.Object, avatar.Object);
+            var picker = new Mock<IImagePickerService>();
+            var vm = new AccountViewModel(auth.Object, dialog.Object, nav.Object, avatar.Object, picker.Object);
             return (vm, auth, dialog, nav);
         }
 
@@ -70,7 +71,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             auth.Setup(a => a.GetMyProfileAsync())
                 .ReturnsAsync(new UserProfile { Id = "u1", Username = "alice", AvatarUpdatedAt = "2026-06-16T12:00:00Z" });
             avatar.Setup(s => s.TryLoadAvatarBytesAsync("u1", "2026-06-16T12:00:00Z")).ReturnsAsync(bytes);
-            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object);
+            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object, new Mock<IImagePickerService>().Object);
 
             await vm.LoadProfileCommand.ExecuteAsync(null);
 
@@ -86,11 +87,102 @@ namespace Maze.Maui.App.Tests.ViewModels
                 .ReturnsAsync(new UserProfile { Id = "u1", Username = "alice", AvatarUpdatedAt = null });
             // No marker → the service resolves to null (no fetch); the VM stores it.
             avatar.Setup(s => s.TryLoadAvatarBytesAsync(It.IsAny<string>(), null)).ReturnsAsync((byte[]?)null);
-            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object);
+            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object, new Mock<IImagePickerService>().Object);
 
             await vm.LoadProfileCommand.ExecuteAsync(null);
 
             Assert.Null(vm.AvatarBytes);
+        }
+
+        // ---- ChangeAvatar / RemoveAvatar ------------------------------------
+
+        // Builds an account VM whose profile loads as user "u1" with no avatar,
+        // returning the avatar + picker mocks for the test to drive.
+        private static (AccountViewModel vm, Mock<IAvatarService> avatar, Mock<IImagePickerService> picker)
+            BuildAvatarVm()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(a => a.GetMyProfileAsync()).ReturnsAsync(new UserProfile { Id = "u1", Username = "alice" });
+            var avatar = new Mock<IAvatarService>();
+            // No marker on load → null bytes (avoids Moq's empty-array default).
+            avatar.Setup(s => s.TryLoadAvatarBytesAsync(It.IsAny<string>(), null)).ReturnsAsync((byte[]?)null);
+            var picker = new Mock<IImagePickerService>();
+            var vm = new AccountViewModel(auth.Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, avatar.Object, picker.Object);
+            return (vm, avatar, picker);
+        }
+
+        [Fact]
+        public async Task ChangeAvatar_UploadsPickedImageAndSetsBytes()
+        {
+            var (vm, avatar, picker) = BuildAvatarVm();
+            await vm.LoadProfileCommand.ExecuteAsync(null); // sets _userId = "u1"
+            picker.Setup(p => p.PickImageAsync()).ReturnsAsync(new PickedImage(new byte[] { 1, 2, 3 }, "image/png"));
+            avatar.Setup(s => s.UploadAvatarAsync(It.IsAny<byte[]>(), "image/png")).ReturnsAsync("2026-06-16T12:00:00Z");
+            byte[] canonical = { 9, 9, 9 };
+            avatar.Setup(s => s.TryLoadAvatarBytesAsync("u1", "2026-06-16T12:00:00Z")).ReturnsAsync(canonical);
+
+            await vm.ChangeAvatarCommand.ExecuteAsync(null);
+
+            Assert.Same(canonical, vm.AvatarBytes);
+            Assert.True(vm.HasAvatar);
+            Assert.Equal("", vm.AvatarError);
+        }
+
+        [Fact]
+        public async Task ChangeAvatar_RejectsNonImage_WithoutUploading()
+        {
+            var (vm, avatar, picker) = BuildAvatarVm();
+            await vm.LoadProfileCommand.ExecuteAsync(null);
+            picker.Setup(p => p.PickImageAsync()).ReturnsAsync(new PickedImage(new byte[] { 1 }, "image/gif"));
+
+            await vm.ChangeAvatarCommand.ExecuteAsync(null);
+
+            Assert.Contains("PNG or JPEG", vm.AvatarError);
+            avatar.Verify(s => s.UploadAvatarAsync(It.IsAny<byte[]>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task ChangeAvatar_RejectsOversize_WithoutUploading()
+        {
+            var (vm, avatar, picker) = BuildAvatarVm();
+            await vm.LoadProfileCommand.ExecuteAsync(null);
+            picker.Setup(p => p.PickImageAsync()).ReturnsAsync(new PickedImage(new byte[2 * 1024 * 1024 + 1], "image/png"));
+
+            await vm.ChangeAvatarCommand.ExecuteAsync(null);
+
+            Assert.Contains("2 MB", vm.AvatarError);
+            avatar.Verify(s => s.UploadAvatarAsync(It.IsAny<byte[]>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task ChangeAvatar_WhenCancelled_DoesNothing()
+        {
+            var (vm, avatar, picker) = BuildAvatarVm();
+            picker.Setup(p => p.PickImageAsync()).ReturnsAsync((PickedImage?)null);
+
+            await vm.ChangeAvatarCommand.ExecuteAsync(null);
+
+            Assert.Equal("", vm.AvatarError);
+            avatar.Verify(s => s.UploadAvatarAsync(It.IsAny<byte[]>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task RemoveAvatar_OnSuccess_ClearsBytes()
+        {
+            var (vm, avatar, picker) = BuildAvatarVm();
+            await vm.LoadProfileCommand.ExecuteAsync(null);
+            // Upload one first so there's something to remove.
+            picker.Setup(p => p.PickImageAsync()).ReturnsAsync(new PickedImage(new byte[] { 1 }, "image/png"));
+            avatar.Setup(s => s.UploadAvatarAsync(It.IsAny<byte[]>(), It.IsAny<string>())).ReturnsAsync("m1");
+            avatar.Setup(s => s.TryLoadAvatarBytesAsync("u1", "m1")).ReturnsAsync(new byte[] { 7 });
+            await vm.ChangeAvatarCommand.ExecuteAsync(null);
+            Assert.True(vm.HasAvatar);
+
+            avatar.Setup(s => s.DeleteAvatarAsync()).ReturnsAsync(true);
+            await vm.RemoveAvatarCommand.ExecuteAsync(null);
+
+            Assert.Null(vm.AvatarBytes);
+            Assert.False(vm.HasAvatar);
         }
 
         // ---- SaveProfile ----------------------------------------------------

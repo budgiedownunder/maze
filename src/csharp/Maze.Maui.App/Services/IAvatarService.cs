@@ -20,5 +20,20 @@ namespace Maze.Maui.App.Services
         /// <param name="avatarUpdatedAt">The user's <c>avatar_updated_at</c>
         /// marker; <c>null</c>/empty means the user has no avatar.</param>
         Task<byte[]?> TryLoadAvatarBytesAsync(string userId, string? avatarUpdatedAt);
+
+        /// <summary>
+        /// Uploads (or replaces) the caller's avatar. The server canonicalises
+        /// the image to a 256x256 PNG and returns the new <c>avatar_updated_at</c>
+        /// marker. Returns <c>null</c> on failure.
+        /// </summary>
+        /// <param name="bytes">The image bytes (PNG or JPEG).</param>
+        /// <param name="contentType">The image's content type.</param>
+        Task<string?> UploadAvatarAsync(byte[] bytes, string contentType);
+
+        /// <summary>
+        /// Removes the caller's avatar. Returns <c>true</c> on success (including
+        /// the idempotent no-op when there was none), <c>false</c> on failure.
+        /// </summary>
+        Task<bool> DeleteAvatarAsync();
     }
 }
