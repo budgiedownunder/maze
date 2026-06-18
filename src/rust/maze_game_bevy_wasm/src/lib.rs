@@ -82,6 +82,8 @@ struct StartConfig {
     enemy_count: u32,
     #[serde(default)]
     health_count: u32,
+    #[serde(default)]
+    treasure_count: u32,
     #[serde(default = "default_enemy_move_period_ms")]
     enemy_move_period_ms: f32,
     #[serde(default = "default_enemy_damage")]
@@ -242,6 +244,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
                 cfg.spare_keys,
                 cfg.enemy_count,
                 cfg.health_count,
+                cfg.treasure_count,
             )
             .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
         )
@@ -320,6 +323,7 @@ mod tests {
         assert_eq!(cfg.spare_keys, 0);
         assert_eq!(cfg.enemy_count, 0);
         assert_eq!(cfg.health_count, 0);
+        assert_eq!(cfg.treasure_count, 0);
         assert_eq!(cfg.enemy_move_period_ms, 1500.0);
         assert_eq!(cfg.enemy_damage, 1);
         assert_eq!(cfg.max_hp, 3);

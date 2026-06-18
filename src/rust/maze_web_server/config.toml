@@ -161,6 +161,9 @@ enemy_count = 1
 # Number of health pickups the generator auto-places. Clamped to
 # maze::MAX_HEALTH_COUNT (= 8). Default 0 = none.
 health_count = 2
+# Number of treasure cells the generator auto-places, dead-end-first and
+# type-weighted. Clamped to maze::MAX_TREASURE_COUNT (= 12). Default 0 = none.
+treasure_count = 3
 # Enemy rig kind to spawn at every 'E' cell. One of "goblin" | "ghost".
 # Default "goblin".
 enemy_type = "goblin"
@@ -215,6 +218,7 @@ spare_doors = 2
 spare_keys = 1
 enemy_count = 3
 health_count = 3
+treasure_count = 5
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1500
@@ -245,6 +249,7 @@ spare_doors = 3
 spare_keys = 1
 enemy_count = 5
 health_count = 4
+treasure_count = 8
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1200

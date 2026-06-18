@@ -6166,6 +6166,7 @@ mod test_definitions {
         assert_eq!(body.spare_keys, 0);
         assert_eq!(body.enemy_count, 1);
         assert_eq!(body.health_count, 2);
+        assert_eq!(body.treasure_count, 3);
         assert_eq!(body.enemy_type, "goblin");
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1800);
@@ -6192,6 +6193,7 @@ mod test_definitions {
         assert_eq!(body.spare_keys, 1);
         assert_eq!(body.enemy_count, 3);
         assert_eq!(body.health_count, 3);
+        assert_eq!(body.treasure_count, 5);
         assert_eq!(body.enemy_type, "goblin");
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1500);
@@ -6212,6 +6214,7 @@ mod test_definitions {
         assert_eq!(body.spare_keys, 1);
         assert_eq!(body.enemy_count, 5);
         assert_eq!(body.health_count, 4);
+        assert_eq!(body.treasure_count, 8);
         assert_eq!(body.enemy_type, "goblin");
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1200);

@@ -98,6 +98,7 @@ pub fn generate_maze_json(
     spare_keys: u32,
     enemy_count: u32,
     health_count: u32,
+    treasure_count: u32,
 ) -> Result<String, String> {
     let options = GeneratorOptions {
         row_count: rows as usize,
@@ -114,8 +115,7 @@ pub fn generate_maze_json(
         spare_keys: Some(spare_keys as usize),
         enemy_count: Some(enemy_count as usize),
         health_count: Some(health_count as usize),
-        // Treasure generation isn't wired into this in-app generate path yet.
-        treasure_count: None,
+        treasure_count: Some(treasure_count as usize),
     };
     let maze = Generator { options }
         .generate()

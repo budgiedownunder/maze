@@ -123,6 +123,12 @@ pub struct Play3dDifficultyConfig {
     /// health pickups.
     #[serde(default = "default_play3d_health_count")]
     pub health_count: u32,
+    /// Number of treasure cells (`'T'`) the generator auto-places on this
+    /// difficulty's maze, dead-end-first and type-weighted. Clamped to
+    /// `maze::MAX_TREASURE_COUNT` (= 12) and to the available eligible cells.
+    /// Default 0 = no treasure.
+    #[serde(default = "default_play3d_treasure_count")]
+    pub treasure_count: u32,
     /// Enemy rig kind to spawn at every `'E'` cell. Same rig for every
     /// enemy on a given difficulty (per-enemy variation is deferred to a
     /// later plan). Default `goblin`.
@@ -450,6 +456,7 @@ impl Default for Play3dDifficultyConfig {
             spare_keys: default_play3d_spare_keys(),
             enemy_count: default_play3d_enemy_count(),
             health_count: default_play3d_health_count(),
+            treasure_count: default_play3d_treasure_count(),
             enemy_type: default_enemy_type(),
             health_style: default_health_style(),
             enemy_move_period_ms: default_play3d_enemy_move_period_ms(),
@@ -528,6 +535,7 @@ impl Default for Play3dConfig {
                 spare_keys: 0,
                 enemy_count: 1,
                 health_count: 2,
+                treasure_count: 3,
                 enemy_type: EnemyTypeConfig::Goblin,
                 health_style: HealthStyleConfig::Heart,
                 enemy_move_period_ms: 1800,
@@ -554,6 +562,7 @@ impl Default for Play3dConfig {
                 spare_keys: 1,
                 enemy_count: 3,
                 health_count: 3,
+                treasure_count: 5,
                 enemy_type: EnemyTypeConfig::Goblin,
                 health_style: HealthStyleConfig::Heart,
                 enemy_move_period_ms: 1500,
@@ -580,6 +589,7 @@ impl Default for Play3dConfig {
                 spare_keys: 1,
                 enemy_count: 5,
                 health_count: 4,
+                treasure_count: 8,
                 enemy_type: EnemyTypeConfig::Goblin,
                 health_style: HealthStyleConfig::Heart,
                 enemy_move_period_ms: 1200,
@@ -633,6 +643,9 @@ fn default_play3d_enemy_count() -> u32 {
     0
 }
 fn default_play3d_health_count() -> u32 {
+    0
+}
+fn default_play3d_treasure_count() -> u32 {
     0
 }
 fn default_play3d_enemy_move_period_ms() -> u32 {
@@ -1446,6 +1459,7 @@ mod tests {
             min_solution_length = 12
             enemy_count = 4
             health_count = 3
+            treasure_count = 6
             enemy_type = "ghost"
             health_style = "potion"
             enemy_move_period_ms = 900
@@ -1455,9 +1469,27 @@ mod tests {
         let preset = &cfg.play3d.easy;
         assert_eq!(preset.enemy_count, 4);
         assert_eq!(preset.health_count, 3);
+        assert_eq!(preset.treasure_count, 6);
         assert_eq!(preset.enemy_type, EnemyTypeConfig::Ghost);
         assert_eq!(preset.health_style, HealthStyleConfig::Potion);
         assert_eq!(preset.enemy_move_period_ms, 900);
         assert_eq!(preset.max_hp, 5);
+    }
+
+    #[test]
+    fn treasure_count_defaults_to_zero_when_omitted() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.treasure_count, 0);
     }
 }

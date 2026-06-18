@@ -492,6 +492,9 @@ pub struct Play3dConfigResponse {
     /// Number of health pickups (`'H'` cells) the generator auto-places.
     /// Clamped to `maze::MAX_HEALTH_COUNT` (= 8). `0` = no pickups.
     pub health_count: u32,
+    /// Number of treasure cells (`'T'`) the generator auto-places, dead-end-first
+    /// and type-weighted. Clamped to `maze::MAX_TREASURE_COUNT` (= 12). `0` = none.
+    pub treasure_count: u32,
     /// Enemy rig kind to spawn at every `'E'` cell. One of `goblin`,
     /// `ghost`. Safely degrades to `goblin` if unrecognised.
     pub enemy_type: String,
@@ -580,6 +583,7 @@ pub async fn get_play3d_config(
         spare_keys: preset.spare_keys,
         enemy_count: preset.enemy_count,
         health_count: preset.health_count,
+        treasure_count: preset.treasure_count,
         enemy_type: preset.enemy_type.as_wire_str().to_string(),
         health_style: preset.health_style.as_wire_str().to_string(),
         enemy_move_period_ms: preset.enemy_move_period_ms,

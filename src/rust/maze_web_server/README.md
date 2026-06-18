@@ -113,6 +113,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.spare_keys` | Integer | `0` | (config-file only — number of spare keys planted on off-spine branches, giving the player a budget to spend on decoys before they risk stranding; capped jointly with `door_count` and `spare_doors` at `2*door_count + spare_doors + spare_keys ≤ 16`)
 |                | `game.play3d.<difficulty>.enemy_count` | Integer | `0` | (config-file only — number of enemies (`'E'` cells) the generator auto-places on this difficulty's maze; clamped to 8 and to the available eligible cells; `0` = no enemies)
 |                | `game.play3d.<difficulty>.health_count` | Integer | `0` | (config-file only — number of health pickups (`'H'` cells) the generator auto-places; clamped to 8 and to the available eligible cells; `0` = none)
+|                | `game.play3d.<difficulty>.treasure_count` | Integer | `0` | (config-file only — number of treasure cells (`'T'`) the generator auto-places, dead-end-first and type-weighted; clamped to 12 and to the available eligible cells; `0` = none)
 |                | `game.play3d.<difficulty>.enemy_type` | Text (`goblin` / `ghost`) | `goblin` | (config-file only — enemy rig kind to spawn at every `'E'` cell; unknown values fall back to `goblin`)
 |                | `game.play3d.<difficulty>.health_style` | Text (`heart` / `potion`) | `heart` | (config-file only — health-pickup rig kind to spawn at every `'H'` cell; unknown values fall back to `heart`)
 |                | `game.play3d.<difficulty>.enemy_move_period_ms` | Integer | `1500` | (config-file only — how often each enemy advances one cell, in milliseconds of real-game time; lower = harder)
@@ -220,6 +221,7 @@ spare_keys = 0
 # with one goblin and two hearts so the player learns the mechanic.
 enemy_count = 1
 health_count = 2
+treasure_count = 3
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1800
@@ -252,6 +254,7 @@ spare_doors = 2
 spare_keys = 1
 enemy_count = 3
 health_count = 3
+treasure_count = 5
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1500
@@ -284,6 +287,7 @@ spare_doors = 3
 spare_keys = 1
 enemy_count = 5
 health_count = 4
+treasure_count = 8
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1200
