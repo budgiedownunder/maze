@@ -13,10 +13,12 @@ pub(crate) fn build_silver_assets(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> SilverAssets {
     SilverAssets {
+        // A muted grey-white (dimmer + greyer than the near-white it was) so the
+        // silver loot doesn't read like the bright cyan-white diamonds at range.
         coin_mat: metal_material(
             materials,
-            Color::srgb(0.86, 0.89, 0.94),
-            LinearRgba::new(0.55, 0.58, 0.66, 1.0),
+            Color::srgb(0.64, 0.66, 0.70),
+            LinearRgba::new(0.30, 0.32, 0.36, 1.0),
         ),
         sparkle_mats: vec![sparkle_material(materials, Color::srgb(0.60, 0.64, 0.75))],
     }

@@ -526,6 +526,11 @@ pub struct MazeGame {
     /// Monotonic running sum of collected treasure `value`s — the other half of
     /// [`MazeGame::score`] alongside `keys_collected`. Only ever grows.
     treasure_value_collected: u64,
+    /// Per-style tally of treasure collected over the run, kept as a small
+    /// linear list (at most one entry per [`TreasureStyle`]). Feeds the bag
+    /// display's grouped per-style chips; the summed reward half of the score
+    /// lives in `treasure_value_collected`. Only ever grows.
+    treasure_counts: Vec<(TreasureStyle, u32)>,
     /// Events produced synchronously by [`MazeGame::move_player`]
     /// (`PlayerHealed` from an auto-pickup, `PlayerDamaged` from stepping into
     /// an enemy-occupied cell) that surface on the next [`MazeGame::tick`]
@@ -785,6 +790,7 @@ impl MazeGame {
             max_hp,
             keys_collected: 0,
             treasure_value_collected: 0,
+            treasure_counts: Vec::new(),
             pending_events: Vec::new(),
         })
     }
@@ -968,6 +974,10 @@ impl MazeGame {
                 self.grid[new_row][new_col] = ' ';
                 self.treasure_value_collected =
                     self.treasure_value_collected.saturating_add(value as u64);
+                match self.treasure_counts.iter_mut().find(|(s, _)| *s == style) {
+                    Some(entry) => entry.1 = entry.1.saturating_add(1),
+                    None => self.treasure_counts.push((style, 1)),
+                }
                 self.pending_events.push(GameEvent::TreasureCollected {
                     cell: (new_row, new_col),
                     style,
@@ -1421,6 +1431,42 @@ impl MazeGame {
             }
         }
         out
+    }
+
+    /// Returns the count of treasure collected over the run, grouped by
+    /// [`TreasureStyle`], ordered by ascending default value (Silver, Gold,
+    /// Jewels, Diamonds). Styles never collected are omitted, so every returned
+    /// count is at least `1`. Feeds the bag display's grouped per-style chips;
+    /// the score contribution is the summed reward, not the count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction, TreasureStyle};
+    /// let json = r#"{"grid":[["S","T","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert!(game.collected_treasure().is_empty());
+    /// game.move_player(Direction::Right); // step onto the treasure — auto-collected
+    /// assert_eq!(game.collected_treasure(), vec![(TreasureStyle::Silver, 1)]);
+    /// ```
+    pub fn collected_treasure(&self) -> Vec<(TreasureStyle, u32)> {
+        // Ordered by ascending default reward value (Silver 50 < Gold 100 <
+        // Jewels 200 < Diamonds 400) so the bag chips read cheapest-to-richest.
+        const ORDER: [TreasureStyle; 4] = [
+            TreasureStyle::Silver,
+            TreasureStyle::Gold,
+            TreasureStyle::Jewels,
+            TreasureStyle::Diamonds,
+        ];
+        ORDER
+            .iter()
+            .filter_map(|&style| {
+                self.treasure_counts
+                    .iter()
+                    .find(|(s, _)| *s == style)
+                    .map(|&(_, count)| (style, count))
+            })
+            .collect()
     }
 
     /// Returns the items currently in the player's bag, in pickup order.
@@ -2305,6 +2351,28 @@ mod tests {
                 style: TreasureStyle::Silver,
                 value: 50
             }]
+        );
+    }
+
+    #[test]
+    fn collected_treasure_groups_per_style_in_ascending_value_order() {
+        // Collect Diamonds then Jewels then two Silver; the result is ordered by
+        // ascending default value (Silver < Jewels < Diamonds) regardless of
+        // pickup order, with per-style counts and no zero entries.
+        let json = r#"{"grid":[["S",[{"type":"T","style":"diamonds"}],[{"type":"T","style":"jewels"}],"T","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert!(game.collected_treasure().is_empty());
+        game.move_player(Direction::Right); // Diamonds
+        game.move_player(Direction::Right); // Jewels
+        game.move_player(Direction::Right); // Silver
+        game.move_player(Direction::Right); // Silver
+        assert_eq!(
+            game.collected_treasure(),
+            vec![
+                (TreasureStyle::Silver, 2),
+                (TreasureStyle::Jewels, 1),
+                (TreasureStyle::Diamonds, 1),
+            ]
         );
     }
 

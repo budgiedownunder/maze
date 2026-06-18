@@ -1316,6 +1316,28 @@ function testMazeGameTreasuresExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::collected_treasure() example
+function testMazeGameCollectedTreasure() {
+    let game = null;
+    try {
+        game = MazeGameWasm.from_json('{"grid":[["S","T","F"]]}');
+        game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
+        console.log("collected_treasure() = ", game.collected_treasure());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameCollectedTreasureExpectedOutput() {
+    return [
+        "collected_treasure() =  [ { style: 'silver', count: 1 } ]"
+    ];
+}
+
 // Test MazeGameWasm::time_until_next_event_ms() example
 function testMazeGameTimeUntilNextEventMs() {
     let game = null;
@@ -1464,6 +1486,7 @@ const tests = [
     { name: "MazeGameWasm:cell_overrides() example", testFunction: testMazeGameCellOverrides, expectedOutput: testMazeGameCellOverridesExpectedOutput },
     { name: "MazeGameWasm:health_pickups() example", testFunction: testMazeGameHealthPickups, expectedOutput: testMazeGameHealthPickupsExpectedOutput },
     { name: "MazeGameWasm:treasures() example", testFunction: testMazeGameTreasures, expectedOutput: testMazeGameTreasuresExpectedOutput },
+    { name: "MazeGameWasm:collected_treasure() example", testFunction: testMazeGameCollectedTreasure, expectedOutput: testMazeGameCollectedTreasureExpectedOutput },
     { name: "MazeGameWasm:time_until_next_event_ms() example", testFunction: testMazeGameTimeUntilNextEventMs, expectedOutput: testMazeGameTimeUntilNextEventMsExpectedOutput },
 ];
 

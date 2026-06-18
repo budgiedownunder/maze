@@ -1194,6 +1194,24 @@ function registerMazeGameTests() {
             ]);
         });
 
+        // MazeGame::collected_treasure() — empty before anything is collected
+        it('should expect collected_treasure() to be empty before any treasure is collected', function () {
+            let game = makeGame('{"grid":[["S","T","F"]]}');
+            expect(game.collected_treasure()).to.deep.equal([]);
+        });
+
+        // MazeGame::collected_treasure() — grouped per style in canonical order, no zero entries
+        it('should expect collected_treasure() to group collected treasure per style', function () {
+            let game = makeGame('{"grid":[["S","T",[{"type":"T","style":"gold"}],"T","F"]]}');
+            game.move_player(DirectionWasm.Right); // silver
+            game.move_player(DirectionWasm.Right); // gold
+            game.move_player(DirectionWasm.Right); // silver
+            expect(game.collected_treasure()).to.deep.equal([
+                { style: 'silver', count: 2 },
+                { style: 'gold', count: 1 },
+            ]);
+        });
+
         // MazeGame::grid() — pure-char grid for the host renderer
         it('should expect grid() to return the pure-char grid', function () {
             let game = makeGame('{"grid":[["S"," ","F"]]}');

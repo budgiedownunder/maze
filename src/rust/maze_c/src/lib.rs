@@ -3258,6 +3258,86 @@ fn treasure_style_to_ffi(style: maze::TreasureStyle) -> i32 {
     }
 }
 
+/// Returns the number of distinct treasure styles the player has collected so
+/// far (the length of the grouped per-style tally). Zero until any treasure is
+/// collected; at most one entry per [`maze::TreasureStyle`].
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_collected_treasure_count(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_collected_treasure_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.collected_treasure().len() as i32
+}
+
+/// Retrieves one entry of the grouped per-style collected-treasure tally by
+/// index: `out_style` carries the [`maze::TreasureStyle`] ordinal (`0` = silver,
+/// `1` = gold, `2` = diamonds, `3` = jewels) and `out_count` the number of that
+/// style collected. Entries are ordered by ascending default value; styles
+/// never collected are omitted, so every `out_count` is at least `1`.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right — onto the treasure, auto-collected
+/// let mut style = -1i32;
+/// let mut count = 0u32;
+/// let ok = unsafe {
+///     maze_c_maze_game_get_collected_treasure(ptr, 0, &mut style, &mut count)
+/// };
+/// assert_eq!(ok, 1);
+/// assert_eq!(style, 0); // silver
+/// assert_eq!(count, 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_collected_treasure(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_style: *mut i32,
+    out_count: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let collected = game.collected_treasure();
+    if index < 0 || index as usize >= collected.len() {
+        return 0;
+    }
+    let (style, count) = collected[index as usize];
+    unsafe {
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_count.is_null() {
+            *out_count = count;
+        }
+    }
+    1
+}
+
 /// Returns the number of uncollected health-pickup cells (live `'H'`).
 ///
 /// # Examples
@@ -4745,6 +4825,36 @@ mod tests {
         assert_eq!(ok, 1);
         assert_eq!(style, 0); // silver (default)
         assert_eq!(value, 50); // Silver default value
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_collected_treasure_count_and_get_group_per_style() {
+        // Two silver + one gold; collected counts group per style in canonical
+        // order with no zero entries.
+        let json =
+            CString::new(r#"{"grid":[["S","T",[{"type":"T","style":"gold"}],"T","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_collected_treasure_count(ptr), 0);
+        maze_c_maze_game_move_player(ptr, 4); // silver
+        maze_c_maze_game_move_player(ptr, 4); // gold
+        maze_c_maze_game_move_player(ptr, 4); // silver
+        assert_eq!(maze_c_maze_game_collected_treasure_count(ptr), 2);
+
+        let mut style: i32 = 99;
+        let mut count: u32 = 99;
+        let ok =
+            unsafe { maze_c_maze_game_get_collected_treasure(ptr, 0, &mut style, &mut count) };
+        assert_eq!(ok, 1);
+        assert_eq!((style, count), (0, 2)); // silver × 2
+        let ok =
+            unsafe { maze_c_maze_game_get_collected_treasure(ptr, 1, &mut style, &mut count) };
+        assert_eq!(ok, 1);
+        assert_eq!((style, count), (1, 1)); // gold × 1
+        // Out-of-range index returns 0.
+        let oob =
+            unsafe { maze_c_maze_game_get_collected_treasure(ptr, 9, &mut style, &mut count) };
+        assert_eq!(oob, 0);
         maze_c_free_maze_game(ptr);
     }
 

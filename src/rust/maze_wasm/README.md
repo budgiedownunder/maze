@@ -101,6 +101,7 @@ const bag     = game.bag();             // → [{ type: 'key', id }]  (collected
 const enemies = game.enemies();         // → [{ row, col, id, damage, movePeriodMs, enemyType? }]  (live enemies; enemyType present only when the spawn cell overrode the rig)
 const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected 'H' cells, row-major order)
 const treasure = game.treasures();      // → [{ row, col, style, value }]  (uncollected 'T' cells; style is the rig, value the resolved reward)
+const collected = game.collected_treasure(); // → [{ style, count }]  (treasure collected so far, grouped per style, zero-count omitted)
 
 // Advance time-based state (opening doors, enemy AI, queued damage / heal events).
 // Returns the events that occurred during the tick (or queued by prior move_player calls):
@@ -189,6 +190,11 @@ i32           maze_game_wasm_get_treasure(MazeGameWasm* maze_game_wasm, i32 inde
                                                                               // 0=ok, -1=error
                                                                               // style_out: 0=silver, 1=gold, 2=diamonds, 3=jewels
                                                                               // value_out: resolved reward (override else rarity default)
+i32           maze_game_wasm_collected_treasure_count(MazeGameWasm* maze_game_wasm); // distinct styles collected
+i32           maze_game_wasm_get_collected_treasure(MazeGameWasm* maze_game_wasm, i32 index,
+                                                    i32* style_out, u32* count_out);
+                                                                              // 0=ok, -1=error; per-style tally, zero-count omitted
+                                                                              // style_out: 0=silver, 1=gold, 2=diamonds, 3=jewels
 ```
 
 The `json_string_ptr` argument must point to a length-prefixed string (4-byte little-endian length followed by UTF-8 bytes), allocated via `allocate_sized_memory`.

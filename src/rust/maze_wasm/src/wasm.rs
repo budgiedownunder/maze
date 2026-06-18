@@ -1887,6 +1887,54 @@ fn treasure_style_to_ffi(style: maze::TreasureStyle) -> i32 {
     }
 }
 
+/// Returns the number of distinct treasure styles the player has collected so
+/// far (the length of the grouped per-style tally), or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_collected_treasure_count(
+    maze_game_wasm: *mut MazeGameWasm,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.collected_treasure().len() as i32
+}
+
+/// Retrieves one entry of the grouped per-style collected-treasure tally by
+/// index: `out_style` is the [`maze::TreasureStyle`] ordinal (`0` = silver,
+/// `1` = gold, `2` = diamonds, `3` = jewels); `out_count` the number of that
+/// style collected. Entries are ordered by ascending default value; styles
+/// never collected are omitted, so every `out_count` is at least `1`. Returns `0` on
+/// success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_collected_treasure(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_style: *mut i32,
+    out_count: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let collected = game.collected_treasure();
+    if index < 0 || index as usize >= collected.len() {
+        return -1;
+    }
+    let (style, count) = collected[index as usize];
+    unsafe {
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_count.is_null() {
+            *out_count = count;
+        }
+    }
+    0
+}
+
 /// Returns the number of uncollected health-pickup cells (live `'H'`),
 /// or `-1` for a null pointer.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]

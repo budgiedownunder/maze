@@ -230,6 +230,17 @@ fn to_js_treasure_obj(row: usize, col: usize, style: maze::TreasureStyle, value:
     obj
 }
 
+/// Converts a per-style collected-treasure tally to a JavaScript object
+/// (`{ style, count }`). `style` is the lowercase wire string; `count` is the
+/// number of that style the player has collected so far. Feeds the bag's
+/// grouped per-style display.
+fn to_js_collected_treasure_obj(style: maze::TreasureStyle, count: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("style"), &JsValue::from_str(style.as_wire_str())).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("count"), &JsValue::from_f64(count as f64)).unwrap();
+    obj
+}
+
 /// Converts a tick event to a JavaScript object — one arm per
 /// [`maze::GameEvent`] variant. Each arm emits the JS object shape documented
 /// in the corresponding `MazeGameEventType` entry of `mazeWasm.ts`.
@@ -933,6 +944,42 @@ impl MazeGameWasm {
         let result = Array::new();
         for ((r, c), style, value) in self.game.treasures() {
             result.push(&to_js_treasure_obj(r, c, style, value));
+        }
+        result
+    }
+
+    /// Returns the treasure collected so far as a JavaScript `Array` of
+    /// `{ style, count }` objects, grouped per style in ascending default value
+    /// (silver, gold, jewels, diamonds). Styles never collected are omitted, so
+    /// every `count` is at least `1`. Feeds the bag's grouped per-style display.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","T","F"]]}');
+    ///         game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
+    ///         console.log("collected_treasure() = ", game.collected_treasure());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn collected_treasure(&self) -> Array {
+        let result = Array::new();
+        for (style, count) in self.game.collected_treasure() {
+            result.push(&to_js_collected_treasure_obj(style, count));
         }
         result
     }
