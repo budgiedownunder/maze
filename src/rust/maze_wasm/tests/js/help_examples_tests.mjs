@@ -1312,7 +1312,7 @@ function testMazeGameTreasures() {
 
 function testMazeGameTreasuresExpectedOutput() {
     return [
-        "treasures() =  [ { row: 0, col: 1, style: 'silver', value: 10 } ]"
+        "treasures() =  [ { row: 0, col: 1, style: 'silver', value: 50 } ]"
     ];
 }
 

@@ -218,8 +218,8 @@ fn to_js_health_pickup_obj(row: usize, col: usize, id: u32) -> Object {
 
 /// Converts an uncollected treasure cell to a JavaScript object
 /// (`{ row, col, style, value }`). `style` is the lowercase wire string for the
-/// treasure's visual rig; `value` is the resolved score reward (the per-cell
-/// override else the rarity-derived default). Renderers key on `(row, col)` —
+/// treasure's type / rig; `value` is the resolved score reward (the per-cell
+/// override else the type's default value). Renderers key on `(row, col)` —
 /// a consumed treasure clears to `' '` and drops out of the snapshot.
 fn to_js_treasure_obj(row: usize, col: usize, style: maze::TreasureStyle, value: u32) -> Object {
     let obj = Object::new();
@@ -904,7 +904,7 @@ impl MazeGameWasm {
     /// Returns the uncollected treasure cells as a JavaScript `Array` of
     /// `{ row, col, style, value }` objects, in row-major order. `style` drives
     /// the rendered rig; `value` is the score awarded on pickup (the per-cell
-    /// override else the rarity-derived default). A consumed treasure clears to
+    /// override else the type's default value). A consumed treasure clears to
     /// `' '` and drops out of the snapshot, so renderers key on `(row, col)`.
     ///
     /// # Examples
@@ -2495,7 +2495,7 @@ impl MazeWasm {
     /// * `spare_keys` - Number of spare keys planted on off-spine branches after solvability check (undefined = default 0)
     /// * `enemy_count` - Number of enemy cells to auto-place at random passable cells (undefined = default 0)
     /// * `health_count` - Number of health-pickup cells to auto-place at random passable cells (undefined = default 0)
-    /// * `treasure_count` - Number of treasure cells to auto-place dead-end-first, rarity-weighted (undefined = default 0)
+    /// * `treasure_count` - Number of treasure cells to auto-place dead-end-first, type-weighted (undefined = default 0)
     ///
     /// # Returns
     ///

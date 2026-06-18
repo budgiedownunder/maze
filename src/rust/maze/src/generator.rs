@@ -5,7 +5,7 @@ use rand::SeedableRng;
 
 use std::collections::HashMap;
 
-use data_model::{CellEntity, Maze, MazeDefinition, MazePoint, TreasureOverride, TreasureRarity};
+use data_model::{CellEntity, Maze, MazeDefinition, MazePoint, TreasureOverride, TreasureStyle};
 
 use crate::{Error, GenerationAlgorithm, Solver};
 
@@ -99,9 +99,10 @@ pub struct GeneratorOptions {
     /// the generated maze. Treasure is placed **dead-end-first** (corridor ends
     /// are claimed before other walkable cells) in a separate pass after
     /// enemies / health, so it never collides with them; each placed treasure
-    /// is assigned a rarity by weight (Common frequent → Rare scarce), and
-    /// non-Common cells carry a `TreasureOverride { rarity }` so the renderers
-    /// and the engine's reward value follow it (Common stays a bare `'T'`).
+    /// is assigned a type by weight (cheaper types more frequent: Silver 40 /
+    /// Gold 30 / Jewels 20 / Diamonds 10 %), and non-Silver cells carry a
+    /// `TreasureOverride { style }` so the renderers and the engine's reward
+    /// value follow it (Silver stays a bare `'T'`).
     /// Clamped to [`MAX_TREASURE_COUNT`] and to the available eligible cells.
     /// `None` or `Some(0)` (the default) places none.
     #[serde(default)]
@@ -313,7 +314,7 @@ impl Generator {
                     place_random_overlay_cells(&mut working, &start, enemy_count, 'E', &mut rng);
                     place_random_overlay_cells(&mut working, &start, health_count, 'H', &mut rng);
                     // Treasure is placed last, dead-end-first, writing its grid
-                    // cells and any non-Common rarity overrides together.
+                    // cells and any non-Silver type overrides together.
                     let mut definition = MazeDefinition::from_vec(working);
                     place_treasure_cells(
                         &mut definition.grid,
@@ -899,13 +900,14 @@ fn place_random_overlay_cells(
     }
 }
 
-/// Rolls a treasure rarity, weighted so Common is frequent and Rare scarce
-/// (≈70% Common, 25% Uncommon, 5% Rare).
-fn roll_treasure_rarity(rng: &mut StdRng) -> TreasureRarity {
+/// Rolls a treasure type, weighted so commoner (cheaper) types appear more
+/// often (≈40% Silver, 30% Gold, 20% Jewels, 10% Diamonds).
+fn roll_treasure_style(rng: &mut StdRng) -> TreasureStyle {
     match rng.gen_range(0..100) {
-        0..=69 => TreasureRarity::Common,
-        70..=94 => TreasureRarity::Uncommon,
-        _ => TreasureRarity::Rare,
+        0..=39 => TreasureStyle::Silver,
+        40..=69 => TreasureStyle::Gold,
+        70..=89 => TreasureStyle::Jewels,
+        _ => TreasureStyle::Diamonds,
     }
 }
 
@@ -913,9 +915,9 @@ fn roll_treasure_rarity(rng: &mut StdRng) -> TreasureRarity {
 /// corridor-end cells (passable with a single open neighbour) are claimed
 /// before other walkable cells, then any remainder spills onto the rest. Only
 /// cells currently `' '` are eligible, so treasure never lands on
-/// `S` / `F` / `K` / `D` / `E` / `H`. Each placed treasure rolls a rarity
-/// ([`roll_treasure_rarity`]); non-Common cells get a `TreasureOverride { rarity }`
-/// inserted into `cell_entities` (Common is the default, so it stays a bare
+/// `S` / `F` / `K` / `D` / `E` / `H`. Each placed treasure rolls a type
+/// ([`roll_treasure_style`]); non-Silver cells get a `TreasureOverride { style }`
+/// inserted into `cell_entities` (Silver is the default, so it stays a bare
 /// `'T'`). Mirrors [`place_random_overlay_cells`], but owns the per-cell
 /// override write too since treasure carries one.
 fn place_treasure_cells(
@@ -944,12 +946,12 @@ fn place_treasure_cells(
     others.shuffle(rng);
     for cell in dead_ends.into_iter().chain(others).take(count) {
         grid[cell.0][cell.1] = 'T';
-        let rarity = roll_treasure_rarity(rng);
-        if rarity != TreasureRarity::Common {
+        let style = roll_treasure_style(rng);
+        if style != TreasureStyle::Silver {
             cell_entities.insert(
                 cell,
                 vec![CellEntity::Treasure(TreasureOverride {
-                    rarity: Some(rarity),
+                    style: Some(style),
                     ..Default::default()
                 })],
             );
@@ -1517,9 +1519,9 @@ mod tests {
     }
 
     #[test]
-    fn generated_treasure_overrides_are_non_common_on_t_cells() {
-        // Every override on a generated maze is a treasure carrying a non-Common
-        // rarity and sits on a `'T'` cell; Common treasure stays a bare `'T'`.
+    fn generated_treasure_overrides_are_non_silver_on_t_cells() {
+        // Every override on a generated maze is a treasure carrying a non-Silver
+        // type and sits on a `'T'` cell; Silver treasure stays a bare `'T'`.
         let maze = make_with_treasure(21, 21, 2024, MAX_TREASURE_COUNT)
             .generate()
             .expect("ok");
@@ -1527,8 +1529,10 @@ mod tests {
             assert_eq!(maze.definition.grid[r][c], 'T');
             match entities.first() {
                 Some(CellEntity::Treasure(o)) => assert!(matches!(
-                    o.rarity,
-                    Some(TreasureRarity::Uncommon) | Some(TreasureRarity::Rare)
+                    o.style,
+                    Some(TreasureStyle::Gold)
+                        | Some(TreasureStyle::Jewels)
+                        | Some(TreasureStyle::Diamonds)
                 )),
                 other => panic!("expected a treasure override, got {other:?}"),
             }
@@ -1556,18 +1560,18 @@ mod tests {
     }
 
     #[test]
-    fn treasure_rarity_roll_is_weighted_toward_common() {
+    fn treasure_style_roll_is_weighted_toward_silver() {
         let mut rng = StdRng::seed_from_u64(42);
-        let (mut common, mut rare) = (0, 0);
+        let (mut silver, mut diamonds) = (0, 0);
         for _ in 0..1000 {
-            match roll_treasure_rarity(&mut rng) {
-                TreasureRarity::Common => common += 1,
-                TreasureRarity::Rare => rare += 1,
-                TreasureRarity::Uncommon => {}
+            match roll_treasure_style(&mut rng) {
+                TreasureStyle::Silver => silver += 1,
+                TreasureStyle::Diamonds => diamonds += 1,
+                TreasureStyle::Gold | TreasureStyle::Jewels => {}
             }
         }
-        assert!(common > rare, "Common ({common}) should dominate Rare ({rare})");
-        assert!(rare > 0, "Rare should occur at least once over 1000 draws");
+        assert!(silver > diamonds, "Silver ({silver}) should dominate Diamonds ({diamonds})");
+        assert!(diamonds > 0, "Diamonds should occur at least once over 1000 draws");
     }
 
     // --- Spare-key / spare-door overlay (decoys + safety budget) ---

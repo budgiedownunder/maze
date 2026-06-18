@@ -163,8 +163,8 @@ mod tests {
             resolve_treasure_style(Some(&diamonds), TreasureStyle::Silver),
             TreasureStyle::Diamonds,
         );
-        // A field-less treasure entity (e.g. a value/rarity-only override)
-        // carries no style choice, so the default wins.
+        // A treasure entity with only a value override carries no style choice,
+        // so the default wins.
         let bare = entity(r#"{ "type": "T", "value": 50 }"#);
         assert_eq!(
             resolve_treasure_style(Some(&bare), TreasureStyle::Silver),

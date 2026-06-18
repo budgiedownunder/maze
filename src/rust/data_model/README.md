@@ -19,9 +19,8 @@ The `data_model` crate is written in `Rust` and defines the following data model
 - `MazeDefinition` - represents a maze definition (a character grid plus an optional sparse map of per-cell overrides)
 - `MazePoint` - represents a point within a maze
 - `OAuthIdentity` - represents a link between a user and an external OAuth provider
-- `TreasureOverride` - non-default characteristics for a treasure cell (`style`, `rarity`, `value`)
-- `TreasureRarity` - generation-frequency tier for a treasure cell, also the source of the default reward value (`common` / `uncommon` / `rare`)
-- `TreasureStyle` - visual style for a treasure cell (`silver` / `gold` / `diamonds` / `jewels`)
+- `TreasureOverride` - non-default characteristics for a treasure cell (`style`, `value`)
+- `TreasureStyle` - treasure type for a treasure cell (`silver` / `gold` / `diamonds` / `jewels`); also the source of the default reward value
 - `User` - represents a user (with one or more associated `UserEmail`s)
 - `UserEmail` - represents an email address attached to a user, with primary and verification flags
 - `UserLogin` - represents a user login

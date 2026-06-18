@@ -1968,7 +1968,7 @@ pub extern "C" fn maze_c_generator_options_set_health_count(
 /// Sets the number of treasure cells to auto-place.
 ///
 /// `0` (the default) places none. The generator places treasure dead-end-first
-/// (corridor ends before other walkable cells), rarity-weighted, clamping the
+/// (corridor ends before other walkable cells), type-weighted, clamping the
 /// request to `maze::MAX_TREASURE_COUNT` and to the eligible-cell count.
 ///
 /// # Examples
@@ -3180,7 +3180,7 @@ pub extern "C" fn maze_c_maze_game_treasure_count(ptr: *mut MazeGameC) -> i32 {
 /// style, and resolved reward value. `out_style` carries the
 /// [`maze::TreasureStyle`] ordinal (`0` = silver, `1` = gold, `2` = diamonds,
 /// `3` = jewels); `out_value` carries the score the treasure awards (per-cell
-/// override else the rarity-derived default).
+/// override else the type's default value).
 ///
 /// Returns `1` on success, `0` if `index` is out of range.
 ///
@@ -3208,7 +3208,7 @@ pub extern "C" fn maze_c_maze_game_treasure_count(ptr: *mut MazeGameC) -> i32 {
 /// assert_eq!(ok, 1);
 /// assert_eq!((row, col), (0, 1));
 /// assert_eq!(style, 0); // silver (a bare 'T' default)
-/// assert_eq!(value, 10); // Common-tier reward
+/// assert_eq!(value, 50); // Silver default value
 /// maze_c_free_maze_game(ptr);
 /// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -4732,7 +4732,7 @@ mod tests {
     }
 
     #[test]
-    fn game_get_treasure_defaults_a_bare_cell_to_silver_and_ten() {
+    fn game_get_treasure_defaults_a_bare_cell_to_silver_and_fifty() {
         let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
         let ptr = new_game(&json);
         let mut row: u32 = 99;
@@ -4744,7 +4744,7 @@ mod tests {
         };
         assert_eq!(ok, 1);
         assert_eq!(style, 0); // silver (default)
-        assert_eq!(value, 10); // Common default
+        assert_eq!(value, 50); // Silver default value
         maze_c_free_maze_game(ptr);
     }
 

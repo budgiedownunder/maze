@@ -1167,16 +1167,16 @@ function registerMazeGameTests() {
             expect(game.treasures()).to.deep.equal([]);
         });
 
-        // MazeGame::treasures() — a bare 'T' is a default (Common) treasure: silver, value 10
-        it('should expect treasures() to default a bare T cell to silver style and value 10', function () {
+        // MazeGame::treasures() — a bare 'T' is the default Silver treasure: value 50
+        it('should expect treasures() to default a bare T cell to silver style and value 50', function () {
             let game = makeGame('{"grid":[["S","T","F"]]}');
-            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'silver', value: 10 }]);
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'silver', value: 50 }]);
         });
 
-        // MazeGame::treasures() — a per-cell rarity override drives the default value (Rare = 100)
-        it('should expect a rarity override to set the treasure value (rare = 100)', function () {
-            let game = makeGame('{"grid":[["S",[{"type":"T","rarity":"rare"}],"F"]]}');
-            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'silver', value: 100 }]);
+        // MazeGame::treasures() — the type drives the default value (gold = 100)
+        it('should expect a style override to set the default treasure value (gold = 100)', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"T","style":"gold"}],"F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'gold', value: 100 }]);
         });
 
         // MazeGame::treasures() — a per-cell style + explicit value override is reflected verbatim
@@ -1190,7 +1190,7 @@ function registerMazeGameTests() {
             let game = makeGame('{"grid":[["S","T","F"]]}');
             game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
             expect(game.tick(0)).to.deep.equal([
-                { type: 'treasureCollected', style: 'silver', value: 10, row: 0, col: 1 },
+                { type: 'treasureCollected', style: 'silver', value: 50, row: 0, col: 1 },
             ]);
         });
 

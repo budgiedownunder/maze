@@ -329,12 +329,11 @@ impl<'de> Deserialize<'de> for WallType {
     }
 }
 
-/// Visual style used to render a treasure (`'T'`) cell. Purely cosmetic — a
-/// treasure's rarity (generation frequency) and reward value are separate,
-/// independently-defaulted characteristics (see [`TreasureRarity`] and
-/// [`TreasureOverride::value`]). Like [`EnemyType`] only the renderers read it.
-/// The wire form is the lowercase string `"silver"`, `"gold"`, `"diamonds"` or
-/// `"jewels"`; an unrecognised value falls back to `Silver`.
+/// Treasure (`'T'`) type — the rig the renderers draw, and the attribute the
+/// generator rolls for each placed treasure. The type also sets the default
+/// reward value (engine-side; see [`TreasureOverride::value`] for the per-cell
+/// override). The wire form is the lowercase string `"silver"`, `"gold"`,
+/// `"diamonds"` or `"jewels"`; an unrecognised value falls back to `Silver`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum TreasureStyle {
     /// Silver - the default treasure rig.
@@ -382,59 +381,6 @@ impl<'de> Deserialize<'de> for TreasureStyle {
             "diamonds" => Self::Diamonds,
             "jewels" => Self::Jewels,
             _ => Self::Silver,
-        })
-    }
-}
-
-/// Rarity tier of a treasure (`'T'`) cell. Drives how frequently the generator
-/// places this tier (Common frequent → Rare scarce) and, when no explicit
-/// reward value is set, the default value the engine awards. Defaulted and
-/// per-cell overridable, independent of the visual [`TreasureStyle`]. The wire
-/// form is the lowercase string `"common"`, `"uncommon"` or `"rare"`; an
-/// unrecognised value falls back to `Common`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum TreasureRarity {
-    /// The default, most frequently generated tier.
-    #[default]
-    Common,
-    /// A less common tier.
-    Uncommon,
-    /// The scarcest tier.
-    Rare,
-}
-
-impl TreasureRarity {
-    /// Returns the lowercase wire string for this rarity tier.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use data_model::TreasureRarity;
-    /// assert_eq!(TreasureRarity::Common.as_wire_str(), "common");
-    /// assert_eq!(TreasureRarity::Rare.as_wire_str(), "rare");
-    /// ```
-    pub fn as_wire_str(&self) -> &'static str {
-        match self {
-            Self::Common => "common",
-            Self::Uncommon => "uncommon",
-            Self::Rare => "rare",
-        }
-    }
-}
-
-impl Serialize for TreasureRarity {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.as_wire_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for TreasureRarity {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        Ok(match s.to_ascii_lowercase().as_str() {
-            "uncommon" => Self::Uncommon,
-            "rare" => Self::Rare,
-            _ => Self::Common,
         })
     }
 }
@@ -539,26 +485,23 @@ impl WallOverride {
 }
 
 /// Non-default characteristics for a treasure (`'T'`) cell. Every field is
-/// optional; a `None` field means "inherit the default". `style` is the visual
-/// rig (renderer-only); `rarity` is the generation-frequency tier; `value` is
-/// the score reward (when `None`, the engine derives it from `rarity`).
+/// optional; a `None` field means "inherit the default". `style` is the
+/// treasure type (which also sets the default reward value); `value` overrides
+/// that style-derived default score reward.
 #[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TreasureOverride {
-    /// Visual style for this treasure. Renderer-only.
+    /// Treasure type. Determines the rig and the default reward value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<TreasureStyle>,
-    /// Rarity tier (generation frequency), overriding the default.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rarity: Option<TreasureRarity>,
-    /// Score reward, overriding the rarity-derived default.
+    /// Score reward, overriding the style-derived default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<u32>,
 }
 
 impl TreasureOverride {
     fn is_empty(&self) -> bool {
-        self.style.is_none() && self.rarity.is_none() && self.value.is_none()
+        self.style.is_none() && self.value.is_none()
     }
 }
 
@@ -2650,15 +2593,14 @@ mod tests {
     }
 
     #[test]
-    fn treasure_rarity_and_value_override_round_trip() {
-        // Rarity (generation frequency) and the reward value are independent of
-        // the visual style; both round-trip on their own.
-        let s = r#"{"grid":[["S",[{"type":"T","rarity":"rare","value":250}]],[" ","F"]]}"#;
+    fn treasure_value_override_round_trips() {
+        // The reward value is independent of the visual style and round-trips on
+        // its own (overriding the style-derived default).
+        let s = r#"{"grid":[["S",[{"type":"T","value":250}]],[" ","F"]]}"#;
         let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
         assert_eq!(d.grid[0][1], 'T');
         match single_override(&d, 0, 1) {
             CellEntity::Treasure(t) => {
-                assert_eq!(t.rarity, Some(TreasureRarity::Rare));
                 assert_eq!(t.value, Some(250));
                 assert!(t.style.is_none());
             }
@@ -2666,18 +2608,6 @@ mod tests {
         }
         let back = serde_json::to_string(&d).expect("Failed to serialize");
         assert_eq!(back, s);
-    }
-
-    #[test]
-    fn unknown_treasure_rarity_falls_back_to_common() {
-        // Forward tolerance: a rarity from a newer build still loads, falling
-        // back to the default tier rather than erroring.
-        let s = r#"{"grid":[["S",[{"type":"T","rarity":"legendary"}]],[" ","F"]]}"#;
-        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
-        match single_override(&d, 0, 1) {
-            CellEntity::Treasure(t) => assert_eq!(t.rarity, Some(TreasureRarity::Common)),
-            other => panic!("expected a treasure override, got {other:?}"),
-        }
     }
 
     #[test]
@@ -2753,9 +2683,6 @@ mod tests {
         assert_eq!(TreasureStyle::Gold.as_wire_str(), "gold");
         assert_eq!(TreasureStyle::Diamonds.as_wire_str(), "diamonds");
         assert_eq!(TreasureStyle::Jewels.as_wire_str(), "jewels");
-        assert_eq!(TreasureRarity::Common.as_wire_str(), "common");
-        assert_eq!(TreasureRarity::Uncommon.as_wire_str(), "uncommon");
-        assert_eq!(TreasureRarity::Rare.as_wire_str(), "rare");
     }
 
     #[test]

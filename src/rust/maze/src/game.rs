@@ -1,7 +1,7 @@
 use crate::MAX_TOTAL_FEATURES;
 use data_model::{
     CellEntity, EnemyOverride, EnemyType, HealthOverride, MazeDefinition, TreasureOverride,
-    TreasureRarity, TreasureStyle,
+    TreasureStyle,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -579,11 +579,23 @@ fn health_override_at(
     }
 }
 
-/// Default reward value for a treasure cell of each rarity, awarded when the
-/// cell carries no explicit `value` override. Rarer tiers are worth more.
-const TREASURE_VALUE_COMMON: u32 = 10;
-const TREASURE_VALUE_UNCOMMON: u32 = 25;
-const TREASURE_VALUE_RARE: u32 = 100;
+/// Default reward value for a treasure cell of each type, awarded when the cell
+/// carries no explicit `value` override. Rarer types are worth more.
+const TREASURE_VALUE_SILVER: u32 = 50;
+const TREASURE_VALUE_GOLD: u32 = 100;
+const TREASURE_VALUE_JEWELS: u32 = 200;
+const TREASURE_VALUE_DIAMONDS: u32 = 400;
+
+/// The default reward value awarded for a treasure of the given type, used when
+/// the cell carries no explicit `value` override.
+fn default_treasure_value(style: TreasureStyle) -> u32 {
+    match style {
+        TreasureStyle::Silver => TREASURE_VALUE_SILVER,
+        TreasureStyle::Gold => TREASURE_VALUE_GOLD,
+        TreasureStyle::Jewels => TREASURE_VALUE_JEWELS,
+        TreasureStyle::Diamonds => TREASURE_VALUE_DIAMONDS,
+    }
+}
 
 /// Returns the treasure override on a cell, if its (single, for now) entity is
 /// a treasure. Cells without an entry, or whose entity is a different kind,
@@ -598,22 +610,19 @@ fn treasure_override_at(
     }
 }
 
-/// Resolves a treasure cell's effective visual style and reward value from its
-/// (optional) override. Style defaults to `Silver` and rarity to `Common`; the
-/// value is the explicit `value` override if set, otherwise the rarity-derived
-/// default. Style is purely cosmetic and does not influence the value.
+/// Resolves a treasure cell's effective type and reward value from its
+/// (optional) override. Style defaults to `Silver`; the value is the explicit
+/// `value` override if set, otherwise the style-derived default
+/// ([`default_treasure_value`]).
 fn treasure_at(
     cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     cell: (usize, usize),
 ) -> (TreasureStyle, u32) {
     let over = treasure_override_at(cell_entities, cell);
     let style = over.and_then(|o| o.style).unwrap_or_default();
-    let rarity = over.and_then(|o| o.rarity).unwrap_or_default();
-    let value = over.and_then(|o| o.value).unwrap_or(match rarity {
-        TreasureRarity::Common => TREASURE_VALUE_COMMON,
-        TreasureRarity::Uncommon => TREASURE_VALUE_UNCOMMON,
-        TreasureRarity::Rare => TREASURE_VALUE_RARE,
-    });
+    let value = over
+        .and_then(|o| o.value)
+        .unwrap_or_else(|| default_treasure_value(style));
     (style, value)
 }
 
@@ -1388,9 +1397,9 @@ impl MazeGame {
     }
 
     /// Returns the cells still holding uncollected treasure (`'T'`), each with
-    /// its resolved visual style and reward value (the per-cell override else
-    /// the rarity-derived default), in row-major order. A consumed treasure
-    /// clears to `' '` and drops out of the result.
+    /// its resolved type and reward value (the per-cell override else the
+    /// type's default value), in row-major order. A consumed treasure clears to
+    /// `' '` and drops out of the result.
     ///
     /// # Examples
     ///
@@ -1398,8 +1407,8 @@ impl MazeGame {
     /// use maze::{MazeGame, TreasureStyle};
     /// let json = r#"{"grid":[["S","T","F"]]}"#;
     /// let game = MazeGame::from_json(json).unwrap();
-    /// // A bare 'T' is a default (Common) treasure: Silver style, value 10.
-    /// assert_eq!(game.treasures(), vec![((0, 1), TreasureStyle::Silver, 10)]);
+    /// // A bare 'T' is the default Silver treasure, value 50.
+    /// assert_eq!(game.treasures(), vec![((0, 1), TreasureStyle::Silver, 50)]);
     /// ```
     pub fn treasures(&self) -> Vec<((usize, usize), TreasureStyle, u32)> {
         let mut out = Vec::new();
@@ -1737,7 +1746,7 @@ impl MazeGame {
     /// The exact determination is internal to the engine and provisional, but
     /// today it is the number of keys collected this run **plus** the total
     /// value of treasure collected (each treasure's per-cell `value` override,
-    /// else its rarity-derived default). Callers should read this getter rather
+    /// else its type's default value). Callers should read this getter rather
     /// than recomputing a score, so every surface stays in agreement when the
     /// formula changes.
     ///
@@ -2246,18 +2255,18 @@ mod tests {
 
     #[test]
     fn score_climbs_by_treasure_value() {
-        // A bare `T` is a default-tier (Common) treasure worth 10.
+        // A bare `T` is the default Silver treasure, worth 50.
         let json = r#"{"grid":[["S","T","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         assert_eq!(game.score(), 0);
         game.move_player(Direction::Right); // onto the treasure — auto-collected
-        assert_eq!(game.score(), 10);
+        assert_eq!(game.score(), 50);
         assert_eq!(game.grid()[0][1], ' '); // cell cleared
     }
 
     #[test]
     fn treasure_value_override_scores_the_explicit_value() {
-        // An explicit per-cell `value` wins over the rarity-derived default.
+        // An explicit per-cell `value` wins over the style-derived default.
         let json = r#"{"grid":[["S",[{"type":"T","value":250}],"F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         game.move_player(Direction::Right);
@@ -2265,10 +2274,9 @@ mod tests {
     }
 
     #[test]
-    fn treasure_value_defaults_from_rarity() {
-        // No explicit value → the rarity-derived default (Rare = 100). Style is
-        // irrelevant to the value.
-        let json = r#"{"grid":[["S",[{"type":"T","rarity":"rare"}],"F"]]}"#;
+    fn treasure_value_defaults_from_style() {
+        // No explicit value → the type's default value (Gold = 100).
+        let json = r#"{"grid":[["S",[{"type":"T","style":"gold"}],"F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         game.move_player(Direction::Right);
         assert_eq!(game.score(), 100);
@@ -2276,13 +2284,13 @@ mod tests {
 
     #[test]
     fn score_adds_keys_and_treasure() {
-        // Additive: a collected key (+1) plus a default treasure (+10) = 11.
+        // Additive: a collected key (+1) plus a default Silver treasure (+50) = 51.
         let json = r#"{"grid":[["S","K","T","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         game.move_player(Direction::Right); // key → +1
         assert_eq!(game.score(), 1);
-        game.move_player(Direction::Right); // treasure → +10
-        assert_eq!(game.score(), 11);
+        game.move_player(Direction::Right); // treasure → +50
+        assert_eq!(game.score(), 51);
     }
 
     #[test]
@@ -2295,7 +2303,7 @@ mod tests {
             vec![GameEvent::TreasureCollected {
                 cell: (0, 1),
                 style: TreasureStyle::Silver,
-                value: 10
+                value: 50
             }]
         );
     }
