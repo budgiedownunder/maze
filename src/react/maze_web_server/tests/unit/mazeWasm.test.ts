@@ -138,6 +138,7 @@ describe('generateMaze', () => {
       1,    // spareKeys
       3,    // enemyCount
       2,    // healthCount
+      undefined,  // treasure_count
     )
   })
 

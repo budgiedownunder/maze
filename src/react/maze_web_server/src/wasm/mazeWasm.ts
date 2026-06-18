@@ -60,6 +60,7 @@ export async function generateMaze(options: GenerateOptions): Promise<MazeDefini
         options.spareKeys,
         options.enemyCount,
         options.healthCount,
+        undefined,  // treasure_count placeholder
       )
     } catch (ex) { throw toError(ex) }
     const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }
