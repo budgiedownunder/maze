@@ -70,6 +70,13 @@ int32_t maze_c_maze_game_health_pickup_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_health_pickup(MazeGameC* ptr, int32_t index,
                                            uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
                                                         // id_out always 0; 1 = success, 0 = out-of-range
+int32_t maze_c_maze_game_treasure_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_treasure(MazeGameC* ptr, int32_t index,
+                                      uint32_t* row_out, uint32_t* col_out,
+                                      int32_t* style_out, uint32_t* value_out);
+                                                        // 1 = success, 0 = out-of-range
+                                                        // style_out: 0 = silver, 1 = gold, 2 = diamonds, 3 = jewels
+                                                        // value_out: resolved reward (override else rarity default)
 
 // Keys (uncollected; valid pointer assumed; out parameters may be null)
 int32_t maze_c_maze_game_key_count(MazeGameC* ptr);

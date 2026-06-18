@@ -182,6 +182,13 @@ i32           maze_game_wasm_health_pickup_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_health_pickup(MazeGameWasm* maze_game_wasm, i32 index,
                                                u32* row_out, u32* col_out, u32* id_out);
                                                                               // 0=ok, -1=error; id is always 0
+i32           maze_game_wasm_treasure_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_treasure(MazeGameWasm* maze_game_wasm, i32 index,
+                                          u32* row_out, u32* col_out,
+                                          i32* style_out, u32* value_out);
+                                                                              // 0=ok, -1=error
+                                                                              // style_out: 0=silver, 1=gold, 2=diamonds, 3=jewels
+                                                                              // value_out: resolved reward (override else rarity default)
 ```
 
 The `json_string_ptr` argument must point to a length-prefixed string (4-byte little-endian length followed by UTF-8 bytes), allocated via `allocate_sized_memory`.

@@ -901,6 +901,7 @@ pub struct GeneratorOptionsWasm {
     pub spare_keys:         u32,
     pub enemy_count:        u32,
     pub health_count:       u32,
+    pub treasure_count:     u32,
 }
 /// Creates a new `GeneratorOptionsWasm` with the given required fields and default optional fields.
 ///
@@ -932,6 +933,7 @@ pub extern "C" fn new_generator_options_wasm(
         spare_keys:         0,
         enemy_count:        0,
         health_count:       0,
+        treasure_count:     0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -1025,6 +1027,16 @@ pub extern "C" fn generator_options_set_health_count(ptr: *mut GeneratorOptionsW
     let opts = unsafe { &mut *ptr };
     opts.health_count = value;
 }
+/// Sets the number of treasure cells to auto-place (`0` = none, the default).
+/// Placed dead-end-first and rarity-weighted; clamped by the generator to
+/// `maze::MAX_TREASURE_COUNT` and to the number of eligible cells.
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_treasure_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.treasure_count = value;
+}
 /// Generates a maze, populating the given `MazeWasm`.
 ///
 /// # Returns
@@ -1069,7 +1081,7 @@ pub extern "C" fn maze_wasm_generate(
         spare_keys: Some(opts.spare_keys as usize),
         enemy_count: Some(opts.enemy_count as usize),
         health_count: Some(opts.health_count as usize),
-        treasure_count: None,
+        treasure_count: Some(opts.treasure_count as usize),
     };
 
     let generator = Generator { options: generator_options };
@@ -1805,6 +1817,73 @@ fn enemy_type_to_ffi(enemy_type: Option<maze::EnemyType>) -> i32 {
         None => -1,
         Some(maze::EnemyType::Goblin) => 0,
         Some(maze::EnemyType::Ghost) => 1,
+    }
+}
+
+/// Returns the number of uncollected treasure cells (live `'T'`),
+/// or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_treasure_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.treasures().len() as i32
+}
+
+/// Retrieves a single uncollected treasure cell by index: its cell, visual
+/// style, and resolved reward value. `out_style` is the [`maze::TreasureStyle`]
+/// ordinal (`0` = silver, `1` = gold, `2` = diamonds, `3` = jewels); `out_value`
+/// the score the treasure awards (per-cell override else the rarity-derived
+/// default). Returns `0` on success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_treasure(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_style: *mut i32,
+    out_value: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let treasures = game.treasures();
+    if index < 0 || index as usize >= treasures.len() {
+        return -1;
+    }
+    let ((row, col), style, value) = treasures[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = col as u32;
+        }
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_value.is_null() {
+            *out_value = value;
+        }
+    }
+    0
+}
+
+/// Encodes a treasure's visual style for the FFI boundary: the
+/// [`maze::TreasureStyle`] ordinal (`0` = silver, `1` = gold, `2` = diamonds,
+/// `3` = jewels). A treasure always has a style (a bare `'T'` defaults to
+/// silver), so there is no `-1` "none" case. C# maps the ordinal back to its
+/// `TreasureStyle`.
+fn treasure_style_to_ffi(style: maze::TreasureStyle) -> i32 {
+    match style {
+        maze::TreasureStyle::Silver => 0,
+        maze::TreasureStyle::Gold => 1,
+        maze::TreasureStyle::Diamonds => 2,
+        maze::TreasureStyle::Jewels => 3,
     }
 }
 
