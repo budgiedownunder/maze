@@ -1,8 +1,9 @@
 //! Native-only "rig gallery" demos, selected via the `MAZE_DEMO` environment
 //! variable, for eyeballing each entity rig against its default without
 //! authoring a maze through the web stack. `gallery` shows every type in one
-//! maze; the focused values (`enemies`, `health`, `keysdoors`, `walls`) show one
-//! type in isolation, which keeps verification simple as more rig types are added.
+//! maze; the focused values (`enemies`, `health`, `keysdoors`, `treasure`,
+//! `walls`) show one type in isolation, which keeps verification simple as more
+//! rig types are added.
 //!
 //! Enemies are neutralised — stationary (a huge `movePeriodMs`) and harmless
 //! (zero `damage`) — so the rigs can be inspected without being chased or killed;
@@ -17,7 +18,7 @@ use serde_json::{json, Value};
 
 /// Recognised `MAZE_DEMO` values. `gallery` shows everything; the others focus
 /// on a single entity type.
-const FOCUSES: &[&str] = &["gallery", "enemies", "health", "keysdoors", "walls"];
+const FOCUSES: &[&str] = &["gallery", "enemies", "health", "keysdoors", "treasure", "walls"];
 
 /// The requested gallery focus from `MAZE_DEMO`, or `None` when it is unset or
 /// names something other than a known gallery (in which case the caller falls
@@ -54,6 +55,16 @@ pub(crate) fn json(focus: &str) -> String {
             // Heart (default) + potion in alcoves off a short spine.
             let mut g = build(&["WWWWW", "S   F", "WHWHW", "WWWWW"]);
             g[2][3] = json!([{ "type": "H", "healthStyle": "potion" }]);
+            g
+        }
+        "treasure" => {
+            // All four treasure styles in dead-end alcoves off a short spine, so
+            // the open chests face the spine (outward) and aren't auto-collected
+            // by walking it. Silver is the bare-'T' default; the rest override.
+            let mut g = build(&["WWWWWWWWW", "S       F", "WTWTWTWTW", "WWWWWWWWW"]);
+            g[2][3] = json!([{ "type": "T", "style": "gold" }]);
+            g[2][5] = json!([{ "type": "T", "style": "diamonds" }]);
+            g[2][7] = json!([{ "type": "T", "style": "jewels" }]);
             g
         }
         "walls" => {
@@ -96,7 +107,7 @@ pub(crate) fn json(focus: &str) -> String {
                 "WDWWWWWWWWWWWWWWWWW", // boundary swing door at col 1
                 "WKWWWWWWWWWWWWWWWWW", // stub + key feeding it
                 "S    KKKKKD D D D F", // spine: keys (5–9) then doors (10,12,14,16)
-                "WEWEWHWHWWWWWWWWWWW", // alcoves: goblin, ghost, heart, potion
+                "WETETHTHTWWWWWWWWWW", // alcoves: goblin/ghost (1,3), heart/potion (5,7), treasure (2,4,6,8)
                 "WWWWWWWWWWWWWWWWWWW",
             ]);
             g[2][6] = json!([{ "type": "K", "keyHolder": "chest" }]);
@@ -107,6 +118,10 @@ pub(crate) fn json(focus: &str) -> String {
             g[3][1] = goblin();
             g[3][3] = ghost();
             g[3][7] = json!([{ "type": "H", "healthStyle": "potion" }]);
+            // Treasure: silver (bare 'T' at col 2) + gold / diamonds / jewels.
+            g[3][4] = json!([{ "type": "T", "style": "gold" }]);
+            g[3][6] = json!([{ "type": "T", "style": "diamonds" }]);
+            g[3][8] = json!([{ "type": "T", "style": "jewels" }]);
             g
         }
     };
@@ -161,8 +176,14 @@ mod tests {
         assert_eq!(wire_at(&game, (2, 14)).as_deref(), Some(r#"{"type":"D","doorStyle":"portcullis"}"#));
         assert_eq!(wire_at(&game, (2, 16)).as_deref(), Some(r#"{"type":"D","doorStyle":"dissolve"}"#));
 
+        // Treasure styles: gold / diamonds / jewels overrides; silver is bare.
+        assert_eq!(wire_at(&game, (3, 4)).as_deref(), Some(r#"{"type":"T","style":"gold"}"#));
+        assert_eq!(wire_at(&game, (3, 6)).as_deref(), Some(r#"{"type":"T","style":"diamonds"}"#));
+        assert_eq!(wire_at(&game, (3, 8)).as_deref(), Some(r#"{"type":"T","style":"jewels"}"#));
+
         // Default-rig cells stay bare chars (no override entry).
         assert_eq!(wire_at(&game, (3, 5)), None, "heart is the default health rig");
+        assert_eq!(wire_at(&game, (3, 2)), None, "silver is the default treasure rig");
         assert_eq!(wire_at(&game, (2, 5)), None, "pedestal key is the default rig");
         assert_eq!(wire_at(&game, (2, 10)), None, "swing door is the default rig");
     }
@@ -179,6 +200,17 @@ mod tests {
             wire_at(&game, (2, 3)).as_deref(),
             Some(r#"{"type":"E","enemyType":"ghost","damage":0,"movePeriodMs":3600000.0}"#),
         );
+    }
+
+    #[test]
+    fn treasure_gallery_overrides_land_on_the_expected_cells() {
+        let game = MazeGame::from_json_with_options(&json("treasure"), MazeGameOptions::default())
+            .expect("treasure gallery must be a valid, loadable maze");
+        // Silver is the bare-'T' default; gold / diamonds / jewels override.
+        assert_eq!(wire_at(&game, (2, 1)), None, "silver is the default treasure rig");
+        assert_eq!(wire_at(&game, (2, 3)).as_deref(), Some(r#"{"type":"T","style":"gold"}"#));
+        assert_eq!(wire_at(&game, (2, 5)).as_deref(), Some(r#"{"type":"T","style":"diamonds"}"#));
+        assert_eq!(wire_at(&game, (2, 7)).as_deref(), Some(r#"{"type":"T","style":"jewels"}"#));
     }
 
     #[test]

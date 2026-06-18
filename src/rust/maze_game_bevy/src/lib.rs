@@ -10,7 +10,7 @@ mod world;
 
 pub use state::{
     DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
-    Landmarks, SkyType, WallType,
+    Landmarks, SkyType, TreasureStyle, WallType,
 };
 pub use world::generate_maze_json;
 
@@ -31,6 +31,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
             enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
             health::health_animation_system,
             key_holder::{key_collection_system, key_holder_system, key_sparks_system},
+            treasure::{treasure_collection_system, treasure_sparkle_system},
         },
         sky, spawn_world,
         walls::{
@@ -74,6 +75,8 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_collection_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, treasure_sparkle_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, treasure_collection_system.run_if(in_state(AppState::Playing)))
         // The single game-state tick driver runs in `FixedUpdate` for
         // deterministic, frame-rate independent stepping (doors, enemies,
         // HP arithmetic). Per-entity animation systems read the resulting
@@ -102,7 +105,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
 mod tests {
     use super::*;
     use crate::overlays::title::TitleEntity;
-    use crate::state::{AppState, GameState, GridFacing, SkyType, WallType};
+    use crate::state::{AppState, GameState, GridFacing, SkyType, TreasureStyle, WallType};
     use crate::world::{
         camera_fov_for_aspect, camera_pos_for, cell_centre,
         decorations::{floor::FloorAccent, wall::WallDecoration},
@@ -117,6 +120,7 @@ mod tests {
             finish::orb::FinishOrb,
             health::HealthMarker,
             key_holder::KeyMarker,
+            treasure::{TreasureLoot, TreasureMarker},
         },
         roof::RoofCell,
         sky::dome::SkyDome,
@@ -587,7 +591,7 @@ mod tests {
     #[test]
     fn demo_grid_is_well_formed() {
         use crate::world::demo_grid;
-        use crate::world::objects::dead_end::is_dead_end;
+        use maze::is_dead_end;
         use std::collections::{HashSet, VecDeque};
 
         let grid = demo_grid();
@@ -799,14 +803,15 @@ mod tests {
     /// the smoke test isn't sensitive to changes in the hash constants.
     fn brazier_forcing_seed() -> u64 {
         use crate::world::demo_grid;
-        use crate::world::objects::dead_end::{dead_end_object_index, is_dead_end};
+        use crate::world::objects::dead_end::dead_end_object_index;
+        use maze::is_dead_end;
         let grid = demo_grid();
         for seed in 0u64..1024 {
             for (r, row) in grid.iter().enumerate() {
                 for (c, &cell) in row.iter().enumerate() {
                     // Mirror `spawn_dead_end_object_for_cell`'s exclusions: only
                     // cells that actually receive a landmark are candidates.
-                    if matches!(cell, 'S' | 'F' | 'K' | 'D') {
+                    if matches!(cell, 'S' | 'F' | 'K' | 'D' | 'E' | 'H' | 'T') {
                         continue;
                     }
                     if is_dead_end(&grid, r, c) && dead_end_object_index(r, c, seed) == 0 {
@@ -1213,6 +1218,79 @@ mod tests {
             ghost_tag_count, 1,
             "a per-cell ghost override must spawn a ghost rig even when the maze default is Goblin",
         );
+    }
+
+    // ── Treasure ('T' cells: open chest + collectible loot) ──────────────────
+
+    #[test]
+    fn treasure_marker_spawned_per_t_cell() {
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'T').count();
+        let count = app
+            .world_mut()
+            .query::<&TreasureMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, expected);
+        assert!(count >= 1, "demo grid must contain at least one 'T' cell");
+    }
+
+    #[test]
+    fn treasure_cell_has_no_dead_end_object() {
+        // A treasure sitting in a dead-end shows its open chest + loot, not a
+        // brazier/urn/pillar/chest landmark — treasure takes precedence.
+        let mut app = make_playing_app_with(
+            r#"{"grid":[["S"," ","F"],["W","T","W"],["W","W","W"]]}"#,
+        );
+        let dead_end = app
+            .world_mut()
+            .query::<&DeadEndObject>()
+            .iter(app.world())
+            .count();
+        let treasure = app
+            .world_mut()
+            .query::<&TreasureMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(treasure, 1, "expected the treasure marker");
+        assert_eq!(dead_end, 0, "treasure cell must not also get a dead-end object");
+    }
+
+    #[test]
+    fn treasure_loot_family_matches_style() {
+        // Each loot pile is baked into shared meshes: the coin styles
+        // (Silver / Gold) into one combined mesh; the gem styles
+        // (Diamonds / Jewels) into one mesh per colour group. So a style
+        // override that switches families changes the baked-mesh (TreasureLoot)
+        // count from 1 to one-per-group. This confirms the per-cell override is
+        // wired into the spawn dispatch (the four-way resolution itself is
+        // unit-tested in `objects::overrides`).
+        let loot = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&TreasureLoot>().iter(app.world()).count()
+        };
+        let coins = loot(r#"{"grid":[["S","T","F"]]}"#); // bare 'T' → Silver coins
+        assert_eq!(coins, 1, "coin loot bakes to a single combined mesh");
+        let gems = loot(r#"{"grid":[["S",[{"type":"T","style":"diamonds"}],"F"]]}"#);
+        assert_eq!(gems, 4, "gem loot bakes to one combined mesh per colour group");
+    }
+
+    #[test]
+    fn treasure_style_wire_round_trip() {
+        for variant in [
+            TreasureStyle::Silver,
+            TreasureStyle::Gold,
+            TreasureStyle::Diamonds,
+            TreasureStyle::Jewels,
+        ] {
+            assert_eq!(TreasureStyle::from_wire_str(variant.as_wire_str()), variant);
+        }
+        // Unknown values fall back to Silver.
+        assert_eq!(TreasureStyle::from_wire_str(""), TreasureStyle::Silver);
+        assert_eq!(TreasureStyle::from_wire_str("totally-unknown"), TreasureStyle::Silver);
+        // Case-insensitive.
+        assert_eq!(TreasureStyle::from_wire_str("GOLD"), TreasureStyle::Gold);
     }
 
     // ── Non-occluding wall types (water / lava / iron fence) ──────────────────

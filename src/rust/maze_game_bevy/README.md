@@ -46,6 +46,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
 - **Keys, doors & a bag** — `K` cells render a glowing gold key — a ringed bow, shaft, and teeth, each paired with a black inverted-hull outline so the parts read distinctly — floating, bobbing, and slowly spinning a fixed clearance above its holder. Walk onto one to auto-collect it — the key rises and shrinks away in a brief flourish, leaving the holder behind as an emptied stand — adding it to the **bag HUD** (a row of key icons along the bottom of the screen, which grows on pickup and shrinks when a key is spent). `D` cells are **doors** rendered in the surrounding cell's wall material, marked with a brass keyhole and eligible for the same sparse wall decorations as ordinary wall panels. A door cell is locked — impassable from every side — until you hold forward against it while carrying a key, which consumes the key and opens it over ~1 s, permanently. How a door *opens* depends on the cell's shape: a **straight corridor** (two open edges on opposing sides) gets a single leaf that **swings** on a hinge; any other topology (corner, T-junction, open area) seals **each** open edge with a leaf that **slides down into the floor**, since a swing would sweep awkwardly through the open space. The key-holder base reuses the shared decorative-prop rigs — `pedestal` renders the broken **pillar**, `chest` the bound treasure **chest** (its lock face turned toward the corridor), and `floating-key` stands the key alone — and the door open-style (swing / slide / portcullis / dissolve) are each chosen per cell from the cell's `keyHolder` / `doorStyle` override, falling back to the per-maze `GameConfig.key_holder` / `GameConfig.door_style`. The built-in demo maze places a key in a dead-end and a door guarding the finish, so the mechanic is playable from `cargo run` with no maze authoring.
 - **Enemies, HP & health pickups** — `E` cells spawn a moving enemy rig that bobs in place and chases the player along a wall-aware BFS shortest path at a fixed move period (default 1500 ms per cell, `N > E > S > W` tie-break on equal-distance choices). Two visual rigs — **Goblin** (default — green body with painted ear-to-ear mouth and per-side eyeballs) and **Ghost** (translucent floating figure with a hemisphere head, truncated-cone body, rippling sheet hem, and a glowing-red eyeball inside each arch-shaped eye) — are chosen per cell from its `enemyType` override, falling back to the per-maze `GameConfig.enemy_type`. Same-cell collisions — whether the player walks onto an enemy's cell or an enemy steps onto the player's cell — fire `GameEvent::PlayerDamaged` and a brief red damage-flash overlay; the **HP HUD** (top-left, "LIFE" label + a row of red heart icons that dim as HP drops) is rebuilt on every change. Reaching 0 HP routes through the same lose path as a wall-clock timeout — movement freezes and the lose overlay appears. `H` cells spawn a floating health pickup with a gentle scale pulse + Y-spin idle, its rig — **Heart** (default — two upper sphere lobes + a flat-faced downward pyramid tip whose corners tuck flush into the lobes) and **Potion** (capped bottle with a glowing liquid) — chosen per cell from its `healthStyle` override, falling back to the per-maze `GameConfig.health_style`. Auto-pickup on walk-over: when `hp < max_hp` the cell clears + a `PlayerHealed` event fires + HP increments; when `hp == max_hp` the cell stays + a `PlayerNotHealed` event surfaces an "already at full health" hint so the host can flash it.
+- **Treasure** — `T` cells render an **open chest** (the shared chest rig with its lid swung open) heaped almost overflowing with loot: coins for **silver** / **gold**, faceted gems for **diamonds** / **jewels**, chosen per cell from the cell's `style` override (default silver). A ring of sparkles radiates from the loot beneath a style-tinted glow. The chest faces outward from a dead-end (and along a corridor) like the key-holder / dead-end chests, and at a dead-end treasure takes precedence over the landmark prop. Walk onto it to auto-collect: the loot rises and shrinks away in a brief flourish while the open chest stays behind, emptied (the engine clears the cell so it can't be re-collected). The collected value is folded into the run score via `MazeGame::score`. The built-in demo places one bare (silver) treasure in a dead-end so it's playable from `cargo run`.
 - **Back-edge camera viewpoint** — instead of standing at the dead-centre of each cell, the camera sits behind the cell centre in the direction opposite the player's facing. This brings perpendicular openings (corridors on the left or right of the current cell) into a glancing angle inside the Field of View (FOV) rather than leaving them at 90° off-axis, and keeps the wall directly ahead a comfortable distance away. Turning the camera in place orbits it to the back edge relative to the new facing, so the player always reads as standing at the "back" of their cell looking forward.
 - **Adaptive FOV** — the camera's vertical FOV is configured at 60° for the reference 16:9 viewport (≈91° horizontal at that aspect). On viewports narrower than the reference (phone portrait, tall windows), the vertical FOV grows so the horizontal FOV stays constant — a perpendicular opening that's visible on desktop is still visible on a phone in portrait. Capped at 100° vertical to prevent fisheye on extreme-portrait viewports.
 - Floor grid lines at cell boundaries for orientation feedback.
@@ -84,10 +85,11 @@ without authoring a maze. The value selects which types to show:
 
 | `MAZE_DEMO` | Shows |
 |:------------|:------|
-| `gallery`   | everything (enemy goblin/ghost, health heart/potion, key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
+| `gallery`   | everything (enemy goblin/ghost, health heart/potion, key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve, treasure silver/gold/diamonds/jewels) |
 | `enemies`   | enemy rigs only (goblin, ghost) |
 | `health`    | health rigs only (heart, potion) |
 | `keysdoors` | key + door rigs only (key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
+| `treasure`  | treasure rigs only — open chests of each style (silver / gold coins, diamond / jewel gems) in dead-end alcoves |
 | `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
 
 Focused values make it easy to verify one type in isolation. Enemies are
@@ -174,14 +176,14 @@ src/
 │   │       ├── mosaic.rs   concentric-mosaic texture + material
 │   │       └── sigil.rs    pentagram-sigil texture + material
 │   ├── objects/            3D physical objects placed in the world
-│   │   ├── mod.rs          ObjectAssets bundle (incl. shared CommonObjectAssets) + spawn_objects_for_cell (finish, dead-end, key holders, doors, enemies, health)
-│   │   ├── overrides.rs    per-cell rig resolvers (cell override → GameConfig default) for all four entity rigs
+│   │   ├── mod.rs          ObjectAssets bundle (incl. shared CommonObjectAssets) + spawn_objects_for_cell (finish, dead-end, key holders, doors, enemies, health, treasure)
+│   │   ├── overrides.rs    per-cell rig resolvers (cell override → default) for every per-cell entity rig
 │   │   ├── common/         shared decorative-prop rigs + helpers (used by dead_end AND key_holder)
 │   │   │   ├── mod.rs      CommonObjectAssets + spawn_with_outline (optional parent) + emissive/outline material helpers + OUTLINE_SCALE + yaw_toward_open_neighbour
 │   │   │   ├── brazier.rs  brazier rig + BrazierBowl marker + brazier_flicker_system
 │   │   │   ├── urn.rs      urn rig + materials
 │   │   │   ├── pillar.rs   broken-pillar rig + materials + TOP_Y apex
-│   │   │   └── chest.rs    chest rig (yaw-oriented lock face) + materials + TOP_Y apex
+│   │   │   └── chest.rs    chest rig (hollow trunk: floor + 4 walls so an open chest shows its interior edges; ChestLid Closed/Open; yaw-oriented; lock only when closed) + materials + TOP_Y apex
 │   │   ├── finish/         objects placed at the finish cell
 │   │   │   ├── mod.rs      FinishAssets bundle + spawn_finish_for_cell ('F' predicate)
 │   │   │   └── orb.rs      FinishOrb + orb mesh/material/light + orb_system
@@ -199,10 +201,16 @@ src/
 │   │   │   ├── mod.rs      EnemyMarker + EnemyAssets dispatcher (by per-cell enemyType override, else GameConfig.enemy_type) + shared animation system
 │   │   │   ├── goblin.rs   default goblin rig: green body with painted mouth and per-side eyeballs
 │   │   │   └── ghost.rs    ghost rig: hemisphere head + truncated-cone body + rippling hem + arch eyes with glowing-red pupils
-│   │   └── health/         'H' cells: floating pickup with idle pulse + spin
-│   │       ├── mod.rs      HealthMarker + HealthAssets dispatcher (by per-cell healthStyle override, else GameConfig.health_style) + shared animation system
-│   │       ├── heart.rs    default heart rig: two upper sphere lobes + flat-faced downward pyramid tip flush with the lobes
-│   │       └── potion.rs   potion rig: capped bottle with a glowing liquid
+│   │   ├── health/         'H' cells: floating pickup with idle pulse + spin
+│   │   │   ├── mod.rs      HealthMarker + HealthAssets dispatcher (by per-cell healthStyle override, else GameConfig.health_style) + shared animation system
+│   │   │   ├── heart.rs    default heart rig: two upper sphere lobes + flat-faced downward pyramid tip flush with the lobes
+│   │   │   └── potion.rs   potion rig: capped bottle with a glowing liquid
+│   │   └── treasure/       'T' cells: a free-standing open chest + collectible loot pile (coins/gems by style) with a radiating sparkle ring
+│   │       ├── mod.rs      TreasureMarker / TreasureLoot + open chest + loot piles baked once into shared combined meshes + sparkle / collection systems
+│   │       ├── silver.rs   silver-coin loot material + spawn
+│   │       ├── gold.rs     gold-coin loot material + spawn
+│   │       ├── diamonds.rs clear-gem loot material + spawn
+│   │       └── jewels.rs   multi-colour gem loot palette + spawn
 │   ├── sky/                sky / atmosphere modes
 │   │   ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
 │   │   ├── dome.rs         inverted-sphere dome + camera-follow system
@@ -247,5 +255,5 @@ choice), and finishes with the HUD (clock, score, status bar, minimap, HP, bag) 
 paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, and the public types `GameConfig`,
 `Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
-`GameOutcome`, `GameResult`. Everything else is `pub(crate)` or fully
-private.
+`TreasureStyle`, `GameOutcome`, `GameResult`. Everything else is
+`pub(crate)` or fully private.

@@ -167,7 +167,7 @@ pub(crate) fn spawn_key_holder_for_cell(
         }
         KeyHolderStyle::Chest => {
             let yaw = common::yaw_toward_open_neighbour(grid, r, c);
-            common::chest::spawn_chest(commands, common_assets, x, z, yaw);
+            common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Closed);
             common::chest::TOP_Y
         }
         KeyHolderStyle::FloatingKey => 0.0, // key floats alone, no base

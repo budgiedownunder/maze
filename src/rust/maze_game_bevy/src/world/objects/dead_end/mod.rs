@@ -31,32 +31,6 @@ pub(crate) fn dead_end_object_index(r: usize, c: usize, seed: u64) -> u32 {
     (h % DEAD_END_OBJECT_VARIANTS as u64) as u32
 }
 
-/// `true` when `(r, c)` is a dead-end cell — a passable cell whose four
-/// orthogonal neighbours include exactly one other passable cell. Start
-/// and finish cells are excluded by the caller, not here, so this helper
-/// stays purely topological.
-pub(crate) fn is_dead_end(grid: &[Vec<char>], r: usize, c: usize) -> bool {
-    let rows = grid.len();
-    let cols = if grid.is_empty() { 0 } else { grid[0].len() };
-    if r >= rows || c >= cols || grid[r][c] == 'W' {
-        return false;
-    }
-    let mut open = 0u32;
-    if r > 0 && grid[r - 1][c] != 'W' {
-        open += 1;
-    }
-    if r + 1 < rows && grid[r + 1][c] != 'W' {
-        open += 1;
-    }
-    if c > 0 && grid[r][c - 1] != 'W' {
-        open += 1;
-    }
-    if c + 1 < cols && grid[r][c + 1] != 'W' {
-        open += 1;
-    }
-    open == 1
-}
-
 pub(crate) fn spawn_dead_end_object_for_cell(
     commands: &mut Commands,
     assets: &CommonObjectAssets,
@@ -72,10 +46,13 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     // has the orb), for key / door cells (they own the dead-end with their
     // holder / panel — a key is commonly placed in a dead-end), for enemy
     // and health-pickup cells (the goblin / heart entity owns the cell's
-    // visual), and when the per-difficulty toggle is off.
+    // visual), for treasure cells (treasure takes precedence at a dead-end
+    // — the generator places it dead-end-first), and when the
+    // per-difficulty toggle is off. `is_dead_end` is the shared
+    // `maze::is_dead_end` so placement here and in the generator agree.
     if !config.landmarks.dead_end_objects
-        || matches!(cell, 'S' | 'F' | 'K' | 'D' | 'E' | 'H')
-        || !is_dead_end(grid, r, c)
+        || matches!(cell, 'S' | 'F' | 'K' | 'D' | 'E' | 'H' | 'T')
+        || !maze::is_dead_end(grid, r, c)
     {
         return;
     }
@@ -92,6 +69,7 @@ pub(crate) fn spawn_dead_end_object_for_cell(
             x,
             z,
             common::yaw_toward_open_neighbour(grid, r, c),
+            common::chest::ChestLid::Closed,
         ),
     }
     // Anchor entity tagging this cell as carrying a dead-end landmark.
@@ -119,68 +97,5 @@ mod tests {
                 assert!(kind < DEAD_END_OBJECT_VARIANTS, "got kind {kind}");
             }
         }
-    }
-
-    #[test]
-    fn is_dead_end_single_open_neighbour() {
-        // (1,1) has only south open
-        let grid = vec![
-            vec!['W', 'W', 'W'],
-            vec!['W', ' ', 'W'],
-            vec!['W', ' ', 'W'],
-        ];
-        assert!(is_dead_end(&grid, 1, 1));
-    }
-
-    #[test]
-    fn is_dead_end_corridor_false() {
-        // (1,1) has east AND west open — two-way corridor, not a dead end
-        let grid = vec![
-            vec!['W', 'W', 'W'],
-            vec![' ', ' ', ' '],
-            vec!['W', 'W', 'W'],
-        ];
-        assert!(!is_dead_end(&grid, 1, 1));
-    }
-
-    #[test]
-    fn is_dead_end_junction_false() {
-        // (1,1) has three open neighbours — T-junction, not a dead end
-        let grid = vec![
-            vec!['W', ' ', 'W'],
-            vec![' ', ' ', ' '],
-            vec!['W', 'W', 'W'],
-        ];
-        assert!(!is_dead_end(&grid, 1, 1));
-    }
-
-    #[test]
-    fn is_dead_end_isolated_false() {
-        // No open neighbours
-        let grid = vec![
-            vec!['W', 'W', 'W'],
-            vec!['W', ' ', 'W'],
-            vec!['W', 'W', 'W'],
-        ];
-        assert!(!is_dead_end(&grid, 1, 1));
-    }
-
-    #[test]
-    fn is_dead_end_corner_with_one_neighbour() {
-        // Top-left cell; grid boundary counts as wall; only south open
-        let grid = vec![vec![' ', 'W'], vec![' ', 'W']];
-        assert!(is_dead_end(&grid, 0, 0));
-    }
-
-    #[test]
-    fn is_dead_end_on_wall_false() {
-        let grid = vec![vec!['W', 'W'], vec!['W', ' ']];
-        assert!(!is_dead_end(&grid, 0, 0));
-    }
-
-    #[test]
-    fn is_dead_end_out_of_bounds_false() {
-        let grid = vec![vec![' ']];
-        assert!(!is_dead_end(&grid, 5, 5));
     }
 }

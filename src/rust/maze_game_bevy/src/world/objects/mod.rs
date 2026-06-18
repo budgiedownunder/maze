@@ -6,8 +6,9 @@ pub(crate) mod finish;
 pub(crate) mod health;
 pub(crate) mod key_holder;
 pub(crate) mod overrides;
+pub(crate) mod treasure;
 
-use crate::state::GameConfig;
+use crate::state::{GameConfig, TreasureStyle};
 use bevy::prelude::*;
 use maze::CellEntity;
 
@@ -24,6 +25,7 @@ pub(crate) struct ObjectAssets {
     pub(crate) door: door::DoorAssets,
     pub(crate) enemy: enemy::EnemyAssets,
     pub(crate) health: health::HealthAssets,
+    pub(crate) treasure: treasure::TreasureAssets,
 }
 
 pub(crate) fn build_object_assets(
@@ -38,6 +40,7 @@ pub(crate) fn build_object_assets(
         door: door::build_door_assets(meshes, materials),
         enemy: enemy::build_enemy_assets(meshes, materials, images),
         health: health::build_health_assets(meshes, materials),
+        treasure: treasure::build_treasure_assets(meshes, materials),
     }
 }
 
@@ -63,6 +66,7 @@ pub(crate) fn spawn_objects_for_cell(
     let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
     let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
     let health_style = overrides::resolve_health_style(cell_entity, config.health_style);
+    let treasure_style = overrides::resolve_treasure_style(cell_entity, TreasureStyle::default());
     key_holder::spawn_key_holder_for_cell(
         commands,
         &assets.key_holder,
@@ -75,4 +79,14 @@ pub(crate) fn spawn_objects_for_cell(
     );
     enemy::spawn_enemy_for_cell(commands, &assets.enemy, enemy_type, cell, r, c, enemy_id);
     health::spawn_health_for_cell(commands, &assets.health, health_style, cell, r, c);
+    treasure::spawn_treasure_for_cell(
+        commands,
+        &assets.treasure,
+        &assets.common,
+        treasure_style,
+        grid,
+        cell,
+        r,
+        c,
+    );
 }

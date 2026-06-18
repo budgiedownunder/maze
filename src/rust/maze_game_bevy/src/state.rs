@@ -442,6 +442,42 @@ impl HealthStyle {
     }
 }
 
+/// Treasure visual variants for `'T'` cells. The style is purely cosmetic — the
+/// reward value (engine-side) is independent — and is chosen per cell from its
+/// `style` override, falling back to `Silver`. Default `Silver`. Shares its wire
+/// vocabulary with the `data_model` `TreasureStyle`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TreasureStyle {
+    #[default]
+    Silver,
+    Gold,
+    Diamonds,
+    Jewels,
+}
+
+impl TreasureStyle {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Silver => "silver",
+            Self::Gold => "gold",
+            Self::Diamonds => "diamonds",
+            Self::Jewels => "jewels",
+        }
+    }
+
+    /// Parses a wire string into a [`TreasureStyle`]. Unknown values fall back
+    /// to [`TreasureStyle::Silver`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "gold" => Self::Gold,
+            "diamonds" => Self::Diamonds,
+            "jewels" => Self::Jewels,
+            _ => Self::Silver,
+        }
+    }
+}
+
 /// Toggle bag for the spatial-orientation landmark techniques. Each new
 /// landmark sub-step adds one field (default `true`). The host populates
 /// this from `[game.play3d.<difficulty>.landmarks]` in the server config.

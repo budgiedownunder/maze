@@ -21,12 +21,17 @@
 //! - [`maze::GameEvent::KeyCollected`] → tags the matching `KeyMarker` with
 //!   `CollectingKey`, so `key_collection_system` plays the rise-and-shrink
 //!   flourish and despawns the holder.
-//! - [`maze::GameEvent::TreasureCollected`] → no-op here for now.
+//! - [`maze::GameEvent::TreasureCollected`] → tags the matching
+//!   `TreasureMarker` with `CollectingTreasure`, so
+//!   `treasure_collection_system` plays the rise-and-shrink flourish and
+//!   despawns the rig. The score the treasure adds is already folded into
+//!   `MazeGame::score`, so the HUD readout updates without extra work here.
 
 use crate::state::GameState;
 use crate::world::objects::door::DoorMarker;
 use crate::world::objects::health::HealthMarker;
 use crate::world::objects::key_holder::{CollectingKey, KeyMarker};
+use crate::world::objects::treasure::{CollectingTreasure, TreasureMarker};
 use bevy::prelude::*;
 use maze::GameEvent;
 
@@ -53,6 +58,7 @@ pub(crate) fn game_tick_system(
     mut doors: Query<&mut DoorMarker>,
     health_pickups: Query<(Entity, &HealthMarker)>,
     key_holders: Query<(Entity, &KeyMarker)>,
+    treasures: Query<(Entity, &TreasureMarker)>,
 ) {
     if state.paused || state.won || state.lost {
         return;
@@ -94,8 +100,12 @@ pub(crate) fn game_tick_system(
                     }
                 }
             }
-            GameEvent::TreasureCollected { .. } => {
-                // No-op for now
+            GameEvent::TreasureCollected { cell, .. } => {
+                for (entity, marker) in &treasures {
+                    if marker.cell == cell {
+                        commands.entity(entity).insert(CollectingTreasure::default());
+                    }
+                }
             }
         }
     }

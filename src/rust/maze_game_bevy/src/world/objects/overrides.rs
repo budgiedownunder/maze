@@ -11,7 +11,7 @@
 //! same lenient `from_wire_str` mapping used everywhere else, so an unknown
 //! value falls back to the rig's default rather than erroring.
 
-use crate::state::{DoorStyle, EnemyType, HealthStyle, KeyHolderStyle, WallType};
+use crate::state::{DoorStyle, EnemyType, HealthStyle, KeyHolderStyle, TreasureStyle, WallType};
 use maze::CellEntity;
 
 /// The enemy rig for a cell: the cell's `enemyType` override, else `default`.
@@ -39,6 +39,19 @@ pub(crate) fn resolve_key_holder(entity: Option<&CellEntity>, default: KeyHolder
     if let Some(CellEntity::Key(over)) = entity {
         if let Some(h) = over.key_holder {
             return KeyHolderStyle::from_wire_str(h.as_wire_str());
+        }
+    }
+    default
+}
+
+/// The treasure rig for a cell: the cell's `style` override, else `default`.
+pub(crate) fn resolve_treasure_style(
+    entity: Option<&CellEntity>,
+    default: TreasureStyle,
+) -> TreasureStyle {
+    if let Some(CellEntity::Treasure(over)) = entity {
+        if let Some(s) = over.style {
+            return TreasureStyle::from_wire_str(s.as_wire_str());
         }
     }
     default
@@ -135,6 +148,31 @@ mod tests {
         assert_eq!(
             resolve_key_holder(None, KeyHolderStyle::Pedestal),
             KeyHolderStyle::Pedestal,
+        );
+    }
+
+    #[test]
+    fn treasure_override_picks_the_overridden_rig() {
+        let t = entity(r#"{ "type": "T", "style": "gold" }"#);
+        assert_eq!(
+            resolve_treasure_style(Some(&t), TreasureStyle::Silver),
+            TreasureStyle::Gold,
+        );
+        let diamonds = entity(r#"{ "type": "T", "style": "diamonds" }"#);
+        assert_eq!(
+            resolve_treasure_style(Some(&diamonds), TreasureStyle::Silver),
+            TreasureStyle::Diamonds,
+        );
+        // A field-less treasure entity (e.g. a value/rarity-only override)
+        // carries no style choice, so the default wins.
+        let bare = entity(r#"{ "type": "T", "value": 50 }"#);
+        assert_eq!(
+            resolve_treasure_style(Some(&bare), TreasureStyle::Silver),
+            TreasureStyle::Silver,
+        );
+        assert_eq!(
+            resolve_treasure_style(None, TreasureStyle::Silver),
+            TreasureStyle::Silver,
         );
     }
 

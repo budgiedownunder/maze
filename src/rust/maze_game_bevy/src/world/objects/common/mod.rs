@@ -42,6 +42,7 @@ pub(crate) struct CommonObjectAssets {
     pub(crate) cylinder: Option<Handle<Mesh>>,
     pub(crate) cuboid: Option<Handle<Mesh>>,
     pub(crate) cone: Option<Handle<Mesh>>,
+    pub(crate) half_cylinder: Option<Handle<Mesh>>,
     pub(crate) stone_mat: Option<Handle<StandardMaterial>>,
     pub(crate) glow_mat: Option<Handle<StandardMaterial>>,
     pub(crate) halo_mat: Option<Handle<StandardMaterial>>,
@@ -68,10 +69,12 @@ pub(crate) fn build_common_object_assets(
     let cylinder = meshes.as_mut().map(|m| m.add(Cylinder::new(0.5, 1.0)));
     let cuboid = meshes.as_mut().map(|m| m.add(Cuboid::new(1.0, 1.0, 1.0)));
     let cone = meshes.as_mut().map(|m| m.add(Cone::new(0.5, 1.0)));
+    let half_cylinder = meshes.as_mut().map(|m| m.add(chest::half_cylinder_mesh()));
     CommonObjectAssets {
         cylinder,
         cuboid,
         cone,
+        half_cylinder,
         stone_mat: brazier::build_stone_material(materials),
         glow_mat: brazier::build_glow_material(materials),
         halo_mat: brazier::build_halo_material(materials),

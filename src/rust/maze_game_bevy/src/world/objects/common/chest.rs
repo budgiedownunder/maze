@@ -1,6 +1,8 @@
 use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use std::f32::consts::FRAC_PI_2;
+use std::f32::consts::{FRAC_PI_2, PI};
 
 // ---------- Tuning constants ----------
 
@@ -35,20 +37,39 @@ const BODY_FACE_Z: f32 = 0.30;
 /// side faces.
 const BODY_HALF_W: f32 = 0.40;
 
-// Lid: a regular `Cylinder` mesh rotated 90° around Z so the cylinder's
-// axis runs along the chest's width (X). Bottom half sits inside the
-// body; top half pokes above as the rounded lid silhouette.
-const LID_Y: f32 = 0.35;
-/// Scale of the unit cylinder (radius 0.5, height 1.0) before rotation.
-/// x and z scale to 0.60 → radius 0.30 in YZ plane after rotation;
-/// y scale to 0.80 → cylinder length 0.80 (matches body width along X
-/// after the 90°-around-Z rotation).
-const LID_SCALE: Vec3 = Vec3::new(0.60, 0.80, 0.60);
+/// Wall thickness for the hollow trunk. The body is built as a floor slab + four
+/// wall panels of this thickness rather than a solid block, so an **open** chest
+/// reveals its interior: the loot fills a real cavity and each panel's
+/// inverted-hull outline draws the inner edges (the vertical back-corner edges
+/// and the bottom floor-to-wall edges). A closed chest is unchanged from outside
+/// — the cavity is hidden under the lid.
+const WALL_T: f32 = 0.06;
 
-// Horizontal hinge band wrapping all four side faces. Slightly wider
-// and deeper than the body so it pokes past each face by ~0.01.
+/// Thickness of the black border bars drawn along an open chest's interior
+/// edges (the vertical corner edges + the top and bottom perimeter) so the
+/// wall-panel edges read distinctly. The inverted-hull outline only rims the
+/// outer silhouette, not these concave interior edges, so they're drawn
+/// explicitly.
+const EDGE_T: f32 = 0.012;
+
+// Lid: a half-cylinder ("half-pipe") mesh — axis along the chest's width (X),
+// flat diametral face down, rounded dome up. The flat face rests at the trunk
+// top `Y` (so a closed chest reads as a rounded dome over the opening); an open
+// chest swings it up on its rear flat edge. A whole cylinder would show its
+// buried lower half once swung open, which looks wrong.
+const LID_Y: f32 = 0.35;
+/// Scale of the unit half-cylinder (radius 0.5, length 1.0 along X, flat at
+/// local `y = 0`): x → length 0.80; y → dome height 0.30; z → half-width 0.30.
+const LID_SCALE: Vec3 = Vec3::new(0.80, 0.60, 0.60);
+
+// Horizontal hinge band wrapping all four side faces — four thin strips hugging
+// the outer faces (a solid slab would fill the hollow interior). Each strip is
+// slightly longer than its face so the band wraps the corners.
 const HINGE_Y: f32 = 0.20;
-const HINGE_SCALE: Vec3 = Vec3::new(0.82, 0.05, 0.62);
+const HINGE_BAND_H: f32 = 0.05;
+const HINGE_STRIP_T: f32 = 0.04;
+const HINGE_FRONT_BACK_LEN: f32 = 0.82;
+const HINGE_LEFT_RIGHT_LEN: f32 = 0.62;
 
 // Vertical leather straps. Each strap forms half of a continuous loop
 // that wraps the chest: front+back straps plus the front-to-back lid
@@ -170,74 +191,253 @@ pub(crate) fn build_lock_material(
     build_emissive_material(materials, LOCK_EMISSIVE)
 }
 
-/// Applies a yaw rotation around the cell centre `(x, 0, z)` to a
-/// local-frame transform. Only the X/Z components rotate; Y stays put,
-/// so vertical stacking inside the chest is preserved. Used by every
-/// `spawn_with_outline` call inside `spawn_chest` so the whole chest
-/// can pivot to face its open neighbour.
-fn apply_yaw(x: f32, z: f32, yaw: f32, local: Transform) -> Transform {
-    let yaw_rot = Quat::from_rotation_y(yaw);
-    let centre = Vec3::new(x, 0.0, z);
-    let rotated = yaw_rot * (local.translation - centre);
+/// Whether a chest renders sealed (`Closed`) or with its lid swung open
+/// (`Open`). Key-holder and dead-end chests are `Closed`; a treasure chest is
+/// `Open` so its piled contents are visible. `TOP_Y` (the apex a key floats
+/// above) only applies to a `Closed` chest.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChestLid {
+    Closed,
+    Open,
+}
+
+/// Angle (radians) the lid swings about its rear flat edge when `Open`: a
+/// quarter turn up so it stands vertical (its flat inner face toward the front),
+/// like a chest lid hinged at the back. Negative lifts the front edge up.
+const LID_OPEN_ANGLE: f32 = -FRAC_PI_2;
+/// Rear-top hinge line for the lid (local frame): along the chest's X axis at
+/// the lid's rear edge, at lid height.
+const LID_HINGE_Z: f32 = -0.30;
+const LID_HINGE_Y: f32 = LID_Y;
+
+// Open-lid straps stop at the body rim — the closed lid (which the closed
+// straps reach up to meet) is swung away, so a full-height strap would hang in
+// the air above the trunk.
+const OPEN_STRAP_TOP_Y: f32 = 0.34;
+const OPEN_STRAP_HEIGHT: f32 = OPEN_STRAP_TOP_Y - STRAP_BOTTOM_Y;
+const OPEN_STRAP_Y: f32 = (OPEN_STRAP_TOP_Y + STRAP_BOTTOM_Y) * 0.5;
+const OPEN_STRAP_FRONT_BACK_SCALE: Vec3 = Vec3::new(STRAP_WIDTH, OPEN_STRAP_HEIGHT, STRAP_THICKNESS);
+const OPEN_STRAP_LEFT_RIGHT_SCALE: Vec3 = Vec3::new(STRAP_THICKNESS, OPEN_STRAP_HEIGHT, STRAP_WIDTH);
+
+/// Swings a local-frame lid transform open about the rear-top hinge by
+/// [`LID_OPEN_ANGLE`]. Only the lid and the lid bindings ride it, so they lift
+/// away as one while the trunk stays put.
+fn hinge_open(local: Transform) -> Transform {
+    let pivot = Vec3::new(0.0, LID_HINGE_Y, LID_HINGE_Z);
+    let rot = Quat::from_rotation_x(LID_OPEN_ANGLE);
     Transform {
-        translation: centre + rotated,
+        translation: pivot + rot * (local.translation - pivot),
+        rotation: rot * local.rotation,
+        scale: local.scale,
+    }
+}
+
+/// Bakes a chest sub-mesh's LOCAL transform (origin at the cell floor centre,
+/// `+Z` = front) into a world transform at the cell `(x, z)` rotated by `yaw`.
+/// Every chest is free-standing: the dead-end / key-holder chests are
+/// landmarks, and the treasure chest stays behind (open, emptied) once its
+/// contents are collected — only the loot (a separate entity) is whisked away.
+fn world_xform(x: f32, z: f32, yaw: f32, local: Transform) -> Transform {
+    let yaw_rot = Quat::from_rotation_y(yaw);
+    Transform {
+        translation: Vec3::new(x, 0.0, z) + yaw_rot * local.translation,
         rotation: yaw_rot * local.rotation,
         scale: local.scale,
     }
 }
 
+/// Spawns a free-standing chest rig at `(x, z)` rotated by `yaw`. `lid` selects
+/// sealed (dead-end / key-holder bases) vs open (treasure chests — the loot is
+/// spawned separately so the chest persists, empty, after collection).
 pub(crate) fn spawn_chest(
     commands: &mut Commands,
     assets: &CommonObjectAssets,
     x: f32,
     z: f32,
     yaw: f32,
+    lid: ChestLid,
 ) {
     let outline = || assets.outline_mat.clone();
     let cuboid = || assets.cuboid.clone();
-    let xform = |local: Transform| apply_yaw(x, z, yaw, local);
-    let at = |lx: f32, ly: f32, lz: f32| Vec3::new(x + lx, ly, z + lz);
+    // Body / hinge / straps / lock stay anchored to the trunk; the lid + lid
+    // bindings additionally swing open when `lid == Open`.
+    let place = |local: Transform| world_xform(x, z, yaw, local);
+    let lid_place = |local: Transform| {
+        let l = if lid == ChestLid::Open { hinge_open(local) } else { local };
+        world_xform(x, z, yaw, l)
+    };
 
-    // Body cuboid.
+    // Hollow trunk: a floor slab + four wall panels instead of a solid block, so
+    // an open chest reveals its interior; each panel's inverted-hull outline
+    // draws the inner edges. (A closed chest hides the cavity under the lid.)
+    let (bw, bh, bd) = (BODY_SCALE.x, BODY_SCALE.y, BODY_SCALE.z);
+    // Floor slab.
     spawn_with_outline(
         commands,
         None,
         cuboid(),
         assets.chest_mat.clone(),
         outline(),
-        xform(Transform::from_translation(at(0.0, BODY_Y, 0.0)).with_scale(BODY_SCALE)),
+        place(Transform::from_translation(Vec3::new(0.0, WALL_T * 0.5, 0.0)).with_scale(Vec3::new(bw, WALL_T, bd))),
         (),
     );
-
-    // Lid: cylinder rotated 90° around Z so its axis runs along the
-    // chest's local X. Bottom half is buried inside the body.
+    // Back / front walls (full width, thin in Z; outer face flush at ±BODY_FACE_Z).
     spawn_with_outline(
         commands,
         None,
-        assets.cylinder.clone(),
-        assets.lid_mat.clone(),
+        cuboid(),
+        assets.chest_mat.clone(),
         outline(),
-        xform(
-            Transform::from_translation(at(0.0, LID_Y, 0.0))
-                .with_rotation(Quat::from_rotation_z(FRAC_PI_2))
-                .with_scale(LID_SCALE),
-        ),
+        place(Transform::from_translation(Vec3::new(0.0, BODY_Y, -(BODY_FACE_Z - WALL_T * 0.5))).with_scale(Vec3::new(bw, bh, WALL_T))),
+        (),
+    );
+    spawn_with_outline(
+        commands,
+        None,
+        cuboid(),
+        assets.chest_mat.clone(),
+        outline(),
+        place(Transform::from_translation(Vec3::new(0.0, BODY_Y, BODY_FACE_Z - WALL_T * 0.5)).with_scale(Vec3::new(bw, bh, WALL_T))),
+        (),
+    );
+    // Left / right walls (full depth, thin in X).
+    spawn_with_outline(
+        commands,
+        None,
+        cuboid(),
+        assets.chest_mat.clone(),
+        outline(),
+        place(Transform::from_translation(Vec3::new(-(BODY_HALF_W - WALL_T * 0.5), BODY_Y, 0.0)).with_scale(Vec3::new(WALL_T, bh, bd))),
+        (),
+    );
+    spawn_with_outline(
+        commands,
+        None,
+        cuboid(),
+        assets.chest_mat.clone(),
+        outline(),
+        place(Transform::from_translation(Vec3::new(BODY_HALF_W - WALL_T * 0.5, BODY_Y, 0.0)).with_scale(Vec3::new(WALL_T, bh, bd))),
         (),
     );
 
-    // Horizontal hinge band wrapping mid-height across all 4 side faces.
+    // Black border bars along the open chest's interior edges — the four
+    // vertical corner edges and the top + bottom perimeter — so the wall-panel
+    // edges read distinctly. Open chests only; a closed chest hides the cavity.
+    if lid == ChestLid::Open {
+        if let (Some(mesh), Some(mat)) = (assets.cuboid.clone(), assets.lock_mat.clone()) {
+            let ix = BODY_HALF_W - WALL_T;
+            let iz = BODY_FACE_Z - WALL_T;
+            let yb = WALL_T;
+            let yt = BODY_Y + bh * 0.5;
+            let mid_y = (yb + yt) * 0.5;
+            let vbar = Vec3::new(EDGE_T, yt - yb, EDGE_T);
+            let xbar = Vec3::new(2.0 * ix, EDGE_T, EDGE_T);
+            let zbar = Vec3::new(EDGE_T, EDGE_T, 2.0 * iz);
+            let edges: [(Vec3, Vec3); 12] = [
+                // Four vertical corner edges.
+                (Vec3::new(ix, mid_y, iz), vbar),
+                (Vec3::new(-ix, mid_y, iz), vbar),
+                (Vec3::new(ix, mid_y, -iz), vbar),
+                (Vec3::new(-ix, mid_y, -iz), vbar),
+                // Top rim perimeter.
+                (Vec3::new(0.0, yt, iz), xbar),
+                (Vec3::new(0.0, yt, -iz), xbar),
+                (Vec3::new(ix, yt, 0.0), zbar),
+                (Vec3::new(-ix, yt, 0.0), zbar),
+                // Bottom floor-to-wall perimeter.
+                (Vec3::new(0.0, yb, iz), xbar),
+                (Vec3::new(0.0, yb, -iz), xbar),
+                (Vec3::new(ix, yb, 0.0), zbar),
+                (Vec3::new(-ix, yb, 0.0), zbar),
+            ];
+            for (translation, scale) in edges {
+                commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(mat.clone()),
+                    place(Transform::from_translation(translation).with_scale(scale)),
+                ));
+            }
+
+            // Lid flat-face perimeter edges. These ride the lid (via `lid_place`,
+            // which hinges them open with it) so the raised lid shows its inner
+            // structure too. The flat face spans the full trunk top.
+            let lx = BODY_HALF_W;
+            let lz = BODY_FACE_Z;
+            let lid_edges: [(Vec3, Vec3); 4] = [
+                (Vec3::new(0.0, LID_Y, lz), Vec3::new(2.0 * lx, EDGE_T, EDGE_T)),
+                (Vec3::new(0.0, LID_Y, -lz), Vec3::new(2.0 * lx, EDGE_T, EDGE_T)),
+                (Vec3::new(lx, LID_Y, 0.0), Vec3::new(EDGE_T, EDGE_T, 2.0 * lz)),
+                (Vec3::new(-lx, LID_Y, 0.0), Vec3::new(EDGE_T, EDGE_T, 2.0 * lz)),
+            ];
+            for (translation, scale) in lid_edges {
+                commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(mat.clone()),
+                    lid_place(Transform::from_translation(translation).with_scale(scale)),
+                ));
+            }
+        }
+    }
+
+    // Lid: a half-cylinder with its flat face resting at the trunk top. Closed,
+    // it reads as a rounded dome over the opening; open, it swings up on its rear
+    // flat edge to stand vertical.
+    spawn_with_outline(
+        commands,
+        None,
+        assets.half_cylinder.clone(),
+        assets.lid_mat.clone(),
+        outline(),
+        lid_place(Transform::from_translation(Vec3::new(0.0, LID_Y, 0.0)).with_scale(LID_SCALE)),
+        (),
+    );
+
+    // Horizontal hinge band across mid-height — four strips hugging the outer
+    // faces (front / back thin in Z, left / right thin in X) so the band wraps
+    // the trunk without filling its hollow interior.
     spawn_with_outline(
         commands,
         None,
         cuboid(),
         assets.hinge_mat.clone(),
         outline(),
-        xform(Transform::from_translation(at(0.0, HINGE_Y, 0.0)).with_scale(HINGE_SCALE)),
+        place(Transform::from_translation(Vec3::new(0.0, HINGE_Y, BODY_FACE_Z)).with_scale(Vec3::new(HINGE_FRONT_BACK_LEN, HINGE_BAND_H, HINGE_STRIP_T))),
+        (),
+    );
+    spawn_with_outline(
+        commands,
+        None,
+        cuboid(),
+        assets.hinge_mat.clone(),
+        outline(),
+        place(Transform::from_translation(Vec3::new(0.0, HINGE_Y, -BODY_FACE_Z)).with_scale(Vec3::new(HINGE_FRONT_BACK_LEN, HINGE_BAND_H, HINGE_STRIP_T))),
+        (),
+    );
+    spawn_with_outline(
+        commands,
+        None,
+        cuboid(),
+        assets.hinge_mat.clone(),
+        outline(),
+        place(Transform::from_translation(Vec3::new(BODY_HALF_W, HINGE_Y, 0.0)).with_scale(Vec3::new(HINGE_STRIP_T, HINGE_BAND_H, HINGE_LEFT_RIGHT_LEN))),
+        (),
+    );
+    spawn_with_outline(
+        commands,
+        None,
+        cuboid(),
+        assets.hinge_mat.clone(),
+        outline(),
+        place(Transform::from_translation(Vec3::new(-BODY_HALF_W, HINGE_Y, 0.0)).with_scale(Vec3::new(HINGE_STRIP_T, HINGE_BAND_H, HINGE_LEFT_RIGHT_LEN))),
         (),
     );
 
-    // Four vertical straps — one on each side face, extending from
-    // below-floor up to the lid apex so they meet the lid bindings flush.
+    // Four vertical straps. Closed straps reach the lid apex to meet the lid
+    // bindings; open straps stop at the body rim.
+    let (strap_y, fb_scale, lr_scale) = match lid {
+        ChestLid::Closed => (STRAP_Y, STRAP_FRONT_BACK_SCALE, STRAP_LEFT_RIGHT_SCALE),
+        ChestLid::Open => (OPEN_STRAP_Y, OPEN_STRAP_FRONT_BACK_SCALE, OPEN_STRAP_LEFT_RIGHT_SCALE),
+    };
     let leather = assets.leather_mat.clone();
     spawn_with_outline(
         commands,
@@ -245,10 +445,7 @@ pub(crate) fn spawn_chest(
         cuboid(),
         leather.clone(),
         outline(),
-        xform(
-            Transform::from_translation(at(0.0, STRAP_Y, STRAP_FRONT_BACK_Z))
-                .with_scale(STRAP_FRONT_BACK_SCALE),
-        ),
+        place(Transform::from_translation(Vec3::new(0.0, strap_y, STRAP_FRONT_BACK_Z)).with_scale(fb_scale)),
         (),
     );
     spawn_with_outline(
@@ -257,10 +454,7 @@ pub(crate) fn spawn_chest(
         cuboid(),
         leather.clone(),
         outline(),
-        xform(
-            Transform::from_translation(at(0.0, STRAP_Y, -STRAP_FRONT_BACK_Z))
-                .with_scale(STRAP_FRONT_BACK_SCALE),
-        ),
+        place(Transform::from_translation(Vec3::new(0.0, strap_y, -STRAP_FRONT_BACK_Z)).with_scale(fb_scale)),
         (),
     );
     spawn_with_outline(
@@ -269,10 +463,7 @@ pub(crate) fn spawn_chest(
         cuboid(),
         leather.clone(),
         outline(),
-        xform(
-            Transform::from_translation(at(-STRAP_LEFT_RIGHT_X, STRAP_Y, 0.0))
-                .with_scale(STRAP_LEFT_RIGHT_SCALE),
-        ),
+        place(Transform::from_translation(Vec3::new(-STRAP_LEFT_RIGHT_X, strap_y, 0.0)).with_scale(lr_scale)),
         (),
     );
     spawn_with_outline(
@@ -281,24 +472,20 @@ pub(crate) fn spawn_chest(
         cuboid(),
         leather.clone(),
         outline(),
-        xform(
-            Transform::from_translation(at(STRAP_LEFT_RIGHT_X, STRAP_Y, 0.0))
-                .with_scale(STRAP_LEFT_RIGHT_SCALE),
-        ),
+        place(Transform::from_translation(Vec3::new(STRAP_LEFT_RIGHT_X, strap_y, 0.0)).with_scale(lr_scale)),
         (),
     );
 
-    // Two perpendicular lid bindings forming a `+` cross over the lid
-    // apex. Each binding spans from one strap's outer face to the
-    // opposite strap's outer face so each loop reads as continuous.
+    // Two perpendicular lid bindings forming a `+` cross over the lid. They ride
+    // the lid, so they swing away with it when the chest is open.
     spawn_with_outline(
         commands,
         None,
         cuboid(),
         leather.clone(),
         outline(),
-        xform(
-            Transform::from_translation(at(0.0, LID_BINDING_Y, 0.0))
+        lid_place(
+            Transform::from_translation(Vec3::new(0.0, LID_BINDING_Y, 0.0))
                 .with_scale(LID_BINDING_FRONT_BACK_SCALE),
         ),
         (),
@@ -309,46 +496,124 @@ pub(crate) fn spawn_chest(
         cuboid(),
         leather,
         outline(),
-        xform(
-            Transform::from_translation(at(0.0, LID_BINDING_Y, 0.0))
+        lid_place(
+            Transform::from_translation(Vec3::new(0.0, LID_BINDING_Y, 0.0))
                 .with_scale(LID_BINDING_LEFT_RIGHT_SCALE),
         ),
         (),
     );
 
-    // Keyhole on the (now-rotated) front face: cone (wide base at Y=0.20,
-    // narrow tip at Y=0.30 — triangle widens DOWNWARD when viewed from
-    // the front) plus a small circle covering the cone's tip. Both
-    // pieces are extra-flat in Z and sit essentially flush with the
-    // strap face so the dark material reads as a CUTOUT painted on the
-    // leather, not a 3D nub mounted on top.
-    let lock = assets.lock_mat.clone();
-    let lock_cone_z = STRAP_FRONT_BACK_Z + STRAP_THICKNESS * 0.5 + LOCK_FRONT_OFFSET;
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cone.clone(),
-        lock.clone(),
-        outline(),
-        xform(
-            Transform::from_translation(at(0.0, LOCK_CONE_Y, lock_cone_z))
-                .with_scale(LOCK_CONE_SCALE),
-        ),
-        (),
-    );
-    // Lock circle: cylinder rotated 90° around X so the disc faces the
-    // viewer of the lock face.
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        lock,
-        outline(),
-        xform(
-            Transform::from_translation(at(0.0, LOCK_CIRCLE_Y, lock_cone_z + LOCK_CIRCLE_OVERLAP))
-                .with_rotation(Quat::from_rotation_x(FRAC_PI_2))
-                .with_scale(LOCK_CIRCLE_SCALE),
-        ),
-        (),
-    );
+    // Keyhole — only on a sealed chest (an open treasure chest isn't locked).
+    // Cone (wide base low, narrow tip high — triangle widening DOWNWARD from the
+    // front) plus a small circle covering the cone's tip, both extra-flat in Z
+    // so the dark material reads as a CUTOUT painted on the leather.
+    if lid == ChestLid::Closed {
+        let lock = assets.lock_mat.clone();
+        let lock_cone_z = STRAP_FRONT_BACK_Z + STRAP_THICKNESS * 0.5 + LOCK_FRONT_OFFSET;
+        spawn_with_outline(
+            commands,
+            None,
+            assets.cone.clone(),
+            lock.clone(),
+            outline(),
+            place(Transform::from_translation(Vec3::new(0.0, LOCK_CONE_Y, lock_cone_z)).with_scale(LOCK_CONE_SCALE)),
+            (),
+        );
+        spawn_with_outline(
+            commands,
+            None,
+            assets.cylinder.clone(),
+            lock,
+            outline(),
+            place(
+                Transform::from_translation(Vec3::new(0.0, LOCK_CIRCLE_Y, lock_cone_z + LOCK_CIRCLE_OVERLAP))
+                    .with_rotation(Quat::from_rotation_x(FRAC_PI_2))
+                    .with_scale(LOCK_CIRCLE_SCALE),
+            ),
+            (),
+        );
+    }
+}
+
+/// Builds the half-cylinder ("half-pipe") lid mesh: axis along local `X`
+/// (length 1, centred), a semicircular cross-section of radius `0.5` in the YZ
+/// plane with the flat diametral face at `y = 0` and the dome bulging up to
+/// `y = 0.5`. Built once into [`CommonObjectAssets`] and scaled per chest. A
+/// closed chest rests the flat face on the trunk top as a rounded dome; an open
+/// chest hinges it up on its rear flat edge.
+pub(crate) fn half_cylinder_mesh() -> Mesh {
+    const N: usize = 20;
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+
+    // Arc point i as (z, y) on the upper semicircle of radius 0.5.
+    let arc = |i: usize| -> (f32, f32) {
+        let phi = i as f32 / N as f32 * PI;
+        (0.5 * phi.cos(), 0.5 * phi.sin())
+    };
+
+    // Curved dome surface (outward radial normals).
+    for i in 0..N {
+        let (z0, y0) = arc(i);
+        let (z1, y1) = arc(i + 1);
+        let n0 = [0.0, 2.0 * y0, 2.0 * z0];
+        let n1 = [0.0, 2.0 * y1, 2.0 * z1];
+        let base = positions.len() as u32;
+        positions.push([-0.5, y0, z0]);
+        normals.push(n0);
+        uvs.push([0.0, 0.0]);
+        positions.push([0.5, y0, z0]);
+        normals.push(n0);
+        uvs.push([0.0, 0.0]);
+        positions.push([0.5, y1, z1]);
+        normals.push(n1);
+        uvs.push([0.0, 0.0]);
+        positions.push([-0.5, y1, z1]);
+        normals.push(n1);
+        uvs.push([0.0, 0.0]);
+        indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // Flat diametral face (y = 0), normal pointing down.
+    {
+        let base = positions.len() as u32;
+        for &(x, z) in &[(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)] {
+            positions.push([x, 0.0, z]);
+            normals.push([0.0, -1.0, 0.0]);
+            uvs.push([0.0, 0.0]);
+        }
+        indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    // Semicircular end caps at x = ±0.5.
+    for (x, sign) in [(0.5_f32, 1.0_f32), (-0.5_f32, -1.0_f32)] {
+        let center = positions.len() as u32;
+        positions.push([x, 0.0, 0.0]);
+        normals.push([sign, 0.0, 0.0]);
+        uvs.push([0.0, 0.0]);
+        let first = positions.len() as u32;
+        for i in 0..=N {
+            let (z, y) = arc(i);
+            positions.push([x, y, z]);
+            normals.push([sign, 0.0, 0.0]);
+            uvs.push([0.0, 0.0]);
+        }
+        for i in 0..N as u32 {
+            let (a, b) = (first + i, first + i + 1);
+            if sign > 0.0 {
+                indices.extend_from_slice(&[center, b, a]);
+            } else {
+                indices.extend_from_slice(&[center, a, b]);
+            }
+        }
+    }
+
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
 }

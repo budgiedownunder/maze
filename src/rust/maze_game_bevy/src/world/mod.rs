@@ -133,14 +133,16 @@ pub fn generate_maze_json(
 /// dead-ends pick up landmark objects (brazier / urn / pillar / chest). The
 /// intended solve is: collect the key, navigate the spine down and east,
 /// then hold against the real door to open it before reaching the finish.
-/// See `demo_grid_is_well_formed` for the structural guarantees this layout
-/// upholds.
+/// A bare treasure (`T` at `(3,3)`) sits in a dead-end off the start corridor —
+/// playable from `cargo run` and demonstrating that treasure takes precedence
+/// over the dead-end landmark prop. See `demo_grid_is_well_formed` for the
+/// structural guarantees this layout upholds.
 pub(crate) fn demo_grid() -> Vec<Vec<char>> {
     vec![
         vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
         vec!['W', 'S', ' ', 'K', ' ', 'E', ' ', 'H', ' ', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'D', 'W'],
-        vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
+        vec!['W', ' ', ' ', 'T', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
         vec!['W', ' ', 'W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
