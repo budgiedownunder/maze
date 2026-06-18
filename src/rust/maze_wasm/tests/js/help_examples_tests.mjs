@@ -1294,6 +1294,28 @@ function testMazeGameHealthPickupsExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::treasures() example
+function testMazeGameTreasures() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","T","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("treasures() = ", game.treasures());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameTreasuresExpectedOutput() {
+    return [
+        "treasures() =  [ { row: 0, col: 1, style: 'silver', value: 10 } ]"
+    ];
+}
+
 // Test MazeGameWasm::time_until_next_event_ms() example
 function testMazeGameTimeUntilNextEventMs() {
     let game = null;
@@ -1441,6 +1463,7 @@ const tests = [
     { name: "MazeGameWasm:grid() example", testFunction: testMazeGameGrid, expectedOutput: testMazeGameGridExpectedOutput },
     { name: "MazeGameWasm:cell_overrides() example", testFunction: testMazeGameCellOverrides, expectedOutput: testMazeGameCellOverridesExpectedOutput },
     { name: "MazeGameWasm:health_pickups() example", testFunction: testMazeGameHealthPickups, expectedOutput: testMazeGameHealthPickupsExpectedOutput },
+    { name: "MazeGameWasm:treasures() example", testFunction: testMazeGameTreasures, expectedOutput: testMazeGameTreasuresExpectedOutput },
     { name: "MazeGameWasm:time_until_next_event_ms() example", testFunction: testMazeGameTimeUntilNextEventMs, expectedOutput: testMazeGameTimeUntilNextEventMsExpectedOutput },
 ];
 

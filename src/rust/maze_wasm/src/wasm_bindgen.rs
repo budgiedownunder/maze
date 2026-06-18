@@ -216,6 +216,20 @@ fn to_js_health_pickup_obj(row: usize, col: usize, id: u32) -> Object {
     obj
 }
 
+/// Converts an uncollected treasure cell to a JavaScript object
+/// (`{ row, col, style, value }`). `style` is the lowercase wire string for the
+/// treasure's visual rig; `value` is the resolved score reward (the per-cell
+/// override else the rarity-derived default). Renderers key on `(row, col)` —
+/// a consumed treasure clears to `' '` and drops out of the snapshot.
+fn to_js_treasure_obj(row: usize, col: usize, style: maze::TreasureStyle, value: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("style"), &JsValue::from_str(style.as_wire_str())).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("value"), &JsValue::from_f64(value as f64)).unwrap();
+    obj
+}
+
 /// Converts a tick event to a JavaScript object — one arm per
 /// [`maze::GameEvent`] variant. Each arm emits the JS object shape documented
 /// in the corresponding `MazeGameEventType` entry of `mazeWasm.ts`.
@@ -883,6 +897,42 @@ impl MazeGameWasm {
                     id += 1;
                 }
             }
+        }
+        result
+    }
+
+    /// Returns the uncollected treasure cells as a JavaScript `Array` of
+    /// `{ row, col, style, value }` objects, in row-major order. `style` drives
+    /// the rendered rig; `value` is the score awarded on pickup (the per-cell
+    /// override else the rarity-derived default). A consumed treasure clears to
+    /// `' '` and drops out of the snapshot, so renderers key on `(row, col)`.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","T","F"]]}');
+    ///         console.log("treasures() = ", game.treasures());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn treasures(&self) -> Array {
+        let result = Array::new();
+        for ((r, c), style, value) in self.game.treasures() {
+            result.push(&to_js_treasure_obj(r, c, style, value));
         }
         result
     }
@@ -2445,6 +2495,7 @@ impl MazeWasm {
     /// * `spare_keys` - Number of spare keys planted on off-spine branches after solvability check (undefined = default 0)
     /// * `enemy_count` - Number of enemy cells to auto-place at random passable cells (undefined = default 0)
     /// * `health_count` - Number of health-pickup cells to auto-place at random passable cells (undefined = default 0)
+    /// * `treasure_count` - Number of treasure cells to auto-place dead-end-first, rarity-weighted (undefined = default 0)
     ///
     /// # Returns
     ///
@@ -2513,6 +2564,7 @@ impl MazeWasm {
         spare_keys: JsValue,
         enemy_count: JsValue,
         health_count: JsValue,
+        treasure_count: JsValue,
     ) -> Result<(), JsValue> {
         let row_count = Self::arg_to_usize("row_count", row_count)?;
         let col_count = Self::arg_to_usize("col_count", col_count)?;
@@ -2554,6 +2606,7 @@ impl MazeWasm {
         let spare_keys = Self::opt_arg_to_usize("spare_keys", spare_keys)?;
         let enemy_count = Self::opt_arg_to_usize("enemy_count", enemy_count)?;
         let health_count = Self::opt_arg_to_usize("health_count", health_count)?;
+        let treasure_count = Self::opt_arg_to_usize("treasure_count", treasure_count)?;
 
         let options = GeneratorOptions {
             row_count,
@@ -2570,7 +2623,7 @@ impl MazeWasm {
             spare_keys,
             enemy_count,
             health_count,
-            treasure_count: None,
+            treasure_count,
         };
 
         let maze = Generator { options }

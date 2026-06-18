@@ -1387,6 +1387,33 @@ impl MazeGame {
         keys
     }
 
+    /// Returns the cells still holding uncollected treasure (`'T'`), each with
+    /// its resolved visual style and reward value (the per-cell override else
+    /// the rarity-derived default), in row-major order. A consumed treasure
+    /// clears to `' '` and drops out of the result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, TreasureStyle};
+    /// let json = r#"{"grid":[["S","T","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// // A bare 'T' is a default (Common) treasure: Silver style, value 10.
+    /// assert_eq!(game.treasures(), vec![((0, 1), TreasureStyle::Silver, 10)]);
+    /// ```
+    pub fn treasures(&self) -> Vec<((usize, usize), TreasureStyle, u32)> {
+        let mut out = Vec::new();
+        for (r, row) in self.grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'T' {
+                    let (style, value) = treasure_at(&self.cell_entities, (r, c));
+                    out.push(((r, c), style, value));
+                }
+            }
+        }
+        out
+    }
+
     /// Returns the items currently in the player's bag, in pickup order.
     ///
     /// # Examples

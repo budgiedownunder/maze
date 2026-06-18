@@ -100,6 +100,7 @@ const doors   = game.doors();           // → [{ row, col, state: 'locked' | 'o
 const bag     = game.bag();             // → [{ type: 'key', id }]  (collected items)
 const enemies = game.enemies();         // → [{ row, col, id, damage, movePeriodMs, enemyType? }]  (live enemies; enemyType present only when the spawn cell overrode the rig)
 const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected 'H' cells, row-major order)
+const treasure = game.treasures();      // → [{ row, col, style, value }]  (uncollected 'T' cells; style is the rig, value the resolved reward)
 
 // Advance time-based state (opening doors, enemy AI, queued damage / heal events).
 // Returns the events that occurred during the tick (or queued by prior move_player calls):

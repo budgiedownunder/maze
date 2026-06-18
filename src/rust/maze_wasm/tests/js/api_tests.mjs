@@ -1161,6 +1161,39 @@ function registerMazeGameTests() {
             ]);
         });
 
+        // MazeGame::treasures() — empty array when grid has no 'T' cells
+        it('should expect treasures() to return an empty array when no T cells exist', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.treasures()).to.deep.equal([]);
+        });
+
+        // MazeGame::treasures() — a bare 'T' is a default (Common) treasure: silver, value 10
+        it('should expect treasures() to default a bare T cell to silver style and value 10', function () {
+            let game = makeGame('{"grid":[["S","T","F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'silver', value: 10 }]);
+        });
+
+        // MazeGame::treasures() — a per-cell rarity override drives the default value (Rare = 100)
+        it('should expect a rarity override to set the treasure value (rare = 100)', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"T","rarity":"rare"}],"F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'silver', value: 100 }]);
+        });
+
+        // MazeGame::treasures() — a per-cell style + explicit value override is reflected verbatim
+        it('should expect a style + value override to be reflected in treasures()', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"T","style":"gold","value":250}],"F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'gold', value: 250 }]);
+        });
+
+        // MazeGame::move_player() — auto-collecting treasure queues a treasureCollected event
+        it('should expect move_player onto a treasure cell to queue a treasureCollected event', function () {
+            let game = makeGame('{"grid":[["S","T","F"]]}');
+            game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
+            expect(game.tick(0)).to.deep.equal([
+                { type: 'treasureCollected', style: 'silver', value: 10, row: 0, col: 1 },
+            ]);
+        });
+
         // MazeGame::grid() — pure-char grid for the host renderer
         it('should expect grid() to return the pure-char grid', function () {
             let game = makeGame('{"grid":[["S"," ","F"]]}');
