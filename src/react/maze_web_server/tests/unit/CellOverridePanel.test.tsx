@@ -54,17 +54,28 @@ describe('CellOverridePanel', () => {
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
   })
 
-  it('renders the style + value fields for a T cell', () => {
+  it('renders the style + value fields for a T cell, defaulting to Silver with no Default option', () => {
     setup('T')
-    expect(screen.getByRole('combobox', { name: 'Style' })).toBeInTheDocument()
+    const style = screen.getByRole('combobox', { name: 'Style' })
+    expect(style).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: 'Value' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Gold' })).toBeInTheDocument()
+    // A bare 'T' is Silver, so there's no "Default" option and Silver is selected.
+    expect(style).toHaveValue('silver')
+    expect(screen.queryByRole('option', { name: 'Default' })).not.toBeInTheDocument()
   })
 
   it('applies a treasure style override live', async () => {
     const { onApply } = setup('T')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Style' }), 'gold')
     expect(onApply).toHaveBeenLastCalledWith({ type: 'T', style: 'gold' })
+  })
+
+  it('clears the override when the treasure style returns to Silver (the bare default)', async () => {
+    const { onApply, onClear } = setup('T', { type: 'T', style: 'gold' })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Style' }), 'silver')
+    expect(onClear).toHaveBeenCalled()
+    expect(onApply).not.toHaveBeenCalled()
   })
 
   it('applies a treasure value override live as it is typed', async () => {

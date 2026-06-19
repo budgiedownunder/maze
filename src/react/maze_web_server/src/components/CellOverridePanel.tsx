@@ -123,7 +123,10 @@ export function CellOverridePanel({
   const [healAmount, setHealAmount] = useState<string>(health?.healAmount?.toString() ?? '')
   const [keyHolder, setKeyHolder] = useState<string>(key?.keyHolder ?? '')
   const [doorStyle, setDoorStyle] = useState<string>(door?.doorStyle ?? '')
-  const [treasureStyle, setTreasureStyle] = useState<string>(treasure?.style ?? '')
+  // Treasure has no "Default" style — a bare 'T' is Silver — so the picker
+  // defaults to Silver when there's no override, and selecting Silver writes no
+  // style override (mirrors the generator: Silver stays a bare 'T').
+  const [treasureStyle, setTreasureStyle] = useState<string>(treasure?.style ?? 'silver')
   const [treasureValue, setTreasureValue] = useState<string>(treasure?.value?.toString() ?? '')
   // Wall is two-tier. `wallKind` is 'default' (inherit the maze's wallType — no
   // override), 'wall' (force a solid wall, texture chosen via wallTexture), or a special
@@ -162,7 +165,7 @@ export function CellOverridePanel({
       setHealAmount('')
       setKeyHolder('')
       setDoorStyle('')
-      setTreasureStyle('')
+      setTreasureStyle('silver')
       setTreasureValue('')
       setWallKind(WALL_KIND_DEFAULT)
       setWallTexture('')
@@ -207,7 +210,8 @@ export function CellOverridePanel({
 
   function applyTreasure(style: string, value: string) {
     const entity: CellEntity = { type: 'T' }
-    if (style) entity.style = style as TreasureStyle
+    // Silver is the implicit default (bare 'T'), so only non-Silver writes a style.
+    if (style && style !== 'silver') entity.style = style as TreasureStyle
     const v = parseNonNegInt(value)
     if (v !== undefined) entity.value = v
     emit(entity)
@@ -370,7 +374,7 @@ export function CellOverridePanel({
             <div className="cell-override-select-row">
               <img
                 className="cell-override-preview"
-                src={cellSprite('T', { type: 'T', style: treasureStyle ? (treasureStyle as TreasureStyle) : undefined })?.src}
+                src={cellSprite('T', { type: 'T', style: treasureStyle as TreasureStyle })?.src}
                 alt="" aria-hidden="true"
               />
               <select
@@ -378,7 +382,6 @@ export function CellOverridePanel({
                 value={treasureStyle}
                 onChange={e => { setTreasureStyle(e.target.value); applyTreasure(e.target.value, treasureValue) }}
               >
-                <option value="">Default</option>
                 {TREASURE_STYLES.map(s => <option key={s} value={s}>{titleCaseWire(s)}</option>)}
               </select>
             </div>

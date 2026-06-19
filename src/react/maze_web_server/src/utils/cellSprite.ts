@@ -29,7 +29,7 @@ const BASE: Record<string, CellImage> = {
   E: { src: '/images/maze/enemy.svg', alt: 'Enemy' },
   H: { src: '/images/maze/health.svg', alt: 'Health' },
   // A bare 'T' is the default Silver treasure; the other styles are variants below.
-  T: { src: '/images/maze/silver.svg', alt: 'Treasure' },
+  T: { src: '/images/maze/silver_in_trunk.svg', alt: 'Treasure' },
 }
 
 // 2D variant sprites for visual overrides. The default rig (goblin / heart) uses the
@@ -42,9 +42,9 @@ const HEALTH_VARIANT_SPRITES: Partial<Record<HealthStyle, string>> = {
 }
 // Treasure styles: silver is the BASE sprite; the richer styles get their own.
 const TREASURE_VARIANT_SPRITES: Partial<Record<TreasureStyle, string>> = {
-  gold: '/images/maze/gold.svg',
-  diamonds: '/images/maze/diamonds.svg',
-  jewels: '/images/maze/jewels.svg',
+  gold: '/images/maze/gold_in_trunk.svg',
+  diamonds: '/images/maze/diamonds_in_trunk.svg',
+  jewels: '/images/maze/jewels_in_trunk.svg',
 }
 // Only the special (non-occluding) wall types get a 2D sprite; the solid textures
 // (brick/dressed_stone/wood/cobblestone) render the generic wall (texture is a 3D concern).
