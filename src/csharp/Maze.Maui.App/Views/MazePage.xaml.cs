@@ -583,22 +583,23 @@ namespace Maze.Maui.App.Views
                 uint minSolutionLength = _lastMinSolutionLength is uint last && last <= rows * cols
                     ? last
                     : defaultMinSolutionLength;
-                // Seed Doors from the existing 'D' cell count so regenerating
-                // preserves the author's door count. Spare Doors / Spare Keys
-                // stay at 0 — the grid alone can't tell us which dootr/key
-                // cells were decoys vs real path doors, so the safe default
-                // is "no extras" and let the author opt in.
-                uint doorCount = current.IsEmpty ? 0 : MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door);
+                // Seed each auto-placed feature count from its existing cell count
+                // so regenerating preserves what the author already has (mirrors
+                // React's defaultsFromGrid). Spare Doors / Spare Keys stay at 0 —
+                // the grid alone can't tell us which door/key cells were decoys vs
+                // real path doors, so the safe default is "no extras" and let the
+                // author opt in.
+                bool hasGrid = !current.IsEmpty;
+                uint doorCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door) : 0;
                 uint spareDoors = 0, spareKeys = 0;
-                // Enemies / Health default to 0 — regenerating from an existing
-                // maze doesn't preserve their count (the safe default is "none",
-                // and the author opts in each time).
-                uint enemyCount = 0, healthCount = 0;
+                uint enemyCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Enemy) : 0;
+                uint healthCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Health) : 0;
+                uint treasureCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Treasure) : 0;
                 string? generationError = null;
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, enemyCount, healthCount, _appFeaturesService.Features.MaxMazeCells, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, enemyCount, healthCount, treasureCount, _appFeaturesService.Features.MaxMazeCells, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
@@ -619,6 +620,7 @@ namespace Maze.Maui.App.Views
                         SpareKeys = popupOptions.SpareKeys,
                         EnemyCount = popupOptions.EnemyCount,
                         HealthCount = popupOptions.HealthCount,
+                        TreasureCount = popupOptions.TreasureCount,
                     };
 
                     bool generationSucceeded = false;

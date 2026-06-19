@@ -26,6 +26,7 @@ namespace Maze.Maui.App.Tests.Utils
         private const string ValidSpareKeys = "0";
         private const string ValidEnemyCount = "0";
         private const string ValidHealthCount = "0";
+        private const string ValidTreasureCount = "0";
 
         private static bool TryParseBaseline(
             int? cap,
@@ -42,11 +43,12 @@ namespace Maze.Maui.App.Tests.Utils
             string? spareDoors = ValidSpareDoors,
             string? spareKeys = ValidSpareKeys,
             string? enemyCount = ValidEnemyCount,
-            string? healthCount = ValidHealthCount)
+            string? healthCount = ValidHealthCount,
+            string? treasureCount = ValidTreasureCount)
             => GenerateMazeOptionsParser.TryParse(
                 rows, cols, startRow, startCol, finishRow, finishCol,
                 minSolutionLength, doorCount, spareDoors, spareKeys,
-                enemyCount, healthCount,
+                enemyCount, healthCount, treasureCount,
                 cap, out parsed, out error);
 
         // ── Happy path ─────────────────────────────────────────────────
@@ -392,6 +394,57 @@ namespace Maze.Maui.App.Tests.Utils
             Assert.NotNull(parsed);
             Assert.Equal(8u, parsed!.EnemyCount);
             Assert.Equal(8u, parsed.HealthCount);
+        }
+
+        // ── Treasure per-field bounds (cap 12) ─────────────────────────
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("  ")]
+        public void TryParse_treats_empty_treasure_as_zero(string? text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, treasureCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(0u, parsed!.TreasureCount);
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("12")]
+        public void TryParse_accepts_treasure_count_in_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, treasureCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(uint.Parse(text), parsed!.TreasureCount);
+        }
+
+        [Theory]
+        [InlineData("13")]
+        [InlineData("100")]
+        [InlineData("abc")]
+        [InlineData("-1")]
+        public void TryParse_rejects_treasure_count_out_of_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out _, out var error, treasureCount: text);
+            Assert.False(ok);
+            Assert.Equal("Treasure must be a whole number between 0 and 12.", error);
+        }
+
+        [Fact]
+        public void TryParse_treasure_does_not_count_against_the_K_plus_D_cap()
+        {
+            // Doors at the K+D cap (2*8 = 16) plus the maximum treasure still
+            // parses — treasure is solver-empty and carries no feature budget.
+            bool ok = TryParseBaseline(
+                cap: null, out var parsed, out _,
+                doorCount: "8", spareDoors: "0", spareKeys: "0",
+                treasureCount: "12");
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(12u, parsed!.TreasureCount);
         }
     }
 }
