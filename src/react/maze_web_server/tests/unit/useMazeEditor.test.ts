@@ -1125,13 +1125,22 @@ describe('per-cell overrides: remap on structural edits', () => {
     expect(result.current.overrides.size).toBe(1)
   })
 
-  it('applyGenerated clears all overrides', () => {
+  it('applyGenerated replaces existing overrides with the generated ones', () => {
     const result = setupHookWithOverrides(
       makeGrid(3, 3),
       [{ row: 1, col: 1, entity: { type: 'E', damage: 1 } }],
     )
-    act(() => result.current.applyGenerated(makeDefinition(makeGrid(3, 3))))
+    act(() => result.current.applyGenerated(makeGrid(3, 3), []))
     expect(result.current.overrides.size).toBe(0)
+  })
+
+  it('applyGenerated seeds overrides emitted by the generator (e.g. treasure style)', () => {
+    const result = setupHook(makeGrid(3, 3))
+    const grid = makeGrid(3, 3)
+    grid[0][1] = 'T'
+    act(() => result.current.applyGenerated(grid, [{ row: 0, col: 1, entity: { type: 'T', style: 'gold' } }]))
+    expect(result.current.getOverride(0, 1)).toEqual({ type: 'T', style: 'gold' })
+    expect(result.current.overrides.size).toBe(1)
   })
 })
 

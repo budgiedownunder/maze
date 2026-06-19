@@ -138,10 +138,11 @@ export function useMazeEditor() {
     setIsDirty(false)
   }, [])
 
-  const applyGenerated = useCallback((definition: MazeDefinition) => {
-    setGrid(definition.grid)
-    // The generator never emits overrides — a generated maze starts override-free.
-    setOverrides(new Map())
+  const applyGenerated = useCallback((grid: string[][], overrides: CellOverride[] = []) => {
+    setGrid(grid)
+    // The generator can emit per-cell overrides (e.g. a treasure's style), so
+    // seed the override map from them rather than clearing it.
+    setOverrides(new Map(overrides.map(o => [cellKey(o.row, o.col), o.entity])))
     setActiveCell(null)
     setAnchorCell(null)
     setSolutionState(null)

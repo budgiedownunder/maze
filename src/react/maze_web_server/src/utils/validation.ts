@@ -18,6 +18,11 @@ export const MAX_ENEMY_COUNT = 8
 // clamps to this regardless; the Generate dialog uses it to bound the Health input.
 export const MAX_HEALTH_COUNT = 8
 
+// Maximum number of treasure cells a generated maze may be seeded with. Mirrors
+// `MAX_TREASURE_COUNT` in `src/rust/maze/src/generator.rs`. The generator clamps
+// to this regardless; the Generate dialog uses it to bound the Treasure input.
+export const MAX_TREASURE_COUNT = 12
+
 // Maximum combined number of 'K' + 'D' cells in any maze (saved or generated).
 // Mirrors `maze::MAX_TOTAL_FEATURES` on the Rust side. The key-aware solver
 // tracks each as a bit in a u32 mask, so its search is exponential in their

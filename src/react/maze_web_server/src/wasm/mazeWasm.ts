@@ -18,7 +18,7 @@ export interface GenerateOptions {
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
   enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
   healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
-  treasureCount?: number // number of treasure cells to auto-place dead-end-first, type-weighted; omitted/undefined = 0 (the generate dialog supplies it from Step 7C)
+  treasureCount: number // number of treasure cells to auto-place dead-end-first, type-weighted; 0 = none
 }
 
 let initialized = false
@@ -39,7 +39,9 @@ function toError(ex: unknown): Error {
   return new Error(typeof ex === 'string' ? ex : 'Unknown error.')
 }
 
-export async function generateMaze(options: GenerateOptions): Promise<MazeDefinition> {
+export async function generateMaze(
+  options: GenerateOptions,
+): Promise<{ grid: string[][]; overrides: CellOverride[] }> {
   await ensureInit()
   const maze = new MazeWasm()
   try {
@@ -64,8 +66,9 @@ export async function generateMaze(options: GenerateOptions): Promise<MazeDefini
         options.treasureCount,
       )
     } catch (ex) { throw toError(ex) }
-    const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }
-    return parsed.definition
+    // The generator emits per-cell overrides (e.g. a treasure's style), so read
+    // the result through the same codec as load — not the raw char-or-array grid.
+    return readGridAndOverrides(maze)
   } finally {
     maze.free()
   }
@@ -109,10 +112,33 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
 const CELL_TYPE_CHARS = [' ', 'S', 'F', 'W', 'K', 'D', 'E', 'H', 'T'] as const
 
 /**
+ * Reads a live `MazeWasm` into a pure-char grid plus a sparse list of per-cell
+ * overrides. The cell type comes from the typed accessor `get_cell().cell_type`
+ * and the override from `get_cell_entity()`, so JavaScript never inspects the
+ * char-or-array grid form. Shared by `splitDefinition` (load) and `generateMaze`
+ * (generation) — the generator emits overrides too (e.g. a treasure's style).
+ */
+function readGridAndOverrides(maze: MazeWasm): { grid: string[][]; overrides: CellOverride[] } {
+  const rows = maze.get_row_count()
+  const cols = maze.get_col_count()
+  const grid: string[][] = []
+  const overrides: CellOverride[] = []
+  for (let r = 0; r < rows; r++) {
+    const row: string[] = []
+    for (let c = 0; c < cols; c++) {
+      const cellType = (maze.get_cell(r, c) as { cell_type: number }).cell_type
+      row.push(CELL_TYPE_CHARS[cellType] ?? ' ')
+      const entity = maze.get_cell_entity(r, c) as CellEntity | null
+      if (entity !== null) overrides.push({ row: r, col: c, entity })
+    }
+    grid.push(row)
+  }
+  return { grid, overrides }
+}
+
+/**
  * Splits a full maze JSON string (`{id, name, definition: {grid}}`) into a pure-char
- * grid plus a sparse list of per-cell overrides. The cell type is read through the
- * wasm typed accessor `get_cell().cell_type` and the override through
- * `get_cell_entity()`, so JavaScript never inspects the char-or-array grid form.
+ * grid plus a sparse list of per-cell overrides.
  */
 export async function splitDefinition(
   fullMazeJson: string,
@@ -122,21 +148,7 @@ export async function splitDefinition(
   try {
     try {
       maze.from_json(fullMazeJson)
-      const rows = maze.get_row_count()
-      const cols = maze.get_col_count()
-      const grid: string[][] = []
-      const overrides: CellOverride[] = []
-      for (let r = 0; r < rows; r++) {
-        const row: string[] = []
-        for (let c = 0; c < cols; c++) {
-          const cellType = (maze.get_cell(r, c) as { cell_type: number }).cell_type
-          row.push(CELL_TYPE_CHARS[cellType] ?? ' ')
-          const entity = maze.get_cell_entity(r, c) as CellEntity | null
-          if (entity !== null) overrides.push({ row: r, col: c, entity })
-        }
-        grid.push(row)
-      }
-      return { grid, overrides }
+      return readGridAndOverrides(maze)
     } catch (ex) { throw toError(ex) }
   } finally {
     maze.free()

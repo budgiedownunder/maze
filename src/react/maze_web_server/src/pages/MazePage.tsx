@@ -340,10 +340,10 @@ export function MazePage() {
     setGenerateError(null)
     try {
       await new Promise<void>(r => requestAnimationFrame(() => r()))
-      const definition = await generateMaze(options)
+      const { grid, overrides } = await generateMaze(options)
       setLastMinSpineLength(options.minSpineLength)
       setShowGenerateModal(false)
-      applyGenerated(definition)
+      applyGenerated(grid, overrides)
     } catch (ex: unknown) {
       setGenerateError((ex as { message?: string }).message ?? 'Generation failed.')
     } finally {

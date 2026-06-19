@@ -96,6 +96,7 @@ export interface GenerateOptions {
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
   enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
   healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
+  treasureCount: number // number of treasure cells to auto-place dead-end-first, type-weighted; 0 = none
 }
 
 // A recorded run, as returned by the score endpoints. Mirrors the server's

@@ -62,6 +62,7 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Spare Keys')).toBeInTheDocument()
     expect(screen.getByLabelText('Enemies')).toBeInTheDocument()
     expect(screen.getByLabelText('Health')).toBeInTheDocument()
+    expect(screen.getByLabelText('Treasure')).toBeInTheDocument()
   })
 
   it('defaults Doors to 0 when the grid has no doors', () => {
@@ -98,6 +99,7 @@ describe('GenerateMazeModal rendering and defaults', () => {
       'Spare Keys',
       'Enemies',
       'Health',
+      'Treasure',
     ]) {
       expect(screen.getByLabelText(label)).toHaveAttribute('min', '0')
     }
@@ -115,6 +117,13 @@ describe('GenerateMazeModal rendering and defaults', () => {
     const health = screen.getByLabelText('Health')
     expect(health).toHaveAttribute('min', '0')
     expect(health).toHaveAttribute('max', '8')
+  })
+
+  it('caps the Treasure spinner at 0 and the maximum permitted count', () => {
+    renderModal()
+    const treasure = screen.getByLabelText('Treasure')
+    expect(treasure).toHaveAttribute('min', '0')
+    expect(treasure).toHaveAttribute('max', '12')
   })
 
   it('defaults Enemies to 0 when the grid has no enemies', () => {
@@ -145,6 +154,21 @@ describe('GenerateMazeModal rendering and defaults', () => {
     ]
     renderModal({ grid: gridWithHealth })
     expect(screen.getByLabelText('Health')).toHaveValue(2)
+  })
+
+  it('defaults Treasure to 0 when the grid has no treasure', () => {
+    renderModal()
+    expect(screen.getByLabelText('Treasure')).toHaveValue(0)
+  })
+
+  it('initializes Treasure from the number of treasure cells already in the grid', () => {
+    const gridWithTreasure: string[][] = [
+      ['S', 'T', ' '],
+      ['T', 'W', 'T'],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridWithTreasure })
+    expect(screen.getByLabelText('Treasure')).toHaveValue(3)
   })
 
   it('disables native form validation so the in-modal error message still fires', () => {
@@ -318,6 +342,16 @@ describe('GenerateMazeModal validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Health must be a whole number between 0 and 8.')
   })
 
+  it('shows error when Treasure exceeds the maximum', async () => {
+    await submitWith({ Treasure: '13' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Treasure must be a whole number between 0 and 12.')
+  })
+
+  it('shows error when Treasure is negative', async () => {
+    await submitWith({ Treasure: '-1' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Treasure must be a whole number between 0 and 12.')
+  })
+
   it('passes spare doors + spare keys through on a valid submit', async () => {
     await submitWith({ 'Spare Doors': '2', 'Spare Keys': '1' })
     expect(mockOnGenerate).toHaveBeenCalledWith(
@@ -329,6 +363,13 @@ describe('GenerateMazeModal validation', () => {
     await submitWith({ Enemies: '3', Health: '2' })
     expect(mockOnGenerate).toHaveBeenCalledWith(
       expect.objectContaining({ enemyCount: 3, healthCount: 2 }),
+    )
+  })
+
+  it('passes the treasure count through on a valid submit', async () => {
+    await submitWith({ Treasure: '5' })
+    expect(mockOnGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ treasureCount: 5 }),
     )
   })
 
@@ -415,6 +456,7 @@ describe('GenerateMazeModal happy path', () => {
       spareKeys: 0,
       enemyCount: 0,
       healthCount: 0,
+      treasureCount: 0,
     })
   })
 

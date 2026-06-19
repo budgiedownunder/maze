@@ -49,6 +49,7 @@ const generatedDefinition = {
     [' ', ' ', ' ', ' '],
     [' ', ' ', ' ', 'F'],
   ],
+  overrides: [],
 }
 
 const solvePath = [{ row: 0, col: 0 }, { row: 1, col: 0 }, { row: 2, col: 0 }, { row: 2, col: 2 }]
