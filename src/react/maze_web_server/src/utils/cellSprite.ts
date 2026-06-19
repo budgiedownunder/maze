@@ -1,11 +1,12 @@
-import type { CellEntity, EnemyType, HealthStyle, WallType } from '../types/cellEntities'
+import type { CellEntity, EnemyType, HealthStyle, TreasureStyle, WallType } from '../types/cellEntities'
 import type { MazeGameSettings } from './mazeGameSettings'
 
 // Resolves a grid cell (its char + optional per-cell override) to the sprite to draw.
 // Shared by the editor grid and the 2D game so the char-or-override → sprite mapping
-// lives in one place. Enemy/health carry distinct 2D variants (ghost/potion), and the
-// special wall types (water/lava/iron_fence) have their own 2D sprites; key/door rigs
-// and the solid wall textures are a 3D-only concern, so they render their generic sprite.
+// lives in one place. Enemy/health carry distinct 2D variants (ghost/potion), treasure
+// renders per style (silver default + gold/diamonds/jewels), and the special wall types
+// (water/lava/iron_fence) have their own 2D sprites; key/door rigs and the solid wall
+// textures are a 3D-only concern, so they render their generic sprite.
 //
 // A cell with no per-cell visual override falls back to the maze's `game_settings`
 // default (wallType / enemyType / healthStyle), so a maze authored as e.g. all-lava or
@@ -27,6 +28,8 @@ const BASE: Record<string, CellImage> = {
   D: { src: '/images/maze/door.svg', alt: 'Door' },
   E: { src: '/images/maze/enemy.svg', alt: 'Enemy' },
   H: { src: '/images/maze/health.svg', alt: 'Health' },
+  // A bare 'T' is the default Silver treasure; the other styles are variants below.
+  T: { src: '/images/maze/silver.svg', alt: 'Treasure' },
 }
 
 // 2D variant sprites for visual overrides. The default rig (goblin / heart) uses the
@@ -36,6 +39,12 @@ const ENEMY_VARIANT_SPRITES: Partial<Record<EnemyType, string>> = {
 }
 const HEALTH_VARIANT_SPRITES: Partial<Record<HealthStyle, string>> = {
   potion: '/images/maze/potion.svg',
+}
+// Treasure styles: silver is the BASE sprite; the richer styles get their own.
+const TREASURE_VARIANT_SPRITES: Partial<Record<TreasureStyle, string>> = {
+  gold: '/images/maze/gold.svg',
+  diamonds: '/images/maze/diamonds.svg',
+  jewels: '/images/maze/jewels.svg',
 }
 // Only the special (non-occluding) wall types get a 2D sprite; the solid textures
 // (brick/dressed_stone/wood/cobblestone) render the generic wall (texture is a 3D concern).
@@ -73,6 +82,11 @@ export function cellSprite(
   } else if (char === 'W') {
     const wallType = (entity?.type === 'W' ? entity.wallType : undefined) ?? settings?.wallType
     const src = wallType ? WALL_VARIANT_SPRITES[wallType] : undefined
+    if (src) return { src, alt: base.alt }
+  } else if (char === 'T') {
+    // Treasure is generation-only (no maze-default game setting); style is per-cell.
+    const style = entity?.type === 'T' ? entity.style : undefined
+    const src = style ? TREASURE_VARIANT_SPRITES[style] : undefined
     if (src) return { src, alt: base.alt }
   }
   return base

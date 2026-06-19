@@ -52,6 +52,7 @@ pub enum MazeCellTypeWasm {
     Door,
     Enemy,
     Health,
+    Treasure,
 }
 
 /// Identifies the type of a maze cell.
@@ -68,6 +69,7 @@ pub enum MazeCellTypeWasm {
     Door,
     Enemy,
     Health,
+    Treasure,
 }
 
 /// Identifies the maze generation algorithm to use.
@@ -179,6 +181,7 @@ pub fn to_generation_algorithm(alg: GenerationAlgorithmWasm) -> GenerationAlgori
 /// use maze_wasm::wasm_common::{to_cell_type_enum, MazeCellTypeWasm};
 ///
 /// assert!(matches!(to_cell_type_enum('W'), MazeCellTypeWasm::Wall));
+/// assert!(matches!(to_cell_type_enum('T'), MazeCellTypeWasm::Treasure));
 /// assert!(matches!(to_cell_type_enum(' '), MazeCellTypeWasm::Empty));
 /// ```
 pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
@@ -190,6 +193,7 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
         'D' => MazeCellTypeWasm::Door,
         'E' => MazeCellTypeWasm::Enemy,
         'H' => MazeCellTypeWasm::Health,
+        'T' => MazeCellTypeWasm::Treasure,
         _ => MazeCellTypeWasm::Empty,
     }
 }
@@ -246,6 +250,7 @@ mod tests {
     fn to_cell_type_enum_maps_known_chars_and_defaults_to_empty() {
         assert!(matches!(to_cell_type_enum('W'), MazeCellTypeWasm::Wall));
         assert!(matches!(to_cell_type_enum('S'), MazeCellTypeWasm::Start));
+        assert!(matches!(to_cell_type_enum('T'), MazeCellTypeWasm::Treasure));
         assert!(matches!(to_cell_type_enum(' '), MazeCellTypeWasm::Empty));
     }
 

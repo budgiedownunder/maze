@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Jewels treasure">
+  <!-- large chest (from treasure_button) -->
+  <path d="M5 14 V13 C5 8.5 9.5 6 16 6 C22.5 6 27 8.5 27 13 V14 Z" fill="#9c6b3f" stroke="#5e3b22" stroke-width="1.4" stroke-linejoin="round"/>
+  <rect x="5" y="14" width="22" height="12" rx="1.5" fill="#b07a47" stroke="#5e3b22" stroke-width="1.4"/>
+  <rect x="4.6" y="12.9" width="22.8" height="2.8" rx="0.6" fill="#f0c850" stroke="#b8860b" stroke-width="0.6"/>
+  <rect x="14.4" y="6.5" width="3.2" height="19.5" fill="#f0c850" stroke="#b8860b" stroke-width="0.5"/>
+  <rect x="13.8" y="17" width="4.4" height="4.6" rx="0.6" fill="#ffe9a8" stroke="#8a6508" stroke-width="0.9"/>
+  <circle cx="16" cy="19.3" r="0.9" fill="#5e3b22"/>
+  <!-- assorted jewel mound (peak just reaches the lid, 4 levels) -->
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#d62246" stroke="#7a1226" stroke-width="0.6" transform="translate(14.8 8.4)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#1eae54" stroke="#0f6e2f" stroke-width="0.6" transform="translate(17.2 8.4)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#2e6bd6" stroke="#1a3f80" stroke-width="0.6" transform="translate(12.5 10.1)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#9b3fd1" stroke="#5e2080" stroke-width="0.6" transform="translate(16 10.1)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#d62246" stroke="#7a1226" stroke-width="0.6" transform="translate(19.5 10.1)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#1eae54" stroke="#0f6e2f" stroke-width="0.6" transform="translate(10.5 11.8)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#2e6bd6" stroke="#1a3f80" stroke-width="0.6" transform="translate(14 11.8)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#9b3fd1" stroke="#5e2080" stroke-width="0.6" transform="translate(18 11.8)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#d62246" stroke="#7a1226" stroke-width="0.6" transform="translate(21.5 11.8)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#1eae54" stroke="#0f6e2f" stroke-width="0.6" transform="translate(8 13.5)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#2e6bd6" stroke="#1a3f80" stroke-width="0.6" transform="translate(11.5 13.5)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#9b3fd1" stroke="#5e2080" stroke-width="0.6" transform="translate(16 13.5)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#d62246" stroke="#7a1226" stroke-width="0.6" transform="translate(20.5 13.5)"/>
+  <polygon points="0,-2.4 2.1,0 0,2.4 -2.1,0" fill="#1eae54" stroke="#0f6e2f" stroke-width="0.6" transform="translate(24 13.5)"/>
+</svg>

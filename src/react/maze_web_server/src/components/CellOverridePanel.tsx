@@ -32,6 +32,7 @@ const TYPE_LABELS: Record<FeatureChar, string> = {
   K: 'Key',
   D: 'Door',
   W: 'Wall',
+  T: 'Treasure',
 }
 
 // Whether a wall type is one of the special (non-occluding) types — those select

@@ -19,6 +19,9 @@ export type KeyHolderStyle = (typeof KEY_HOLDER_STYLES)[number]
 export const DOOR_STYLES = ['swing', 'slide', 'portcullis', 'dissolve'] as const
 export type DoorStyle = (typeof DOOR_STYLES)[number]
 
+export const TREASURE_STYLES = ['silver', 'gold', 'diamonds', 'jewels'] as const
+export type TreasureStyle = (typeof TREASURE_STYLES)[number]
+
 export const WALL_SOLID_TEXTURES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const
 export const WALL_SPECIAL_TYPES = ['water', 'lava', 'iron_fence'] as const
 export const WALL_TYPES = [...WALL_SOLID_TEXTURES, ...WALL_SPECIAL_TYPES] as const

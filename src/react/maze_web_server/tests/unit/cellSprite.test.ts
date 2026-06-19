@@ -54,6 +54,22 @@ describe('cellSprite', () => {
     expect(cellSprite('W', { type: 'W', wallType: 'brick' })?.src).toBe('/images/maze/wall.png')
     expect(cellSprite('W', { type: 'W', wallType: 'cobblestone' })?.src).toBe('/images/maze/wall.png')
   })
+
+  it('returns the silver sprite for a bare treasure cell (default style)', () => {
+    expect(cellSprite('T')).toEqual({ src: '/images/maze/silver.svg', alt: 'Treasure' })
+    expect(cellSprite('T', { type: 'T' })?.src).toBe('/images/maze/silver.svg')
+    expect(cellSprite('T', { type: 'T', style: 'silver' })?.src).toBe('/images/maze/silver.svg')
+  })
+
+  it('returns the per-style sprite for a treasure override', () => {
+    expect(cellSprite('T', { type: 'T', style: 'gold' })).toEqual({ src: '/images/maze/gold.svg', alt: 'Treasure' })
+    expect(cellSprite('T', { type: 'T', style: 'diamonds' })?.src).toBe('/images/maze/diamonds.svg')
+    expect(cellSprite('T', { type: 'T', style: 'jewels' })?.src).toBe('/images/maze/jewels.svg')
+  })
+
+  it('returns the silver sprite for a treasure override with no style field', () => {
+    expect(cellSprite('T', { type: 'T', value: 250 })?.src).toBe('/images/maze/silver.svg')
+  })
 })
 
 describe('cellSprite with maze game settings', () => {
