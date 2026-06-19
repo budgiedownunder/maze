@@ -92,7 +92,9 @@ namespace Maze.Api
         /// <summary>The player walked onto a health pickup that did not apply (already at max HP). The cell is spared; <see cref="GameEvent.Payload"/> is the reason code (0 = already at max HP).</summary>
         PlayerNotHealed = 4,
         /// <summary>The player walked onto a key and it was auto-collected into the bag. <see cref="GameEvent.Row"/> / <see cref="GameEvent.Column"/> is the consumed key cell; <see cref="GameEvent.Payload"/> is the collected key id.</summary>
-        KeyCollected = 5
+        KeyCollected = 5,
+        /// <summary>The player walked onto treasure and it was auto-collected. <see cref="GameEvent.Row"/> / <see cref="GameEvent.Column"/> is the consumed treasure cell; <see cref="GameEvent.Payload"/> is the score value the treasure awarded.</summary>
+        TreasureCollected = 6
     }
 
     /// <summary>One time-based game event emitted by <see cref="MazeGame.Tick"/>.</summary>
@@ -121,6 +123,18 @@ namespace Maze.Api
     /// <param name="Row">Row of the health-pickup cell.</param>
     /// <param name="Column">Column of the health-pickup cell.</param>
     public readonly record struct HealthPickupInfo(uint Row, uint Column);
+
+    /// <summary>One uncollected treasure cell with its visual style and resolved reward value — see <see cref="MazeGame.Treasures"/>.</summary>
+    /// <param name="Row">Row of the treasure cell.</param>
+    /// <param name="Column">Column of the treasure cell.</param>
+    /// <param name="Style">Visual style (a bare <c>'T'</c> resolves to <see cref="TreasureStyle.Silver"/>).</param>
+    /// <param name="Value">Score awarded when collected (the per-cell override else the style's default value).</param>
+    public readonly record struct TreasureInfo(uint Row, uint Column, TreasureStyle Style, uint Value);
+
+    /// <summary>One entry of the grouped per-style collected-treasure tally — see <see cref="MazeGame.CollectedTreasures"/>.</summary>
+    /// <param name="Style">The treasure style.</param>
+    /// <param name="Count">How many of that style the player has collected this run (always <c>&gt;= 1</c>).</param>
+    public readonly record struct CollectedTreasureInfo(TreasureStyle Style, uint Count);
 
     /// <summary>A cell visited by the player, identified by its zero-based row and column.</summary>
     public record MazeGameVisitedCell(int Row, int Col);
@@ -349,6 +363,49 @@ namespace Maze.Api
                         pickups.Add(new HealthPickupInfo(p.Row, p.Column));
                 }
                 return pickups;
+            }
+        }
+
+        /// <summary>Maps a treasure-style FFI ordinal (0 = silver, 1 = gold, 2 = diamonds, 3 = jewels) to <see cref="TreasureStyle"/>; defaults to Silver for an unknown ordinal.</summary>
+        private static TreasureStyle MapTreasureStyle(int ordinal) => ordinal switch
+        {
+            1 => TreasureStyle.Gold,
+            2 => TreasureStyle.Diamonds,
+            3 => TreasureStyle.Jewels,
+            _ => TreasureStyle.Silver,
+        };
+
+        /// <summary>All uncollected treasure cells with their style + reward value, in row-major order.
+        /// Shrinks as the player walks over treasure (auto-collected on walk-over).</summary>
+        public IReadOnlyList<TreasureInfo> Treasures
+        {
+            get
+            {
+                int count = Interop.MazeGameTreasureCount(_gamePtr);
+                var treasures = new List<TreasureInfo>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetTreasure(_gamePtr, i, out var t))
+                        treasures.Add(new TreasureInfo(t.Row, t.Column, MapTreasureStyle(t.Style), t.Value));
+                }
+                return treasures;
+            }
+        }
+
+        /// <summary>The grouped per-style treasure tally collected so far, ordered by ascending default
+        /// value (Silver, Gold, Jewels, Diamonds); styles never collected are omitted, so every count is at least 1.</summary>
+        public IReadOnlyList<CollectedTreasureInfo> CollectedTreasures
+        {
+            get
+            {
+                int count = Interop.MazeGameCollectedTreasureCount(_gamePtr);
+                var collected = new List<CollectedTreasureInfo>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetCollectedTreasure(_gamePtr, i, out var c))
+                        collected.Add(new CollectedTreasureInfo(MapTreasureStyle(c.Style), c.Count));
+                }
+                return collected;
             }
         }
     }

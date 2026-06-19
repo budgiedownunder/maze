@@ -307,6 +307,10 @@ namespace Maze.Interop
         /// <param name="optionsPtr">Pointer to the generator options</param>
         /// <param name="value">Number of health pickups to place</param>
         public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value);
+        /// <summary>Sets the number of treasure cells to auto-place (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of treasure cells to place</param>
+        public void GeneratorOptionsSetTreasureCount(UIntPtr optionsPtr, UInt32 value);
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
@@ -475,6 +479,26 @@ namespace Maze.Interop
         /// <param name="pickup">Receives the pickup cell on success</param>
         /// <returns>True if the index was valid; false if out of range</returns>
         public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeHealthPickup pickup);
+        /// <summary>Returns the number of uncollected treasure cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected treasure count</returns>
+        public int MazeGameTreasureCount(UIntPtr gamePtr);
+        /// <summary>Retrieves a single uncollected treasure cell by index, with its style + reward value</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the treasure list</param>
+        /// <param name="treasure">Receives the treasure cell + style + value on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTreasure(UIntPtr gamePtr, int index, out MazeTreasure treasure);
+        /// <summary>Returns the number of distinct treasure styles the player has collected (the per-style tally length)</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Collected-treasure style count</returns>
+        public int MazeGameCollectedTreasureCount(UIntPtr gamePtr);
+        /// <summary>Retrieves one entry of the grouped per-style collected-treasure tally by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the collected-treasure tally</param>
+        /// <param name="collected">Receives the style + count on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetCollectedTreasure(UIntPtr gamePtr, int index, out MazeCollectedTreasure collected);
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
         /// </summary>

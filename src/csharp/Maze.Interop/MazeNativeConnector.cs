@@ -63,6 +63,7 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_keys(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_enemy_count(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_health_count(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_treasure_count(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern byte maze_c_maze_generate(IntPtr mazePtr, IntPtr optsPtr);
         [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPUTF8Str)] string json);
         [DllImport("__Internal")] private static extern void   maze_c_free_maze_game(IntPtr ptr);
@@ -90,6 +91,10 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_enemy(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut, out uint damageOut, out float movePeriodMsOut, out int enemyTypeOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_health_pickup_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_health_pickup(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_treasure_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_treasure(IntPtr ptr, int index, out uint rowOut, out uint colOut, out int styleOut, out uint valueOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_collected_treasure_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_collected_treasure(IntPtr ptr, int index, out int styleOut, out uint countOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -374,6 +379,11 @@ namespace Maze.Interop
             maze_c_generator_options_set_health_count((IntPtr)(ulong)optionsPtr, value);
         }
 
+        public void GeneratorOptionsSetTreasureCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_treasure_count((IntPtr)(ulong)optionsPtr, value);
+        }
+
         public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)
         {
             ThrowIfError(maze_c_maze_generate((IntPtr)(ulong)mazePtr, (IntPtr)(ulong)optionsPtr));
@@ -526,6 +536,30 @@ namespace Maze.Interop
         {
             byte result = maze_c_maze_game_get_health_pickup((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
             pickup = new MazeInterop.MazeHealthPickup { Row = row, Column = col, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameTreasureCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_treasure_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetTreasure(UIntPtr gamePtr, int index, out MazeInterop.MazeTreasure treasure)
+        {
+            byte result = maze_c_maze_game_get_treasure((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out int style, out uint value);
+            treasure = new MazeInterop.MazeTreasure { Row = row, Column = col, Style = style, Value = value };
+            return result != 0;
+        }
+
+        public int MazeGameCollectedTreasureCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_collected_treasure_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetCollectedTreasure(UIntPtr gamePtr, int index, out MazeInterop.MazeCollectedTreasure collected)
+        {
+            byte result = maze_c_maze_game_get_collected_treasure((IntPtr)(ulong)gamePtr, index, out int style, out uint count);
+            collected = new MazeInterop.MazeCollectedTreasure { Style = style, Count = count };
             return result != 0;
         }
 

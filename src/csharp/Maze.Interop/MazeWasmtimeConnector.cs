@@ -314,6 +314,7 @@ namespace Maze.Interop
             generatorOptionsSetSpareKeys = ResolveFunction("generator_options_set_spare_keys");
             generatorOptionsSetEnemyCount = ResolveFunction("generator_options_set_enemy_count");
             generatorOptionsSetHealthCount = ResolveFunction("generator_options_set_health_count");
+            generatorOptionsSetTreasureCount = ResolveFunction("generator_options_set_treasure_count");
             mazeGenerate = ResolveFunction("maze_wasm_generate");
             freeGeneratorOptions = ResolveFunction("free_generator_options_wasm");
             newMazeGame = ResolveFunction("new_maze_game_wasm");
@@ -342,6 +343,10 @@ namespace Maze.Interop
             mazeGameGetEnemy = ResolveFunction("maze_game_wasm_get_enemy");
             mazeGameHealthPickupCount = ResolveFunction("maze_game_wasm_health_pickup_count");
             mazeGameGetHealthPickup = ResolveFunction("maze_game_wasm_get_health_pickup");
+            mazeGameTreasureCount = ResolveFunction("maze_game_wasm_treasure_count");
+            mazeGameGetTreasure = ResolveFunction("maze_game_wasm_get_treasure");
+            mazeGameCollectedTreasureCount = ResolveFunction("maze_game_wasm_collected_treasure_count");
+            mazeGameGetCollectedTreasure = ResolveFunction("maze_game_wasm_get_collected_treasure");
             mazeGameVisitedCellCount = ResolveFunction("maze_game_wasm_visited_cell_count");
             mazeGameGetVisitedCell = ResolveFunction("maze_game_wasm_get_visited_cell");
         }

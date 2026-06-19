@@ -117,6 +117,7 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? generatorOptionsSetSpareKeys;
         protected IWebAssemblyFunction? generatorOptionsSetEnemyCount;
         protected IWebAssemblyFunction? generatorOptionsSetHealthCount;
+        protected IWebAssemblyFunction? generatorOptionsSetTreasureCount;
         protected IWebAssemblyFunction? mazeGenerate;
         protected IWebAssemblyFunction? freeGeneratorOptions;
         protected IWebAssemblyFunction? newMazeGame;
@@ -145,6 +146,10 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeGameGetEnemy;
         protected IWebAssemblyFunction? mazeGameHealthPickupCount;
         protected IWebAssemblyFunction? mazeGameGetHealthPickup;
+        protected IWebAssemblyFunction? mazeGameTreasureCount;
+        protected IWebAssemblyFunction? mazeGameGetTreasure;
+        protected IWebAssemblyFunction? mazeGameCollectedTreasureCount;
+        protected IWebAssemblyFunction? mazeGameGetCollectedTreasure;
         protected IWebAssemblyFunction? mazeGameVisitedCellCount;
         protected IWebAssemblyFunction? mazeGameGetVisitedCell;
         /// <summary>
@@ -723,6 +728,13 @@ namespace Maze.Interop
         {
             generatorOptionsSetHealthCount?.Invoke((long)(uint)optionsPtr, value);
         }
+        /// <summary>Sets the treasure_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of treasure cells to auto-place (0 = none)</param>
+        public void GeneratorOptionsSetTreasureCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetTreasureCount?.Invoke((long)(uint)optionsPtr, value);
+        }
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
@@ -1135,6 +1147,68 @@ namespace Maze.Interop
             FreeSizedMemory(rowOutPtr);
             FreeSizedMemory(colOutPtr);
             FreeSizedMemory(idOutPtr);
+            return result == 0;
+        }
+        /// <summary>Returns the number of uncollected treasure cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected treasure count</returns>
+        public int MazeGameTreasureCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameTreasureCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>Retrieves a single uncollected treasure cell + style + value by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the treasure list</param>
+        /// <param name="treasure">Receives the treasure cell + style + value on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTreasure(UIntPtr gamePtr, int index, out MazeInterop.MazeTreasure treasure)
+        {
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            UInt32 styleOutPtr = AllocateSizedMemory(4);
+            UInt32 valueOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetTreasure?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4),
+                (long)(uint)(styleOutPtr + 4),
+                (long)(uint)(valueOutPtr + 4)) ?? -1);
+            treasure.Row = memory.ReadUInt32(rowOutPtr + 4);
+            treasure.Column = memory.ReadUInt32(colOutPtr + 4);
+            // style is a signed i32; the memory abstraction only reads raw u32, so reinterpret.
+            treasure.Style = (int)memory.ReadUInt32(styleOutPtr + 4);
+            treasure.Value = memory.ReadUInt32(valueOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            FreeSizedMemory(styleOutPtr);
+            FreeSizedMemory(valueOutPtr);
+            return result == 0;
+        }
+        /// <summary>Returns the number of distinct treasure styles the player has collected (the per-style tally length)</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Collected-treasure style count</returns>
+        public int MazeGameCollectedTreasureCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameCollectedTreasureCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>Retrieves one entry of the grouped per-style collected-treasure tally by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the collected-treasure tally</param>
+        /// <param name="collected">Receives the style + count on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetCollectedTreasure(UIntPtr gamePtr, int index, out MazeInterop.MazeCollectedTreasure collected)
+        {
+            UInt32 styleOutPtr = AllocateSizedMemory(4);
+            UInt32 countOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetCollectedTreasure?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(styleOutPtr + 4),
+                (long)(uint)(countOutPtr + 4)) ?? -1);
+            // style is a signed i32; the memory abstraction only reads raw u32, so reinterpret.
+            collected.Style = (int)memory.ReadUInt32(styleOutPtr + 4);
+            collected.Count = memory.ReadUInt32(countOutPtr + 4);
+            FreeSizedMemory(styleOutPtr);
+            FreeSizedMemory(countOutPtr);
             return result == 0;
         }
         /// <summary>

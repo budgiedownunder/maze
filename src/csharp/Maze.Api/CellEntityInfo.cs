@@ -34,6 +34,23 @@ namespace Maze.Api
         [JsonStringEnumMemberName("floating_key")] FloatingKey,
     }
 
+    /// <summary>
+    /// Visual style for a treasure (<c>'T'</c>) cell. Also drives the cell's default score
+    /// value (Silver lowest, Diamonds highest). A bare <c>'T'</c> defaults to <see cref="Silver"/>.
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<TreasureStyle>))]
+    public enum TreasureStyle
+    {
+        /// <summary>Silver treasure — the default style and lowest value.</summary>
+        [JsonStringEnumMemberName("silver")] Silver,
+        /// <summary>Gold treasure.</summary>
+        [JsonStringEnumMemberName("gold")] Gold,
+        /// <summary>Diamonds treasure — the highest value.</summary>
+        [JsonStringEnumMemberName("diamonds")] Diamonds,
+        /// <summary>Jewels treasure.</summary>
+        [JsonStringEnumMemberName("jewels")] Jewels,
+    }
+
     /// <summary>Open-animation rig for a door (<c>'D'</c>) cell. Renderer-only.</summary>
     [JsonConverter(typeof(JsonStringEnumConverter<DoorStyle>))]
     public enum DoorStyle
@@ -92,6 +109,7 @@ namespace Maze.Api
     [JsonDerivedType(typeof(KeyCellEntity), "K")]
     [JsonDerivedType(typeof(DoorCellEntity), "D")]
     [JsonDerivedType(typeof(WallCellEntity), "W")]
+    [JsonDerivedType(typeof(TreasureCellEntity), "T")]
     public abstract class CellEntityInfo
     {
     }
@@ -135,5 +153,14 @@ namespace Maze.Api
     {
         /// <summary>Wall visual type.</summary>
         [JsonPropertyName("wallType")] public WallType? WallType { get; set; }
+    }
+
+    /// <summary>Per-cell override for a treasure (<c>'T'</c>) cell.</summary>
+    public sealed class TreasureCellEntity : CellEntityInfo
+    {
+        /// <summary>Treasure visual style. A bare <c>'T'</c> (no style) renders as <see cref="TreasureStyle.Silver"/>.</summary>
+        [JsonPropertyName("style")] public TreasureStyle? Style { get; set; }
+        /// <summary>Score awarded when collected. When <c>null</c>, the style's default value applies.</summary>
+        [JsonPropertyName("value")] public uint? Value { get; set; }
     }
 }

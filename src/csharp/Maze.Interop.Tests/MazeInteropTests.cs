@@ -1142,6 +1142,31 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetTreasureCount"/>
+        /// produces a grid containing the requested `'T'` cell count.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithTreasure_PlacesItInTheProducedGrid()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 321);
+            try
+            {
+                interop.GeneratorOptionsSetTreasureCount(optionsPtr, 4);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                string json = interop.MazeToJson(mazePtr);
+                int tCount = json.Split('T').Length - 1;
+                Assert.Equal(4, tCount);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
         /// Confirms that the generator's key + door cap (mirrored at the
         /// <c>Maze.MaxTotalFeatures</c> layer) surfaces as a thrown exception
         /// when the request would exceed it.
@@ -1562,6 +1587,41 @@ namespace Maze.Interop.Tests
                 Assert.Equal(1, interop.MazeGameHealthPickupCount(gamePtr));
                 Assert.True(interop.MazeGameGetHealthPickup(gamePtr, 0, out MazeHealthPickup pickup));
                 Assert.Equal((0u, 2u), (pickup.Row, pickup.Column));
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms uncollected treasure (style + value) surfaces through <c>MazeGameGetTreasure</c>,
+        /// and that walking onto treasure grows the grouped per-style collected tally read via
+        /// <c>MazeGameGetCollectedTreasure</c> through the interop layer.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Treasure_SurfacesAndCollectsThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            // ['S','T','F']: a bare Silver treasure (style ordinal 0, default value 50).
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","T","F"]]}""");
+            try
+            {
+                Assert.Equal(1, interop.MazeGameTreasureCount(gamePtr));
+                Assert.True(interop.MazeGameGetTreasure(gamePtr, 0, out MazeTreasure treasure));
+                Assert.Equal((0u, 1u), (treasure.Row, treasure.Column));
+                Assert.Equal(0, treasure.Style); // 0 = silver
+                Assert.Equal(50u, treasure.Value);
+                Assert.Equal(0, interop.MazeGameCollectedTreasureCount(gamePtr));
+
+                interop.MazeGameMovePlayer(gamePtr, 4); // Right → onto T, auto-collected
+                interop.MazeGameTick(gamePtr, 0f);      // flush the TreasureCollected event
+
+                Assert.Equal(0, interop.MazeGameTreasureCount(gamePtr));
+                Assert.Equal(1, interop.MazeGameCollectedTreasureCount(gamePtr));
+                Assert.True(interop.MazeGameGetCollectedTreasure(gamePtr, 0, out MazeCollectedTreasure collected));
+                Assert.Equal(0, collected.Style); // silver
+                Assert.Equal(1u, collected.Count);
             }
             finally
             {

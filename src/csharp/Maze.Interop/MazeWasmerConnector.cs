@@ -950,6 +950,7 @@ hasResult)
                 { "generator_options_set_spare_keys", () => ref this.generatorOptionsSetSpareKeys },
                 { "generator_options_set_enemy_count", () => ref this.generatorOptionsSetEnemyCount },
                 { "generator_options_set_health_count", () => ref this.generatorOptionsSetHealthCount },
+                { "generator_options_set_treasure_count", () => ref this.generatorOptionsSetTreasureCount },
                 { "maze_wasm_generate", () => ref this.mazeGenerate },
                 { "free_generator_options_wasm", () => ref this.freeGeneratorOptions },
                 { "new_maze_game_wasm",              () => ref this.newMazeGame },
@@ -978,6 +979,10 @@ hasResult)
                 { "maze_game_wasm_get_enemy",        () => ref this.mazeGameGetEnemy },
                 { "maze_game_wasm_health_pickup_count", () => ref this.mazeGameHealthPickupCount },
                 { "maze_game_wasm_get_health_pickup", () => ref this.mazeGameGetHealthPickup },
+                { "maze_game_wasm_treasure_count",   () => ref this.mazeGameTreasureCount },
+                { "maze_game_wasm_get_treasure",     () => ref this.mazeGameGetTreasure },
+                { "maze_game_wasm_collected_treasure_count", () => ref this.mazeGameCollectedTreasureCount },
+                { "maze_game_wasm_get_collected_treasure", () => ref this.mazeGameGetCollectedTreasure },
                 { "maze_game_wasm_visited_cell_count", () => ref this.mazeGameVisitedCellCount },
                 { "maze_game_wasm_get_visited_cell", () => ref this.mazeGameGetVisitedCell }
             };

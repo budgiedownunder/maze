@@ -69,6 +69,10 @@ namespace Maze.Api
             /// A cell containing a health pickup that restores HP when walked over
             /// </summary>
             Health = 7,
+            /// <summary>
+            /// A cell containing collectible treasure that is auto-collected when walked over
+            /// </summary>
+            Treasure = 8,
         }
 
         /// <summary>
@@ -157,6 +161,12 @@ namespace Maze.Api
             /// <see cref="MaxHealthCount"/> and to the eligible-cell count.
             /// </summary>
             public UInt32? HealthCount { get; set; }
+            /// <summary>
+            /// Number of treasure cells to auto-place (dead-end cells first, then
+            /// other passable cells). When null, defaults to 0. Clamped by the
+            /// generator to <see cref="MaxTreasureCount"/> and to the eligible-cell count.
+            /// </summary>
+            public UInt32? TreasureCount { get; set; }
         }
         /// <summary>
         /// Maximum combined count of key and door cells any maze may carry.
@@ -187,6 +197,13 @@ namespace Maze.Api
         /// rejects above-cap requests up front.
         /// </summary>
         public const UInt32 MaxHealthCount = 8;
+        /// <summary>
+        /// Maximum value accepted by <see cref="GenerationOptions.TreasureCount"/>.
+        /// Mirrors <c>maze::MAX_TREASURE_COUNT</c> on the Rust side; the generator
+        /// clamps requests to this internally and per-field UI validation
+        /// rejects above-cap requests up front.
+        /// </summary>
+        public const UInt32 MaxTreasureCount = 12;
         /// <summary>
         /// Returns <c>true</c> when a Generate request's planned key + door cell
         /// count would exceed <see cref="MaxTotalFeatures"/>. Each real door
@@ -286,6 +303,8 @@ namespace Maze.Api
                         Interop.GeneratorOptionsSetEnemyCount(optionsPtr, options.EnemyCount.Value);
                     if (options.HealthCount.HasValue)
                         Interop.GeneratorOptionsSetHealthCount(optionsPtr, options.HealthCount.Value);
+                    if (options.TreasureCount.HasValue)
+                        Interop.GeneratorOptionsSetTreasureCount(optionsPtr, options.TreasureCount.Value);
                     Interop.MazeGenerate(maze._mazePtr, optionsPtr);
                 }
                 finally
