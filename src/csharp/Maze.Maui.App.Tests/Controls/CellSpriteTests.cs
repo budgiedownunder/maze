@@ -39,6 +39,19 @@ namespace Maze.Maui.App.Tests.Controls
         public void Wall_variant(WallType type, string? expected) =>
             Assert.Equal(expected, CellSprite.VariantImageName(new WallCellEntity { WallType = type }));
 
+        [Theory]
+        [InlineData(TreasureStyle.Gold, "gold_in_trunk.png")]
+        [InlineData(TreasureStyle.Diamonds, "diamonds_in_trunk.png")]
+        [InlineData(TreasureStyle.Jewels, "jewels_in_trunk.png")]
+        [InlineData(TreasureStyle.Silver, null)] // Silver is the default chest sprite (hardcoded base)
+        public void Treasure_variant(TreasureStyle style, string? expected) =>
+            Assert.Equal(expected, CellSprite.VariantImageName(new TreasureCellEntity { Style = style }));
+
+        [Fact]
+        public void Value_only_treasure_override_has_no_variant() =>
+            // A value-only override (no style) is the Silver baseline — base sprite, badge marks it.
+            Assert.Null(CellSprite.VariantImageName(new TreasureCellEntity { Value = 99 }));
+
         [Fact]
         public void Numeric_only_enemy_override_has_no_variant() =>
             // An override with only a damage value (no rig change) keeps the base sprite;

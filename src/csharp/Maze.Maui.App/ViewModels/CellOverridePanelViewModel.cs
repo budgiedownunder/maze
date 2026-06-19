@@ -55,6 +55,7 @@ namespace Maze.Maui.App.ViewModels
         [NotifyPropertyChangedFor(nameof(Title))]
         [NotifyPropertyChangedFor(nameof(IsEnemy))]
         [NotifyPropertyChangedFor(nameof(IsHealth))]
+        [NotifyPropertyChangedFor(nameof(IsTreasure))]
         [NotifyPropertyChangedFor(nameof(IsKey))]
         [NotifyPropertyChangedFor(nameof(IsDoor))]
         [NotifyPropertyChangedFor(nameof(IsWall))]
@@ -105,6 +106,19 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private string healAmountText = "";
 
+        // ── Treasure ──
+        // Treasure has no maze default; Silver is the implicit baseline (a bare 'T'),
+        // so the style picker offers the four styles directly (no "Default" option) and
+        // selecting Silver writes no style override — mirroring the web editor.
+        /// <summary>Treasure visual style (Silver is the baseline / bare 'T').</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(TreasureStyleIndex))]
+        [NotifyPropertyChangedFor(nameof(TreasurePreviewImage))]
+        private TreasureStyle treasureStyleValue = TreasureStyle.Silver;
+        /// <summary>Treasure value override (numeric text; blank = the style default).</summary>
+        [ObservableProperty]
+        private string treasureValueText = "";
+
         // ── Key ──
         /// <summary>Key-holder rig override, or null to inherit.</summary>
         [ObservableProperty]
@@ -154,6 +168,8 @@ namespace Maze.Maui.App.ViewModels
         public bool IsEnemy => CellType == CellType.Enemy;
         /// <summary>Whether the selected cell is a health cell.</summary>
         public bool IsHealth => CellType == CellType.Health;
+        /// <summary>Whether the selected cell is a treasure cell.</summary>
+        public bool IsTreasure => CellType == CellType.Treasure;
         /// <summary>Whether the selected cell is a key cell.</summary>
         public bool IsKey => CellType == CellType.Key;
         /// <summary>Whether the selected cell is a door cell.</summary>
@@ -183,6 +199,12 @@ namespace Maze.Maui.App.ViewModels
             CellSprite.PreviewImageName(CellType.Health,
                 HealthStyleValue is null ? null : new HealthCellEntity { HealthStyle = HealthStyleValue },
                 editor.GameSettings, "health.png");
+        /// <summary>Sprite previewing the selected treasure style (Silver falls back to the
+        /// default chest sprite; the richer styles have their own).</summary>
+        public string TreasurePreviewImage =>
+            CellSprite.PreviewImageName(CellType.Treasure,
+                new TreasureCellEntity { Style = TreasureStyleValue },
+                editor.GameSettings, "silver_in_trunk.png");
         /// <summary>Sprite previewing the selected wall type, or the maze default (e.g. lava)
         /// when "Default" inherits it.</summary>
         public string WallPreviewImage =>
@@ -215,6 +237,15 @@ namespace Maze.Maui.App.ViewModels
         {
             get => HealthStyleValue is null ? 0 : (int)HealthStyleValue.Value + 1;
             set => HealthStyleValue = value <= 0 ? null : (HealthStyle)(value - 1);
+        }
+
+        /// <summary>Treasure style picker options (no "Default" — Silver is the baseline).</summary>
+        public IReadOnlyList<string> TreasureStyleOptions { get; } = new[] { "Silver", "Gold", "Diamonds", "Jewels" };
+        /// <summary>Selected index of the treasure style picker (maps directly to <see cref="TreasureStyle"/>).</summary>
+        public int TreasureStyleIndex
+        {
+            get => (int)TreasureStyleValue;
+            set => TreasureStyleValue = value >= 0 && value <= (int)TreasureStyle.Jewels ? (TreasureStyle)value : TreasureStyle.Silver;
         }
 
         /// <summary>Key-holder picker options.</summary>
@@ -275,6 +306,8 @@ namespace Maze.Maui.App.ViewModels
         partial void OnMovePeriodMsTextChanged(string value) => ApplyCurrent();
         partial void OnHealthStyleValueChanged(HealthStyle? value) => ApplyCurrent();
         partial void OnHealAmountTextChanged(string value) => ApplyCurrent();
+        partial void OnTreasureStyleValueChanged(TreasureStyle value) => ApplyCurrent();
+        partial void OnTreasureValueTextChanged(string value) => ApplyCurrent();
         partial void OnKeyHolderValueChanged(KeyHolderStyle? value) => ApplyCurrent();
         partial void OnDoorStyleValueChanged(DoorStyle? value) => ApplyCurrent();
         partial void OnWallTypeKindChanged(WallKind value)
@@ -329,6 +362,8 @@ namespace Maze.Maui.App.ViewModels
             MovePeriodMsText = "";
             HealthStyleValue = null;
             HealAmountText = "";
+            TreasureStyleValue = TreasureStyle.Silver;
+            TreasureValueText = "";
             KeyHolderValue = null;
             DoorStyleValue = null;
             WallTypeKind = WallKind.Default;
@@ -345,6 +380,10 @@ namespace Maze.Maui.App.ViewModels
                 case HealthCellEntity h:
                     HealthStyleValue = h.HealthStyle;
                     HealAmountText = h.HealAmount?.ToString() ?? "";
+                    break;
+                case TreasureCellEntity t:
+                    TreasureStyleValue = t.Style ?? TreasureStyle.Silver;
+                    TreasureValueText = t.Value?.ToString() ?? "";
                     break;
                 case KeyCellEntity k:
                     KeyHolderValue = k.KeyHolder;
@@ -380,6 +419,8 @@ namespace Maze.Maui.App.ViewModels
             MovePeriodMsText = "";
             HealthStyleValue = null;
             HealAmountText = "";
+            TreasureStyleValue = TreasureStyle.Silver;
+            TreasureValueText = "";
             KeyHolderValue = null;
             DoorStyleValue = null;
             WallTypeKind = WallKind.Default;
@@ -447,6 +488,12 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Steps the heal-amount override down by one.</summary>
         [RelayCommand]
         private void DecrementHealAmount() => HealAmountText = StepInt(HealAmountText, -1);
+        /// <summary>Steps the treasure value override up by one.</summary>
+        [RelayCommand]
+        private void IncrementTreasureValue() => TreasureValueText = StepInt(TreasureValueText, 1);
+        /// <summary>Steps the treasure value override down by one.</summary>
+        [RelayCommand]
+        private void DecrementTreasureValue() => TreasureValueText = StepInt(TreasureValueText, -1);
 
         // A blank field steps up to 1 and stays blank on a step-down; a value steps by
         // `delta`, clamped at 0. Assigning the text live-applies via its change handler.
@@ -513,6 +560,15 @@ namespace Maze.Maui.App.ViewModels
                         HealAmount = ParseNonNegInt(HealAmountText)
                     };
                     return health.HealthStyle is null && health.HealAmount is null ? null : health;
+                case CellType.Treasure:
+                    // Silver is the bare-'T' baseline, so it writes no style override;
+                    // only a richer style or an explicit value produces an entity.
+                    TreasureCellEntity treasure = new()
+                    {
+                        Style = TreasureStyleValue == TreasureStyle.Silver ? null : TreasureStyleValue,
+                        Value = ParseNonNegInt(TreasureValueText)
+                    };
+                    return treasure.Style is null && treasure.Value is null ? null : treasure;
                 case CellType.Key:
                     return KeyHolderValue is null ? null : new KeyCellEntity { KeyHolder = KeyHolderValue };
                 case CellType.Door:
@@ -568,12 +624,13 @@ namespace Maze.Maui.App.ViewModels
         }
 
         private static bool IsOverridable(CellType type) =>
-            type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health;
+            type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health or CellType.Treasure;
 
         private static string TypeLabel(CellType type) => type switch
         {
             CellType.Enemy => "Enemy",
             CellType.Health => "Health",
+            CellType.Treasure => "Treasure",
             CellType.Key => "Key",
             CellType.Door => "Door",
             CellType.Wall => "Wall",

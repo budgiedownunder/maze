@@ -87,6 +87,7 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeSetDoorCells;
         protected IWebAssemblyFunction? mazeSetEnemyCells;
         protected IWebAssemblyFunction? mazeSetHealthCells;
+        protected IWebAssemblyFunction? mazeSetTreasureCells;
         protected IWebAssemblyFunction? mazeClearCells;
         protected IWebAssemblyFunction? mazeInsertRows;
         protected IWebAssemblyFunction? mazeDeleteRows;
@@ -334,6 +335,13 @@ namespace Maze.Interop
         public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             UInt32 errorPtr = (UInt32)(Int32)(mazeSetHealthCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to treasure</summary>
+        public void MazeSetTreasureCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetTreasureCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
             if (errorPtr != 0)
                 TidyAndThrowError(errorPtr);
         }

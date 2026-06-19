@@ -284,6 +284,7 @@ namespace Maze.Interop
             mazeSetDoorCells = ResolveFunction("maze_wasm_set_door_cells");
             mazeSetEnemyCells = ResolveFunction("maze_wasm_set_enemy_cells");
             mazeSetHealthCells = ResolveFunction("maze_wasm_set_health_cells");
+            mazeSetTreasureCells = ResolveFunction("maze_wasm_set_treasure_cells");
             mazeClearCells = ResolveFunction("maze_wasm_clear_cells");
             mazeInsertRows = ResolveFunction("maze_wasm_insert_rows");
             mazeDeleteRows = ResolveFunction("maze_wasm_delete_rows");

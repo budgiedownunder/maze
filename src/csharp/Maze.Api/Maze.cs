@@ -537,6 +537,18 @@ namespace Maze.Api
             Interop.MazeSetHealthCells(_mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
+        /// Sets a range of cells to treasure within a maze, or will throw
+        /// an exception if the cells cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetTreasureCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetTreasureCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
         /// Inserts rows into the maze, or will throw an exception if the rows cannot be inserted
         /// </summary>
         /// <param name="startRow">Target start row</param>

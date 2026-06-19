@@ -638,6 +638,14 @@ namespace Maze.Interop
             connector.MazeSetHealthCells(mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
+        /// Sets a range of cells in a maze to treasure, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetTreasureCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetTreasureCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception
         /// if the cells cannot be cleared
         /// </summary>

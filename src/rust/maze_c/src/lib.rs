@@ -463,6 +463,7 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
         'D' => 5,
         'E' => 6,
         'H' => 7,
+        'T' => 8,
         _ => 0,
     };
     if !out_cell_type.is_null() {
@@ -883,6 +884,40 @@ pub extern "C" fn maze_c_maze_set_health_cells(
 ) -> u8 {
     clear_last_error();
     set_cell_range(ptr, start_row, start_col, end_row, end_col, 'H')
+}
+
+/// Sets a rectangular range of cells to treasure (`'T'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 2) as treasure, and assert its
+/// cell type is Treasure (8).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_treasure_cells(ptr, 1, 2, 1, 2);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 2, &mut ct) };
+/// assert_eq!(ct, 8, "expected Treasure at (1, 2)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_treasure_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'T')
 }
 
 /// Clears (empties) a rectangular range of cells. Returns `1` on success, `0` on error.
@@ -3847,6 +3882,28 @@ mod tests {
                     if inside { 7 } else { 0 },
                     "expected {} at ({r},{c})",
                     if inside { "Health" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_treasure_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_treasure_cells(ptr, 0, 4, 2, 4);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (0..=2).contains(&r) && c == 4;
+                assert_eq!(
+                    ct,
+                    if inside { 8 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Treasure" } else { "Empty" },
                 );
             }
         }

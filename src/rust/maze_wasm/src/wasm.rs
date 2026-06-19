@@ -278,6 +278,24 @@ pub extern "C" fn maze_wasm_set_health_cells(
     set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'H')
 }
 
+/// Sets cells to treasure (`'T'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'T'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_treasure_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'T')
+}
+
 /// Sets cells values in a `MazeWasm` to empty
 ///
 /// # Returns

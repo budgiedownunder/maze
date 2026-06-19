@@ -53,6 +53,9 @@
                 <ImageButton x:Name="SetHealthBtn" IsVisible="{Binding CanSetHealth}" Command="{Binding SetHealthCommand}" Source="health_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
+                <ImageButton x:Name="SetTreasureBtn" IsVisible="{Binding CanSetTreasure}" Command="{Binding SetTreasureCommand}" Source="treasure_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
                 <ImageButton x:Name="ClearBtn" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" Source="clear_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
@@ -130,7 +133,7 @@
                    FontSize="12"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                   Text="[W] Wall    [S] Start    [F] Finish    [K] Key    [D] Door    [E] Enemy    [H] Health    [DEL] Clear    [&#8592;&#8593;&#8594;&#8595;] Move    [Shift] Range" />
+                   Text="[W] Wall    [S] Start    [F] Finish    [K] Key    [D] Door    [E] Enemy    [H] Health    [T] Treasure    [DEL] Clear    [&#8592;&#8593;&#8594;&#8595;] Move    [Shift] Range" />
 
             <!-- Inline per-cell override panel — below the grid; the Auto row collapses when hidden -->
             <!-- Width set responsively in code-behind (fills up to a max), always left-aligned -->

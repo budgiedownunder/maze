@@ -51,6 +51,21 @@
                 </Grid>
             </VerticalStackLayout>
 
+            <!-- Treasure -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsTreasure}">
+                <Label Text="Style" />
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="{Binding TreasurePreviewImage}" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" />
+                    <Picker ItemsSource="{Binding TreasureStyleOptions}" SelectedIndex="{Binding TreasureStyleIndex}" WidthRequest="180" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Label Text="Value" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                    <Button Grid.Column="0" Text="&#8722;" Command="{Binding DecrementTreasureValueCommand}" WidthRequest="40" Padding="0" />
+                    <Entry Grid.Column="1" Text="{Binding TreasureValueText}" Placeholder="Default" Keyboard="Numeric" />
+                    <Button Grid.Column="2" Text="+" Command="{Binding IncrementTreasureValueCommand}" WidthRequest="40" Padding="0" />
+                </Grid>
+            </VerticalStackLayout>
+
             <!-- Key -->
             <VerticalStackLayout Spacing="6" IsVisible="{Binding IsKey}">
                 <Label Text="Holder" />

@@ -90,6 +90,11 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Event handler</returns>
         public event EventHandler? SetHealthRequested;
         /// <summary>
+        /// Represents a set treasure cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetTreasureRequested;
+        /// <summary>
         /// Represents a clear cells requested event handler
         /// </summary>
         /// <returns>Event handler</returns>
@@ -226,6 +231,12 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Boolean value</returns>
         [ObservableProperty]
         protected bool canSetHealth = false;
+        /// <summary>
+        /// Indicates whether treasure cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetTreasure = false;
         /// <summary>
         /// Indicates whether the currently selected cells can be cleared
         /// </summary>
@@ -420,6 +431,16 @@ namespace Maze.Maui.App.ViewModels
         private async Task SetHealthAsync()
         {
             await RunRequest(SetHealthRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
+        /// Set treasure cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetTreasureAsync()
+        {
+            await RunRequest(SetTreasureRequested);
             UpdateCanSaveRefresh(true);
         }
         /// <summary>

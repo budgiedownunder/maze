@@ -204,7 +204,7 @@ namespace Maze.Maui.App
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
             bool containsKey = false, containsDoor = false;
-            bool containsEnemy = false, containsHealth = false;
+            bool containsEnemy = false, containsHealth = false, containsTreasure = false;
             int numWalls = 0;
             if (currentSelection is not null)
             {
@@ -239,6 +239,9 @@ namespace Maze.Maui.App
                             case CellType.Health:
                                 containsHealth = true;
                                 break;
+                            case CellType.Treasure:
+                                containsTreasure = true;
+                                break;
                         }
                     }
                 }
@@ -253,6 +256,7 @@ namespace Maze.Maui.App
                 ContainsDoor = containsDoor,
                 ContainsEnemy = containsEnemy,
                 ContainsHealth = containsHealth,
+                ContainsTreasure = containsTreasure,
                 IsAllWalls = containsWall && numWalls == cellCount
             };
         }
@@ -758,6 +762,7 @@ namespace Maze.Maui.App
                 case CellType.Door:
                 case CellType.Enemy:
                 case CellType.Health:
+                case CellType.Treasure:
                     SetSelectionContentToType(cellType);
                     break;
             }
@@ -911,7 +916,7 @@ namespace Maze.Maui.App
         /// <param name="type">Cell type</param>
         /// <returns>True for overridable cell types</returns>
         private static bool IsOverridableType(CellType type) =>
-            type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health;
+            type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health or CellType.Treasure;
         /// <summary>
         /// Converts the maze grid content to a `Maze` object
         /// </summary>
@@ -933,6 +938,7 @@ namespace Maze.Maui.App
                         case CellType.Door: maze.SetDoorCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                         case CellType.Enemy: maze.SetEnemyCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                         case CellType.Health: maze.SetHealthCells((uint)row, (uint)column, (uint)row, (uint)column); break;
+                        case CellType.Treasure: maze.SetTreasureCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                     }
                 }
             }
@@ -1493,6 +1499,11 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool ContainsHealth { get; set; } = false;
         /// <summary>
+        /// Indicates whether the selection contains a treasure cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ContainsTreasure { get; set; } = false;
+        /// <summary>
         /// Indicates whether the selection is a single cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1513,13 +1524,13 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsFinish { get => IsSingleCell && ContainsFinish; }
         /// <summary>
-        /// Indicates whether the selection contains all empty cells. K, D, E
-        /// and H cells count as non-empty so that the Clear button enables on a
+        /// Indicates whether the selection contains all empty cells. K, D, E,
+        /// H and T cells count as non-empty so that the Clear button enables on a
         /// selection that contains them — mirrors the React editor's
         /// <c>selectionStatus.isEmpty</c> rule.
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor && !ContainsEnemy && !ContainsHealth; }
+        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor && !ContainsEnemy && !ContainsHealth && !ContainsTreasure; }
         /// <summary>
         /// Constructor
         /// </summary>
@@ -1679,6 +1690,11 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsHealth { get => CellType == CellType.Health; }
         /// <summary>
+        /// Indicates whether the cell is a treasure cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool IsTreasure { get => CellType == CellType.Treasure; }
+        /// <summary>
         /// Indicates whether the cell is a start or finish cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1705,6 +1721,7 @@ namespace Maze.Maui.App
                 case CellType.Door:
                 case CellType.Enemy:
                 case CellType.Health:
+                case CellType.Treasure:
                     Content = BuildIconContent();
                     break;
                 case CellType.Empty:
@@ -1784,6 +1801,10 @@ namespace Maze.Maui.App
                     return "enemy.png";
                 case CellType.Health:
                     return "health.png";
+                case CellType.Treasure:
+                    // Silver is the default treasure sprite; the richer styles are
+                    // variants resolved above via CellSprite.VariantImageName.
+                    return "silver_in_trunk.png";
             }
             return "";
         }
@@ -1929,7 +1950,7 @@ namespace Maze.Maui.App
             // ship with transparent corners specifically so the highlight
             // is visible here.) Enemy and health cells are passable, so the
             // solution path can cross them and they highlight like any passage.
-            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor || IsEnemy || IsHealth)
+            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor || IsEnemy || IsHealth || IsTreasure)
             {
                 solutionPathDirection = pathDirection;
 

@@ -154,6 +154,7 @@ namespace Maze.Maui.App.Views
             _viewModel.SetDoorRequested += (s, e) => { ChangeSelectionToDoor(); };
             _viewModel.SetEnemyRequested += (s, e) => { ChangeSelectionToEnemy(); };
             _viewModel.SetHealthRequested += (s, e) => { ChangeSelectionToHealth(); };
+            _viewModel.SetTreasureRequested += (s, e) => { ChangeSelectionToTreasure(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.WalkSolutionRequested += async (s, e) => { await WalkSolution(); };
@@ -363,6 +364,10 @@ namespace Maze.Maui.App.Views
                     if (_viewModel.CanSetHealth)
                         _viewModel.SetHealthCommand.Execute(null);
                     break;
+                case Controls.Keyboard.Key.T:
+                    if (_viewModel.CanSetTreasure)
+                        _viewModel.SetTreasureCommand.Execute(null);
+                    break;
                 case Controls.Keyboard.Key.Delete:
                     if (_viewModel.CanClear)
                         _viewModel.ClearCommand.Execute(null);
@@ -420,6 +425,13 @@ namespace Maze.Maui.App.Views
         private void ChangeSelectionToHealth()
         {
             ChangeSelectedCellsContent(Maze.CellType.Health);
+        }
+        /// <summary>
+        /// Changes the selected cells to treasure cells
+        /// </summary>
+        private void ChangeSelectionToTreasure()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Treasure);
         }
         /// <summary>
         /// Clears the selected cell(s) content
@@ -763,6 +775,7 @@ namespace Maze.Maui.App.Views
             _viewModel.CanSetDoor = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetEnemy = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetHealth = !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetTreasure = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>

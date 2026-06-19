@@ -40,6 +40,7 @@ namespace Maze.Api
             Door = 5,
             Enemy = 6,
             Health = 7,
+            Treasure = 8,
         }
 
         public CellType GetCellType(UInt32 row, UInt32 col) =>
@@ -52,6 +53,7 @@ namespace Maze.Api
         public void SetDoorCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Door);
         public void SetEnemyCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Enemy);
         public void SetHealthCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Health);
+        public void SetTreasureCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Treasure);
 
         private void Set(UInt32 row, UInt32 col, CellType type)
         {
@@ -69,6 +71,7 @@ namespace Maze.Api
         public const UInt32 MaxDoorCount = 8;
         public const UInt32 MaxEnemyCount = 8;
         public const UInt32 MaxHealthCount = 8;
+        public const UInt32 MaxTreasureCount = 12;
         public static bool ExceedsGenerateFeatureCap(UInt32 doorCount, UInt32 spareDoors, UInt32 spareKeys)
             => 2 * doorCount + spareDoors + spareKeys > MaxTotalFeatures;
 

@@ -920,6 +920,7 @@ hasResult)
                 { "maze_wasm_set_door_cells", () => ref this.mazeSetDoorCells },
                 { "maze_wasm_set_enemy_cells", () => ref this.mazeSetEnemyCells },
                 { "maze_wasm_set_health_cells", () => ref this.mazeSetHealthCells },
+                { "maze_wasm_set_treasure_cells", () => ref this.mazeSetTreasureCells },
                 { "maze_wasm_clear_cells", () => ref this.mazeClearCells },
                 { "maze_wasm_insert_rows", () => ref this.mazeInsertRows },
                 { "maze_wasm_delete_rows", () => ref this.mazeDeleteRows },

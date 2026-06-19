@@ -105,6 +105,66 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public void LoadCell_shows_the_treasure_panel_with_its_title()
+        {
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(2, 3, CellType.Treasure);
+            Assert.True(vm.IsVisible);
+            Assert.True(vm.IsTreasure);
+            Assert.Equal("Treasure [2,3]", vm.Title);
+        }
+
+        [Fact]
+        public void Seeds_the_fields_from_an_existing_treasure_override()
+        {
+            (CellOverridePanelViewModel vm, _) = Build(new TreasureCellEntity { Style = TreasureStyle.Gold, Value = 250 });
+            vm.LoadCell(1, 1, CellType.Treasure);
+            Assert.Equal(TreasureStyle.Gold, vm.TreasureStyleValue);
+            Assert.Equal("250", vm.TreasureValueText);
+        }
+
+        [Fact]
+        public void A_bare_silver_treasure_seeds_as_silver_with_no_value()
+        {
+            // A treasure cell with no override (or a value-only override) is the Silver baseline.
+            (CellOverridePanelViewModel vm, _) = Build();
+            vm.LoadCell(1, 1, CellType.Treasure);
+            Assert.Equal(TreasureStyle.Silver, vm.TreasureStyleValue);
+            Assert.Equal("", vm.TreasureValueText);
+        }
+
+        [Fact]
+        public void Applies_a_treasure_style_override_live_when_the_style_changes()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build();
+            vm.LoadCell(1, 1, CellType.Treasure);
+            vm.TreasureStyleValue = TreasureStyle.Gold;
+            editor.Verify(e => e.SetCellOverride(1, 1,
+                It.Is<TreasureCellEntity>(x => x.Style == TreasureStyle.Gold && x.Value == null)), Times.Once);
+            editor.Verify(e => e.RefreshCellContent(1, 1), Times.AtLeastOnce);
+        }
+
+        [Fact]
+        public void Applies_a_treasure_value_override_live_as_it_is_typed()
+        {
+            // Silver + an explicit value writes a value-only override (no style field).
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build();
+            vm.LoadCell(4, 5, CellType.Treasure);
+            vm.TreasureValueText = "99";
+            editor.Verify(e => e.SetCellOverride(4, 5,
+                It.Is<TreasureCellEntity>(x => x.Value == 99 && x.Style == null)), Times.Once);
+        }
+
+        [Fact]
+        public void Clears_the_treasure_override_when_the_style_reverts_to_silver()
+        {
+            (CellOverridePanelViewModel vm, Mock<ICellOverrideEditor> editor) = Build(new TreasureCellEntity { Style = TreasureStyle.Gold });
+            vm.LoadCell(1, 1, CellType.Treasure);
+            vm.TreasureStyleValue = TreasureStyle.Silver;
+            editor.Verify(e => e.ClearCellOverride(1, 1), Times.Once);
+        }
+
+        [Fact]
         public void Seeds_a_solid_override_as_wall_plus_that_texture()
         {
             (CellOverridePanelViewModel vm, _) = Build(new WallCellEntity { WallType = WallType.DressedStone });
