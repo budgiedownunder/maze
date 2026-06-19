@@ -29,7 +29,7 @@ const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
 
 // Narrows a grid cell char to a feature type that can carry a per-cell override.
 function isFeatureChar(ch: string | undefined): ch is FeatureChar {
-  return ch === 'E' || ch === 'H' || ch === 'K' || ch === 'D' || ch === 'W'
+  return ch === 'E' || ch === 'H' || ch === 'K' || ch === 'D' || ch === 'W' || ch === 'T'
 }
 
 export function MazePage() {
@@ -55,7 +55,7 @@ export function MazePage() {
     selectAll, activateCell, activateRow, activateCol,
     moveActive, moveActiveHome, moveActiveEnd,
     enableRangeMode, disableRangeMode,
-    setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, clearCell,
+    setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, setTreasure, clearCell,
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
     canInsertRows, canInsertColumns,
     applyGenerated, applySolution, clearSolution,
@@ -502,12 +502,16 @@ export function MazePage() {
       case 'H':
         if (!isBusy && !selectionStatus.hasSolution) setHealth()
         break
+      case 't':
+      case 'T':
+        if (!isBusy && !selectionStatus.hasSolution) setTreasure()
+        break
       case 'Delete':
       case 'Backspace':
         if (!isBusy && !selectionStatus.isEmpty && !selectionStatus.hasSolution) clearCell()
         break
     }
-  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, clearCell, selectionStatus])
+  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, setTreasure, clearCell, selectionStatus])
 
   const headerTitle = isNew
     ? '(unsaved)'
@@ -734,6 +738,15 @@ export function MazePage() {
               onClick={() => { setHealth(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/health_button.svg" alt="Set Health" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Set Treasure [T]"
+              aria-label="Set Treasure"
+              disabled={activeCell === null || selectionStatus.hasSolution || isWalking}
+              onClick={() => { setTreasure(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/treasure_button.svg" alt="Set Treasure" />
             </button>
             <button
               className="maze-toolbar-btn"

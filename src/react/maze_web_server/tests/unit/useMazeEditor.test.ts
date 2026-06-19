@@ -32,6 +32,16 @@ function setupHook(grid: string[][]) {
   return result
 }
 
+// Asserts that a single-cell selection holding the given feature char reads as
+// non-empty, so it can be cleared / deleted (see `selectionStatus.isEmpty`).
+function expectFeatureCellIsNotEmpty(cell: string) {
+  const grid = makeGrid(3, 3)
+  grid[0][0] = cell
+  const result = setupHook(grid)
+  act(() => result.current.activateCell(0, 0, false))
+  expect(result.current.selectionStatus.isEmpty).toBe(false)
+}
+
 // Same as `setupHook` but the hook reads max_maze_cells from a wrapping
 // AppFeaturesContext.Provider with the supplied cap. Uses createElement
 // rather than JSX so this file can stay as `.ts` (no JSX parser needed).
@@ -512,6 +522,22 @@ describe('setHealth', () => {
   })
 })
 
+describe('setTreasure', () => {
+  it('sets a single selected cell to treasure', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.setTreasure())
+    expect(result.current.grid[1][1]).toBe('T')
+  })
+
+  it('marks the maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(0, 0, false))
+    act(() => result.current.setTreasure())
+    expect(result.current.isDirty).toBe(true)
+  })
+})
+
 // ──────────────────────────────────────────────────────────────
 // clearCell
 // ──────────────────────────────────────────────────────────────
@@ -566,6 +592,25 @@ describe('clearCell', () => {
     act(() => result.current.activateCell(1, 1, false))
     act(() => result.current.clearCell())
     expect(result.current.grid[1][1]).toBe(' ')
+  })
+
+  it('clears a treasure cell to empty', () => {
+    const grid = makeGrid(3, 3)
+    grid[1][1] = 'T'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.clearCell())
+    expect(result.current.grid[1][1]).toBe(' ')
+  })
+
+  it('drops a treasure cell override when the cell is cleared', () => {
+    const grid = makeGrid(3, 3)
+    grid[1][1] = 'T'
+    const result = setupHookWithOverrides(grid, [{ row: 1, col: 1, entity: { type: 'T', style: 'gold' } }])
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.clearCell())
+    expect(result.current.grid[1][1]).toBe(' ')
+    expect(result.current.getOverride(1, 1)).toBeUndefined()
   })
 })
 
@@ -660,45 +705,17 @@ describe('selectionStatus', () => {
     expect(result.current.selectionStatus.isEmpty).toBe(true)
   })
 
-  it('isEmpty is false when selection contains a wall', () => {
-    const grid = makeGrid(3, 3)
-    grid[0][0] = 'W'
-    const result = setupHook(grid)
-    act(() => result.current.activateCell(0, 0, false))
-    expect(result.current.selectionStatus.isEmpty).toBe(false)
-  })
+  it('isEmpty is false when selection contains a wall', () => expectFeatureCellIsNotEmpty('W'))
 
-  it('isEmpty is false when selection contains a key', () => {
-    const grid = makeGrid(3, 3)
-    grid[0][0] = 'K'
-    const result = setupHook(grid)
-    act(() => result.current.activateCell(0, 0, false))
-    expect(result.current.selectionStatus.isEmpty).toBe(false)
-  })
+  it('isEmpty is false when selection contains a key', () => expectFeatureCellIsNotEmpty('K'))
 
-  it('isEmpty is false when selection contains a door', () => {
-    const grid = makeGrid(3, 3)
-    grid[0][0] = 'D'
-    const result = setupHook(grid)
-    act(() => result.current.activateCell(0, 0, false))
-    expect(result.current.selectionStatus.isEmpty).toBe(false)
-  })
+  it('isEmpty is false when selection contains a door', () => expectFeatureCellIsNotEmpty('D'))
 
-  it('isEmpty is false when selection contains an enemy', () => {
-    const grid = makeGrid(3, 3)
-    grid[0][0] = 'E'
-    const result = setupHook(grid)
-    act(() => result.current.activateCell(0, 0, false))
-    expect(result.current.selectionStatus.isEmpty).toBe(false)
-  })
+  it('isEmpty is false when selection contains an enemy', () => expectFeatureCellIsNotEmpty('E'))
 
-  it('isEmpty is false when selection contains a health pickup', () => {
-    const grid = makeGrid(3, 3)
-    grid[0][0] = 'H'
-    const result = setupHook(grid)
-    act(() => result.current.activateCell(0, 0, false))
-    expect(result.current.selectionStatus.isEmpty).toBe(false)
-  })
+  it('isEmpty is false when selection contains a health pickup', () => expectFeatureCellIsNotEmpty('H'))
+
+  it('isEmpty is false when selection contains treasure', () => expectFeatureCellIsNotEmpty('T'))
 
   it('allColumnsSelected is true when selection spans all columns', () => {
     const result = setupHook(makeGrid(3, 4))

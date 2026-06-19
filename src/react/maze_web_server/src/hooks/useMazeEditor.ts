@@ -241,6 +241,7 @@ export function useMazeEditor() {
     let containsDoor = false
     let containsEnemy = false
     let containsHealth = false
+    let containsTreasure = false
 
     for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
       for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
@@ -253,6 +254,7 @@ export function useMazeEditor() {
         else if (cell === 'D') containsDoor = true
         else if (cell === 'E') containsEnemy = true
         else if (cell === 'H') containsHealth = true
+        else if (cell === 'T') containsTreasure = true
       }
     }
 
@@ -261,7 +263,7 @@ export function useMazeEditor() {
       selectionRect.minCol === selectionRect.maxCol
     const isAllWalls = totalCells > 0 && wallCount === totalCells
     const isEmpty =
-      !containsWall && !containsStart && !containsFinish && !containsKey && !containsDoor && !containsEnemy && !containsHealth
+      !containsWall && !containsStart && !containsFinish && !containsKey && !containsDoor && !containsEnemy && !containsHealth && !containsTreasure
     const isStart = isSingleCell && containsStart
     const isFinish = isSingleCell && containsFinish
     const allColumnsSelected =
@@ -462,6 +464,7 @@ export function useMazeEditor() {
   const setDoor = useCallback(() => fillSelection('D'), [fillSelection])
   const setEnemy = useCallback(() => fillSelection('E'), [fillSelection])
   const setHealth = useCallback(() => fillSelection('H'), [fillSelection])
+  const setTreasure = useCallback(() => fillSelection('T'), [fillSelection])
   const clearCell = useCallback(() => fillSelection(' '), [fillSelection])
 
   // ── Structural editing ───────────────────────────────────────
@@ -618,6 +621,7 @@ export function useMazeEditor() {
     setDoor,
     setEnemy,
     setHealth,
+    setTreasure,
     clearCell,
     insertRowsBefore,
     deleteRows,

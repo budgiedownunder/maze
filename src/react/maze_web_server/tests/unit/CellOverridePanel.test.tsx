@@ -5,7 +5,7 @@ import { CellOverridePanel } from '../../src/components/CellOverridePanel'
 import type { CellEntity } from '../../src/types/cellEntities'
 import { MAZE_GAME_SETTINGS_DEFAULTS, type MazeGameSettings } from '../../src/utils/mazeGameSettings'
 
-function setup(cellType: 'E' | 'H' | 'K' | 'D' | 'W', override?: CellEntity, gameSettings?: MazeGameSettings) {
+function setup(cellType: 'E' | 'H' | 'K' | 'D' | 'W' | 'T', override?: CellEntity, gameSettings?: MazeGameSettings) {
   const onApply = vi.fn()
   const onClear = vi.fn()
   render(
@@ -52,6 +52,31 @@ describe('CellOverridePanel', () => {
     setup('D')
     expect(screen.getByRole('combobox', { name: 'Style' })).toBeInTheDocument()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+  })
+
+  it('renders the style + value fields for a T cell', () => {
+    setup('T')
+    expect(screen.getByRole('combobox', { name: 'Style' })).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: 'Value' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Gold' })).toBeInTheDocument()
+  })
+
+  it('applies a treasure style override live', async () => {
+    const { onApply } = setup('T')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Style' }), 'gold')
+    expect(onApply).toHaveBeenLastCalledWith({ type: 'T', style: 'gold' })
+  })
+
+  it('applies a treasure value override live as it is typed', async () => {
+    const { onApply } = setup('T')
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Value' }), '250')
+    expect(onApply).toHaveBeenLastCalledWith({ type: 'T', value: 250 })
+  })
+
+  it('seeds the treasure fields from an existing override', () => {
+    setup('T', { type: 'T', style: 'diamonds', value: 400 })
+    expect(screen.getByRole('combobox', { name: 'Style' })).toHaveValue('diamonds')
+    expect(screen.getByRole('spinbutton', { name: 'Value' })).toHaveValue(400)
   })
 
   it('seeds the fields from an existing override', () => {

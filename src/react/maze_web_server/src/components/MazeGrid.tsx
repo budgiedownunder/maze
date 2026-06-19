@@ -478,7 +478,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const isWalker = walkInfo?.walkerKey === key
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
-                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H'
+                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H' || cell === 'T'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
                   // Per-cell variant sprite (ghost/potion) in both editor and game
                   // mode. The static cells (health/key/door) read their rig from

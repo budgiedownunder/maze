@@ -4,6 +4,7 @@ import {
   ENEMY_TYPES,
   HEALTH_STYLES,
   KEY_HOLDER_STYLES,
+  TREASURE_STYLES,
   WALL_SOLID_TEXTURES,
   WALL_SPECIAL_TYPES,
   titleCaseWire,
@@ -17,6 +18,7 @@ import type {
   FeatureChar,
   HealthStyle,
   KeyHolderStyle,
+  TreasureStyle,
   WallType,
 } from '../types/cellEntities'
 
@@ -112,6 +114,7 @@ export function CellOverridePanel({
   const key = override?.type === 'K' ? override : undefined
   const door = override?.type === 'D' ? override : undefined
   const wall = override?.type === 'W' ? override : undefined
+  const treasure = override?.type === 'T' ? override : undefined
 
   const [enemyType, setEnemyType] = useState<string>(enemy?.enemyType ?? '')
   const [damage, setDamage] = useState<string>(enemy?.damage?.toString() ?? '')
@@ -120,6 +123,8 @@ export function CellOverridePanel({
   const [healAmount, setHealAmount] = useState<string>(health?.healAmount?.toString() ?? '')
   const [keyHolder, setKeyHolder] = useState<string>(key?.keyHolder ?? '')
   const [doorStyle, setDoorStyle] = useState<string>(door?.doorStyle ?? '')
+  const [treasureStyle, setTreasureStyle] = useState<string>(treasure?.style ?? '')
+  const [treasureValue, setTreasureValue] = useState<string>(treasure?.value?.toString() ?? '')
   // Wall is two-tier. `wallKind` is 'default' (inherit the maze's wallType — no
   // override), 'wall' (force a solid wall, texture chosen via wallTexture), or a special
   // type; `wallTexture` is the solid texture when a texture is in play. A stored override
@@ -157,6 +162,8 @@ export function CellOverridePanel({
       setHealAmount('')
       setKeyHolder('')
       setDoorStyle('')
+      setTreasureStyle('')
+      setTreasureValue('')
       setWallKind(WALL_KIND_DEFAULT)
       setWallTexture('')
     }
@@ -195,6 +202,14 @@ export function CellOverridePanel({
   function applyDoor(style: string) {
     const entity: CellEntity = { type: 'D' }
     if (style) entity.doorStyle = style as DoorStyle
+    emit(entity)
+  }
+
+  function applyTreasure(style: string, value: string) {
+    const entity: CellEntity = { type: 'T' }
+    if (style) entity.style = style as TreasureStyle
+    const v = parseNonNegInt(value)
+    if (v !== undefined) entity.value = v
     emit(entity)
   }
 
@@ -346,6 +361,37 @@ export function CellOverridePanel({
             {DOOR_STYLES.map(s => <option key={s} value={s}>{titleCaseWire(s)}</option>)}
           </select>
         </label>
+      )}
+
+      {cellType === 'T' && (
+        <>
+          <label className="cell-override-field">
+            <span>Style</span>
+            <div className="cell-override-select-row">
+              <img
+                className="cell-override-preview"
+                src={cellSprite('T', { type: 'T', style: treasureStyle ? (treasureStyle as TreasureStyle) : undefined })?.src}
+                alt="" aria-hidden="true"
+              />
+              <select
+                className="cell-override-input"
+                value={treasureStyle}
+                onChange={e => { setTreasureStyle(e.target.value); applyTreasure(e.target.value, treasureValue) }}
+              >
+                <option value="">Default</option>
+                {TREASURE_STYLES.map(s => <option key={s} value={s}>{titleCaseWire(s)}</option>)}
+              </select>
+            </div>
+          </label>
+          <label className="cell-override-field">
+            <span>Value</span>
+            <input
+              type="number" min="0" className="cell-override-input" placeholder="Default"
+              value={treasureValue}
+              onChange={e => { setTreasureValue(e.target.value); applyTreasure(treasureStyle, e.target.value) }}
+            />
+          </label>
+        </>
       )}
 
       {cellType === 'W' && (

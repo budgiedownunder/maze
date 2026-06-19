@@ -9,10 +9,10 @@ Browser-based UI for the `maze_web_server` REST API. Features:
 - **User accounts** — sign up/in/out, edit profile, set a profile avatar, change password, manage email addresses, delete account, plus OAuth sign-in (Google, GitHub, Facebook) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured. When signed in, the user's avatar shows in the page header (username as hover text) and links to the account page; avatars also appear on leaderboard rows
 - **Maze list** — create, open, rename, duplicate, delete, and play mazes
 - **Maze editor** — cell-by-cell editing (walls, start, finish, keys, doors, enemies, health
-  pickups), multi-cell range selection, structural editing (insert/delete rows and columns),
+  pickups, treasure), multi-cell range selection, structural editing (insert/delete rows and columns),
   keyboard shortcuts, and a per-cell override panel for tuning an individual cell's
   characteristics (an enemy's type/damage/move interval, a health pickup's style/heal amount,
-  a key holder or door style, or a wall's type — "Default" (inherit the maze's wall
+  a treasure's style/value, a key holder or door style, or a wall's type — "Default" (inherit the maze's wall
   default), a forced solid texture, or a water / lava / iron-fence skin). Variant types such
   as ghost enemies, potion pickups, and water/lava/iron-fence walls show their own sprite in
   the grid, and overridden cells are marked with a corner badge. A settings toolbar button
