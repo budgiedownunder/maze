@@ -213,6 +213,11 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>The full maze item (with game settings), or the original item on failure</returns>
         private async Task<MazeItem> LoadFullMazeAsync(MazeItem item)
         {
+            // A new, unsaved maze has no server record yet — its id is empty, and the
+            // single-maze GET rejects an empty id. There is nothing to fetch, so use the
+            // fresh item as-is (it already carries the editor's default game settings).
+            if (string.IsNullOrEmpty(item.ID))
+                return item;
             return await _mazeService.GetMazeItem(item.ID) ?? item;
         }
         /// <summary>

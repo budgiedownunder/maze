@@ -372,12 +372,16 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task NewAsync_NavigatesToDesignWithFreshMazeItem()
+        public async Task NewAsync_NavigatesToDesignWithFreshMazeItem_WithoutFetchingTheServer()
         {
-            var (vm, _, _, nav) = BuildVm();
+            var (vm, _, service, nav) = BuildVm();
 
             await vm.NewCommand.ExecuteAsync(null);
 
+            // A new maze has an empty id, so LoadFullMazeAsync must NOT call the
+            // single-maze GET (the API rejects an empty id and throws) — it uses the
+            // fresh item directly. Regression test for the New-maze crash.
+            service.Verify(s => s.GetMazeItem(It.IsAny<string>()), Times.Never);
             nav.Verify(n => n.GoToAsync(nameof(MazePage), It.IsAny<IDictionary<string, object>>()), Times.Once);
         }
 
