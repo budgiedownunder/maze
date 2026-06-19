@@ -23,6 +23,7 @@ const { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstanc
     keys:             vi.fn().mockReturnValue([]),
     doors:            vi.fn().mockReturnValue([]),
     bag:              vi.fn().mockReturnValue([]),
+    collected_treasure: vi.fn().mockReturnValue([]),
     hp:               vi.fn().mockReturnValue(3),
     max_hp:           vi.fn().mockReturnValue(3),
     enemies:          vi.fn().mockReturnValue([]),
@@ -111,6 +112,8 @@ beforeEach(() => {
   mockGameInstance.lose_reason.mockReturnValue(null)
   mockGameInstance.hp.mockReturnValue(3)
   mockGameInstance.max_hp.mockReturnValue(3)
+  mockGameInstance.bag.mockReturnValue([])
+  mockGameInstance.collected_treasure.mockReturnValue([])
   mockUseMazeGame.mockReturnValue([
     { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
     mockMove,
@@ -356,12 +359,52 @@ describe('MazeGamePage', () => {
     expect(bag.textContent).toMatch(/empty/)
   })
 
-  it('bag shows a key icon for each collected key', async () => {
+  it('bag groups collected keys into a single key chip with a count', async () => {
     mockGameInstance.bag.mockReturnValue([{ type: 'key', id: 0 }, { type: 'key', id: 1 }])
     renderPage()
     await waitForLoad()
     const bag = document.querySelector('.maze-bag')!
-    expect(bag.querySelectorAll('img')).toHaveLength(2)
+    // One grouped key chip, not one icon per key.
+    expect(bag.querySelectorAll('img')).toHaveLength(1)
+    expect(within(bag as HTMLElement).getByAltText('Key')).toBeInTheDocument()
+    expect(bag.textContent).toMatch(/×2/)
+  })
+
+  it('bag shows a per-style chip with a count for each collected treasure style', async () => {
+    mockGameInstance.collected_treasure.mockReturnValue([
+      { style: 'silver', count: 3 },
+      { style: 'gold', count: 1 },
+    ])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')! as HTMLElement
+    const silver = within(bag).getByAltText('Silver treasure')
+    expect(silver).toHaveAttribute('src', '/images/maze/silver.svg')
+    const gold = within(bag).getByAltText('Gold treasure')
+    expect(gold).toHaveAttribute('src', '/images/maze/gold.svg')
+    expect(bag.textContent).toMatch(/×3/)
+    expect(bag.textContent).toMatch(/×1/)
+  })
+
+  it('bag shows the key chip alongside treasure chips', async () => {
+    mockGameInstance.bag.mockReturnValue([{ type: 'key', id: 0 }])
+    mockGameInstance.collected_treasure.mockReturnValue([{ style: 'jewels', count: 2 }])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')! as HTMLElement
+    expect(within(bag).getByAltText('Key')).toBeInTheDocument()
+    expect(within(bag).getByAltText('Jewels treasure')).toHaveAttribute('src', '/images/maze/jewels.svg')
+    expect(bag.querySelectorAll('.maze-bag-chip')).toHaveLength(2)
+  })
+
+  it('bag omits zero-count treasure styles and shows "empty" with nothing held', async () => {
+    mockGameInstance.bag.mockReturnValue([])
+    mockGameInstance.collected_treasure.mockReturnValue([{ style: 'gold', count: 0 }])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')! as HTMLElement
+    expect(bag.querySelectorAll('.maze-bag-chip')).toHaveLength(0)
+    expect(bag.textContent).toMatch(/empty/)
   })
 
   it('keyboard legend shows arrow and letter key hints', async () => {

@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom'
 import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
-import { getBag, getHp, getMaxHp, getGameGrid, getGameCellOverrides, MazeGameLoseReason } from '../wasm/mazeWasm'
+import { getBag, getCollectedTreasure, getHp, getMaxHp, getGameGrid, getGameCellOverrides, MazeGameLoseReason } from '../wasm/mazeWasm'
+import type { TreasureStyle } from '../types/cellEntities'
 import { AppHeader } from '../components/AppHeader'
 import { MazeGrid } from '../components/MazeGrid'
 import { GameResultPopup } from '../components/GameResultPopup'
@@ -15,6 +16,24 @@ const KEY_MAP: Record<string, MazeGameDirection> = {
   ArrowDown: MazeGameDirection.Down, s: MazeGameDirection.Down,  S: MazeGameDirection.Down,
   ArrowLeft: MazeGameDirection.Left, a: MazeGameDirection.Left,  A: MazeGameDirection.Left,
   ArrowRight: MazeGameDirection.Right, d: MazeGameDirection.Right, D: MazeGameDirection.Right,
+}
+
+// Bag-chip icons, distinct from the in-grid `*_in_trunk.svg` treasure sprites
+// (loose coins / gems rather than the chest). Keys reuse the in-grid key icon.
+const TREASURE_BAG_ICONS: Record<TreasureStyle, string> = {
+  silver:   '/images/maze/silver.svg',
+  gold:     '/images/maze/gold.svg',
+  diamonds: '/images/maze/diamonds.svg',
+  jewels:   '/images/maze/jewels.svg',
+}
+
+// One grouped bag entry: an icon, a count, and its alt text. Built from the held
+// keys plus the per-style collected-treasure tally; zero-count types are omitted.
+interface BagChip {
+  key: string
+  src: string
+  alt: string
+  count: number
 }
 
 export function MazeGamePage() {
@@ -49,12 +68,26 @@ export function MazeGamePage() {
     [game],
   )
 
-  // Bag contents — recomputed whenever the game advances (version bump). Keys
-  // are auto-collected on walk-over, so the bag grows as the player moves.
-  const bag = useMemo(
-    () => (game ? getBag(game) : []),
-    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
-  )
+  // Bag chips — recomputed whenever the game advances (version bump). Each item
+  // type renders as one grouped `[icon] × N` chip: a single key chip for the
+  // held keys, then one chip per collected treasure style (ascending value, the
+  // order the engine returns). Zero-count types are omitted entirely, so the key
+  // chip vanishes once keys are consumed and a style only appears once collected.
+  const bagChips = useMemo<BagChip[]>(() => {
+    if (!game) return []
+    const chips: BagChip[] = []
+    const keyCount = getBag(game).length
+    if (keyCount > 0) {
+      chips.push({ key: 'key', src: '/images/maze/key.svg', alt: 'Key', count: keyCount })
+    }
+    for (const { style, count } of getCollectedTreasure(game)) {
+      if (count > 0) {
+        const label = `${style.charAt(0).toUpperCase()}${style.slice(1)} treasure`
+        chips.push({ key: style, src: TREASURE_BAG_ICONS[style], alt: label, count })
+      }
+    }
+    return chips
+  }, [game, version]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // HP HUD state — re-read each version bump.
   const hp = useMemo(
@@ -162,9 +195,14 @@ export function MazeGamePage() {
 
               <div className="maze-bag" aria-label="Bag">
                 <span>BAG</span>
-                {bag.length === 0
+                {bagChips.length === 0
                   ? <span className="maze-bag-empty">empty</span>
-                  : bag.map((_, i) => <img key={i} src="/images/maze/key.svg" alt="Key" />)}
+                  : bagChips.map(chip => (
+                      <span key={chip.key} className="maze-bag-chip">
+                        <img src={chip.src} alt={chip.alt} />
+                        <span className="maze-bag-chip-count">&times;{chip.count}</span>
+                      </span>
+                    ))}
               </div>
             </div>
 

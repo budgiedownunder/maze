@@ -2,9 +2,9 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
-import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
+import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups, getTreasures } from '../wasm/mazeWasm'
 import { cellSprite, enemyRigHasSprite } from '../utils/cellSprite'
-import type { CellEntity, EnemyType } from '../types/cellEntities'
+import type { CellEntity, EnemyType, TreasureStyle } from '../types/cellEntities'
 import type { MazeGameSettings } from '../utils/mazeGameSettings'
 
 export const CELL_SIZE = 32
@@ -164,6 +164,18 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
     const healthCells = useMemo(() => {
       if (!game) return null
       return new Set(getHealthPickups(game).map(h => `${h.row},${h.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Live (uncollected) treasure cells, keyed by "row,col" → style. Treasure is
+    // auto-collected on walk-over, clearing the engine cell, but the static grid
+    // char never changes — so in game mode a `'T'` cell renders only while it is
+    // still in the runtime's treasure list, and its sprite follows the live style.
+    // Once collected, the cell drops from the list and the symbol disappears.
+    const treasureStyleByCell = useMemo(() => {
+      if (!game) return null
+      const map = new Map<string, TreasureStyle>()
+      for (const t of getTreasures(game)) map.set(`${t.row},${t.col}`, t.style)
+      return map
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Live enemy positions, counted per cell. The static grid char `'E'` is
@@ -505,6 +517,11 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       img = null
                     } else if (cell === 'H') {
                       if (!healthCells?.has(key)) img = null
+                    } else if (cell === 'T') {
+                      // Collected treasure drops from the live list → hide it;
+                      // otherwise render the live style's sprite.
+                      const style = treasureStyleByCell?.get(key)
+                      img = style ? cellSprite('T', { type: 'T', style }, gameSettings) : null
                     }
                   }
                   const enemyCount = game !== null && game !== undefined ? (enemyCountByCell?.get(key) ?? 0) : 0

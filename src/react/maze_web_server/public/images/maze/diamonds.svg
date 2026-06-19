@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Diamonds treasure">
+  <!-- the pointed diamond from diamonds_in_trunk.svg, scaled and centred to nearly fill the square -->
+  <g transform="translate(16 16) scale(2.33) translate(-23 -9.3)">
+    <polygon points="23,3.6 29,9.3 23,15 17,9.3" fill="#def7ff"/>
+    <polygon points="17,9.3 29,9.3 23,15" fill="#c4ecfc"/>
+    <polygon points="23,3.6 29,9.3 17,9.3" fill="#eefbff"/>
+    <polygon points="23,3.6 26,7.6 20,7.6" fill="#ffffff"/>
+    <path d="M17,9.3 H29 M23,3.6 V15" stroke="#a6dbf1" stroke-width="0.8" fill="none" vector-effect="non-scaling-stroke"/>
+    <polygon points="23,3.6 29,9.3 23,15 17,9.3" fill="none" stroke="#3f9fda" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+  </g>
+</svg>

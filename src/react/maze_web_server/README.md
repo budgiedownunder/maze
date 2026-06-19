@@ -22,7 +22,8 @@ Browser-based UI for the `maze_web_server` REST API. Features:
 - **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
   on-screen D-pad; visited cells are marked; completion shows a result popup. Wall / enemy /
   health cells render the maze's default sprites (e.g. lava walls, ghost enemies, potion
-  pickups) unless a per-cell override says otherwise
+  pickups) unless a per-cell override says otherwise. Treasure cells render per style and are
+  auto-collected on walk-over, tallied into the bag as grouped per-type `[icon] × N` chips
 - **3D maze game** — a "Play 3D" button on the maze list and maze editor pages opens a
   "Run / Custom Run" chooser — "Run" launches with the maze's saved settings, "Custom
   Run" with one-off tweaks — then navigates the browser to `/game/?id={mazeId}` on the Rust server, which serves the

@@ -100,6 +100,20 @@ export const mockMazeEnemyHealth: Maze = {
   },
 }
 
+// A single treasure on the S→F path: walk onto it to auto-collect, verifying the
+// in-grid treasure sprite disappears (rendered from the runtime's live treasure
+// list, not the static grid char) and the collected style shows in the bag. Kept
+// out of `mockMazes`, served by id directly.
+export const mockMazeTreasure: Maze = {
+  id: 'maze-treasure',
+  name: 'Treasure',
+  definition: {
+    grid: [
+      ['S', 'T', 'F'],
+    ],
+  },
+}
+
 // A maze persisted WITH a per-cell override: the enemy cell at (0,1) carries the
 // canonical array form. Used to verify the editor loads + renders a saved override.
 // Kept out of `mockMazes`, served by id directly. The array-form cell isn't expressible
@@ -411,6 +425,7 @@ export const handlers = [
       ?? (params.id === mockMazeKeyDoor.id ? mockMazeKeyDoor : undefined)
       ?? (params.id === mockMazeEnemyGauntlet.id ? mockMazeEnemyGauntlet : undefined)
       ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
+      ?? (params.id === mockMazeTreasure.id ? mockMazeTreasure : undefined)
       ?? (params.id === mockMazeOverride.id ? mockMazeOverride : undefined)
       ?? (params.id === mockMazeOverrideStatic.id ? mockMazeOverrideStatic : undefined)
       ?? (params.id === mockMazeWithSettings.id ? mockMazeWithSettings : undefined)

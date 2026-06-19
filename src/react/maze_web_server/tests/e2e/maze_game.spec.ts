@@ -194,6 +194,30 @@ test.describe('MazeGamePage', () => {
     await expect(grid.getByAltText('Health')).toHaveCount(0)
   })
 
+  test('walking onto treasure auto-collects it and shows the style in the bag', async ({ page }) => {
+    // Treasure maze grid ['S','T','F']: the treasure cell shows the in-grid
+    // sprite and the bag starts empty. Walking onto it auto-collects (no button),
+    // the in-grid symbol disappears (rendered from the runtime's live treasure
+    // list, not the static grid char), and a silver bag chip appears.
+    await page.goto('/play/maze-treasure')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const grid = page.locator('.maze-grid-container')
+    const bag = page.locator('.maze-bag')
+
+    await expect(grid.getByAltText('Treasure')).toBeVisible()
+    await expect(bag).toContainText('empty')
+
+    // Step onto the treasure — auto-collected on walk-over.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+
+    // The in-grid treasure sprite is consumed and the bag shows a silver chip.
+    await expect(grid.getByAltText('Treasure')).toHaveCount(0)
+    await expect(bag.getByAltText('Silver treasure')).toBeVisible()
+    await expect(bag).toContainText('1')
+  })
+
   test('collecting a key opens a door and completes the maze', async ({ page }) => {
     // KeyDoor maze grid: ['S', 'K', 'D', 'F']
     await page.goto('/play/maze-keydoor')

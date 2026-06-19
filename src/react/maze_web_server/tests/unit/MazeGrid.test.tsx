@@ -355,6 +355,7 @@ function makeGameObj(overrides: Partial<{
   doors: () => Array<{ row: number; col: number; state: string }>
   enemies: () => Array<{ row: number; col: number; id: number; enemyType?: string }>
   health_pickups: () => Array<{ row: number; col: number; id: number }>
+  treasures: () => Array<{ row: number; col: number; style: string; value: number }>
 }> = {}) {
   return {
     player_row:       vi.fn().mockReturnValue(0),
@@ -366,6 +367,7 @@ function makeGameObj(overrides: Partial<{
     doors:            vi.fn().mockReturnValue([]),
     enemies:          vi.fn().mockReturnValue([]),
     health_pickups:   vi.fn().mockReturnValue([]),
+    treasures:        vi.fn().mockReturnValue([]),
     free:             vi.fn(),
     ...overrides,
   }
@@ -629,6 +631,34 @@ describe('MazeGrid game mode — keys & doors', () => {
     const game = makeGameObj({ doors: () => [{ row: 0, col: 2, state: 'open' }] })
     renderKD(game)
     expect(screen.queryByAltText('Door')).not.toBeInTheDocument()
+  })
+})
+
+describe('MazeGrid game mode — treasure', () => {
+  const T_GRID = [['S', 'T', 'F']]
+
+  function renderT(game: ReturnType<typeof makeGameObj>) {
+    return render(
+      <MazeGrid grid={T_GRID} solution={null} activeCell={null} anchorCell={null} game={game as never} version={1} />,
+    )
+  }
+
+  it('renders the per-style sprite for an uncollected treasure cell', () => {
+    const game = makeGameObj({ treasures: () => [{ row: 0, col: 1, style: 'gold', value: 100 }] })
+    renderT(game)
+    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/gold_in_trunk.svg')
+  })
+
+  it('renders the silver sprite for a default-style treasure cell', () => {
+    const game = makeGameObj({ treasures: () => [{ row: 0, col: 1, style: 'silver', value: 50 }] })
+    renderT(game)
+    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/silver_in_trunk.svg')
+  })
+
+  it('does not render treasure once collected (omitted from treasures())', () => {
+    const game = makeGameObj({ treasures: () => [] })
+    renderT(game)
+    expect(screen.queryByAltText('Treasure')).not.toBeInTheDocument()
   })
 })
 

@@ -1219,20 +1219,33 @@
   }
 }
 
-/* Bag HUD — collected items, shown under the maze in the game */
+/* Bag HUD — collected items, shown under the maze in the game. Items are grouped
+   into per-type `[icon] × N` chips that wrap onto further lines as needed and stay
+   centred horizontally. */
 .maze-bag {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   align-items: center;
   justify-content: center;
   min-height: 28px;
 }
-.maze-bag span {
+.maze-bag > span {
   font-size: 0.85rem;
   opacity: 0.8;
 }
 .maze-bag .maze-bag-empty {
   opacity: 0.6;
+}
+.maze-bag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.maze-bag-chip-count {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
 }
 .maze-bag img {
   width: 24px;
