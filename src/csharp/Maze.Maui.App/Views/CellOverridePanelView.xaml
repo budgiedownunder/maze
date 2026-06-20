@@ -4,7 +4,7 @@
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
              x:Class="Maze.Maui.App.Views.CellOverridePanelView"
              x:DataType="viewmodel:CellOverridePanelViewModel"
-             IsVisible="{Binding IsVisible}">
+             IsVisible="{Binding IsVisible, FallbackValue=False}">
     <ScrollView x:Name="PanelScroll" VerticalOptions="Fill">
         <Border Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
             StrokeShape="RoundRectangle 8"
