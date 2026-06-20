@@ -646,13 +646,13 @@ describe('MazeGrid game mode — treasure', () => {
   it('renders the per-style sprite for an uncollected treasure cell', () => {
     const game = makeGameObj({ treasures: () => [{ row: 0, col: 1, style: 'gold', value: 100 }] })
     renderT(game)
-    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/gold_in_trunk.svg')
+    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/gold.svg')
   })
 
   it('renders the silver sprite for a default-style treasure cell', () => {
     const game = makeGameObj({ treasures: () => [{ row: 0, col: 1, style: 'silver', value: 50 }] })
     renderT(game)
-    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/silver_in_trunk.svg')
+    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/silver.svg')
   })
 
   it('does not render treasure once collected (omitted from treasures())', () => {

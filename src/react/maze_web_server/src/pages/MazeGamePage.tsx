@@ -18,8 +18,8 @@ const KEY_MAP: Record<string, MazeGameDirection> = {
   ArrowRight: MazeGameDirection.Right, d: MazeGameDirection.Right, D: MazeGameDirection.Right,
 }
 
-// Bag-chip icons, distinct from the in-grid `*_in_trunk.svg` treasure sprites
-// (loose coins / gems rather than the chest). Keys reuse the in-grid key icon.
+// Bag-chip icons — the same per-style loot icons (coins / gems) used for the
+// in-grid treasure cells. Keys reuse the key icon.
 const TREASURE_BAG_ICONS: Record<TreasureStyle, string> = {
   silver:   '/images/maze/silver.svg',
   gold:     '/images/maze/gold.svg',
