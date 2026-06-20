@@ -31,9 +31,9 @@ namespace Maze.Maui.App
             WallCellEntity { WallType: WallType.IronFence } => "iron_fence.png",
             // Silver is the default treasure sprite (the hardcoded base), so only the
             // richer styles carry a distinct variant.
-            TreasureCellEntity { Style: TreasureStyle.Gold } => "gold_in_trunk.png",
-            TreasureCellEntity { Style: TreasureStyle.Diamonds } => "diamonds_in_trunk.png",
-            TreasureCellEntity { Style: TreasureStyle.Jewels } => "jewels_in_trunk.png",
+            TreasureCellEntity { Style: TreasureStyle.Gold } => "gold.png",
+            TreasureCellEntity { Style: TreasureStyle.Diamonds } => "diamonds.png",
+            TreasureCellEntity { Style: TreasureStyle.Jewels } => "jewels.png",
             _ => null
         };
 

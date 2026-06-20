@@ -1824,7 +1824,7 @@ namespace Maze.Maui.App
                 case CellType.Treasure:
                     // Silver is the default treasure sprite; the richer styles are
                     // variants resolved above via CellSprite.VariantImageName.
-                    return "silver_in_trunk.png";
+                    return "silver.png";
             }
             return "";
         }

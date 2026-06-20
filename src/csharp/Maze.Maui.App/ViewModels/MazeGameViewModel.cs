@@ -109,8 +109,8 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Number of items currently in the bag — convenience for bindings.</summary>
         public int BagCount => Bag.Count;
 
-        /// <summary>Bag-chip icon for a treasure style — the loose-loot icons (distinct from
-        /// the in-grid <c>*_in_trunk</c> chest sprites).</summary>
+        /// <summary>Bag-chip icon for a treasure style — the same per-style loot icons used
+        /// for the in-grid treasure cells.</summary>
         private static string TreasureBagIcon(TreasureStyle style) => style switch
         {
             TreasureStyle.Gold => "gold.png",

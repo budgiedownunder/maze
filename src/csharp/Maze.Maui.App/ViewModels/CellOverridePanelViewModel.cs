@@ -200,11 +200,11 @@ namespace Maze.Maui.App.ViewModels
                 HealthStyleValue is null ? null : new HealthCellEntity { HealthStyle = HealthStyleValue },
                 editor.GameSettings, "health.png");
         /// <summary>Sprite previewing the selected treasure style (Silver falls back to the
-        /// default chest sprite; the richer styles have their own).</summary>
+        /// default sprite; the richer styles have their own).</summary>
         public string TreasurePreviewImage =>
             CellSprite.PreviewImageName(CellType.Treasure,
                 new TreasureCellEntity { Style = TreasureStyleValue },
-                editor.GameSettings, "silver_in_trunk.png");
+                editor.GameSettings, "silver.png");
         /// <summary>Sprite previewing the selected wall type, or the maze default (e.g. lava)
         /// when "Default" inherits it.</summary>
         public string WallPreviewImage =>

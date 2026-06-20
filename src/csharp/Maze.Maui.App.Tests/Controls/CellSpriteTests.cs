@@ -40,10 +40,10 @@ namespace Maze.Maui.App.Tests.Controls
             Assert.Equal(expected, CellSprite.VariantImageName(new WallCellEntity { WallType = type }));
 
         [Theory]
-        [InlineData(TreasureStyle.Gold, "gold_in_trunk.png")]
-        [InlineData(TreasureStyle.Diamonds, "diamonds_in_trunk.png")]
-        [InlineData(TreasureStyle.Jewels, "jewels_in_trunk.png")]
-        [InlineData(TreasureStyle.Silver, null)] // Silver is the default chest sprite (hardcoded base)
+        [InlineData(TreasureStyle.Gold, "gold.png")]
+        [InlineData(TreasureStyle.Diamonds, "diamonds.png")]
+        [InlineData(TreasureStyle.Jewels, "jewels.png")]
+        [InlineData(TreasureStyle.Silver, null)] // Silver is the default sprite (hardcoded base)
         public void Treasure_variant(TreasureStyle style, string? expected) =>
             Assert.Equal(expected, CellSprite.VariantImageName(new TreasureCellEntity { Style = style }));
 
