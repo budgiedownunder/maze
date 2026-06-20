@@ -207,6 +207,68 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public void Move_OntoTreasure_AutoCollectsMarksGridAndBuildsTheBagChip()
+        {
+            var (vm, _, grid) = BuildVm();
+            MazeGame stub = InstallGame(vm, grid.Object, ItemWithDefinition());
+
+            // Walking onto treasure auto-collects it: the 0ms tick flush carries a
+            // TreasureCollected event and the engine reports the grown per-style tally.
+            stub.PlayerRow = 0;
+            stub.PlayerCol = 1;
+            stub.NextMoveResult = MazeGameMoveResult.Moved;
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.TreasureCollected, 0, 1, 50) };
+            stub.CollectedTreasures = new List<CollectedTreasureInfo> { new(TreasureStyle.Silver, 1) };
+
+            vm.Move(MazeGameDirection.Right);
+
+            grid.Verify(g => g.MarkTreasureCollected(0, 1), Times.Once);
+            Assert.Single(vm.CollectedTreasures);
+            // No keys held → a single silver treasure chip × 1.
+            Assert.Single(vm.BagChips);
+            Assert.Equal("silver.png", vm.BagChips[0].IconSource);
+            Assert.Equal(1, vm.BagChips[0].Count);
+            Assert.False(vm.IsBagEmpty);
+        }
+
+        [Fact]
+        public void BagChips_GroupsKeysThenTreasureStyles_OmittingZeroCounts()
+        {
+            var (vm, _, _) = BuildVm();
+            vm.Bag = new List<BagItem> { new(BagItemKind.Key, 1), new(BagItemKind.Key, 2) };
+            vm.CollectedTreasures = new List<CollectedTreasureInfo>
+            {
+                new(TreasureStyle.Silver, 3),
+                new(TreasureStyle.Gold, 1),
+            };
+
+            IReadOnlyList<BagChip> chips = vm.BagChips;
+            Assert.Equal(3, chips.Count);
+            Assert.Equal(("key.png", 2), (chips[0].IconSource, chips[0].Count));
+            Assert.Equal(("silver.png", 3), (chips[1].IconSource, chips[1].Count));
+            Assert.Equal(("gold.png", 1), (chips[2].IconSource, chips[2].Count));
+            Assert.False(vm.IsBagEmpty);
+        }
+
+        [Fact]
+        public void BagChips_DropsTheKeyChipWhenNoKeysHeld()
+        {
+            var (vm, _, _) = BuildVm();
+            vm.CollectedTreasures = new List<CollectedTreasureInfo> { new(TreasureStyle.Diamonds, 2) };
+
+            Assert.Single(vm.BagChips);
+            Assert.Equal("diamonds.png", vm.BagChips[0].IconSource);
+        }
+
+        [Fact]
+        public void BagChips_IsEmpty_WithNoKeysOrTreasure()
+        {
+            var (vm, _, _) = BuildVm();
+            Assert.Empty(vm.BagChips);
+            Assert.True(vm.IsBagEmpty);
+        }
+
+        [Fact]
         public async Task Pause_RaisesPauseRequested_AndResumeClearsIsPaused()
         {
             var (vm, dialog, grid) = BuildVm();

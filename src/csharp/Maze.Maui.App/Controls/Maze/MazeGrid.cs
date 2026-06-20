@@ -44,6 +44,9 @@ namespace Maze.Maui.App
         // stack. Seeded from spawn overrides; each enemy carries its own rig as it moves.
         private List<EnemyType?>?[,] _enemyRigsAt = new List<EnemyType?>?[0, 0];
         private bool[,] _healthCollected = new bool[0, 0];
+        // _treasureCollected[r,c] == true → the treasure at (r,c) was auto-collected on
+        // walk-over; hide its icon.
+        private bool[,] _treasureCollected = new bool[0, 0];
         // 1-based positions of start/finish cells (-1 = not set)
         private int _startRow = -1, _startCol = -1;
         private int _finishRow = -1, _finishCol = -1;
@@ -147,6 +150,7 @@ namespace Maze.Maui.App
             _enemyAt = new int[RowCount, ColumnCount];
             _enemyRigsAt = new List<EnemyType?>?[RowCount, ColumnCount];
             _healthCollected = new bool[RowCount, ColumnCount];
+            _treasureCollected = new bool[RowCount, ColumnCount];
             _gameMode = false;
             _startRow = _startCol = _finishRow = _finishCol = -1;
 
@@ -422,6 +426,12 @@ namespace Maze.Maui.App
                 // auto-consumes the cell but the static grid char never changes.
                 content.Update(CellType.Empty, content.SolutionPathDirection);
             }
+            else if (_gameMode && _cellTypes[row, column] == CellType.Treasure && _treasureCollected[row, column])
+            {
+                // Collected treasure renders as an empty passage — auto-collected on
+                // walk-over while the static grid char stays 'T' (same as a key / pickup).
+                content.Update(CellType.Empty, content.SolutionPathDirection);
+            }
 
             bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
             if (_gameMode && (_enemyAt[row, column] > 0 || playerHere))
@@ -506,6 +516,16 @@ namespace Maze.Maui.App
         {
             if (row < 0 || col < 0 || row >= _healthCollected.GetLength(0) || col >= _healthCollected.GetLength(1)) return;
             _healthCollected[row, col] = true;
+            RefreshCellRuntime(row, col);
+        }
+        /// <summary>
+        /// Marks the treasure at the given 0-based cell as collected — the icon
+        /// disappears (mirrors <see cref="MarkKeyCollected"/> for <c>'T'</c> cells).
+        /// </summary>
+        public void MarkTreasureCollected(int row, int col)
+        {
+            if (row < 0 || col < 0 || row >= _treasureCollected.GetLength(0) || col >= _treasureCollected.GetLength(1)) return;
+            _treasureCollected[row, col] = true;
             RefreshCellRuntime(row, col);
         }
         /// <summary>

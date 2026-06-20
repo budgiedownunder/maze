@@ -18,7 +18,7 @@ At the moment, it allows the user to:
 - Edit per-maze 3D game settings (sky, wall / enemy / health styles, timer, …) via a **Settings** toolbar button, saved with the maze; a cell with no per-cell override inherits the maze's wall / enemy / health default as its 2D base sprite
 - Generate mazes automatically using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly, with configurable dimensions, start/finish positions and minimum spine length
 - Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
-- Play mazes and animate walk throughs (2D), with variant sprites for overridden cells (ghost enemies, potion pickups, water/lava/iron-fence walls) and the maze's wall / enemy / health defaults for non-overridden cells
+- Play mazes and animate walk throughs (2D), with variant sprites for overridden cells (ghost enemies, potion pickups, water/lava/iron-fence walls) and the maze's wall / enemy / health defaults for non-overridden cells; treasure cells render per style and are auto-collected on walk-over, tallied into the bag as grouped `[icon] × N` chips
 - Play mazes in first-person **3D**, powered by a [`Bevy`](https://bevyengine.org/) WebAssembly game ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md)) embedded in a `WebView`; **Play 3D** opens a **Run / Custom Run** chooser (Run uses the maze's saved settings, Custom Run a one-off tweak)
 
 It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  

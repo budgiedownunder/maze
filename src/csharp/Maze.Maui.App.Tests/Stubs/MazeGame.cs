@@ -60,6 +60,7 @@ namespace Maze.Api
         PlayerHealed = 3,
         PlayerNotHealed = 4,
         KeyCollected = 5,
+        TreasureCollected = 6,
     }
 
     public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column, uint Payload);
@@ -69,6 +70,8 @@ namespace Maze.Api
     public readonly record struct EnemyInfo(uint Row, uint Column, uint Id, EnemyType? EnemyType = null);
 
     public readonly record struct HealthPickupInfo(uint Row, uint Column);
+
+    public readonly record struct CollectedTreasureInfo(TreasureStyle Style, uint Count);
 
     public sealed class MazeGame : IDisposable
     {
@@ -144,6 +147,7 @@ namespace Maze.Api
         public GameEvent[] NextTickEvents { get; set; } = [];
 
         public IReadOnlyList<BagItem> Bag { get; set; } = [];
+        public IReadOnlyList<CollectedTreasureInfo> CollectedTreasures { get; set; } = [];
         public IReadOnlyList<DoorInfo> Doors { get; set; } = [];
         public IReadOnlyList<KeyInfo> Keys { get; set; } = [];
 

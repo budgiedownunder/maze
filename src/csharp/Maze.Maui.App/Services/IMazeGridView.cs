@@ -45,5 +45,8 @@ namespace Maze.Maui.App.Services
 
         /// <summary>Marks the health pickup at the given cell as consumed — the icon disappears.</summary>
         void MarkHealthCollected(int row, int col);
+
+        /// <summary>Marks the treasure at the given cell as collected — the icon disappears in game mode.</summary>
+        void MarkTreasureCollected(int row, int col);
     }
 }
