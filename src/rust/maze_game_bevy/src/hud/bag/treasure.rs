@@ -1,8 +1,9 @@
 //! Procedural treasure icons for the bag HUD — one per [`maze::TreasureStyle`],
 //! generated at runtime (no asset files) with their colours baked in (so the
-//! bag sprite renders them untinted). Silver and gold are a vertical metal
-//! **ingot bar** recessed in a black slot; diamonds is a bright faceted gem;
-//! jewels is a gem quartered into four jewel-palette colours.
+//! bag sprite renders them untinted). Silver and gold are circular metal
+//! **coins** (concentric rings with a black rim and an upper-left glint);
+//! diamonds is a bright faceted gem; jewels is a gem quartered into four
+//! jewel-palette colours.
 
 use crate::images::make_image;
 use bevy::prelude::*;
@@ -17,8 +18,8 @@ pub(crate) fn make_treasure_icon_texture(
     style: TreasureStyle,
 ) -> Handle<Image> {
     let pixels = match style {
-        TreasureStyle::Silver => bar_in_slot_pixels([0.80, 0.82, 0.88]),
-        TreasureStyle::Gold => bar_in_slot_pixels([0.95, 0.78, 0.25]),
+        TreasureStyle::Silver => coin_pixels(&SILVER_COIN),
+        TreasureStyle::Gold => coin_pixels(&GOLD_COIN),
         TreasureStyle::Diamonds => gem_pixels(GemFill::Solid([0.90, 0.96, 1.0])),
         TreasureStyle::Jewels => gem_pixels(GemFill::Quartered),
     };
@@ -33,26 +34,90 @@ fn put(pixels: &mut [u8], idx: usize, rgb: [f32; 3]) {
     pixels[idx + 3] = 255;
 }
 
-/// A vertical metal ingot bar (the given colour) inset within a black
-/// rectangle, so the bar reads as recessed in a slot. Everything outside the
-/// black rectangle is transparent.
-fn bar_in_slot_pixels(bar_rgb: [f32; 3]) -> Vec<u8> {
-    // Outer black slot and the inset bar, as inclusive pixel bounds.
-    let (slot_x0, slot_x1, slot_y0, slot_y1) = (16.0, 48.0, 8.0, 56.0);
-    let (bar_x0, bar_x1, bar_y0, bar_y1) = (26.0, 38.0, 14.0, 50.0);
+/// The concentric-band colours of a coin, outermost (the black rim) to the
+/// centre, plus the glint colour. Mirrors the web bag's `silver.svg` / `gold.svg`
+/// coins (a base disc, an inset face disc, and an engraved inner ring).
+struct CoinPalette {
+    /// Black outer rim.
+    outline: [f32; 3],
+    /// Base disc between the rim and the face.
+    outer: [f32; 3],
+    /// Ring outlining the inset face.
+    mid_stroke: [f32; 3],
+    /// The inset face fill.
+    mid_fill: [f32; 3],
+    /// Engraved inner ring on the face.
+    ring_stroke: [f32; 3],
+    /// Upper-left glint colour, blended over the face.
+    highlight: [f32; 3],
+}
+
+const SILVER_COIN: CoinPalette = CoinPalette {
+    outline: [0.07, 0.07, 0.08],
+    outer: [0.79, 0.81, 0.84],
+    mid_stroke: [0.60, 0.635, 0.68],
+    mid_fill: [0.875, 0.89, 0.914],
+    ring_stroke: [0.667, 0.694, 0.733],
+    highlight: [1.0, 1.0, 1.0],
+};
+
+const GOLD_COIN: CoinPalette = CoinPalette {
+    outline: [0.07, 0.07, 0.08],
+    outer: [0.906, 0.678, 0.18],
+    mid_stroke: [0.722, 0.525, 0.043],
+    mid_fill: [0.957, 0.812, 0.369],
+    ring_stroke: [0.784, 0.580, 0.102],
+    highlight: [1.0, 0.95, 0.77],
+};
+
+/// Linear blend of two colours (`t` = 0 → `a`, `t` = 1 → `b`).
+fn lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
+}
+
+/// A circular coin built from concentric colour bands (rim → base → face ring →
+/// face → engraved inner ring), with an upper-left glint. Radii are in the
+/// 64×64 icon's pixel space (≈ 2× the 32-unit web SVG). Everything outside the
+/// rim is transparent.
+fn coin_pixels(p: &CoinPalette) -> Vec<u8> {
+    let cx = ICON_W as f32 / 2.0;
+    let cy = ICON_H as f32 / 2.0;
     let mut pixels = vec![0u8; (ICON_W * ICON_H * 4) as usize];
     for y in 0..ICON_H {
         for x in 0..ICON_W {
             let idx = ((y * ICON_W + x) * 4) as usize;
-            let fx = x as f32;
-            let fy = y as f32;
-            if (bar_x0..=bar_x1).contains(&fx) && (bar_y0..=bar_y1).contains(&fy) {
-                put(&mut pixels, idx, bar_rgb);
-            } else if (slot_x0..=slot_x1).contains(&fx) && (slot_y0..=slot_y1).contains(&fy) {
-                // The recessed black slot around the bar.
-                put(&mut pixels, idx, [0.04, 0.04, 0.06]);
-            }
-            // Otherwise transparent.
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cy;
+            let r = (dx * dx + dy * dy).sqrt();
+            // Concentric bands from the centre out; > 29.5 is outside the coin.
+            let base = if r <= 11.9 {
+                p.mid_fill
+            } else if r <= 14.1 {
+                p.ring_stroke
+            } else if r <= 19.9 {
+                p.mid_fill
+            } else if r <= 22.1 {
+                p.mid_stroke
+            } else if r <= 25.0 {
+                p.outer
+            } else if r <= 29.5 {
+                p.outline
+            } else {
+                continue; // transparent
+            };
+            // Soft elliptical glint over the upper-left of the coin face only.
+            let hx = (x as f32 - 24.8) / 6.0;
+            let hy = (y as f32 - 23.2) / 4.0;
+            let rgb = if r <= 25.0 && hx * hx + hy * hy <= 1.0 {
+                lerp3(base, p.highlight, 0.5)
+            } else {
+                base
+            };
+            put(&mut pixels, idx, rgb);
         }
     }
     pixels
