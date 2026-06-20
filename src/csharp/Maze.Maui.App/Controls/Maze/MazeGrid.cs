@@ -859,7 +859,13 @@ namespace Maze.Maui.App
             }
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame is not null)
-                Controls.InteractiveGrid.Grid.SetCellContent(cellFrame, new MazeCellContent(cellType));
+                // Build the content the same way the load / refresh paths do — with the
+                // maze's game settings — so a freshly-placed wall / enemy / health cell
+                // adopts the maze-default 2D sprite (e.g. lava / ghost / potion) rather
+                // than the hardcoded base. Indices here are one-based; OverrideForRender
+                // takes zero-based.
+                Controls.InteractiveGrid.Grid.SetCellContent(cellFrame,
+                    new MazeCellContent(cellType, OverrideForRender(cellType, row - 1, column - 1), mazeItem?.GameSettings, showBadge: !_gameMode));
             return cellFrame;
         }
         /// <summary>
