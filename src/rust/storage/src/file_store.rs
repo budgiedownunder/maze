@@ -20,7 +20,7 @@ use crate::store::{
 };
 use crate::{
     file_store_migration,
-    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
     Error, MazeItem, Store,
 };
 
@@ -2466,6 +2466,7 @@ impl MazeStore for FileStore {
             MAX_MAZE_CELLS,
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
+        validate_maze_object_counts(&maze.definition.grid)?;
         // Reject case-insensitive name collision before writing — the
         // `write_maze_file` overwrite check uses `Path::exists`, which
         // is case-insensitive on NTFS/APFS but case-sensitive on ext4.
@@ -2601,6 +2602,7 @@ impl MazeStore for FileStore {
             MAX_MAZE_CELLS,
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
+        validate_maze_object_counts(&maze.definition.grid)?;
         if !self.maze_exists(owner, &maze.id) {
             return Err(Error::MazeIdNotFound(maze.id.to_string()));
         }

@@ -16,7 +16,7 @@ use crate::store::{
     ScoreboardEntry, SortDirection, TokenStore, UserStore,
 };
 use crate::{
-    validation::{validate_email_format, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
@@ -2948,6 +2948,7 @@ impl MazeStore for SqlStore {
             MAX_MAZE_CELLS,
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
+        validate_maze_object_counts(&maze.definition.grid)?;
 
         let existing = sqlx::query(&q(
             self.kind,
@@ -3125,6 +3126,7 @@ impl MazeStore for SqlStore {
             MAX_MAZE_CELLS,
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
+        validate_maze_object_counts(&maze.definition.grid)?;
         let definition_json = serde_json::to_string(&maze)?;
         validate_maze_definition_size(definition_json.len(), MAX_MAZE_DEFINITION_BYTES)?;
         let result = sqlx::query(&q(
@@ -4963,26 +4965,27 @@ mod tests {
 
     #[tokio::test]
     async fn sql_store_create_maze_rejects_oversized_definition_from_overrides() {
-        use data_model::{CellEntity, EnemyOverride, EnemyType, MazeDefinition};
+        use data_model::{CellEntity, MazeDefinition, WallOverride, WallType};
         let mut store = new_sqlite_store().await;
         let owner = seed_owner(&mut store).await;
         // 30 × 30 = 900 cells — comfortably under the 3,600-cell cap — but
-        // filling the cells with enemy overrides inflates the serialised
+        // filling the cells with wall overrides inflates the serialised
         // definition far past the 16,000-byte column. This is exactly the case
-        // the cell-count cap can't catch: the byte guard must reject it.
-        let mut grid = vec![vec!['E'; 30]; 30];
+        // the cell-count cap can't catch: the byte guard must reject it. Walls
+        // carry no per-type count cap (unlike enemies / health / treasure /
+        // keys / doors), so this isolates the byte guard as the only check that
+        // can reject the maze.
+        let mut grid = vec![vec!['W'; 30]; 30];
         grid[0][0] = 'S';
         grid[29][29] = 'F';
         let mut definition = MazeDefinition::from_vec(grid);
         for r in 0..30 {
             for c in 0..30 {
-                if definition.grid[r][c] == 'E' {
+                if definition.grid[r][c] == 'W' {
                     definition.cell_entities.insert(
                         (r, c),
-                        vec![CellEntity::Enemy(EnemyOverride {
-                            enemy_type: Some(EnemyType::Ghost),
-                            damage: Some(2),
-                            move_period_ms: Some(900.0),
+                        vec![CellEntity::Wall(WallOverride {
+                            wall_type: Some(WallType::IronFence),
                         })],
                     );
                 }

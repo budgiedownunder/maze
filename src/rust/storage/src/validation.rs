@@ -173,6 +173,60 @@ pub fn validate_maze_feature_count(grid: &[Vec<char>], max: usize) -> Result<(),
     Ok(())
 }
 
+/// Validates that a maze carries no more enemies / health pickups / treasure than
+/// [`maze::MAX_ENEMY_COUNT`] / [`maze::MAX_HEALTH_COUNT`] / [`maze::MAX_TREASURE_COUNT`]
+/// respectively — the same per-type caps generation enforces, applied to authored
+/// mazes so the editor cannot paint a maze whose in-game object count exceeds what
+/// generation would ever place. (An unbounded treasure pile, for instance,
+/// overwhelms a mobile GPU with per-chest lights and sparkles.) Each store calls
+/// this from `create_maze` / `update_maze`. Doors are not checked here — they fall
+/// under the combined key + door cap validated by [`validate_maze_feature_count`].
+///
+/// # Returns
+///
+/// `Ok(())` if every limited type is at or under its cap,
+/// `Err(Error::MazeHasTooManyObjects { kind, count, max })` for the first type
+/// that exceeds it.
+///
+/// # Examples
+///
+/// A maze with a handful of each object passes; one with more treasure than the
+/// cap is refused
+/// ```
+/// use storage::validation::validate_maze_object_counts;
+///
+/// let ok: Vec<Vec<char>> = vec![vec!['S', 'E', 'T', 'H', 'F']];
+/// assert!(validate_maze_object_counts(&ok).is_ok());
+///
+/// let too_much_treasure: Vec<Vec<char>> = vec![std::iter::repeat_n('T', 13).collect()];
+/// assert!(validate_maze_object_counts(&too_much_treasure).is_err());
+/// ```
+pub fn validate_maze_object_counts(grid: &[Vec<char>]) -> Result<(), Error> {
+    let mut enemies = 0usize;
+    let mut health = 0usize;
+    let mut treasure = 0usize;
+    for row in grid {
+        for &ch in row {
+            match ch {
+                'E' => enemies += 1,
+                'H' => health += 1,
+                'T' => treasure += 1,
+                _ => {}
+            }
+        }
+    }
+    for (count, max, kind) in [
+        (enemies, maze::MAX_ENEMY_COUNT, "enemies"),
+        (health, maze::MAX_HEALTH_COUNT, "health pickups"),
+        (treasure, maze::MAX_TREASURE_COUNT, "treasure items"),
+    ] {
+        if count > max {
+            return Err(Error::MazeHasTooManyObjects { kind, count, max });
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,5 +405,55 @@ mod tests {
             vec![' ', 'W', ' ', ' '],
         ];
         validate_maze_feature_count(&grid, 0).expect("no K/D so any cap passes");
+    }
+
+    // ─── validate_maze_object_counts ─────────────────────────────────────
+
+    fn grid_with_cell(ch: char, n: usize) -> Vec<Vec<char>> {
+        vec![std::iter::repeat_n(ch, n).collect()]
+    }
+
+    #[test]
+    fn validate_maze_object_counts_accepts_each_type_at_cap() {
+        validate_maze_object_counts(&grid_with_cell('E', maze::MAX_ENEMY_COUNT))
+            .expect("enemies at cap should pass");
+        validate_maze_object_counts(&grid_with_cell('H', maze::MAX_HEALTH_COUNT))
+            .expect("health at cap should pass");
+        validate_maze_object_counts(&grid_with_cell('T', maze::MAX_TREASURE_COUNT))
+            .expect("treasure at cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_object_counts_rejects_over_cap_treasure() {
+        let err = validate_maze_object_counts(&grid_with_cell('T', maze::MAX_TREASURE_COUNT + 1))
+            .expect_err("over-cap treasure should fail");
+        match err {
+            Error::MazeHasTooManyObjects { kind, count, max } => {
+                assert_eq!(kind, "treasure items");
+                assert_eq!(count, maze::MAX_TREASURE_COUNT + 1);
+                assert_eq!(max, maze::MAX_TREASURE_COUNT);
+            }
+            other => panic!("expected MazeHasTooManyObjects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_maze_object_counts_rejects_over_cap_enemies() {
+        let err = validate_maze_object_counts(&grid_with_cell('E', maze::MAX_ENEMY_COUNT + 1))
+            .expect_err("over-cap enemies should fail");
+        assert!(matches!(
+            err,
+            Error::MazeHasTooManyObjects { kind: "enemies", .. }
+        ));
+    }
+
+    #[test]
+    fn validate_maze_object_counts_ignores_keys_doors_and_terrain() {
+        // K/D (counted by the feature validator) and S/F/W/' ' don't count here.
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', 'K', 'D', 'W', 'F'],
+            vec![' ', 'K', 'D', ' ', ' '],
+        ];
+        validate_maze_object_counts(&grid).expect("no E/H/T so it passes");
     }
 }

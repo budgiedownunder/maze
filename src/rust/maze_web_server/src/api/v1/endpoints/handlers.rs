@@ -249,6 +249,12 @@ fn get_maze_definition_too_large_error(bytes: usize, max: usize) -> Error {
     ))
 }
 
+fn get_maze_too_many_objects_error(kind: &str, count: usize, max: usize) -> Error {
+    ErrorUnprocessableEntity(format!(
+        "Maze has too many {kind}: {count} exceeds the limit of {max}"
+    ))
+}
+
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
     format!("The maze could not be solved: {err}")
 }
@@ -2109,6 +2115,8 @@ pub async fn create_maze(
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
                 StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
                     Err(get_maze_too_many_features_error(keys, doors, max)),
+                StoreError::MazeHasTooManyObjects { kind, count, max } =>
+                    Err(get_maze_too_many_objects_error(kind, count, max)),
                 StoreError::MazeDefinitionTooLarge { bytes, max } =>
                     Err(get_maze_definition_too_large_error(bytes, max)),
                 _ => Err(get_maze_create_internal_error(&err))
@@ -2209,6 +2217,8 @@ pub async fn update_maze(
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
                StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
                     Err(get_maze_too_many_features_error(keys, doors, max)),
+               StoreError::MazeHasTooManyObjects { kind, count, max } =>
+                    Err(get_maze_too_many_objects_error(kind, count, max)),
                StoreError::MazeDefinitionTooLarge { bytes, max } =>
                     Err(get_maze_definition_too_large_error(bytes, max)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))

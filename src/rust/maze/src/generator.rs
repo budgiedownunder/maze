@@ -7,7 +7,9 @@ use std::collections::HashMap;
 
 use data_model::{CellEntity, Maze, MazeDefinition, MazePoint, TreasureOverride, TreasureStyle};
 
-use crate::{Error, GenerationAlgorithm, Solver};
+use crate::{
+    Error, GenerationAlgorithm, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT, Solver,
+};
 
 /// Options that control how a maze is generated.
 ///
@@ -435,20 +437,6 @@ fn carve(
 /// bound — so the placement-validation solve stays in true key-aware mode rather
 /// than falling back to the lock-blind solve.
 pub const MAX_AUTO_DOORS: usize = 8;
-
-/// Maximum number of enemies (`'E'` cells) auto-placed at generation. Caps
-/// difficulty at a level that stays playable on small grids and keeps the
-/// tick-time per-enemy cost bounded for renderers that update the visual
-/// each frame.
-pub const MAX_ENEMY_COUNT: usize = 8;
-
-/// Maximum number of health pickups (`'H'` cells) auto-placed at generation.
-/// Mirrors [`MAX_ENEMY_COUNT`] so the two knobs feel symmetric to authors
-/// configuring a difficulty preset.
-pub const MAX_HEALTH_COUNT: usize = 8;
-
-/// Maximum number of treasure (`'T'` cells) auto-placed at generation.
-pub const MAX_TREASURE_COUNT: usize = 12;
 
 /// Count of non-wall 4-neighbours of `(r, c)`.
 fn open_degree(grid: &[Vec<char>], r: usize, c: usize) -> usize {
