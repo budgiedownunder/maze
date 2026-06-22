@@ -953,6 +953,7 @@ export function MazePage() {
             [D]&nbsp;Door&nbsp;&nbsp;&nbsp;
             [E]&nbsp;Enemy&nbsp;&nbsp;&nbsp;
             [H]&nbsp;Health&nbsp;&nbsp;&nbsp;
+            [T]&nbsp;Treasure&nbsp;&nbsp;&nbsp;
             [DEL]&nbsp;Clear&nbsp;&nbsp;&nbsp;
             [&#x2190;&#x2191;&#x2192;&#x2193;]&nbsp;Move&nbsp;&nbsp;&nbsp;
             [Shift]&nbsp;Range

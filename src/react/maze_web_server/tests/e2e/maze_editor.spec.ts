@@ -1035,6 +1035,7 @@ test('shortcut hint bar contains expected shortcuts', async ({ page }) => {
   await expect(hint).toContainText('[D]')
   await expect(hint).toContainText('[E]')
   await expect(hint).toContainText('[H]')
+  await expect(hint).toContainText('[T]')
   await expect(hint).toContainText('[DEL]')
   await expect(hint).toContainText('[Shift] Range')
 })
