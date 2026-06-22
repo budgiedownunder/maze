@@ -81,8 +81,8 @@ const GLOW_RADIUS: f32 = 0.45;
 /// Radiating sparkles: tiny emissive spheres that fly outward from the loot and
 /// shrink away, looping on staggered phases — a cheap "glinting treasure"
 /// shimmer (no particle system). Mirrors the key holder's sparks. The colour(s)
-/// come from the per-style module so the shimmer matches the loot.
-const SPARK_COUNT: usize = 30;
+/// come from the per-style module so the shimmer matches the loot. The number of
+/// rays per chest is chosen at spawn time (see rays_per_chest) rather than fixed.
 /// Radiating light lines: thin emissive beams planted across the loot surface (a
 /// phyllotaxis disc of `SPARK_FOOTPRINT_R`), each fluctuating in length so the
 /// treasure shimmers. The beam mesh is a unit cylinder scaled thin × length ×
@@ -261,6 +261,8 @@ pub(crate) struct LootContext<'a> {
     gem_outlines: &'a [Option<Handle<Mesh>>],
     outline_mat: &'a Option<Handle<StandardMaterial>>,
     sparkle_mesh: &'a Option<Handle<Mesh>>,
+    /// Sparkle rays this chest spawns (uniform across the maze; see rays_per_chest).
+    ray_count: usize,
 }
 
 /// Builds a metallic loot material (silver / gold coins). Shared by the coin
@@ -396,6 +398,21 @@ fn glow_color(style: TreasureStyle) -> Color {
     }
 }
 
+/// The additive-blended sparkle rays are the heavy per-frame cost (transparent
+/// overdraw), so on a treasure-dense maze a real iPhone's GPU drowns where the
+/// desktop simulator sails past. Each chest gets `rays_per_chest` rays — the same
+/// count for every chest in a maze (so they look uniform), the total stays
+/// bounded, and sparse mazes still get the full per-chest cap. Every chest also
+/// keeps one point light; lights are far cheaper than the sparkle overdraw.
+const MAX_RAYS_PER_CHEST: usize = 5;
+const MAX_TOTAL_RAYS: usize = 120;
+
+/// Sparkle rays each chest gets for a maze holding `num_chests` treasures:
+/// `min(MAX_RAYS_PER_CHEST, MAX_TOTAL_RAYS / num_chests)`.
+pub(crate) fn rays_per_chest(num_chests: usize) -> usize {
+    (MAX_TOTAL_RAYS / num_chests.max(1)).min(MAX_RAYS_PER_CHEST)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_treasure_for_cell(
     commands: &mut Commands,
@@ -406,6 +423,8 @@ pub(crate) fn spawn_treasure_for_cell(
     cell: char,
     r: usize,
     c: usize,
+    // Sparkle rays for this chest — uniform across the maze (see rays_per_treasure).
+    ray_count: usize,
 ) {
     if cell != 'T' {
         return;
@@ -428,7 +447,7 @@ pub(crate) fn spawn_treasure_for_cell(
         ))
         .id();
 
-    // Style-tinted glow above the loot.
+    // Style-tinted glow above the loot — one point light per chest.
     let glow = commands
         .spawn((
             PointLight {
@@ -451,6 +470,7 @@ pub(crate) fn spawn_treasure_for_cell(
         gem_outlines: &assets.gem_outlines,
         outline_mat: &common_assets.outline_mat,
         sparkle_mesh: &assets.sparkle_mesh,
+        ray_count,
     };
     match style {
         TreasureStyle::Silver => silver::spawn_silver(commands, root, &assets.silver, &ctx),
@@ -531,6 +551,7 @@ fn spawn_sparkles(
     root: Entity,
     mesh: &Option<Handle<Mesh>>,
     mats: &[Option<Handle<StandardMaterial>>],
+    ray_count: usize,
 ) {
     let group = commands
         .spawn((Transform::default(), Visibility::default()))
@@ -540,14 +561,14 @@ fn spawn_sparkles(
     let Some(mesh) = mesh.clone() else {
         return;
     };
-    if mats.is_empty() {
+    if mats.is_empty() || ray_count == 0 {
         return;
     }
     // Phyllotaxis (sunflower) spread so the start points cover the loot surface
     // evenly instead of emanating from one central point.
     const GOLDEN_ANGLE: f32 = 2.399_963_2;
-    for i in 0..SPARK_COUNT {
-        let t = (i as f32 + 0.5) / SPARK_COUNT as f32;
+    for i in 0..ray_count {
+        let t = (i as f32 + 0.5) / ray_count as f32;
         let r = t.sqrt() * SPARK_FOOTPRINT_R;
         let a = i as f32 * GOLDEN_ANGLE;
         let (bx, bz) = (r * a.cos(), r * a.sin());
@@ -620,5 +641,23 @@ pub(crate) fn treasure_collection_system(
         transform.translation.y = COLLECT_RISE * eased;
         transform.scale = Vec3::splat(1.0 - eased);
         transform.rotate_y(dt * COLLECT_SPIN_RATE);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rays_per_chest;
+
+    #[test]
+    fn rays_per_chest_caps_then_scales_with_count() {
+        // Sparse mazes: every chest gets the full per-chest cap.
+        assert_eq!(rays_per_chest(1), 5);
+        assert_eq!(rays_per_chest(10), 5);
+        assert_eq!(rays_per_chest(24), 5); // 120 / 24 == 5, still at the cap
+        // Denser mazes: the total budget scales the per-chest count down evenly.
+        assert_eq!(rays_per_chest(30), 4); // 120 / 30
+        assert_eq!(rays_per_chest(120), 1);
+        // Degenerate input must not divide by zero.
+        assert_eq!(rays_per_chest(0), 5);
     }
 }

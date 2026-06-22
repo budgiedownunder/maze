@@ -29,5 +29,5 @@ pub(crate) fn spawn_gold(
     ctx: &LootContext,
 ) {
     spawn_coin_loot(commands, root, ctx, &assets.coin_mat);
-    spawn_sparkles(commands, root, ctx.sparkle_mesh, &assets.sparkle_mats);
+    spawn_sparkles(commands, root, ctx.sparkle_mesh, &assets.sparkle_mats, ctx.ray_count);
 }

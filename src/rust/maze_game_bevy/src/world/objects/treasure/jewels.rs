@@ -36,5 +36,5 @@ pub(crate) fn spawn_jewels(
     ctx: &LootContext,
 ) {
     spawn_gem_loot(commands, root, ctx, &assets.gem_mats);
-    spawn_sparkles(commands, root, ctx.sparkle_mesh, &assets.sparkle_mats);
+    spawn_sparkles(commands, root, ctx.sparkle_mesh, &assets.sparkle_mats, ctx.ray_count);
 }

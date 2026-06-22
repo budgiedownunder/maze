@@ -60,6 +60,9 @@ pub(crate) fn spawn_objects_for_cell(
     // per-maze `GameConfig` default.
     cell_entity: Option<&CellEntity>,
     enemy_id: u32,
+    // Sparkle rays a treasure in this cell gets — uniform across the maze (see
+    // treasure::rays_per_chest); ignored for non-treasure cells.
+    treasure_rays: usize,
 ) {
     finish::spawn_finish_for_cell(commands, &assets.finish, cell, r, c);
     dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config);
@@ -88,5 +91,6 @@ pub(crate) fn spawn_objects_for_cell(
         cell,
         r,
         c,
+        treasure_rays,
     );
 }

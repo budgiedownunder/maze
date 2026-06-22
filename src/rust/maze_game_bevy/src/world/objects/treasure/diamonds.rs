@@ -30,5 +30,5 @@ pub(crate) fn spawn_diamonds(
 ) {
     // One material reused across every gem colour group.
     spawn_gem_loot(commands, root, ctx, std::slice::from_ref(&assets.gem_mat));
-    spawn_sparkles(commands, root, ctx.sparkle_mesh, &assets.sparkle_mats);
+    spawn_sparkles(commands, root, ctx.sparkle_mesh, &assets.sparkle_mats, ctx.ray_count);
 }

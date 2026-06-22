@@ -420,6 +420,12 @@ pub(crate) fn spawn_world(
     // bumping this counter per `'E'` keeps the Bevy `EnemyMarker.id`
     // aligned with the runtime `maze::Enemy.id`.
     let mut enemy_id: u32 = 0;
+    // Sparkle rays each treasure chest gets — the same count for every chest in the
+    // maze (so they look uniform), with the total bounded for treasure-dense mazes
+    // (the additive sparkle overdraw is what overwhelms a mobile GPU; the per-chest
+    // point light is comparatively cheap and always kept). See rays_per_chest.
+    let treasure_rays =
+        objects::treasure::rays_per_chest(grid.iter().flatten().filter(|&&ch| ch == 'T').count());
     for (r, row) in grid.iter().enumerate() {
         for (c, &cell) in row.iter().enumerate() {
             let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
@@ -465,6 +471,7 @@ pub(crate) fn spawn_world(
                 &config,
                 cell_entity,
                 enemy_id,
+                treasure_rays,
             );
             if cell == 'E' {
                 enemy_id += 1;
