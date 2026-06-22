@@ -18,10 +18,12 @@ pub(crate) struct ClockBackground;
 pub(crate) fn spawn_clock_hud(commands: &mut Commands, window: &Query<&Window>) {
     // Countdown text — top-centre HUD. Initial position from the current window;
     // clock_text_system / clock_flash_system reposition each frame so resizes track.
-    let clock_y = window
+    // `scale` shrinks the clock (text + pill) on narrow widths in step with the
+    // SCORE readout, so the centred clock and left-anchored SCORE don't collide.
+    let (clock_y, scale) = window
         .single()
-        .map(|w| w.height() / 2.0 - 32.0)
-        .unwrap_or(330.0);
+        .map(|w| (w.height() / 2.0 - 32.0, crate::hud::hud_scale(w.width())))
+        .unwrap_or((330.0, 1.0));
     // Flashing background sits behind the text. Alpha is driven each frame by
     // clock_flash_system; starts at the COLOR_CLOCK_FLASH peak and gets clamped to 0
     // on the first frame because remaining_secs is well above CLOCK_FLASH_SECS.
@@ -32,14 +34,14 @@ pub(crate) fn spawn_clock_hud(commands: &mut Commands, window: &Query<&Window>) 
             custom_size: Some(Vec2::new(140.0, 52.0)),
             ..default()
         },
-        Transform::from_xyz(0.0, clock_y, 8.9),
+        Transform::from_xyz(0.0, clock_y, 8.9).with_scale(Vec3::splat(scale)),
     ));
     commands.spawn((
         ClockText,
         Text2d::new("--:--"),
         TextFont { font_size: 36.0, ..default() },
         TextColor(CLOCK_GOLD),
-        Transform::from_xyz(0.0, clock_y, 9.0),
+        Transform::from_xyz(0.0, clock_y, 9.0).with_scale(Vec3::splat(scale)),
     ));
 }
 
@@ -84,9 +86,12 @@ pub(crate) fn clock_text_system(
     mut clock: ResMut<GameClock>,
     mut texts: Query<(&mut Text2d, &mut Transform, &mut TextColor), With<ClockText>>,
 ) {
-    // Anchor the HUD to the top edge each frame so window resizes track.
-    let half_h = window.single().map(|w| w.height() / 2.0).unwrap_or(360.0);
-    let target_y = half_h - 32.0;
+    // Anchor the HUD to the top edge each frame so window resizes track, and
+    // rescale for the current width so the clock keeps clear of the SCORE.
+    let (target_y, scale) = window
+        .single()
+        .map(|w| (w.height() / 2.0 - 32.0, crate::hud::hud_scale(w.width())))
+        .unwrap_or((328.0, 1.0));
 
     // Throttle text content updates to once per whole-second change.
     let remaining = clock.remaining_secs.max(0.0).ceil() as i32;
@@ -103,6 +108,7 @@ pub(crate) fn clock_text_system(
             colour.0 = if warn { CLOCK_RED } else { CLOCK_GOLD };
         }
         transform.translation.y = target_y;
+        transform.scale = Vec3::splat(scale);
     }
 }
 
@@ -113,8 +119,10 @@ pub(crate) fn clock_flash_system(
     window: Query<&Window>,
     mut backgrounds: Query<(&mut Sprite, &mut Transform), With<ClockBackground>>,
 ) {
-    let half_h = window.single().map(|w| w.height() / 2.0).unwrap_or(360.0);
-    let target_y = half_h - 32.0;
+    let (target_y, scale) = window
+        .single()
+        .map(|w| (w.height() / 2.0 - 32.0, crate::hud::hud_scale(w.width())))
+        .unwrap_or((328.0, 1.0));
 
     // Hide entirely outside the flash window or once the game ends — the win / lose
     // overlay should own the screen at that point.
@@ -129,5 +137,6 @@ pub(crate) fn clock_flash_system(
     for (mut sprite, mut transform) in &mut backgrounds {
         sprite.color = COLOR_CLOCK_FLASH.with_alpha(pulse_alpha);
         transform.translation.y = target_y;
+        transform.scale = Vec3::splat(scale);
     }
 }

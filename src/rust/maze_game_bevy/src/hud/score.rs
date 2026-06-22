@@ -24,6 +24,10 @@ pub(crate) struct ScoreHud {
 
 pub(crate) fn spawn_score_hud(commands: &mut Commands, window: &Query<&Window>) {
     let (x, y) = top_left(window);
+    let scale = window
+        .single()
+        .map(|w| crate::hud::hud_scale(w.width()))
+        .unwrap_or(1.0);
     commands.spawn((
         ScoreHud { last_score: 0 },
         Text2d::new(score_text(0)),
@@ -33,7 +37,7 @@ pub(crate) fn spawn_score_hud(commands: &mut Commands, window: &Query<&Window>) 
         },
         TextColor(COLOR_SCORE),
         Anchor::CENTER_LEFT,
-        Transform::from_xyz(x, y, 9.0),
+        Transform::from_xyz(x, y, 9.0).with_scale(Vec3::splat(scale)),
     ));
 }
 
@@ -48,6 +52,10 @@ pub(crate) fn score_hud_system(
     let (x, y) = top_left(&window);
     transform.translation.x = x;
     transform.translation.y = y;
+    if let Ok(w) = window.single() {
+        // Track resizes: shrink on narrow widths so SCORE clears the centred clock.
+        transform.scale = Vec3::splat(crate::hud::hud_scale(w.width()));
+    }
 
     let score = state.game.score();
     if score_hud.last_score != score {
