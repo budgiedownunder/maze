@@ -48,16 +48,16 @@
                         VerticalOptions="Center"
                         BackgroundColor="{StaticResource PlayButton}"
                         TextColor="White">
-                    <VisualStateManager.VisualStateGroups>
-                        <VisualStateGroup x:Name="CommonStates">
-                            <VisualState x:Name="Normal" />
-                            <VisualState x:Name="Disabled">
-                                <VisualState.Setters>
-                                    <Setter Property="Opacity" Value="0.5" />
-                                </VisualState.Setters>
-                            </VisualState>
-                        </VisualStateGroup>
-                    </VisualStateManager.VisualStateGroups>
+                    <!-- Dim while disabled (no winnable subject selected). A property Trigger
+                         rather than a "CommonStates" VisualStateGroup: the implicit Button
+                         style already defines a CommonStates group, and the runtime XAML
+                         loader (iOS) appends rather than replaces, producing a duplicate
+                         group name that throws "VisualStateGroup Names must be unique". -->
+                    <Button.Triggers>
+                        <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </Button.Triggers>
                 </Button>
             </Grid>
         </VerticalStackLayout>
