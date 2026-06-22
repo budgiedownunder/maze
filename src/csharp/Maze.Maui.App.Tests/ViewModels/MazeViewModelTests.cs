@@ -102,6 +102,61 @@ namespace Maze.Maui.App.Tests.ViewModels
             service.Verify(s => s.CreateMazeItem(It.IsAny<MazeItem>()), Times.Never);
         }
 
+        // ---- SaveMaze (over a per-type object cap) ---------------------------
+
+        [Fact]
+        public async Task SaveMaze_OverTreasureCap_RefusesWithAlertAndNoServiceCall()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.IsStored = false;
+            vm.MazeItem = new MazeItem();
+            var maze = new Api.Maze(4, 4);
+            maze.SetTreasureCells(0, 0, 3, 3); // 16 treasure cells > MaxTreasureCount (12)
+
+            var result = await vm.SaveMaze(maze);
+
+            Assert.False(result);
+            dialog.Verify(d => d.ShowAlert("Cannot save",
+                It.Is<string>(m => m.Contains("16 treasure items") && m.Contains("limit of 12")), "OK"), Times.Once);
+            service.Verify(s => s.CreateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+            service.Verify(s => s.UpdateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveMaze_OverEnemyCap_RefusesStoredSaveWithAlertAndNoServiceCall()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.IsStored = true;
+            vm.MazeItem = new MazeItem { ID = "id-1" };
+            var maze = new Api.Maze(3, 3);
+            maze.SetEnemyCells(0, 0, 2, 2); // 9 enemy cells > MaxEnemyCount (8)
+
+            var result = await vm.SaveMaze(maze);
+
+            Assert.False(result);
+            dialog.Verify(d => d.ShowAlert("Cannot save",
+                It.Is<string>(m => m.Contains("9 enemies") && m.Contains("limit of 8")), "OK"), Times.Once);
+            service.Verify(s => s.UpdateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+            service.Verify(s => s.CreateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveMaze_OverHealthCap_RefusesWithAlertAndNoServiceCall()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.IsStored = false;
+            vm.MazeItem = new MazeItem();
+            var maze = new Api.Maze(3, 3);
+            maze.SetHealthCells(0, 0, 2, 2); // 9 health cells > MaxHealthCount (8)
+
+            var result = await vm.SaveMaze(maze);
+
+            Assert.False(result);
+            dialog.Verify(d => d.ShowAlert("Cannot save",
+                It.Is<string>(m => m.Contains("9 health pickups") && m.Contains("limit of 8")), "OK"), Times.Once);
+            service.Verify(s => s.CreateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+        }
+
         // ---- Game settings --------------------------------------------------
 
         [Fact]

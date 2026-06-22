@@ -508,19 +508,19 @@ namespace Maze.Maui.App.ViewModels
             await RunRequest(WalkSolutionRequested);
         }
         /// <summary>
-        /// Saves the given maze definition. Refuses the save up-front when the
-        /// grid carries more key + door cells than the key-aware
-        /// solver can handle (<see cref="Api.Maze.MaxTotalFeatures"/>)
+        /// Saves the given maze definition. Refuses the save up-front when the grid
+        /// exceeds a cap: more key + door cells than the key-aware solver can handle
+        /// (<see cref="Api.Maze.MaxTotalFeatures"/>), or more enemy / health /
+        /// treasure cells than their per-type limits
+        /// (<see cref="Api.Maze.MaxEnemyCount"/>, <see cref="Api.Maze.MaxHealthCount"/>,
+        /// <see cref="Api.Maze.MaxTreasureCount"/>).
         /// </summary>
         /// <param name="definition">Maze definition</param>
         /// <returns>Task containing a boolean result</returns>
         public async Task<bool> SaveMaze(Api.Maze definition)
         {
-            // Only key + door cells are capped here: they drive the key-aware
-            // solver's feature budget. Enemy and health cells map to empty
-            // passages for the solver and carry no such budget, so there is
-            // deliberately no per-maze enemy/health cap — the editor allows any
-            // number of them.
+            // Keys + doors share one budget: together they drive the key-aware
+            // solver's feature mask (Api.Maze.MaxTotalFeatures).
             (uint keys, uint doors) = Utils.MazeCellCounter.CountKeysAndDoors(definition);
             if (keys + doors > Api.Maze.MaxTotalFeatures)
             {
@@ -531,6 +531,31 @@ namespace Maze.Maui.App.ViewModels
                     "Remove some key or door cells before saving.",
                     "OK");
                 return false;
+            }
+
+            // Enemy, health and treasure cells are each capped to the same
+            // per-type limit the generator places and the server enforces on save,
+            // so a hand-authored maze cannot (for example) stack hundreds of
+            // treasure chests and overwhelm the 3D renderer. Refuse over-cap
+            // up-front with a clear message rather than letting the save fail with
+            // a raw server error.
+            foreach ((Api.Maze.CellType type, uint max, string label) in new[]
+            {
+                (Api.Maze.CellType.Enemy, Api.Maze.MaxEnemyCount, "enemies"),
+                (Api.Maze.CellType.Health, Api.Maze.MaxHealthCount, "health pickups"),
+                (Api.Maze.CellType.Treasure, Api.Maze.MaxTreasureCount, "treasure items"),
+            })
+            {
+                uint count = Utils.MazeCellCounter.CountCellsOfType(definition, type);
+                if (count > max)
+                {
+                    await _dialogService.ShowAlert(
+                        "Cannot save",
+                        $"This maze has {count} {label}, over the limit of {max}. " +
+                        $"Remove some {label} before saving.",
+                        "OK");
+                    return false;
+                }
             }
 
             bool saved = false;
