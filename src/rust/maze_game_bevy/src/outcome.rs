@@ -15,13 +15,14 @@
 
 use crate::overlays::{lose, win};
 use crate::state::{
-    dispatch_game_result, GameClock, GameConfig, GameOutcome, GameResult, GameState,
+    dispatch_game_result, GameClock, GameConfig, GameOutcome, GameResult, GameState, MultiLevelRun,
 };
 use bevy::prelude::*;
 
 pub(crate) fn outcome_watcher_system(
     mut commands: Commands,
     mut state: ResMut<GameState>,
+    mut run: ResMut<MultiLevelRun>,
     clock: Res<GameClock>,
     config: Res<GameConfig>,
 ) {
@@ -29,9 +30,13 @@ pub(crate) fn outcome_watcher_system(
         return;
     }
     if !state.won && state.game.is_complete() {
+        if !run.is_final() {
+            crate::world::advance_to_next_level(state.as_mut(), run.as_mut(), &config);
+            return;
+        }
         state.won = true;
         let elapsed_ms = (clock.elapsed_secs * 1000.0) as u64;
-        let score = state.game.score();
+        let score = run.cumulative_score(state.game.score());
         win::spawn_win_overlay(&mut commands, score, elapsed_ms);
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Win,
@@ -55,7 +60,7 @@ pub(crate) fn outcome_watcher_system(
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Lose,
             elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
-            score: state.game.score(),
+            score: run.cumulative_score(state.game.score()),
             difficulty: config.difficulty.clone(),
             rows: state.grid.len() as u32,
             cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,

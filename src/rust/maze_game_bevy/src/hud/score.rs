@@ -5,7 +5,7 @@
 //! rightward as the value climbs (the score never shifts its left edge), and
 //! repositioned each frame so window resizes track the top-left corner.
 
-use crate::state::GameState;
+use crate::state::{GameState, MultiLevelRun};
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
@@ -44,6 +44,7 @@ pub(crate) fn spawn_score_hud(commands: &mut Commands, window: &Query<&Window>) 
 pub(crate) fn score_hud_system(
     window: Query<&Window>,
     state: Res<GameState>,
+    run: Res<MultiLevelRun>,
     mut hud: Query<(&mut ScoreHud, &mut Text2d, &mut Transform)>,
 ) {
     let Ok((mut score_hud, mut text, mut transform)) = hud.single_mut() else {
@@ -57,7 +58,8 @@ pub(crate) fn score_hud_system(
         transform.scale = Vec3::splat(crate::hud::hud_scale(w.width()));
     }
 
-    let score = state.game.score();
+    // Running total across the run: banked completed levels + the live level.
+    let score = run.cumulative_score(state.game.score());
     if score_hud.last_score != score {
         text.0 = score_text(score);
         score_hud.last_score = score;

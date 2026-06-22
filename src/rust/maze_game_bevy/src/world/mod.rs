@@ -12,7 +12,9 @@ pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COU
 
 use crate::hud;
 use crate::overlays::pause;
-use crate::state::{GameClock, GameConfig, GameState, GridFacing, PendingMazeJson, WallType};
+use crate::state::{
+    GameClock, GameConfig, GameState, GridFacing, MultiLevelRun, PendingMazeJson, WallType,
+};
 use bevy::prelude::*;
 use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
 use std::collections::HashSet;
@@ -165,6 +167,79 @@ pub(crate) fn grid_to_json(grid: &[Vec<char>]) -> String {
         })
         .collect();
     format!("{{\"grid\":[{}]}}", rows.join(","))
+}
+
+/// Advances a multi-level run to the next level on an interim finish: banks the
+/// completed level's score + treasure into the run totals, builds the next
+/// level's game (carrying the player's HP, and the whole bag when the run is
+/// configured not to reset it), and resets the per-level view state to the new
+/// level's start. The caller must ensure the run is not already on its final
+/// level ([`MultiLevelRun::is_final`]).
+///
+/// This performs the *logical* swap only — the active game, grid, and player
+/// camera move to the new level instantly. The stacked-world rendering and the
+/// climb/transition animation are layered on separately.
+pub(crate) fn advance_to_next_level(
+    state: &mut GameState,
+    run: &mut MultiLevelRun,
+    config: &GameConfig,
+) {
+    // Bank the completed level's contribution to the run totals before the
+    // live game is replaced.
+    run.banked_score += state.game.score();
+    merge_treasure(&mut run.carried_treasure, &state.game.collected_treasure());
+
+    let next_index = run.current_level + 1;
+    let carried_hp = state.game.hp();
+    let carried_bag = state.game.bag().to_vec();
+
+    let opts = MazeGameOptions {
+        enemy_move_period_ms: Some(config.enemy_move_period_ms),
+        enemy_damage: Some(config.enemy_damage),
+        max_hp: Some(config.max_hp),
+        starting_hp: Some(carried_hp),
+    };
+    let mut next_game = MazeGame::from_json_with_options(&run.levels[next_index], opts)
+        .expect("multi-level run holds maze JSON produced by the generator");
+    if !run.reset_bag_between_levels {
+        next_game.seed_carried_bag(carried_bag);
+    }
+
+    let grid = next_game.grid().to_vec();
+    let start_row = next_game.player_row();
+    let start_col = next_game.player_col();
+    let facing = initial_facing(&grid, start_row, start_col);
+    let start_yaw = facing.to_yaw();
+    let start_pos = camera_pos_for(start_row, start_col, start_yaw);
+
+    let mut explored = HashSet::new();
+    explore_cell(&mut explored, &grid, start_row, start_col);
+
+    state.game = next_game;
+    state.grid = grid;
+    state.facing = facing;
+    state.visual_pos = start_pos;
+    state.visual_yaw = start_yaw;
+    state.visual_pitch = 0.0;
+    state.anim = None;
+    state.explored = explored;
+    state.damage_flash_timer = 0.0;
+    run.current_level = next_index;
+}
+
+/// Folds a level's per-style treasure counts into the run's cumulative tally,
+/// preserving the (ascending-value) order `collected_treasure` returns.
+fn merge_treasure(acc: &mut Vec<(maze::TreasureStyle, u32)>, add: &[(maze::TreasureStyle, u32)]) {
+    for &(style, count) in add {
+        if count == 0 {
+            continue;
+        }
+        if let Some(entry) = acc.iter_mut().find(|(s, _)| *s == style) {
+            entry.1 += count;
+        } else {
+            acc.push((style, count));
+        }
+    }
 }
 
 pub(crate) fn lcg(state: &mut u64) -> f32 {
@@ -326,12 +401,15 @@ pub(crate) fn spawn_world(
     // `MAZE_DEMO=<focus>` native run — selects a rig showroom below and relaxes
     // the round timer so there's no pressure while inspecting the rigs.
     let gallery_focus = gallery::requested_focus();
-    let (game, grid) = match pending.0.as_deref() {
+    // `maze_json` is kept alongside the built game so the active level can be
+    // recorded in `MultiLevelRun`. A single-level game is a one-element run;
+    // multi-level wiring supplies the remaining levels later.
+    let (game, grid, maze_json) = match pending.0.as_deref() {
         Some(json) => {
             let game = MazeGame::from_json_with_options(json, game_opts)
                 .expect("maze JSON was validated by the REST API");
             let grid = game.grid().to_vec();
-            (game, grid)
+            (game, grid, json.to_string())
         }
         // `MAZE_DEMO=gallery cargo run` swaps the demo for a rig showroom that
         // places every entity-rig variant beside its default. Native-only — the
@@ -341,16 +419,14 @@ pub(crate) fn spawn_world(
             let game = MazeGame::from_json_with_options(&json, game_opts)
                 .expect("gallery maze is hardcoded and always valid");
             let grid = game.grid().to_vec();
-            (game, grid)
+            (game, grid, json)
         }
         None => {
             let grid = demo_grid();
             let json = grid_to_json(&grid);
-            (
-                MazeGame::from_json_with_options(&json, game_opts)
-                    .expect("demo grid is hardcoded and always valid"),
-                grid,
-            )
+            let game = MazeGame::from_json_with_options(&json, game_opts)
+                .expect("demo grid is hardcoded and always valid");
+            (game, grid, json)
         }
     };
 
@@ -520,5 +596,141 @@ pub(crate) fn spawn_world(
         config.max_hp,
         config.starting_hp,
     );
+
+    // Record the run state and spawn the level indicator (a no-op for a
+    // single-level run). The active level's maze is already live in
+    // `GameState`; `MultiLevelRun` tracks the per-level totals + the level
+    // index for the indicator and the win/transition decision.
+    let run = MultiLevelRun::single(maze_json);
+    hud::level::spawn_level_indicator(&mut commands, &window, &run);
+    commands.insert_resource(run);
+
     pause::spawn_paused_overlay(&mut commands);
+}
+
+#[cfg(test)]
+mod multi_level_tests {
+    use super::{advance_to_next_level, camera_pos_for, explore_cell, initial_facing, merge_treasure};
+    use crate::state::{GameConfig, GameState, MultiLevelRun};
+    use maze::{Direction, MazeGame, TreasureStyle};
+    use std::collections::HashSet;
+
+    /// Builds a `GameState` from a maze JSON the same way `spawn_world` does,
+    /// so `advance_to_next_level` can be exercised without a Bevy app.
+    fn state_from(json: &str) -> GameState {
+        let game = MazeGame::from_json(json).expect("valid maze JSON");
+        let grid = game.grid().to_vec();
+        let row = game.player_row();
+        let col = game.player_col();
+        let facing = initial_facing(&grid, row, col);
+        let visual_yaw = facing.to_yaw();
+        let visual_pos = camera_pos_for(row, col, visual_yaw);
+        let mut explored = HashSet::new();
+        explore_cell(&mut explored, &grid, row, col);
+        GameState {
+            game,
+            grid,
+            facing,
+            visual_pos,
+            visual_yaw,
+            visual_pitch: 0.0,
+            anim: None,
+            explored,
+            won: false,
+            lost: false,
+            paused: false,
+            damage_flash_timer: 0.0,
+        }
+    }
+
+    fn run_of(levels: &[&str], reset_bag: bool) -> MultiLevelRun {
+        MultiLevelRun {
+            levels: levels.iter().map(|s| s.to_string()).collect(),
+            current_level: 0,
+            banked_score: 0,
+            carried_treasure: Vec::new(),
+            reset_bag_between_levels: reset_bag,
+        }
+    }
+
+    #[test]
+    fn run_methods_report_count_finality_and_cumulative_score() {
+        let mut run = run_of(&["a", "b"], true);
+        run.banked_score = 10;
+        assert_eq!(run.level_count(), 2);
+        assert!(!run.is_final(), "level 0 of 2 is not final");
+        assert_eq!(run.cumulative_score(5), 15);
+        run.current_level = 1;
+        assert!(run.is_final(), "level 1 of 2 is final");
+    }
+
+    #[test]
+    fn advance_banks_score_and_swaps_to_the_next_level() {
+        let l0 = r#"{"grid":[["S","K","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // collect the key → score 1
+        assert_eq!(state.game.score(), 1);
+
+        let mut run = run_of(&[l0, l1], true);
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+
+        assert_eq!(run.current_level, 1);
+        assert_eq!(run.banked_score, 1, "the completed level's score is banked");
+        assert_eq!(state.grid, vec![vec!['S', ' ', 'F']], "swapped to level 1's grid");
+        assert_eq!((state.game.player_row(), state.game.player_col()), (0, 0));
+    }
+
+    #[test]
+    fn advance_resets_the_bag_by_default() {
+        let l0 = r#"{"grid":[["S","K","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // bag now holds the key
+        assert_eq!(state.game.bag().len(), 1);
+
+        let mut run = run_of(&[l0, l1], true); // reset_bag = true
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+        assert!(state.game.bag().is_empty(), "default resets the bag each level");
+    }
+
+    #[test]
+    fn advance_carries_the_bag_when_configured() {
+        let l0 = r#"{"grid":[["S","K","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // bag now holds the key
+
+        let mut run = run_of(&[l0, l1], false); // reset_bag = false → carry
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+        assert_eq!(state.game.bag().len(), 1, "the carried bag seeds the next level");
+    }
+
+    #[test]
+    fn advance_folds_collected_treasure_into_the_run_tally() {
+        let l0 = r#"{"grid":[["S","T","F"]]}"#; // bare 'T' → Silver, value 50
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // collect the treasure
+
+        let mut run = run_of(&[l0, l1], true);
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+
+        assert_eq!(run.carried_treasure, vec![(TreasureStyle::Silver, 1)]);
+        assert_eq!(run.banked_score, 50, "silver's reward value is banked");
+    }
+
+    #[test]
+    fn merge_treasure_sums_by_style_and_skips_zero_counts() {
+        let mut acc = vec![(TreasureStyle::Silver, 1)];
+        merge_treasure(
+            &mut acc,
+            &[
+                (TreasureStyle::Silver, 2),
+                (TreasureStyle::Gold, 1),
+                (TreasureStyle::Diamonds, 0),
+            ],
+        );
+        assert_eq!(acc, vec![(TreasureStyle::Silver, 3), (TreasureStyle::Gold, 1)]);
+    }
 }

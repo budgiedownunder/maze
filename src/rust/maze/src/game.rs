@@ -1484,6 +1484,32 @@ impl MazeGame {
         &self.bag
     }
 
+    /// Seeds the player's bag with items carried in from a previous level.
+    ///
+    /// Used by the multi-level 3D game to carry the player's bag forward when a
+    /// run is configured not to reset it between levels. The items are appended
+    /// to the (freshly constructed, empty) bag. This deliberately does **not**
+    /// touch `keys_collected`, so carried keys are not re-counted toward the
+    /// score — their value was already tallied on the level where they were
+    /// collected, and the run's cumulative score is banked per level by the
+    /// caller.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{BagItem, MazeGame};
+    /// let json = r#"{"grid":[["S","D","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// // Hand the next level a key carried from the previous one.
+    /// game.seed_carried_bag(vec![BagItem::Key { id: 0 }]);
+    /// assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
+    /// // Carrying does not inflate the score (the key was scored already).
+    /// assert_eq!(game.score(), 0);
+    /// ```
+    pub fn seed_carried_bag(&mut self, items: Vec<BagItem>) {
+        self.bag.extend(items);
+    }
+
     /// Collects the key at the player's current cell, adding it to the bag and
     /// clearing the cell. Returns the collected [`BagItem`], or `None` if the
     /// current cell holds no collectible.

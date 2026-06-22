@@ -129,7 +129,7 @@ The crate is organised into focused per-concern modules under `src/`:
 src/
 ├── lib.rs                  module decls + public re-exports + build_app
 ├── palette.rs              cross-module colour constants
-├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, etc.)
+├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, MultiLevelRun, etc.)
 ├── images.rs               generic Bevy Image factory (sampler-tuned)
 ├── movement.rs             input + animation + quit
 ├── tick.rs                 central game_tick_system + damage-flash overlay system
@@ -232,7 +232,8 @@ src/
 │   ├── mod.rs              module declarations
 │   ├── minimap.rs          top-right minimap overlay
 │   ├── statusbar.rs        bottom-left mode label
-│   ├── score.rs            top-left live score readout (MazeGame::score())
+│   ├── score.rs            top-left live score readout (cumulative across a multi-level run)
+│   ├── level.rs            level readout (multi-level runs only)
 │   ├── clock.rs            top-centre countdown clock + lose-state trigger
 │   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change
 │   └── bag/                bottom inventory HUD

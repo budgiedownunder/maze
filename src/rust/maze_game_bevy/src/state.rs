@@ -112,6 +112,64 @@ pub(crate) struct GameClock {
     pub(crate) last_displayed_secs: i32,
 }
 
+/// Run-level state for a multi-level game: the per-level maze JSON, the active
+/// level index, and the totals that carry across levels. A single-level game
+/// is just a run with one level — every multi-level branch collapses to the
+/// current single-level behaviour, so a 1-level run is byte-for-byte identical
+/// to a non-multi-level game.
+#[derive(Resource)]
+pub(crate) struct MultiLevelRun {
+    /// Per-level maze JSON, bottom level (index 0) first. The active level's
+    /// maze is also live in [`GameState::game`]; this holds every level so the
+    /// run can build the next one on a transition.
+    pub(crate) levels: Vec<String>,
+    /// Index (into [`Self::levels`]) of the level currently being played.
+    pub(crate) current_level: usize,
+    /// Sum of the score of every level completed so far. The live level's
+    /// score is added on top for the running total (see
+    /// [`Self::cumulative_score`]).
+    pub(crate) banked_score: u64,
+    /// Per-style treasure collected on completed levels, ordered as
+    /// [`maze::MazeGame::collected_treasure`]. The live level's counts are
+    /// added on top for display.
+    pub(crate) carried_treasure: Vec<(maze::TreasureStyle, u32)>,
+    /// When `true` (the default) each level starts with an empty bag; when
+    /// `false` the player's whole bag carries from one level into the next.
+    pub(crate) reset_bag_between_levels: bool,
+}
+
+impl MultiLevelRun {
+    /// A single-level run wrapping one maze — the shape `spawn_world` inserts
+    /// for every non-multi-level game (and the fallback when no multi-level
+    /// data is supplied).
+    pub(crate) fn single(maze_json: String) -> Self {
+        Self {
+            levels: vec![maze_json],
+            current_level: 0,
+            banked_score: 0,
+            carried_treasure: Vec::new(),
+            reset_bag_between_levels: true,
+        }
+    }
+
+    /// Total number of levels in the run.
+    pub(crate) fn level_count(&self) -> usize {
+        self.levels.len()
+    }
+
+    /// Whether the active level is the last one — reaching its finish wins the
+    /// run rather than transitioning to another level.
+    pub(crate) fn is_final(&self) -> bool {
+        self.current_level + 1 >= self.levels.len()
+    }
+
+    /// The running total score: every completed level's banked score plus the
+    /// live level's current score.
+    pub(crate) fn cumulative_score(&self, live_score: u64) -> u64 {
+        self.banked_score + live_score
+    }
+}
+
 /// Per-session game configuration handed down from the JS host (via
 /// `maze_game_bevy_wasm::start_with_config`). When no host config is provided
 /// (native `cargo run`, or the bare wasm `start()` path), `Default` produces
