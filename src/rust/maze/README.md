@@ -10,6 +10,7 @@ The `maze` crate is written in `Rust` and defines an API for calculating maze so
 - `GeneratorOptions` - defines maze generation options
 - `MazePath` - represents a path composed of a sequence of maze points
 - `MazePathDirection` - represents a direction within a maze path
+- `MazePoint` - represents a row/column position in a maze (re-exported from `data_model`; used by `GeneratorOptions.start` / `.finish`)
 - `MazePointOffset` - represents an offset between maze points
 - `MazePrinter` - trait implementation for printing mazes and their solutions
 - `MazeSolver` - trait implementation for solving mazes

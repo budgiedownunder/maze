@@ -12,7 +12,9 @@ pub use state::{
     DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
     Landmarks, SkyType, TreasureStyle, WallType,
 };
-pub use world::generate_maze_json;
+pub use world::{
+    generate_level_maze_jsons, generate_maze_json, LevelDifficultyChange, MAX_LEVEL_COUNT,
+};
 
 use bevy::prelude::*;
 

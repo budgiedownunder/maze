@@ -137,6 +137,7 @@ src/
 ├── world/                  3D scene construction
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
 │   ├── gallery.rs          MAZE_DEMO rig-gallery demos (focus selector + maze JSON)
+│   ├── levels.rs           multi-level generation: N chained level grids (generate_level_maze_jsons)
 │   ├── textures/           shared procedural world textures
 │   │   ├── mod.rs          module declarations
 │   │   ├── brick.rs        make_brick_texture (consumed by walls)
@@ -254,7 +255,8 @@ enemy rigs, and health-pickup rigs, which are spawned alongside the loop
 because they borrow either the cell's wall material or the per-config rig
 choice), and finishes with the HUD (clock, score, status bar, minimap, HP, bag) +
 paused-overlay spawns. The only items re-exported through `lib.rs` are
-`build_app`, `generate_maze_json`, and the public types `GameConfig`,
-`Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
-`TreasureStyle`, `GameOutcome`, `GameResult`. Everything else is
-`pub(crate)` or fully private.
+`build_app`, `generate_maze_json`, `generate_level_maze_jsons` (multi-level:
+N chained level grids, bottom first), `MAX_LEVEL_COUNT`, and the public types
+`GameConfig`, `Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
+`TreasureStyle`, `LevelDifficultyChange`, `GameOutcome`, `GameResult`.
+Everything else is `pub(crate)` or fully private.

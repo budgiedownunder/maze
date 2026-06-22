@@ -15,7 +15,7 @@ mod solver;
 mod topology;
 
 // Re-export traits and structs
-pub use data_model::{CellEntity, EnemyType, TreasureStyle};
+pub use data_model::{CellEntity, EnemyType, MazePoint, TreasureStyle};
 pub use error::Error;
 pub use game::{
     BagItem, Direction, DoorState, Enemy, GameEvent, LoseReason, MazeGame, MazeGameOptions,

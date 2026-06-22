@@ -1,11 +1,14 @@
 pub(crate) mod decorations;
 pub(crate) mod floor;
 pub(crate) mod gallery;
+pub(crate) mod levels;
 pub(crate) mod objects;
 pub(crate) mod roof;
 pub(crate) mod sky;
 pub(crate) mod textures;
 pub(crate) mod walls;
+
+pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COUNT};
 
 use crate::hud;
 use crate::overlays::pause;
