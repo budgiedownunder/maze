@@ -65,15 +65,37 @@ pub(crate) fn spawn_objects_for_cell(
     // treasure::rays_per_chest); ignored for non-treasure cells.
     treasure_rays: usize,
     placement: LevelPlacement,
-    // The finish orb is drawn only on the run's top (final) level; interim levels
-    // omit it (a transition rig replaces it). A single-level game is its own final
-    // level, so the orb always shows — unchanged from before multi-level runs.
-    spawn_finish: bool,
+    // Whether this cell's level is the run's top (final) level. The final level's
+    // finish keeps the gold orb; interim levels draw a transition rig instead. A
+    // single-level game is its own final level, so the orb always shows —
+    // unchanged from before multi-level runs.
+    is_final: bool,
+    // Whether an interim finish here may use a ladder — true only when the next
+    // level's start sits directly above to climb onto; otherwise it falls back to
+    // a portal. Ignored on the final level (orb) and non-finish cells.
+    ladder_allowed: bool,
+    // Cells whose dead-end landmark must be suppressed — the gallery code-spawns a
+    // finish rig into these plain-space alcoves and a landmark would clash. Empty
+    // for ordinary levels.
+    dead_end_skip: &[(usize, usize)],
 ) {
-    if spawn_finish {
-        finish::spawn_finish_for_cell(commands, &assets.finish, cell, r, c, placement);
+    finish::spawn_finish_for_cell(
+        commands,
+        &assets.finish,
+        &assets.common,
+        grid,
+        cell,
+        r,
+        c,
+        placement,
+        config.finish_type,
+        config.seed,
+        is_final,
+        ladder_allowed,
+    );
+    if !dead_end_skip.contains(&(r, c)) {
+        dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, placement);
     }
-    dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, placement);
     let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
     let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
     let health_style = overrides::resolve_health_style(cell_entity, config.health_style);

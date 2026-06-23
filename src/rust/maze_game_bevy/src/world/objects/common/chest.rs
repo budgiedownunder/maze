@@ -85,9 +85,12 @@ const STRAP_WIDTH: f32 = 0.10;
 /// strap top sits exactly here so the lid binding (whose bottom face
 /// also sits at this Y) shares a clean edge with each strap top.
 const LID_APEX_Y: f32 = 0.65;
-/// Strap bottom Y — just below the floor so the strap appears to wrap
-/// under the chest (the floor visually conceals the negative-Y portion).
-const STRAP_BOTTOM_Y: f32 = -0.025;
+/// Strap bottom Y — sits at the floor, not below it. (It used to dip to a small
+/// negative Y so the strap "wrapped under" the chest, relying on the floor to hide
+/// it — but in a multi-level stack the level below sees that negative-Y portion,
+/// and its inverted-hull outline, poke through the floor. Keeping it at the floor
+/// keeps the chest from showing its underside from below.)
+const STRAP_BOTTOM_Y: f32 = 0.0;
 const STRAP_HEIGHT: f32 = LID_APEX_Y - STRAP_BOTTOM_Y;
 const STRAP_Y: f32 = (LID_APEX_Y + STRAP_BOTTOM_Y) * 0.5;
 /// Front/back strap scale: width across face (X), height (Y),

@@ -85,14 +85,15 @@ without authoring a maze. The value selects which types to show:
 
 | `MAZE_DEMO` | Shows |
 |:------------|:------|
-| `gallery`   | everything (enemy goblin/ghost, health heart/potion, key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve, treasure silver/gold/diamonds/jewels) |
 | `enemies`   | enemy rigs only (goblin, ghost) |
+| `finishes`  | interim-finish transition rigs only — the ladder and the (aura-animated) portal mid-spine, leading to the gold finish orb |
+| `gallery`   | everything (enemy goblin/ghost, health heart/potion, key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve, treasure silver/gold/diamonds/jewels, finish ladder/portal in alcoves) |
 | `health`    | health rigs only (heart, potion) |
 | `keysdoors` | key + door rigs only (key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
-| `treasure`  | treasure rigs only — open chests of each style (silver / gold coins, diamond / jewel gems) in dead-end alcoves |
-| `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
 | `multilevel_centre` | a walkable centred multi-level pyramid (bottom level live, the rest static): an open `9×9` platform at the bottom, a `5×5` centred above, a `3×3` centred on top, each rendered a `LEVEL_HEIGHT` higher with an open perimeter so the platforms read as floating layers; reaching a level's finish lifts + centres you onto the next. Only the top platform keeps the finish orb, on its far corner in the open. |
 | `multilevel_edge`   | the same `9×9 → 5×5 → 3×3` stack but edge-aligned — every level shares a common origin corner (zero X/Z offset) instead of being centred, for verifying the `edge` layout mode. |
+| `treasure`  | treasure rigs only — open chests of each style (silver / gold coins, diamond / jewel gems) in dead-end alcoves |
+| `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
 
 Focused values make it easy to verify one type in isolation. Enemies are
 stationary and harmless so you can inspect them freely; in the key/door galleries
@@ -187,9 +188,11 @@ src/
 │   │   │   ├── urn.rs      urn rig + materials
 │   │   │   ├── pillar.rs   broken-pillar rig + materials + TOP_Y apex
 │   │   │   └── chest.rs    chest rig (hollow trunk: floor + 4 walls so an open chest shows its interior edges; ChestLid Closed/Open; yaw-oriented; lock only when closed) + materials + TOP_Y apex
-│   │   ├── finish/         objects placed at the finish cell
-│   │   │   ├── mod.rs      FinishAssets bundle + spawn_finish_for_cell ('F' predicate)
-│   │   │   └── orb.rs      FinishOrb + orb mesh/material/light + orb_system
+│   │   ├── finish/         objects placed at the finish cell (orb on the final level; a transition rig on interim levels)
+│   │   │   ├── mod.rs      FinishAssets bundle + spawn_finish_for_cell ('F' predicate; final → orb, interim → rig by FinishType)
+│   │   │   ├── orb.rs      FinishOrb + orb mesh/material/light + orb_system
+│   │   │   ├── ladder.rs   FinishLadder rig: vertical rails + rungs rising a LEVEL_HEIGHT (interim ladder finish)
+│   │   │   └── portal.rs   FinishPortal rig: translucent luminescent cylinder + light rings travelling down it (portal_system)
 │   │   ├── dead_end/       dead-end landmark objects (placement seeded)
 │   │   │   └── mod.rs      DeadEndObject anchor + hash + is_dead_end + dispatcher into common::{brazier,urn,pillar,chest}
 │   │   ├── key_holder/     'K' cells: a glowing outlined floating key above a common base rig (pillar / chest / none)

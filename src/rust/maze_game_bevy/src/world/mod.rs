@@ -13,8 +13,8 @@ pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COU
 use crate::hud;
 use crate::overlays::pause;
 use crate::state::{
-    GameClock, GameConfig, GameState, GridFacing, LayeredAlignment, MultiLevelRun, PendingLevels,
-    PendingMazeJson, WallType,
+    FinishType, GameClock, GameConfig, GameState, GridFacing, LayeredAlignment, MultiLevelRun,
+    PendingLevels, PendingMazeJson, WallType,
 };
 use bevy::prelude::*;
 use maze::{CellEntity, GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
@@ -386,6 +386,16 @@ pub(crate) fn camera_pos_for(row: usize, col: usize, yaw: f32) -> Vec3 {
     cell_centre(row, col) + Vec3::new(yaw.sin(), 0.0, yaw.cos()) * CAMERA_EDGE_OFFSET
 }
 
+/// World (X, Z) of cell `(r, c)`'s centre under `placement` — the same mapping the
+/// spawn helpers use. Lets the transition compare a finish's world position to the
+/// next level's start (a ladder needs them aligned; see `ladder_allowed`).
+pub(crate) fn cell_world_xz(r: usize, c: usize, placement: LevelPlacement) -> Vec2 {
+    Vec2::new(
+        placement.world_x(c as f32 * CELL_SIZE + 1.0),
+        placement.world_z(r as f32 * CELL_SIZE + 1.0),
+    )
+}
+
 pub(crate) fn explore_cell(
     explored: &mut HashSet<(usize, usize)>,
     grid: &[Vec<char>],
@@ -497,6 +507,12 @@ fn spawn_level(
     placement: LevelPlacement,
     is_final: bool,
     is_live: bool,
+    // True only when an interim finish on this level has the next level's start
+    // directly above it (so a ladder can land); otherwise a ladder finish falls
+    // back to a portal. Irrelevant on the final level.
+    ladder_allowed: bool,
+    // Cells whose dead-end landmark to suppress (gallery finish-rig alcoves).
+    dead_end_skip: &[(usize, usize)],
 ) {
     // Sparkle rays each treasure chest gets — the same count for every chest in
     // this level (so they look uniform), with the total bounded for treasure-dense
@@ -539,7 +555,7 @@ fn spawn_level(
             // A static level's enemies never match a live runtime enemy, so they
             // get a non-matching id and stand frozen as scenery.
             let spawn_enemy_id = if is_live { enemy_id } else { u32::MAX };
-            objects::spawn_objects_for_cell(commands, assets.object, grid, cell, r, c, config, cell_entity, spawn_enemy_id, treasure_rays, placement, is_final);
+            objects::spawn_objects_for_cell(commands, assets.object, grid, cell, r, c, config, cell_entity, spawn_enemy_id, treasure_rays, placement, is_final, ladder_allowed, dead_end_skip);
             if cell == 'E' {
                 enemy_id += 1;
             }
@@ -726,6 +742,7 @@ pub(crate) fn spawn_world(
         visual_yaw: start_yaw,
         visual_pitch: 0.0,
         anim: None,
+        transition: None,
         explored,
         won: false,
         lost: false,
@@ -790,8 +807,71 @@ pub(crate) fn spawn_world(
     // offsets are measured against.
     let base_dims = (grid.len(), grid.first().map_or(0, |row| row.len()));
     let level_count = levels.len();
+
+    // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
+    // only when the next level's start sits directly above it (same world XZ) so
+    // the climb lands on real floor; otherwise the finish falls back to a portal,
+    // which can be entered anywhere. Under `centre` alignment a smaller upper
+    // level's start is offset off the lower finish, so a ladder won't be used
+    // there — exactly the constraint that a portal can always replace a ladder
+    // but not the reverse.
+    let cell_world_xz = |g: &[Vec<char>], target: char, p: LevelPlacement| -> Option<Vec2> {
+        g.iter().enumerate().find_map(|(r, row)| {
+            row.iter().position(|&ch| ch == target).map(|c| {
+                Vec2::new(
+                    p.world_x(c as f32 * CELL_SIZE + 1.0),
+                    p.world_z(r as f32 * CELL_SIZE + 1.0),
+                )
+            })
+        })
+    };
+    let level_anchors: Vec<(Option<Vec2>, Option<Vec2>)> = levels
+        .iter()
+        .enumerate()
+        .map(|(level, json)| {
+            let lgrid: Vec<Vec<char>> = if level == 0 {
+                grid.clone()
+            } else {
+                MazeGame::from_json(json)
+                    .expect("multi-level maze JSON is host-validated or a hardcoded demo")
+                    .grid()
+                    .to_vec()
+            };
+            let placement = LevelPlacement::for_level(
+                level,
+                lgrid.len(),
+                lgrid.first().map_or(0, |row| row.len()),
+                base_dims.0,
+                base_dims.1,
+                config.layered_alignment,
+            );
+            (cell_world_xz(&lgrid, 'S', placement), cell_world_xz(&lgrid, 'F', placement))
+        })
+        .collect();
+
     for (level, level_json) in levels.iter().enumerate() {
         let is_final = level + 1 == level_count;
+        // A ladder needs the next level's start directly above this level's finish.
+        let ladder_allowed = !is_final
+            && match (
+                level_anchors.get(level).and_then(|a| a.1),
+                level_anchors.get(level + 1).and_then(|a| a.0),
+            ) {
+                (Some(finish), Some(next_start)) => finish.distance_squared(next_start) < 1e-3,
+                _ => false,
+            };
+        // Only the bottom (gallery) level ever suppresses dead-end landmarks — at
+        // the cells where the `finishes`/`gallery` showroom code-spawns a rig.
+        let dead_end_skip: Vec<(usize, usize)> = if level == 0 {
+            gallery_focus
+                .as_deref()
+                .map(|focus| {
+                    gallery::finish_rig_cells(focus).into_iter().map(|(_, r, c)| (r, c)).collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         if level == 0 {
             // The live level reuses the already-parsed grid + per-cell overrides.
             let placement = LevelPlacement::for_level(
@@ -802,7 +882,7 @@ pub(crate) fn spawn_world(
                 base_dims.1,
                 config.layered_alignment,
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -818,7 +898,42 @@ pub(crate) fn spawn_world(
                 base_dims.1,
                 config.layered_alignment,
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip);
+        }
+    }
+
+    // The finish transition rigs (ladder / portal) aren't cell overrides, so the
+    // `gallery` / `finishes` showrooms code-spawn them against the bottom level
+    // here — non-functional showpieces (their dead-end landmark is suppressed via
+    // `dead_end_skip`, so the rig stands alone in its alcove).
+    if let Some(focus) = gallery_focus.as_deref() {
+        let placement = LevelPlacement::for_level(
+            0,
+            base_dims.0,
+            base_dims.1,
+            base_dims.0,
+            base_dims.1,
+            config.layered_alignment,
+        );
+        for (rig, r, c) in gallery::finish_rig_cells(focus) {
+            match rig {
+                FinishType::Portal => objects::finish::portal::spawn_portal(
+                    &mut commands,
+                    &object_assets.finish.portal,
+                    r,
+                    c,
+                    placement,
+                ),
+                _ => objects::finish::ladder::spawn_ladder(
+                    &mut commands,
+                    &object_assets.common,
+                    &object_assets.finish.ladder,
+                    &grid,
+                    r,
+                    c,
+                    placement,
+                ),
+            }
         }
     }
 
@@ -887,6 +1002,7 @@ mod multi_level_tests {
             visual_yaw,
             visual_pitch: 0.0,
             anim: None,
+            transition: None,
             explored,
             won: false,
             lost: false,
@@ -934,6 +1050,107 @@ mod multi_level_tests {
             bevy::prelude::Vec3::new(0.0, crate::world::LEVEL_HEIGHT, 0.0),
             "the camera is lifted onto level 1",
         );
+    }
+
+    // Walks the player to `(target_r, target_c)` across an open (wall-free) demo
+    // platform — row first, then column.
+    fn walk_to(state: &mut GameState, target_r: usize, target_c: usize) {
+        for _ in 0..64 {
+            if state.game.player_row() > target_r {
+                state.game.move_player(Direction::Up);
+            } else if state.game.player_row() < target_r {
+                state.game.move_player(Direction::Down);
+            } else if state.game.player_col() > target_c {
+                state.game.move_player(Direction::Left);
+            } else if state.game.player_col() < target_c {
+                state.game.move_player(Direction::Right);
+            } else {
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn edge_demo_both_interim_transitions_are_ladders() {
+        use crate::state::FinishType;
+        let levels = super::multilevel_demo_levels();
+        let refs: Vec<&str> = levels.iter().map(|s| s.as_str()).collect();
+        let config = GameConfig::default(); // Edge alignment, Ladder finish type.
+
+        let mut state = state_from(&levels[0]);
+        let mut run = run_of(&refs, true);
+
+        walk_to(&mut state, 2, 2); // bottom finish
+        assert!(state.game.is_complete(), "reached the bottom finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(state.transition.as_ref().unwrap().kind, FinishType::Ladder, "0→1");
+        state.transition = None;
+        advance_to_next_level(&mut state, &mut run, &config);
+
+        walk_to(&mut state, 1, 1); // middle finish
+        assert!(state.game.is_complete(), "reached the middle finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(state.transition.as_ref().unwrap().kind, FinishType::Ladder, "1→2");
+    }
+
+    #[test]
+    fn start_transition_arms_a_ladder_when_the_next_start_is_above() {
+        use crate::state::FinishType;
+        // l1's start (0,1) sits directly above l0's finish (0,1) → ladder, and the
+        // run is NOT yet swapped (the swap happens when the climb completes).
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["F","S"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right);
+        assert!(state.game.is_complete(), "player reached the finish");
+
+        let run = run_of(&[l0, l1], true);
+        crate::transition::start_level_transition(&mut state, &run, &GameConfig::default());
+        let t = state.transition.as_ref().expect("a transition is armed");
+        assert_eq!(t.kind, FinishType::Ladder);
+        assert_eq!(run.current_level, 0, "the swap is deferred to completion");
+    }
+
+    #[test]
+    fn start_transition_falls_back_to_a_portal_when_no_start_is_above() {
+        use crate::state::FinishType;
+        // l1's start (0,0) is NOT above l0's finish (0,1) → even the default Ladder
+        // finish type transitions via a portal.
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["S","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right);
+
+        let run = run_of(&[l0, l1], true);
+        crate::transition::start_level_transition(&mut state, &run, &GameConfig::default());
+        assert_eq!(state.transition.as_ref().unwrap().kind, FinishType::Portal);
+    }
+
+    #[test]
+    fn start_transition_targets_the_next_level_default_start_pose() {
+        // The transition must settle on exactly the pose `advance_to_next_level`
+        // produces (next start cell, default facing), so play resumes seamlessly.
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["F","S"]]}"#;
+
+        let mut t_state = state_from(l0);
+        t_state.game.move_player(Direction::Right);
+        let run = run_of(&[l0, l1], true);
+        crate::transition::start_level_transition(&mut t_state, &run, &GameConfig::default());
+        let trans = t_state.transition.as_ref().unwrap();
+        let (target_pos, target_yaw) = (trans.target_pos, trans.target_yaw);
+
+        let mut a_state = state_from(l0);
+        a_state.game.move_player(Direction::Right);
+        let mut a_run = run_of(&[l0, l1], true);
+        advance_to_next_level(&mut a_state, &mut a_run, &GameConfig::default());
+
+        let settled_pos = a_state.visual_pos + a_state.camera_offset;
+        assert!(
+            (target_pos - settled_pos).length() < 1e-3,
+            "transition target {target_pos:?} should match the settled pose {settled_pos:?}",
+        );
+        assert!((target_yaw - a_state.visual_yaw).abs() < 1e-3, "and the same facing");
     }
 
     #[test]

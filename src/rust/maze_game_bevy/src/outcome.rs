@@ -22,16 +22,20 @@ use bevy::prelude::*;
 pub(crate) fn outcome_watcher_system(
     mut commands: Commands,
     mut state: ResMut<GameState>,
-    mut run: ResMut<MultiLevelRun>,
+    run: ResMut<MultiLevelRun>,
     clock: Res<GameClock>,
     config: Res<GameConfig>,
 ) {
-    if state.anim.is_some() {
+    // Wait for any in-flight move to settle, and don't re-fire while a level
+    // transition is already playing (the completed level stays `is_complete`
+    // until the transition swaps it out).
+    if state.anim.is_some() || state.transition.is_some() {
         return;
     }
     if !state.won && state.game.is_complete() {
         if !run.is_final() {
-            crate::world::advance_to_next_level(state.as_mut(), run.as_mut(), &config);
+            // Begin the climb / portal step; the swap happens when it completes.
+            crate::transition::start_level_transition(state.as_mut(), &run, &config);
             return;
         }
         state.won = true;

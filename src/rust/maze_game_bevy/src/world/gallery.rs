@@ -2,8 +2,14 @@
 //! variable, for eyeballing each entity rig against its default without
 //! authoring a maze through the web stack. `gallery` shows every type in one
 //! maze; the focused values (`enemies`, `health`, `keysdoors`, `treasure`,
-//! `walls`) show one type in isolation, which keeps verification simple as more
-//! rig types are added.
+//! `walls`, `finishes`) show one type in isolation, which keeps verification
+//! simple as more rig types are added.
+//!
+//! `finishes` is a special case: the interim-finish transition rigs (ladder /
+//! portal) are driven by `GameConfig::finish_type` + the run's level structure,
+//! not by per-cell overrides like the rest of the gallery, so they can't be
+//! expressed as grid cells. [`finish_rig_cells`] instead names the cells where
+//! `spawn_world` code-spawns each rig for this focus.
 //!
 //! Enemies are neutralised — stationary (a huge `movePeriodMs`) and harmless
 //! (zero `damage`) — so the rigs can be inspected without being chased or killed;
@@ -14,11 +20,13 @@
 //! confirm a boundary-capped corridor still swings. Not used by the web/WASM
 //! path (it always supplies its own maze).
 
+use crate::state::FinishType;
 use serde_json::{json, Value};
 
 /// Recognised `MAZE_DEMO` values. `gallery` shows everything; the others focus
 /// on a single entity type.
-const FOCUSES: &[&str] = &["gallery", "enemies", "health", "keysdoors", "treasure", "walls"];
+const FOCUSES: &[&str] =
+    &["gallery", "enemies", "health", "keysdoors", "treasure", "walls", "finishes"];
 
 /// The multi-level demo selectors (dispatched in `world::spawn_world`, not here).
 /// Listed so [`validate_demo_env`] can recognise them.
@@ -137,6 +145,12 @@ pub(crate) fn json(focus: &str) -> String {
             g[2][5] = json!([{ "type": "W", "wallType": "iron_fence" }]);
             g
         }
+        "finishes" => {
+            // A straight spine the player walks S → F. The interim-finish rigs
+            // are code-spawned mid-spine (see `finish_rig_cells`); `F` keeps the
+            // gold orb (the final-level finish), so all three markers line up.
+            build(&["WWWWWWW", "S     F", "WWWWWWW"])
+        }
         "keysdoors" => {
             // Spine: keys (pedestal/chest/floating + spares) then the four door
             // styles; a boundary swing door (open south) sits at (0, 1).
@@ -159,7 +173,7 @@ pub(crate) fn json(focus: &str) -> String {
                 "WDWWWWWWWWWWWWWWWWW", // boundary swing door at col 1
                 "WKWWWWWWWWWWWWWWWWW", // stub + key feeding it
                 "S    KKKKKD D D D F", // spine: keys (5–9) then doors (10,12,14,16)
-                "WETETHTHTWWWWWWWWWW", // alcoves: goblin/ghost (1,3), heart/potion (5,7), treasure (2,4,6,8)
+                "WETETHTHTWW W WWWWW", // alcoves: enemies/health/treasure (1–8); finish rigs at (3,11)/(3,13)
                 "WWWWWWWWWWWWWWWWWWW",
             ]);
             g[2][6] = json!([{ "type": "K", "keyHolder": "chest" }]);
@@ -179,6 +193,21 @@ pub(crate) fn json(focus: &str) -> String {
     };
 
     json!({ "grid": grid }).to_string()
+}
+
+/// Cells where `spawn_world` should code-spawn an interim-finish rig for `focus`,
+/// as `(rig, row, col)`. The transition rigs aren't cell overrides, so the
+/// `finishes` gallery places them here — mid-spine corridor cells (two open
+/// neighbours, so no dead-end landmark spawns on top of them). Empty for every
+/// other focus.
+pub(crate) fn finish_rig_cells(focus: &str) -> Vec<(FinishType, usize, usize)> {
+    match focus {
+        // `finishes`: mid-spine corridor cells. `gallery`: the two carved dead-end
+        // alcoves off the spine (their landmark is suppressed). Both code-spawned.
+        "finishes" => vec![(FinishType::Ladder, 1, 2), (FinishType::Portal, 1, 4)],
+        "gallery" => vec![(FinishType::Ladder, 3, 11), (FinishType::Portal, 3, 13)],
+        _ => vec![],
+    }
 }
 
 #[cfg(test)]

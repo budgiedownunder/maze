@@ -1,6 +1,6 @@
-use super::{FloorAssets, FloorCell};
+use super::FloorAssets;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::LevelPlacement;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -38,21 +38,7 @@ pub(crate) fn spawn_start(
     c: usize,
     placement: LevelPlacement,
 ) {
-    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
-    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
-    let y = placement.world_y(0.0);
-    match (assets.floor_mesh.clone(), assets.start_mat.clone()) {
-        (Some(mesh), Some(mat)) => {
-            commands.spawn((
-                StartCell,
-                FloorCell,
-                Transform::from_xyz(x, y, z),
-                Mesh3d(mesh),
-                MeshMaterial3d(mat),
-            ));
-        }
-        _ => {
-            commands.spawn((StartCell, FloorCell, Transform::from_xyz(x, y, z)));
-        }
-    }
+    // Coloured green top over a plain-stone underside cap, so the start cell shows
+    // from above but reads as ordinary floor from the level below.
+    super::spawn_capped_tile(commands, assets, assets.start_mat.clone(), StartCell, r, c, placement);
 }

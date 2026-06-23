@@ -59,6 +59,7 @@ impl GridFacing {
         }
     }
 
+
     pub(crate) fn to_yaw(self) -> f32 {
         match self {
             Self::North => 0.0,
@@ -93,6 +94,37 @@ impl Animation {
     }
 }
 
+/// An in-progress level-to-level transition — the climb (ladder) or step-through
+/// (portal) that replaces the old placement snap on reaching an interim finish.
+/// While one is active the clock and player movement are frozen and the camera is
+/// driven directly in world space; on completion the run swaps to the next level.
+/// `kind` selects the visual style (the same concrete rig the finish drew).
+pub(crate) struct LevelTransition {
+    pub(crate) kind: FinishType,
+    pub(crate) elapsed: f32,
+    pub(crate) duration: f32,
+    /// Camera world pose at the start (the finish cell) and end (the next level's
+    /// start cell, at its default facing — as at game start).
+    pub(crate) start_pos: Vec3,
+    pub(crate) target_pos: Vec3,
+    pub(crate) start_yaw: f32,
+    pub(crate) target_yaw: f32,
+    pub(crate) start_pitch: f32,
+    pub(crate) target_pitch: f32,
+}
+
+impl LevelTransition {
+    /// Eased 0→1 progress (smoothstep), matching the move-animation easing.
+    pub(crate) fn progress(&self) -> f32 {
+        let t = (self.elapsed / self.duration).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
+
+    pub(crate) fn is_complete(&self) -> bool {
+        self.elapsed >= self.duration
+    }
+}
+
 #[derive(Resource)]
 pub(crate) struct GameState {
     pub(crate) game: MazeGame,
@@ -102,6 +134,10 @@ pub(crate) struct GameState {
     pub(crate) visual_yaw: f32,
     pub(crate) visual_pitch: f32,
     pub(crate) anim: Option<Animation>,
+    /// An in-flight level transition (climb / portal). While `Some`, the clock +
+    /// movement are frozen and the camera is driven by the transition. `None`
+    /// during normal play and for every single-level game.
+    pub(crate) transition: Option<LevelTransition>,
     pub(crate) explored: HashSet<(usize, usize)>,
     pub(crate) won: bool,
     pub(crate) lost: bool,
@@ -300,6 +336,10 @@ pub struct GameConfig {
     /// meaningful for an open-sky multi-level stack; a no-op for single-level
     /// games (level 0 has zero offset under either mode). Default `Edge`.
     pub layered_alignment: LayeredAlignment,
+    /// What an interim level's finish renders as (`Ladder` / `Portal` / `Random`).
+    /// The final level keeps the gold orb. Inert for a single-level game. Default
+    /// `Ladder`.
+    pub finish_type: FinishType,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -628,6 +668,62 @@ impl LayeredAlignment {
     }
 }
 
+/// What an **interim** level's finish renders as — the rig the player uses to
+/// transition up to the next level. The **final** level's finish always keeps the
+/// gold orb. `Ladder` / `Portal` apply one rig to every transition; `Random`
+/// picks a concrete rig per interim finish cell, seeded off the run seed so a run
+/// is deterministic. Default `Ladder`. (Inert for a single-level game — no
+/// interim finishes.) The concrete-rig set is extensible; `Random` draws from it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FinishType {
+    #[default]
+    Ladder,
+    Portal,
+    Random,
+}
+
+impl FinishType {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Ladder => "ladder",
+            Self::Portal => "portal",
+            Self::Random => "random",
+        }
+    }
+
+    /// Parses a wire string into a [`FinishType`]. Unknown values fall back to
+    /// [`FinishType::Ladder`] — same forgiving policy as the other config enums.
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "portal" => Self::Portal,
+            "random" => Self::Random,
+            _ => Self::Ladder,
+        }
+    }
+
+    /// The concrete rig to draw at an interim finish cell `(row, col)`. `Ladder` /
+    /// `Portal` resolve to themselves; `Random` hashes `(row, col, seed)` to a
+    /// concrete rig so the choice is stable per cell and per run.
+    pub fn concrete_for_cell(self, row: usize, col: usize, seed: u64) -> Self {
+        match self {
+            Self::Random => {
+                let mut h = seed.wrapping_mul(0xD1B5_4A32_D192_ED03);
+                h = h.wrapping_add((row as u64).wrapping_mul(0xA076_1D64_78BD_642F));
+                h = h.wrapping_add((col as u64).wrapping_mul(0xE703_7ED1_A0B4_28DB));
+                h ^= h >> 31;
+                // Two concrete rigs today; extend the modulus as the set grows.
+                if h.is_multiple_of(2) {
+                    Self::Ladder
+                } else {
+                    Self::Portal
+                }
+            }
+            concrete => concrete,
+        }
+    }
+}
+
 /// Toggle bag for the spatial-orientation landmark techniques. Each new
 /// landmark sub-step adds one field (default `true`). The host populates
 /// this from `[game.play3d.<difficulty>.landmarks]` in the server config.
@@ -699,6 +795,7 @@ impl Default for GameConfig {
             enemy_type: EnemyType::default(),
             health_style: HealthStyle::default(),
             layered_alignment: LayeredAlignment::default(),
+            finish_type: FinishType::default(),
         }
     }
 }
@@ -811,6 +908,28 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"score\":5"), "score missing from {json}");
         assert!(json.contains("\"elapsedMs\":83456"));
+    }
+
+    #[test]
+    fn finish_type_wire_round_trips_and_random_resolves_deterministically() {
+        for variant in [FinishType::Ladder, FinishType::Portal, FinishType::Random] {
+            assert_eq!(FinishType::from_wire_str(variant.as_wire_str()), variant);
+        }
+        assert_eq!(FinishType::from_wire_str("PORTAL"), FinishType::Portal);
+        assert_eq!(FinishType::from_wire_str("unknown"), FinishType::Ladder);
+
+        // A fixed style resolves to itself at every cell; `Random` resolves to a
+        // concrete (never-`Random`) rig, stable per (cell, seed).
+        assert_eq!(FinishType::Ladder.concrete_for_cell(2, 3, 7), FinishType::Ladder);
+        assert_eq!(FinishType::Portal.concrete_for_cell(2, 3, 7), FinishType::Portal);
+        let r = FinishType::Random.concrete_for_cell(2, 3, 7);
+        assert!(matches!(r, FinishType::Ladder | FinishType::Portal));
+        assert_eq!(r, FinishType::Random.concrete_for_cell(2, 3, 7), "stable per cell+seed");
+        // Different seeds flip at least one cell (so the seed actually matters).
+        let flips = (0..64).filter(|&s| {
+            FinishType::Random.concrete_for_cell(1, 1, s) != FinishType::Random.concrete_for_cell(1, 1, s + 1)
+        }).count();
+        assert!(flips > 0, "seed should affect the Random pick");
     }
 
     #[test]

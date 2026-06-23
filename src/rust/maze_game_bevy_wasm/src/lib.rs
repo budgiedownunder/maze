@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use maze_game_bevy::{
-    DoorStyle, EnemyType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks, LayeredAlignment,
-    SkyType, WallType,
+    DoorStyle, EnemyType, FinishType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks,
+    LayeredAlignment, SkyType, WallType,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -284,6 +284,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         enemy_type: EnemyType::from_wire_str(&cfg.enemy_type),
         health_style: HealthStyle::from_wire_str(&cfg.health_style),
         layered_alignment: LayeredAlignment::default(),
+        finish_type: FinishType::default(),
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();

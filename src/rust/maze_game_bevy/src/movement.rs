@@ -21,6 +21,11 @@ pub(crate) fn movement_system(
     if state.paused {
         return;
     }
+    // During a level transition the camera is driven by `transition_system`;
+    // bail so we don't fight it for the camera or accept movement input.
+    if state.transition.is_some() {
+        return;
+    }
     let dt = time.delta_secs();
 
     // Advance active animation; snap to target when complete

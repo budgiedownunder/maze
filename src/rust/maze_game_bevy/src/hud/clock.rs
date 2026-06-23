@@ -52,7 +52,10 @@ pub(crate) fn tick_clock_system(
     mut state: ResMut<GameState>,
     config: Res<GameConfig>,
 ) {
-    if state.won || state.lost || state.paused {
+    // Freeze the clock during a win/loss, while paused, and for the whole of a
+    // level transition (the climb / portal step) — the timer resumes only once
+    // the player is back in play on the next level.
+    if state.won || state.lost || state.paused || state.transition.is_some() {
         return;
     }
     let dt = time.delta_secs();

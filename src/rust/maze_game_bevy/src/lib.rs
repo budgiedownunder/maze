@@ -6,11 +6,12 @@ mod overlays;
 mod palette;
 mod state;
 mod tick;
+mod transition;
 mod world;
 
 pub use state::{
-    DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
-    Landmarks, LayeredAlignment, SkyType, TreasureStyle, WallType,
+    DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult, HealthStyle,
+    KeyHolderStyle, Landmarks, LayeredAlignment, SkyType, TreasureStyle, WallType,
 };
 pub use world::gallery::validate_demo_env;
 pub use world::{
@@ -60,6 +61,8 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(OnExit(AppState::TitleScreen), title::teardown_title)
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, crate::transition::transition_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, crate::transition::transition_fx_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, outcome_watcher_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::leaf_system.run_if(in_state(AppState::Playing)))
@@ -74,6 +77,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, objects::finish::portal::portal_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
@@ -121,7 +125,7 @@ mod tests {
             dead_end::DeadEndObject,
             door::DoorMarker,
             enemy::EnemyMarker,
-            finish::orb::FinishOrb,
+            finish::{ladder::FinishLadder, orb::FinishOrb, portal::FinishPortal},
             health::HealthMarker,
             key_holder::KeyMarker,
             treasure::{TreasureLoot, TreasureMarker},
@@ -631,6 +635,79 @@ mod tests {
             "the orb rides the upper level, a full LEVEL_HEIGHT up — got y = {}",
             orbs[0],
         );
+    }
+
+    #[test]
+    fn interim_finish_draws_the_transition_rig_chosen_by_finish_type() {
+        use crate::state::FinishType;
+        // Vertically-aligned levels: the upper level's start `(0,1)` sits directly
+        // above the lower level's finish `(0,1)`, so a ladder is allowed.
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["F","S"]]}"#;
+
+        // Default finish type is Ladder: the interim (bottom) finish gets a ladder
+        // rig (several sub-meshes), no portal; the top keeps the orb.
+        let mut ladder = make_playing_app_with_levels(&[lower, upper]);
+        assert!(
+            ladder.world_mut().query::<&FinishLadder>().iter(ladder.world()).count() > 0,
+            "the interim finish should draw a ladder rig by default when a start is above",
+        );
+        assert_eq!(
+            ladder.world_mut().query::<&FinishPortal>().iter(ladder.world()).count(),
+            0,
+            "no portal when finish_type is Ladder and a ladder is allowed",
+        );
+        assert_eq!(
+            ladder.world_mut().query::<&FinishOrb>().iter(ladder.world()).count(),
+            1,
+            "the final level still keeps its orb",
+        );
+
+        // FinishType::Portal swaps the interim rig to a portal (one body), no ladder.
+        let mut portal = make_playing_app_with_levels_and_config(
+            &[lower, upper],
+            GameConfig { finish_type: FinishType::Portal, ..GameConfig::default() },
+        );
+        assert_eq!(
+            portal.world_mut().query::<&FinishPortal>().iter(portal.world()).count(),
+            1,
+            "the interim finish should draw a single portal body",
+        );
+        assert_eq!(
+            portal.world_mut().query::<&FinishLadder>().iter(portal.world()).count(),
+            0,
+            "no ladder when finish_type is Portal",
+        );
+    }
+
+    #[test]
+    fn a_ladder_finish_with_no_start_above_falls_back_to_a_portal() {
+        // The upper level's start `(0,0)` is NOT above the lower finish `(0,1)`, so
+        // even a Ladder finish type must fall back to a portal (you can't climb to
+        // nothing). This is the rule that a portal can always replace a ladder.
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[lower, upper]); // default = Ladder
+        assert_eq!(
+            app.world_mut().query::<&FinishLadder>().iter(app.world()).count(),
+            0,
+            "a ladder with no start above must not be drawn",
+        );
+        assert_eq!(
+            app.world_mut().query::<&FinishPortal>().iter(app.world()).count(),
+            1,
+            "it falls back to a portal instead",
+        );
+    }
+
+    #[test]
+    fn single_level_game_keeps_the_orb_and_draws_no_transition_rig() {
+        // A one-level game is its own final level, so it keeps the orb and never
+        // draws a transition rig — unchanged from before multi-level runs.
+        let mut app = make_playing_app_with(r#"{"grid":[["S","F"]]}"#);
+        assert_eq!(app.world_mut().query::<&FinishOrb>().iter(app.world()).count(), 1);
+        assert_eq!(app.world_mut().query::<&FinishLadder>().iter(app.world()).count(), 0);
+        assert_eq!(app.world_mut().query::<&FinishPortal>().iter(app.world()).count(), 0);
     }
 
     #[test]
