@@ -50,7 +50,7 @@ pub(crate) mod silver;
 
 use super::common::{self, CommonObjectAssets};
 use crate::state::TreasureStyle;
-use crate::world::CELL_SIZE;
+use crate::world::{world_y, CELL_SIZE};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -209,6 +209,10 @@ fn baked_handle(
 #[derive(Component)]
 pub(crate) struct TreasureMarker {
     pub(crate) cell: (usize, usize),
+    /// Run level this chest sits on. The collectible loot root rests at this
+    /// level's floor and [`treasure_collection_system`] rewrites its absolute Y
+    /// during the rise flourish, so it must re-apply the level offset.
+    pub(crate) level: usize,
 }
 
 /// Tags each baked loot mesh (the coin pile, or one gem colour group). Lets the
@@ -425,6 +429,7 @@ pub(crate) fn spawn_treasure_for_cell(
     c: usize,
     // Sparkle rays for this chest — uniform across the maze (see rays_per_treasure).
     ray_count: usize,
+    level: usize,
 ) {
     if cell != 'T' {
         return;
@@ -434,15 +439,15 @@ pub(crate) fn spawn_treasure_for_cell(
     let yaw = common::yaw_toward_open_neighbour(grid, r, c);
 
     // The open chest stands free so it stays behind, emptied, after collection.
-    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open);
+    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, level);
 
     // Collectible loot root — positioned + yawed at the cell so its children use
     // the same local frame as the chest interior. The flourish rises/shrinks
     // this root, leaving the chest.
     let root = commands
         .spawn((
-            TreasureMarker { cell: (r, c) },
-            Transform::from_xyz(x, 0.0, z).with_rotation(Quat::from_rotation_y(yaw)),
+            TreasureMarker { cell: (r, c), level },
+            Transform::from_xyz(x, world_y(level, 0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
             Visibility::default(),
         ))
         .id();
@@ -626,10 +631,10 @@ pub(crate) fn treasure_sparkle_system(
 pub(crate) fn treasure_collection_system(
     mut commands: Commands,
     time: Res<Time>,
-    mut collecting: Query<(Entity, &mut CollectingTreasure, &mut Transform)>,
+    mut collecting: Query<(Entity, &mut CollectingTreasure, &mut Transform, &TreasureMarker)>,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut state, mut transform) in &mut collecting {
+    for (entity, mut state, mut transform, marker) in &mut collecting {
         state.elapsed += dt;
         let progress = (state.elapsed / COLLECT_DURATION).min(1.0);
         if progress >= 1.0 {
@@ -638,7 +643,7 @@ pub(crate) fn treasure_collection_system(
         }
         // Ease-out so the loot leaps up quickly then settles into nothing.
         let eased = 1.0 - (1.0 - progress) * (1.0 - progress);
-        transform.translation.y = COLLECT_RISE * eased;
+        transform.translation.y = world_y(marker.level, COLLECT_RISE * eased);
         transform.scale = Vec3::splat(1.0 - eased);
         transform.rotate_y(dt * COLLECT_SPIN_RATE);
     }

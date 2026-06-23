@@ -55,13 +55,14 @@ pub(crate) fn spawn_health_for_cell(
     cell: char,
     r: usize,
     c: usize,
+    level: usize,
 ) {
     if cell != 'H' {
         return;
     }
     match health_style {
-        HealthStyle::Heart => heart::spawn_heart(commands, &assets.heart, r, c),
-        HealthStyle::Potion => potion::spawn_potion(commands, &assets.potion, r, c),
+        HealthStyle::Heart => heart::spawn_heart(commands, &assets.heart, r, c, level),
+        HealthStyle::Potion => potion::spawn_potion(commands, &assets.potion, r, c, level),
     }
 }
 

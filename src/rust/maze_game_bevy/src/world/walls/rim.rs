@@ -23,7 +23,7 @@ use super::{pool_type_at, WALL_THICKNESS};
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::{GameConfig, WallType};
 use crate::world::textures::rock::make_rock_texture;
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{world_y, CELL_SIZE, HALF_CELL};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use maze::CellEntity;
@@ -129,12 +129,13 @@ pub(crate) fn spawn_pool_rim(
     config: &GameConfig,
     r: usize,
     c: usize,
+    level: usize,
 ) {
     let rows = grid.len();
     let cols = grid[r].len();
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
-    let y = -RECESS_DEPTH / 2.0;
+    let y = world_y(level, -RECESS_DEPTH / 2.0);
     let mat = match wall_type {
         WallType::Lava => &assets.lava_mat,
         _ => &assets.water_mat,

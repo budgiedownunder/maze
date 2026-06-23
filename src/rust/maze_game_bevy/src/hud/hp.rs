@@ -14,7 +14,7 @@
 
 use crate::hud::bag::BagHud;
 use crate::images::make_image;
-use crate::state::GameState;
+use crate::state::{GameState, MultiLevelRun};
 use bevy::prelude::*;
 
 const HEART_SIZE: f32 = 24.0;
@@ -158,6 +158,7 @@ fn row_left_for(max_hp: u32) -> f32 {
 pub(crate) fn hp_hud_system(
     window: Query<&Window>,
     state: Res<GameState>,
+    run: Res<MultiLevelRun>,
     mut label: Query<
         (&mut HpHud, &mut Transform),
         (Without<HpHeartIcon>, Without<BagHud>),
@@ -174,7 +175,8 @@ pub(crate) fn hp_hud_system(
     let hp = state.game.hp();
     let max_hp = state.game.max_hp();
     let row_left = row_left_for(max_hp);
-    let y = crate::hud::bag::top_edge_y(&state.game, win.width(), win.height())
+    let treasure = run.cumulative_treasure(&state.game.collected_treasure());
+    let y = crate::hud::bag::top_edge_y(&state.game, &treasure, win.width(), win.height())
         + HP_GAP_ABOVE_BAG
         + HEART_SIZE / 2.0;
 

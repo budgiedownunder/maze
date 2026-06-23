@@ -4,7 +4,7 @@ pub(crate) mod moss;
 pub(crate) mod sigil;
 
 use crate::state::GameConfig;
-use crate::world::CELL_SIZE;
+use crate::world::{world_y, CELL_SIZE};
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -94,6 +94,7 @@ pub(crate) fn is_junction(grid: &[Vec<char>], r: usize, c: usize) -> bool {
     open > 2
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_floor_accents_for_cell(
     commands: &mut Commands,
     assets: &FloorAccentAssets,
@@ -102,6 +103,7 @@ pub(crate) fn spawn_floor_accents_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    level: usize,
 ) {
     // A single flat accent per junction cell — moss / cracked tile /
     // mosaic / sigil, picked by hashing (row, col, seed). Skipped for
@@ -116,6 +118,7 @@ pub(crate) fn spawn_floor_accents_for_cell(
     }
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    let y = world_y(level, FLOOR_ACCENT_Y);
     let kind = floor_accent_index(r, c, config.seed);
     let mat = assets.mats[kind as usize].clone();
     match (assets.mesh.clone(), mat) {
@@ -124,11 +127,11 @@ pub(crate) fn spawn_floor_accents_for_cell(
                 FloorAccent,
                 Mesh3d(mesh),
                 MeshMaterial3d(mt),
-                Transform::from_xyz(x, FLOOR_ACCENT_Y, z),
+                Transform::from_xyz(x, y, z),
             ));
         }
         _ => {
-            commands.spawn((FloorAccent, Transform::from_xyz(x, FLOOR_ACCENT_Y, z)));
+            commands.spawn((FloorAccent, Transform::from_xyz(x, y, z)));
         }
     }
 }

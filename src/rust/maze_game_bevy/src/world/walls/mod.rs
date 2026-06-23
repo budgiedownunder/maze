@@ -374,22 +374,23 @@ pub(crate) fn spawn_non_occluding_for_cell(
     wall_type: WallType,
     r: usize,
     c: usize,
+    level: usize,
 ) {
     match wall_type {
         // Water / lava render a recessed surface plus rim skirts filling the band
         // up to floor level on every edge facing a non-pool cell.
         WallType::Water => {
-            water::spawn_water(commands, &assets.water, r, c);
-            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c);
+            water::spawn_water(commands, &assets.water, r, c, level);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, level);
         }
         WallType::Lava => {
-            lava::spawn_lava(commands, &assets.lava, r, c);
-            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c);
+            lava::spawn_lava(commands, &assets.lava, r, c, level);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, level);
         }
         // The fence needs the grid + overrides to bar only the edges facing a
         // passable cell or a water/lava pool.
         WallType::IronFence => {
-            iron_fence::spawn_iron_fence(commands, &assets.iron_fence, grid, cell_entities, config, r, c)
+            iron_fence::spawn_iron_fence(commands, &assets.iron_fence, grid, cell_entities, config, r, c, level)
         }
         WallType::Brick | WallType::DressedStone | WallType::Wood | WallType::Cobblestone => {}
     }

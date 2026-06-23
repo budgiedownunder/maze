@@ -1,4 +1,5 @@
 use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
+use crate::world::world_y;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -70,9 +71,11 @@ pub(crate) fn build_groove_material(
 /// A pillar sub-mesh transform: positioned at `(x, y, z)` with `scale`, but with
 /// only the vertical extent (the Y of both the position and the scale)
 /// multiplied by `h`. So `h = 1.0` is the full dead-end landmark and `h = 0.5`
-/// is a half-height pedestal of the same footprint.
-fn col_xform(x: f32, y: f32, z: f32, scale: Vec3, h: f32) -> Transform {
-    Transform::from_translation(Vec3::new(x, y * h, z))
+/// is a half-height pedestal of the same footprint. The whole rig is then lifted
+/// to its run `level` (level 0 is the identity); the offset is applied after the
+/// height scale because it is a world-space displacement, not part of the rig.
+fn col_xform(x: f32, y: f32, z: f32, scale: Vec3, h: f32, level: usize) -> Transform {
+    Transform::from_translation(Vec3::new(x, world_y(level, y * h), z))
         .with_scale(Vec3::new(scale.x, scale.y * h, scale.z))
 }
 
@@ -82,6 +85,7 @@ pub(crate) fn spawn_pillar(
     x: f32,
     z: f32,
     height_scale: f32,
+    level: usize,
 ) {
     let body = assets.pillar_mat.clone();
     let groove = assets.groove_mat.clone();
@@ -98,7 +102,7 @@ pub(crate) fn spawn_pillar(
         assets.cylinder.clone(),
         body.clone(),
         outline(),
-        col_xform(x, BASE_Y, z, BASE_SCALE, height_scale),
+        col_xform(x, BASE_Y, z, BASE_SCALE, height_scale, level),
         (),
     );
     spawn_with_outline(
@@ -107,7 +111,7 @@ pub(crate) fn spawn_pillar(
         assets.cylinder.clone(),
         body.clone(),
         outline(),
-        col_xform(x, SHAFT_Y, z, SHAFT_SCALE, height_scale),
+        col_xform(x, SHAFT_Y, z, SHAFT_SCALE, height_scale, level),
         (),
     );
     spawn_with_outline(
@@ -116,7 +120,7 @@ pub(crate) fn spawn_pillar(
         assets.cylinder.clone(),
         body,
         outline(),
-        col_xform(x, CAPITAL_Y, z, CAPITAL_SCALE, height_scale),
+        col_xform(x, CAPITAL_Y, z, CAPITAL_SCALE, height_scale, level),
         (),
     );
 
@@ -132,6 +136,7 @@ pub(crate) fn spawn_pillar(
         BASE_Y,
         BASE_GROOVE_COUNT,
         height_scale,
+        level,
     );
     spawn_grooves(
         commands,
@@ -142,6 +147,7 @@ pub(crate) fn spawn_pillar(
         CAPITAL_Y,
         CAPITAL_GROOVE_COUNT,
         height_scale,
+        level,
     );
 
     // Join ring on top of the base around the shaft's foot. Width is
@@ -153,7 +159,7 @@ pub(crate) fn spawn_pillar(
         assets.cylinder.clone(),
         groove,
         assets.pillar_outline_mat.clone(),
-        col_xform(x, BASE_JOIN_RING_Y, z, BASE_JOIN_RING_SCALE, height_scale),
+        col_xform(x, BASE_JOIN_RING_Y, z, BASE_JOIN_RING_SCALE, height_scale, level),
         (),
     );
 }
@@ -168,6 +174,7 @@ fn spawn_grooves(
     y: f32,
     count: u32,
     height_scale: f32,
+    level: usize,
 ) {
     for i in 0..count {
         let angle = (i as f32 / count as f32) * TAU;
@@ -179,7 +186,7 @@ fn spawn_grooves(
             assets.cuboid.clone(),
             groove_mat.clone(),
             assets.pillar_outline_mat.clone(),
-            col_xform(gx, y, gz, GROOVE_SCALE, height_scale),
+            col_xform(gx, y, gz, GROOVE_SCALE, height_scale, level),
             (),
         );
     }

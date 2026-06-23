@@ -16,7 +16,7 @@
 mod key;
 mod treasure;
 
-use crate::state::GameState;
+use crate::state::{GameState, MultiLevelRun};
 use bevy::prelude::*;
 use maze::{BagItem, TreasureStyle};
 
@@ -260,8 +260,13 @@ fn layout_chips(n_chips: usize, win_w: f32, win_h: f32) -> BagLayout {
 /// rows (e.g. HP) stack above this so they never collide with the bag — when a
 /// narrow window wraps the bag onto extra rows, the reported top edge rises
 /// accordingly.
-pub(crate) fn top_edge_y(game: &maze::MazeGame, win_w: f32, win_h: f32) -> f32 {
-    let chips = compute_chips(game.bag(), &game.collected_treasure());
+pub(crate) fn top_edge_y(
+    game: &maze::MazeGame,
+    treasure: &[(TreasureStyle, u32)],
+    win_w: f32,
+    win_h: f32,
+) -> f32 {
+    let chips = compute_chips(game.bag(), treasure);
     let layout = layout_chips(chips.len(), win_w, win_h);
     let base_y = -win_h / 2.0 + BAG_MARGIN_BOTTOM;
     let top_row_y = layout.chips.iter().map(|c| c.y).fold(base_y, f32::max);
@@ -272,6 +277,7 @@ pub(crate) fn bag_hud_system(
     mut commands: Commands,
     window: Query<&Window>,
     state: Res<GameState>,
+    run: Res<MultiLevelRun>,
     mut label: Query<(&mut BagHud, &mut Transform), Without<BagChipPart>>,
     mut parts: Query<(Entity, &BagChipPart, &mut Transform), Without<BagHud>>,
 ) {
@@ -282,7 +288,11 @@ pub(crate) fn bag_hud_system(
         return;
     };
 
-    let chips = compute_chips(state.game.bag(), &state.game.collected_treasure());
+    // Treasure chips show the whole run's tally (banked + live), so they keep
+    // accumulating across level transitions; keys come from the live bag (which
+    // carries forward when `reset_bag_between_levels` is false).
+    let treasure = run.cumulative_treasure(&state.game.collected_treasure());
+    let chips = compute_chips(state.game.bag(), &treasure);
     let layout = layout_chips(chips.len(), win.width(), win.height());
 
     // Centre the label with the chips each frame so resizes re-centre the row.

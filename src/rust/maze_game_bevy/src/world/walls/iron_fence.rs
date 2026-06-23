@@ -12,7 +12,7 @@
 use super::{can_be_looked_across, WALL_HEIGHT};
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameConfig;
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{world_y, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::CellEntity;
 use std::collections::HashMap;
@@ -104,6 +104,7 @@ fn edges_barred(
 /// facing a passable cell, a water/lava pool, or the maze perimeter (the player
 /// sees sky through the bars there). The caller spawns the floor tile separately
 /// (the fence stands on a normal floor).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_iron_fence(
     commands: &mut Commands,
     assets: &IronFenceAssets,
@@ -112,13 +113,14 @@ pub(crate) fn spawn_iron_fence(
     config: &GameConfig,
     r: usize,
     c: usize,
+    level: usize,
 ) {
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
     let root = commands
         .spawn((
             IronFenceBars,
-            Transform::from_xyz(x, WALL_HEIGHT / 2.0, z),
+            Transform::from_xyz(x, world_y(level, WALL_HEIGHT / 2.0), z),
             Visibility::default(),
         ))
         .id();

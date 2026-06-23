@@ -1,5 +1,5 @@
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{world_y, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -73,9 +73,11 @@ pub(crate) fn spawn_lines_for_cell(
     grid: &[Vec<char>],
     r: usize,
     c: usize,
+    level: usize,
 ) {
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    let line_y = world_y(level, LINE_Y);
 
     // Each shared edge is spawned once: always South + East; North/West only
     // when the neighbour in that direction is a wall or grid boundary.
@@ -83,20 +85,20 @@ pub(crate) fn spawn_lines_for_cell(
         commands,
         assets.line_ew.clone(),
         assets.line_mat.clone(),
-        Vec3::new(x, LINE_Y, z + HALF_CELL),
+        Vec3::new(x, line_y,z + HALF_CELL),
     );
     spawn_line(
         commands,
         assets.line_ns.clone(),
         assets.line_mat.clone(),
-        Vec3::new(x + HALF_CELL, LINE_Y, z),
+        Vec3::new(x + HALF_CELL, line_y,z),
     );
     if r == 0 || grid[r - 1][c] == 'W' {
         spawn_line(
             commands,
             assets.line_ew.clone(),
             assets.line_mat.clone(),
-            Vec3::new(x, LINE_Y, z - HALF_CELL),
+            Vec3::new(x, line_y,z - HALF_CELL),
         );
     }
     if c == 0 || grid[r][c - 1] == 'W' {
@@ -104,7 +106,7 @@ pub(crate) fn spawn_lines_for_cell(
             commands,
             assets.line_ns.clone(),
             assets.line_mat.clone(),
-            Vec3::new(x - HALF_CELL, LINE_Y, z),
+            Vec3::new(x - HALF_CELL, line_y,z),
         );
     }
 }

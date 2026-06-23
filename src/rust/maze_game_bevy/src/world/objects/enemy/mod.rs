@@ -13,7 +13,7 @@ pub(crate) mod ghost;
 pub(crate) mod goblin;
 
 use crate::state::{EnemyType, GameConfig, GameState};
-use crate::world::CELL_SIZE;
+use crate::world::{world_y, CELL_SIZE};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -28,6 +28,10 @@ pub(crate) struct EnemyMarker {
     /// `state.game.enemies()` each frame.
     #[allow(dead_code)]
     pub(crate) spawn_cell: (usize, usize),
+    /// Run level this enemy sits on. [`enemy_animation_system`] rewrites the
+    /// rig's absolute Y each frame from a per-type resting height, so it must
+    /// re-apply the level offset to keep the enemy on its stacked floor.
+    pub(crate) level: usize,
 }
 
 /// Composite enemy assets. One sub-struct per rig variant.
@@ -49,6 +53,7 @@ pub(crate) fn build_enemy_assets(
 
 /// Spawns the per-cell enemy entity using the rig variant selected by
 /// `enemy_type`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_enemy_for_cell(
     commands: &mut Commands,
     assets: &EnemyAssets,
@@ -57,13 +62,14 @@ pub(crate) fn spawn_enemy_for_cell(
     r: usize,
     c: usize,
     id: u32,
+    level: usize,
 ) {
     if cell != 'E' {
         return;
     }
     match enemy_type {
-        EnemyType::Goblin => goblin::spawn_goblin(commands, &assets.goblin, r, c, id),
-        EnemyType::Ghost => ghost::spawn_ghost(commands, &assets.ghost, r, c, id),
+        EnemyType::Goblin => goblin::spawn_goblin(commands, &assets.goblin, r, c, id, level),
+        EnemyType::Ghost => ghost::spawn_ghost(commands, &assets.ghost, r, c, id, level),
     }
 }
 
@@ -105,7 +111,7 @@ pub(crate) fn enemy_animation_system(
         let interp = from.lerp(to, enemy.move_progress());
         t.translation.x = interp.x;
         t.translation.z = interp.z;
-        t.translation.y = base_y + bob;
+        t.translation.y = world_y(marker.level, base_y) + bob;
         // Face the direction of travel — eyes (and teeth, when present)
         // are positioned on the rig's local +Z face, so rotating around Y
         // by the heading-angle aims them along the movement vector. A

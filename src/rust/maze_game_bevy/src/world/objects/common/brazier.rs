@@ -1,5 +1,6 @@
 use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::world_y;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -85,7 +86,9 @@ pub(crate) fn flicker_factor(t: f32) -> f32 {
     1.0 + FLICKER_AMPLITUDE * phase * 0.5
 }
 
-pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32) {
+pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, level: usize) {
+    // Lift each part to its run level; level 0 is the identity.
+    let pos = |y: f32| Vec3::new(x, world_y(level, y), z);
     // Stone column — steady, no flicker.
     spawn_with_outline(
         commands,
@@ -93,7 +96,7 @@ pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets
         assets.cylinder.clone(),
         assets.stone_mat.clone(),
         assets.outline_mat.clone(),
-        Transform::from_translation(Vec3::new(x, COLUMN_Y, z)).with_scale(COLUMN_SCALE),
+        Transform::from_translation(pos(COLUMN_Y)).with_scale(COLUMN_SCALE),
         (),
     );
     // Glowing bowl — carries the `BrazierBowl` marker so the flicker
@@ -104,7 +107,7 @@ pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets
         assets.cylinder.clone(),
         assets.glow_mat.clone(),
         assets.outline_mat.clone(),
-        Transform::from_translation(Vec3::new(x, BOWL_Y, z)).with_scale(BOWL_SCALE),
+        Transform::from_translation(pos(BOWL_Y)).with_scale(BOWL_SCALE),
         BrazierBowl,
     );
     // Halo — a thin disc of stronger orange just above the bowl. Steady
@@ -116,7 +119,7 @@ pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets
         assets.cylinder.clone(),
         assets.halo_mat.clone(),
         assets.outline_mat.clone(),
-        Transform::from_translation(Vec3::new(x, HALO_Y, z)).with_scale(HALO_SCALE),
+        Transform::from_translation(pos(HALO_Y)).with_scale(HALO_SCALE),
         (),
     );
 }

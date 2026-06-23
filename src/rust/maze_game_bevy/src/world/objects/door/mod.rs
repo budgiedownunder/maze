@@ -41,7 +41,7 @@ use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
 use crate::world::walls::{is_non_occluding_wall, wall_kind_for_cell, WallAssets, PANEL_W};
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{world_y, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
@@ -329,6 +329,7 @@ pub(crate) fn spawn_door_for_cell(
     c: usize,
     config: &GameConfig,
     cell_entity: Option<&CellEntity>,
+    level: usize,
 ) {
     if cell != 'D' {
         return;
@@ -339,6 +340,11 @@ pub(crate) fn spawn_door_for_cell(
     let cols = grid[r].len();
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    // The leaf-anchor Y for this level; every edge centre / pivot below derives
+    // from it, and the leaf-motion systems offset from the captured base
+    // translation, so the whole leaf stays on its stacked floor. Level 0 is the
+    // identity.
+    let base_y = world_y(level, 0.0);
     let kind = wall_kind_for_cell(r, c, rows, cols, config);
 
     // A swinging door only reads well between two facing walls, so it's the one
@@ -351,7 +357,7 @@ pub(crate) fn spawn_door_for_cell(
     if let Some(axis) = swing_axis {
         let normal_z = axis == CorridorAxis::NorthSouth; // N/S corridor → normal along Z
         let closed_yaw = if normal_z { 0.0 } else { FRAC_PI_2 };
-        let edge_centre = Vec3::new(x, 0.0, z);
+        let edge_centre = Vec3::new(x, base_y, z);
         let pivot_translation =
             edge_centre + Quat::from_rotation_y(closed_yaw) * Vec3::new(-PANEL_W / 2.0, 0.0, 0.0);
         spawn_leaf(
@@ -388,10 +394,10 @@ pub(crate) fn spawn_door_for_cell(
     // solid walls are closed.
     // (open?, closed_yaw, edge centre, decoration face id, normal-along-Z?)
     let edges = [
-        (r > 0 && open_for_door(grid, cell_entities, config, r - 1, c), PI, Vec3::new(x, 0.0, z - HALF_CELL), 0u32, true),
-        (r + 1 < rows && open_for_door(grid, cell_entities, config, r + 1, c), 0.0, Vec3::new(x, 0.0, z + HALF_CELL), 1, true),
-        (c + 1 < cols && open_for_door(grid, cell_entities, config, r, c + 1), FRAC_PI_2, Vec3::new(x + HALF_CELL, 0.0, z), 2, false),
-        (c > 0 && open_for_door(grid, cell_entities, config, r, c - 1), -FRAC_PI_2, Vec3::new(x - HALF_CELL, 0.0, z), 3, false),
+        (r > 0 && open_for_door(grid, cell_entities, config, r - 1, c), PI, Vec3::new(x, base_y, z - HALF_CELL), 0u32, true),
+        (r + 1 < rows && open_for_door(grid, cell_entities, config, r + 1, c), 0.0, Vec3::new(x, base_y, z + HALF_CELL), 1, true),
+        (c + 1 < cols && open_for_door(grid, cell_entities, config, r, c + 1), FRAC_PI_2, Vec3::new(x + HALF_CELL, base_y, z), 2, false),
+        (c > 0 && open_for_door(grid, cell_entities, config, r, c - 1), -FRAC_PI_2, Vec3::new(x - HALF_CELL, base_y, z), 3, false),
     ];
     for (open, closed_yaw, edge_centre, face_id, normal_z) in edges {
         if !open {

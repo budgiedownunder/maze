@@ -53,11 +53,12 @@ pub(crate) fn spawn_floor_for_cell(
     cell: char,
     r: usize,
     c: usize,
+    level: usize,
 ) {
-    lines::spawn_lines_for_cell(commands, &assets.lines, grid, r, c);
+    lines::spawn_lines_for_cell(commands, &assets.lines, grid, r, c, level);
     match cell {
-        'S' => start::spawn_start(commands, assets, r, c),
-        'F' => finish::spawn_finish(commands, assets, r, c),
-        _ => tile::spawn_tile(commands, assets, r, c),
+        'S' => start::spawn_start(commands, assets, r, c, level),
+        'F' => finish::spawn_finish(commands, assets, r, c, level),
+        _ => tile::spawn_tile(commands, assets, r, c, level),
     }
 }

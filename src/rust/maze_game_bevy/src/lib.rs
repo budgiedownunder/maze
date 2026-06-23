@@ -186,6 +186,24 @@ mod tests {
         app
     }
 
+    /// A playing app whose run is the given stacked level set (bottom level
+    /// first), supplied via the `PendingLevels` override so the multi-level
+    /// rendering path can be exercised headlessly without the native env var.
+    fn make_playing_app_with_levels(levels: &[&str]) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(crate::state::PendingLevels(
+            levels.iter().map(|s| s.to_string()).collect(),
+        ));
+        build_app(&mut app, None);
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update();
+        app
+    }
+
     fn expected_wall_panel_count(grid: &[Vec<char>]) -> usize {
         let rows = grid.len();
         grid.iter()
@@ -572,6 +590,62 @@ mod tests {
             0,
             "FinishOrb should be despawned after win"
         );
+    }
+
+    #[test]
+    fn multi_level_run_stacks_each_level_a_level_height_higher() {
+        // Three identical 1×2 levels (a start + a finish). Every passable cell
+        // spawns one floor tile, so each level contributes two — lifted to its
+        // own `world_y(level, 0.0)` band.
+        let level = r#"{"grid":[["S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[level, level, level]);
+        let mut query = app.world_mut().query::<(&FloorCell, &Transform)>();
+        let ys: Vec<f32> = query.iter(app.world()).map(|(_, t)| t.translation.y).collect();
+        assert_eq!(ys.len(), 6, "two floor tiles × three levels");
+        for level in 0..3 {
+            let expected = crate::world::world_y(level, 0.0);
+            let n = ys.iter().filter(|y| (**y - expected).abs() < 1e-3).count();
+            assert_eq!(n, 2, "level {level} keeps its two floor tiles at y = {expected}");
+        }
+    }
+
+    #[test]
+    fn multi_level_run_has_a_single_finish_orb_on_the_top_level() {
+        // Two levels, each with a finish: only the top (final) level keeps the
+        // orb — the interim finish omits it.
+        let level = r#"{"grid":[["S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[level, level]);
+        let mut query = app.world_mut().query::<(&FinishOrb, &Transform)>();
+        let orbs: Vec<f32> = query.iter(app.world()).map(|(_, t)| t.translation.y).collect();
+        assert_eq!(orbs.len(), 1, "only the top level keeps the finish orb");
+        assert!(
+            orbs[0] > crate::world::LEVEL_HEIGHT,
+            "the orb rides the upper level, a full LEVEL_HEIGHT up — got y = {}",
+            orbs[0],
+        );
+    }
+
+    #[test]
+    fn floor_and_wall_counts_scale_with_the_level_count() {
+        // A wall-bearing footprint rendered as one level, then as three. Every
+        // level renders the same geometry (only its Y offset differs), so the
+        // floor and wall counts scale exactly with the level count.
+        let level = r#"{"grid":[["S","W"," "],[" ","W","F"]]}"#;
+        let single = {
+            let mut app = make_playing_app_with_levels(&[level]);
+            let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+            let walls = app.world_mut().query::<&WallCell>().iter(app.world()).count();
+            (floors, walls)
+        };
+        let triple = {
+            let mut app = make_playing_app_with_levels(&[level, level, level]);
+            let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+            let walls = app.world_mut().query::<&WallCell>().iter(app.world()).count();
+            (floors, walls)
+        };
+        assert!(single.1 > 0, "sanity: the footprint actually has wall panels");
+        assert_eq!(triple.0, single.0 * 3, "floor tiles scale with the level count");
+        assert_eq!(triple.1, single.1 * 3, "wall panels scale with the level count");
     }
 
     #[test]

@@ -13,15 +13,29 @@ pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COU
 use crate::hud;
 use crate::overlays::pause;
 use crate::state::{
-    GameClock, GameConfig, GameState, GridFacing, MultiLevelRun, PendingMazeJson, WallType,
+    GameClock, GameConfig, GameState, GridFacing, MultiLevelRun, PendingLevels, PendingMazeJson,
+    WallType,
 };
 use bevy::prelude::*;
-use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
-use std::collections::HashSet;
+use maze::{CellEntity, GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
+use std::collections::{HashMap, HashSet};
 
 pub(crate) const CELL_SIZE: f32 = 2.0;
 pub(crate) const HALF_CELL: f32 = CELL_SIZE / 2.0;
 const EYE_HEIGHT: f32 = 1.7;
+
+/// Vertical gap between stacked levels in a multi-level run. Equal to the wall
+/// height so a level's floor sits exactly at the top of the walls of the level
+/// below — on the ceiling for a roofed level. Level 0 is the bottom.
+pub(crate) const LEVEL_HEIGHT: f32 = crate::world::walls::WALL_HEIGHT;
+
+/// Maps a level-local Y coordinate into world space for the given level index:
+/// `y + level * LEVEL_HEIGHT`. Used everywhere a level's geometry sets a Y — at
+/// spawn and in the per-frame animation systems — so every level is built the
+/// same way, just lifted by its offset. Level 0 is the identity.
+pub(crate) fn world_y(level: usize, y: f32) -> f32 {
+    y + level as f32 * LEVEL_HEIGHT
+}
 
 /// How far back from the cell centre — in the direction OPPOSITE the
 /// player's current facing — the camera is positioned. A non-zero shift
@@ -224,6 +238,11 @@ pub(crate) fn advance_to_next_level(
     state.anim = None;
     state.explored = explored;
     state.damage_flash_timer = 0.0;
+    // Lift the camera onto the new level. The move animation stays at ground
+    // level; `movement_system` adds this offset when writing the camera transform,
+    // so reaching an interim finish takes the player up onto the next level. (A
+    // smooth climb animation is a later refinement — this is the height snap.)
+    state.camera_y_offset = world_y(next_index, 0.0);
     run.current_level = next_index;
 }
 
@@ -376,10 +395,150 @@ pub(crate) fn camera_fov_resize_system(
     }
 }
 
+/// Immutable per-session render assets shared by every level's geometry. Bundled
+/// so [`spawn_level`] takes one reference instead of a long argument list.
+struct LevelRenderAssets<'a> {
+    wall: &'a walls::WallAssets,
+    nonoccluding: &'a walls::NonOccludingAssets,
+    floor: &'a floor::FloorAssets,
+    decoration: &'a decorations::DecorationAssets,
+    object: &'a objects::ObjectAssets,
+    roof: &'a roof::RoofAssets,
+}
+
+/// Renders one level's full geometry, lifted to its stacked Y offset
+/// (`world_y(level, …)` runs through every spawn helper). `is_final` keeps the
+/// finish orb only on the top level — interim finishes omit it (a transition rig
+/// replaces it later). `is_live` marks the level whose enemies are driven by the
+/// live `MazeGame` in `GameState`; every other level's enemies are static
+/// scenery, so they get a non-matching id and `enemy_animation_system` leaves
+/// them at their spawn pose.
+#[allow(clippy::too_many_arguments)]
+fn spawn_level(
+    commands: &mut Commands,
+    assets: &LevelRenderAssets,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    level: usize,
+    is_final: bool,
+    is_live: bool,
+) {
+    // Sparkle rays each treasure chest gets — the same count for every chest in
+    // this level (so they look uniform), with the total bounded for treasure-dense
+    // levels (the additive sparkle overdraw is what overwhelms a mobile GPU; the
+    // per-chest point light is comparatively cheap and always kept). The global
+    // across-levels budget is a later refinement; per level matches the
+    // single-maze behaviour. See rays_per_chest.
+    let treasure_rays =
+        objects::treasure::rays_per_chest(grid.iter().flatten().filter(|&&ch| ch == 'T').count());
+    // Row-major scan order matches `MazeGame`'s enemy-id assignment, so bumping
+    // this per `'E'` keeps the live level's `EnemyMarker.id` aligned with the
+    // runtime `maze::Enemy.id`.
+    let mut enemy_id: u32 = 0;
+    for (r, row) in grid.iter().enumerate() {
+        for (c, &cell) in row.iter().enumerate() {
+            let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
+            if cell == 'W' {
+                // A solid wall renders nothing itself — the adjacent open cell
+                // draws the panel. A non-occluding wall (water / lava / iron
+                // fence) is un-skipped: it renders its in-cell geometry plus the
+                // panels facing any solid-wall neighbours (panels toward open /
+                // non-occluding neighbours and the grid edge are suppressed in
+                // `spawn_walls_for_cell`). Water / lava pools double as the floor;
+                // the iron fence stands on a normal tile.
+                let wall_type = objects::overrides::resolve_wall_type(cell_entity, config.wall_type);
+                if !wall_type.is_non_occluding() {
+                    continue;
+                }
+                walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, level);
+                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, level);
+                if matches!(wall_type, WallType::IronFence) {
+                    floor::tile::spawn_tile(commands, assets.floor, r, c, level);
+                }
+                roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, level);
+                continue;
+            }
+            walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, level);
+            decorations::spawn_decorations_for_cell(commands, assets.decoration, grid, cell_entities, cell, r, c, config, level);
+            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, level);
+            // A static level's enemies never match a live runtime enemy, so they
+            // get a non-matching id and stand frozen as scenery.
+            let spawn_enemy_id = if is_live { enemy_id } else { u32::MAX };
+            objects::spawn_objects_for_cell(commands, assets.object, grid, cell, r, c, config, cell_entity, spawn_enemy_id, treasure_rays, level, is_final);
+            if cell == 'E' {
+                enemy_id += 1;
+            }
+            // Doors are spawned here (not inside `spawn_objects_for_cell`)
+            // because the panel borrows the cell's wall material from
+            // `wall_assets`.
+            objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, level);
+            roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, level);
+        }
+    }
+}
+
+/// Hand-built level set for `MAZE_DEMO=multilevel` — a native, walkable stack for
+/// verifying the stacked rendering. A **shrinking open-platform pyramid**: an open
+/// `9×9` platform at the bottom (live), a `5×5` above it, a `3×3` on top — each a
+/// genuinely smaller grid (not a padded one), so with the demo's open perimeter
+/// (see `spawn_world`) every platform's edge shows sky instead of a wall and you
+/// can look up past the lower platforms to the ones above. The grids are
+/// **edge-aligned** (a common origin corner — the `edge` layout mode); `centre`
+/// alignment, which would centre each smaller grid over the one below, is the
+/// dedicated `world_x` / `world_z` follow-on work. Each level's start sits above
+/// the previous level's finish (same `(row, col)`, so a clean vertical climb under
+/// edge alignment), and the run's single finish **orb is on the far corner of the
+/// top `3×3`**, in the open, so it reads from below. Collectible cells are kept
+/// off each other's `(row, col)` across levels (bottom's outside the upper
+/// footprints) so the live game's collection events never disturb an upper
+/// level's matching marker.
+fn multilevel_demo_levels() -> Vec<String> {
+    let build = |rows: &[&str]| -> Vec<Vec<char>> {
+        rows.iter().map(|row| row.chars().collect()).collect()
+    };
+    // Bottom: 9×9 open platform (live). Climbs at F(2,2); objects sit OUTSIDE the
+    // 5×5/3×3 upper footprints (rows/cols ≥ 5) so they never collide with an
+    // upper level's marker cell.
+    let bottom = build(&[
+        "         ",
+        "         ",
+        "  F      ",
+        "         ",
+        "         ",
+        "         ",
+        "  K   E  ",
+        "       S ",
+        "    T    ",
+    ]);
+    // Middle: 5×5 open platform. S(2,2) sits above the bottom's F(2,2); F(1,1)
+    // below the top's S. Health + treasure kept off the top's 3×3 footprint.
+    let middle = build(&[
+        "     ",
+        " F  H",
+        "  S  ",
+        "     ",
+        " T   ",
+    ]);
+    // Top: 3×3 open platform. S(1,1) sits above the middle's F(1,1); F(2,2) — the
+    // orb — is the far corner, in the open, the easiest to spot from below.
+    let top = build(&[
+        "   ",
+        " S ",
+        "  F",
+    ]);
+    [bottom, middle, top]
+        .iter()
+        .map(|grid| grid_to_json(grid))
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_world(
     mut commands: Commands,
     pending: Res<PendingMazeJson>,
+    pending_levels: Option<Res<PendingLevels>>,
     config: Res<GameConfig>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
@@ -387,52 +546,77 @@ pub(crate) fn spawn_world(
     mut images: Option<ResMut<Assets<Image>>>,
     window: Query<&Window>,
 ) {
-    // Maze source: either the JS host pre-generated / supplied JSON via
-    // `PendingMazeJson` (the `/game/?id=…` or `/game/?difficulty=…` paths), or
-    // we fall back to the built-in demo grid (the native / no-config path).
-    // Generation failures are surfaced before we ever reach here — see
-    // `generate_maze_json` and `maze_game_bevy_wasm::start_with_config`.
+    // Maze sources for the run. The bottom (live) level is `levels[0]`; any levels
+    // above it are stacked as static geometry until the player climbs to them (the
+    // run-state machine swaps the live game on a transition). The JS host supplies
+    // one maze today — multi-level generation feeds in later — so the only
+    // multi-level case here is the native `MAZE_DEMO=multilevel` hand-built stack
+    // for verifying the stacked rendering. Generation failures are surfaced before
+    // we ever reach here — see `generate_maze_json` and
+    // `maze_game_bevy_wasm::start_with_config`.
     let game_opts = MazeGameOptions {
         enemy_move_period_ms: Some(config.enemy_move_period_ms),
         enemy_damage: Some(config.enemy_damage),
         max_hp: Some(config.max_hp),
         starting_hp: Some(config.starting_hp),
     };
-    // `MAZE_DEMO=<focus>` native run — selects a rig showroom below and relaxes
-    // the round timer so there's no pressure while inspecting the rigs.
-    let gallery_focus = gallery::requested_focus();
-    // `maze_json` is kept alongside the built game so the active level can be
-    // recorded in `MultiLevelRun`. A single-level game is a one-element run;
-    // multi-level wiring supplies the remaining levels later.
-    let (game, grid, maze_json) = match pending.0.as_deref() {
-        Some(json) => {
-            let game = MazeGame::from_json_with_options(json, game_opts)
-                .expect("maze JSON was validated by the REST API");
-            let grid = game.grid().to_vec();
-            (game, grid, json.to_string())
-        }
-        // `MAZE_DEMO=gallery cargo run` swaps the demo for a rig showroom that
-        // places every entity-rig variant beside its default. Native-only — the
-        // web/WASM path always supplies a maze via `PendingMazeJson`.
-        None if gallery_focus.is_some() => {
-            let json = gallery::json(gallery_focus.as_deref().unwrap_or("gallery"));
-            let game = MazeGame::from_json_with_options(&json, game_opts)
-                .expect("gallery maze is hardcoded and always valid");
-            let grid = game.grid().to_vec();
-            (game, grid, json)
-        }
-        None => {
-            let grid = demo_grid();
-            let json = grid_to_json(&grid);
-            let game = MazeGame::from_json_with_options(&json, game_opts)
-                .expect("demo grid is hardcoded and always valid");
-            (game, grid, json)
-        }
+    // `MAZE_DEMO=<focus>` native run — a rig showroom or the multi-level stack;
+    // both relax the round timer so there's no pressure while inspecting. These
+    // env demos are native-runtime only: under `cfg(test)` they are forced off so
+    // a headless test always uses the maze it supplies (or the built-in demo
+    // grid), regardless of a developer's shell `MAZE_DEMO` — otherwise running
+    // `cargo test` with it set would swap the maze out from under the assertions.
+    let gallery_focus = if cfg!(test) {
+        None
+    } else {
+        gallery::requested_focus()
+    };
+    // A non-empty `PendingLevels` override supplies the whole run directly (a
+    // multi-level host launch, or the rendering tests). Otherwise the native
+    // `MAZE_DEMO=multilevel` env var selects the hand-built demo stack.
+    let injected_levels = pending_levels
+        .as_ref()
+        .map(|p| p.0.clone())
+        .filter(|levels| !levels.is_empty());
+    let multilevel_demo = !cfg!(test)
+        && injected_levels.is_none()
+        && pending.0.is_none()
+        && gallery_focus.is_none()
+        && std::env::var("MAZE_DEMO").map(|v| v == "multilevel").unwrap_or(false);
+    let levels: Vec<String> = if let Some(levels) = injected_levels {
+        levels
+    } else if let Some(json) = pending.0.as_deref() {
+        vec![json.to_string()]
+    } else if let Some(focus) = gallery_focus.as_deref() {
+        // Native-only — the web/WASM path always supplies a maze via
+        // `PendingMazeJson`. The gallery places every entity rig beside its default.
+        vec![gallery::json(focus)]
+    } else if multilevel_demo {
+        multilevel_demo_levels()
+    } else {
+        vec![grid_to_json(&demo_grid())]
     };
 
-    // Per-cell rig overrides (sparse — only overridden cells appear). Cloned out
-    // before `game` is moved into `GameState`; used during the spawn scan below
-    // to pick a per-cell rig in place of the per-maze `GameConfig` default.
+    // The multilevel demo opens the perimeter so the stack is genuinely
+    // see-through (decision 8): with no outer walls, looking up-and-out from the
+    // bottom level reveals the levels rising above — including the top level's
+    // orb — which a walled perimeter would seal off. Demo-only; every other launch
+    // keeps its configured perimeter. Shadowed so the whole render below uses it.
+    let config: GameConfig = if multilevel_demo {
+        GameConfig {
+            perimeter_walls: false,
+            ..(*config).clone()
+        }
+    } else {
+        (*config).clone()
+    };
+
+    // The bottom level is the live game in `GameState`; build it with the session
+    // options. Its per-cell rig overrides (sparse) are cloned out before the game
+    // is moved into `GameState`, for the spawn scan to pick per-cell rigs.
+    let game = MazeGame::from_json_with_options(&levels[0], game_opts)
+        .expect("maze JSON is host-validated or a hardcoded demo, so it always parses");
+    let grid = game.grid().to_vec();
     let cell_entities = game.cell_entities().clone();
 
     let start_row = game.player_row();
@@ -457,6 +641,9 @@ pub(crate) fn spawn_world(
         lost: false,
         paused: false,
         damage_flash_timer: 0.0,
+        // The player starts on the bottom level, so the camera sits at ground
+        // level; advancing a level lifts it (see `advance_to_next_level`).
+        camera_y_offset: 0.0,
     });
 
     // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see
@@ -465,7 +652,7 @@ pub(crate) fn spawn_world(
     // fallback. The rig galleries get a long timer so there's no time pressure
     // while inspecting the rigs.
     commands.insert_resource(GameClock {
-        remaining_secs: if gallery_focus.is_some() {
+        remaining_secs: if gallery_focus.is_some() || multilevel_demo {
             3600.0
         } else {
             config.timer_seconds.max(0.0)
@@ -495,84 +682,34 @@ pub(crate) fn spawn_world(
     let object_assets = objects::build_object_assets(&mut meshes, &mut materials, &mut images);
     let roof_assets = roof::build_roof_assets(&mut meshes, &mut materials, &mut images, &config);
 
-    // Row-major scan order matches `MazeGame`'s enemy-id assignment, so
-    // bumping this counter per `'E'` keeps the Bevy `EnemyMarker.id`
-    // aligned with the runtime `maze::Enemy.id`.
-    let mut enemy_id: u32 = 0;
-    // Sparkle rays each treasure chest gets — the same count for every chest in the
-    // maze (so they look uniform), with the total bounded for treasure-dense mazes
-    // (the additive sparkle overdraw is what overwhelms a mobile GPU; the per-chest
-    // point light is comparatively cheap and always kept). See rays_per_chest.
-    let treasure_rays =
-        objects::treasure::rays_per_chest(grid.iter().flatten().filter(|&&ch| ch == 'T').count());
-    for (r, row) in grid.iter().enumerate() {
-        for (c, &cell) in row.iter().enumerate() {
-            let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
-            if cell == 'W' {
-                // A solid wall renders nothing itself — the adjacent open cell
-                // draws the panel. A non-occluding wall (water / lava / iron
-                // fence) is un-skipped: it renders its in-cell geometry plus the
-                // panels facing any solid-wall neighbours (panels toward open /
-                // non-occluding neighbours and the grid edge are suppressed in
-                // `spawn_walls_for_cell`). Water / lava pools double as the floor;
-                // the iron fence stands on a normal tile.
-                let wall_type = objects::overrides::resolve_wall_type(cell_entity, config.wall_type);
-                if !wall_type.is_non_occluding() {
-                    continue;
-                }
-                walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, &cell_entities, r, c, &config);
-                walls::spawn_non_occluding_for_cell(&mut commands, &nonoccluding_assets, &grid, &cell_entities, &config, wall_type, r, c);
-                if matches!(wall_type, WallType::IronFence) {
-                    floor::tile::spawn_tile(&mut commands, &floor_assets, r, c);
-                }
-                roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
-                continue;
-            }
-            walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, &cell_entities, r, c, &config);
-            decorations::spawn_decorations_for_cell(
-                &mut commands,
-                &decoration_assets,
-                &grid,
-                &cell_entities,
-                cell,
-                r,
-                c,
-                &config,
-            );
-            floor::spawn_floor_for_cell(&mut commands, &floor_assets, &grid, cell, r, c);
-            objects::spawn_objects_for_cell(
-                &mut commands,
-                &object_assets,
-                &grid,
-                cell,
-                r,
-                c,
-                &config,
-                cell_entity,
-                enemy_id,
-                treasure_rays,
-            );
-            if cell == 'E' {
-                enemy_id += 1;
-            }
-            // Doors are spawned here (not inside `spawn_objects_for_cell`)
-            // because the panel borrows the cell's wall material from
-            // `wall_assets`.
-            objects::door::spawn_door_for_cell(
-                &mut commands,
-                &object_assets.door,
-                &wall_assets,
-                &decoration_assets.wall,
-                &mut materials,
-                &grid,
-                &cell_entities,
-                cell,
-                r,
-                c,
-                &config,
-                cell_entity,
-            );
-            roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
+    // Render every level, stacked on the Y axis (`world_y(level, …)` runs through
+    // each spawn helper). The bottom level (index 0) is live — its enemies track
+    // the runtime `MazeGame` in `GameState`; every level above is static geometry
+    // until the player climbs to it. Only the top (final) level keeps the finish
+    // orb; interim finishes omit it (a transition rig replaces it later). A
+    // single-level game is a one-element loop, so its render is unchanged.
+    let level_assets = LevelRenderAssets {
+        wall: &wall_assets,
+        nonoccluding: &nonoccluding_assets,
+        floor: &floor_assets,
+        decoration: &decoration_assets,
+        object: &object_assets,
+        roof: &roof_assets,
+    };
+    let level_count = levels.len();
+    for (level, level_json) in levels.iter().enumerate() {
+        let is_final = level + 1 == level_count;
+        if level == 0 {
+            // The live level reuses the already-parsed grid + per-cell overrides.
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, level, is_final, true);
+        } else {
+            // Upper levels need only their grid + per-cell overrides for the static
+            // geometry; the game options don't affect either, so parse without them.
+            let level_game = MazeGame::from_json(level_json)
+                .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+            let level_grid = level_game.grid().to_vec();
+            let level_cells = level_game.cell_entities().clone();
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, level, is_final, false);
         }
     }
 
@@ -598,10 +735,16 @@ pub(crate) fn spawn_world(
     );
 
     // Record the run state and spawn the level indicator (a no-op for a
-    // single-level run). The active level's maze is already live in
-    // `GameState`; `MultiLevelRun` tracks the per-level totals + the level
-    // index for the indicator and the win/transition decision.
-    let run = MultiLevelRun::single(maze_json);
+    // single-level run). The bottom level's maze is already live in `GameState`;
+    // `MultiLevelRun` holds every level's JSON plus the per-level totals + the
+    // level index for the indicator and the win/transition decision.
+    let mut run = MultiLevelRun::new(levels);
+    // The native multilevel demo carries the bag forward between levels so the
+    // carry behaviour is visible — the bottom level's key stays in the bag as you
+    // climb. Every other run keeps the default (bag resets each level).
+    if multilevel_demo {
+        run.reset_bag_between_levels = false;
+    }
     hud::level::spawn_level_indicator(&mut commands, &window, &run);
     commands.insert_resource(run);
 
@@ -640,6 +783,7 @@ mod multi_level_tests {
             lost: false,
             paused: false,
             damage_flash_timer: 0.0,
+            camera_y_offset: 0.0,
         }
     }
 
@@ -679,6 +823,11 @@ mod multi_level_tests {
         assert_eq!(run.banked_score, 1, "the completed level's score is banked");
         assert_eq!(state.grid, vec![vec!['S', ' ', 'F']], "swapped to level 1's grid");
         assert_eq!((state.game.player_row(), state.game.player_col()), (0, 0));
+        assert_eq!(
+            state.camera_y_offset,
+            crate::world::LEVEL_HEIGHT,
+            "the camera is lifted onto level 1",
+        );
     }
 
     #[test]
@@ -718,6 +867,26 @@ mod multi_level_tests {
 
         assert_eq!(run.carried_treasure, vec![(TreasureStyle::Silver, 1)]);
         assert_eq!(run.banked_score, 50, "silver's reward value is banked");
+    }
+
+    #[test]
+    fn multilevel_demo_levels_taper() {
+        // The native `MAZE_DEMO=multilevel` stack: at least two levels, each a
+        // parseable maze with its own start + finish, and a strictly shrinking
+        // (square) grid as you climb — the open-platform pyramid.
+        let levels = super::multilevel_demo_levels();
+        assert!(levels.len() >= 2, "the demo stacks at least two levels");
+        let mut prev_dim: Option<usize> = None;
+        for json in &levels {
+            let game = MazeGame::from_json(json).expect("each demo level parses");
+            let grid = game.grid();
+            assert_eq!(grid.len(), grid[0].len(), "each demo level is square");
+            let dim = grid.len();
+            if let Some(prev) = prev_dim {
+                assert!(dim < prev, "each level up is a strictly smaller grid ({dim} < {prev})");
+            }
+            prev_dim = Some(dim);
+        }
     }
 
     #[test]

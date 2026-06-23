@@ -91,6 +91,7 @@ without authoring a maze. The value selects which types to show:
 | `keysdoors` | key + door rigs only (key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
 | `treasure`  | treasure rigs only — open chests of each style (silver / gold coins, diamond / jewel gems) in dead-end alcoves |
 | `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
+| `multilevel`| a walkable multi-level pyramid (bottom level live, the rest static): an open `9×9` platform at the bottom, a `5×5` above, a `3×3` on top, each rendered a `LEVEL_HEIGHT` higher with an open perimeter so the platforms read as floating layers; reaching a level's finish lifts you onto the next. Only the top platform keeps the finish orb, on its far corner in the open - layers currently edge-aligned to a common corner.|
 
 Focused values make it easy to verify one type in isolation. Enemies are
 stationary and harmless so you can inspect them freely; in the key/door galleries
@@ -248,14 +249,16 @@ src/
     └── pause.rs            paused overlay
 ```
 
-`spawn_world` is a thin orchestrator: it resolves the maze source into
-`GameState` + `GameClock`, spawns the camera and the sky, builds per-domain
-asset bundles (`walls`, `floor`, `decorations`, `objects`), runs a per-cell
-loop calling each domain's `spawn_*_for_cell` (including the door leaves,
+`spawn_world` is a thin orchestrator: it resolves the run's level set into
+`GameState` (the bottom level is live) + `GameClock`, spawns the camera and the
+sky, builds per-domain asset bundles (`walls`, `floor`, `decorations`,
+`objects`), then renders every level stacked on the Y axis — `spawn_level` runs a
+per-cell loop calling each domain's `spawn_*_for_cell` (including the door leaves,
 enemy rigs, and health-pickup rigs, which are spawned alongside the loop
 because they borrow either the cell's wall material or the per-config rig
-choice), and finishes with the HUD (clock, score, status bar, minimap, HP, bag) +
-paused-overlay spawns. The only items re-exported through `lib.rs` are
+choice), lifting every Y by `world_y(level, …)` (`LEVEL_HEIGHT` per level, so
+level 0 is unchanged). Only the top level keeps the finish orb. It finishes with
+the HUD (clock, score, status bar, minimap, HP, bag) + paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, `generate_level_maze_jsons` (multi-level:
 N chained level grids, bottom first), `MAX_LEVEL_COUNT`, and the public types
 `GameConfig`, `Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,

@@ -12,7 +12,7 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{lcg, CELL_SIZE};
+use crate::world::{lcg, world_y, CELL_SIZE};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -92,14 +92,21 @@ const ROCK_SPIN: f32 = 0.23;
 const ROCK_EMISSIVE: LinearRgba = LinearRgba::new(0.06, 0.02, 0.0, 1.0);
 
 /// Marker on a lava pool surface. Spawned per non-occluding lava `'W'` cell;
-/// [`lava_animation_system`] queries it to bubble the surface.
+/// [`lava_animation_system`] queries it to bubble the surface. The stored
+/// `level` is the run level the pool belongs to, so the animation keeps the
+/// surface at its stacked Y offset rather than snapping back to level 0.
 #[derive(Component)]
-pub(crate) struct LavaSurface;
+pub(crate) struct LavaSurface {
+    level: usize,
+}
 
 /// Marker on a dark rock bobbing on a lava surface. [`lava_animation_system`]
 /// raises and lowers it through the molten surface, phased by its world position.
+/// The stored `level` keeps the bob centred on the pool's stacked Y offset.
 #[derive(Component)]
-pub(crate) struct LavaRock;
+pub(crate) struct LavaRock {
+    level: usize,
+}
 
 pub(crate) struct LavaAssets {
     mesh: Option<Handle<Mesh>>,
@@ -235,36 +242,44 @@ pub(crate) fn build_lava_assets(
     }
 }
 
-/// Spawns the recessed lava pool surface filling cell `(r, c)` plus its bobbing
-/// rocks. The caller spawns the rim ([`super::rim`]); the cell has no floor tile.
-pub(crate) fn spawn_lava(commands: &mut Commands, assets: &LavaAssets, r: usize, c: usize) {
+/// Spawns the recessed lava pool surface filling cell `(r, c)` on run level
+/// `level`, plus its bobbing rocks. The caller spawns the rim ([`super::rim`]);
+/// the cell has no floor tile.
+pub(crate) fn spawn_lava(
+    commands: &mut Commands,
+    assets: &LavaAssets,
+    r: usize,
+    c: usize,
+    level: usize,
+) {
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    let surface_y = world_y(level, SURFACE_Y);
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
-                LavaSurface,
-                Transform::from_xyz(x, SURFACE_Y, z),
+                LavaSurface { level },
+                Transform::from_xyz(x, surface_y, z),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((LavaSurface, Transform::from_xyz(x, SURFACE_Y, z)));
+            commands.spawn((LavaSurface { level }, Transform::from_xyz(x, surface_y, z)));
         }
     }
     for (i, &(dx, dz)) in ROCK_OFFSETS.iter().enumerate() {
-        let pos = Vec3::new(x + dx, SURFACE_Y - ROCK_SINK, z + dz);
+        let pos = Vec3::new(x + dx, surface_y - ROCK_SINK, z + dz);
         // Non-uniform scale stretches the sphere into an irregular boulder; the
         // animation system only rewrites the rock's Y and rotation, so this scale
         // persists.
         let transform = Transform::from_translation(pos).with_scale(ROCK_SCALES[i]);
         match (assets.rock_mesh.clone(), assets.rock_material.clone()) {
             (Some(mesh), Some(mat)) => {
-                commands.spawn((LavaRock, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
+                commands.spawn((LavaRock { level }, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
             }
             _ => {
-                commands.spawn((LavaRock, transform));
+                commands.spawn((LavaRock { level }, transform));
             }
         };
     }
@@ -277,19 +292,20 @@ pub(crate) fn spawn_lava(commands: &mut Commands, assets: &LavaAssets, r: usize,
 pub(crate) fn lava_animation_system(
     time: Res<Time>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
-    mut surfaces: Query<&mut Transform, (With<LavaSurface>, Without<LavaRock>)>,
-    mut rocks: Query<&mut Transform, (With<LavaRock>, Without<LavaSurface>)>,
+    mut surfaces: Query<(&mut Transform, &LavaSurface), Without<LavaRock>>,
+    mut rocks: Query<(&mut Transform, &LavaRock), Without<LavaSurface>>,
     surface_mats: Query<&MeshMaterial3d<StandardMaterial>, With<LavaSurface>>,
 ) {
     let t = time.elapsed_secs();
-    for mut tr in surfaces.iter_mut() {
+    for (mut tr, surface) in surfaces.iter_mut() {
         let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
-        tr.translation.y = SURFACE_Y + dy;
+        tr.translation.y = world_y(surface.level, SURFACE_Y) + dy;
         tr.rotation = rot;
     }
-    for mut tr in rocks.iter_mut() {
+    for (mut tr, rock) in rocks.iter_mut() {
         let phase = (tr.translation.x + tr.translation.z) * ROCK_K;
-        tr.translation.y = SURFACE_Y - ROCK_SINK + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
+        tr.translation.y =
+            world_y(rock.level, SURFACE_Y - ROCK_SINK) + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
         tr.rotation = Quat::from_rotation_y(t * ROCK_SPIN) * Quat::from_rotation_x(t * ROCK_SPIN * 0.6);
     }
     // Drift the shared ripple texture (one material across all lava tiles).
@@ -389,7 +405,7 @@ pub(crate) fn lava_steam_system(
     mut commands: Commands,
     time: Res<Time>,
     steam_assets: Option<Res<LavaSteamAssets>>,
-    lava: Query<&Transform, With<LavaSurface>>,
+    lava: Query<(&Transform, &LavaSurface)>,
     mut wisps: Query<(Entity, &mut LavaSteam, &mut Transform), Without<LavaSurface>>,
     mut rng: Local<u64>,
     mut timer: Local<f32>,
@@ -416,7 +432,12 @@ pub(crate) fn lava_steam_system(
     let Some(assets) = steam_assets else {
         return;
     };
-    let cells: Vec<Vec3> = lava.iter().map(|t| t.translation).collect();
+    // The resting surface position of each lava cell (its level-correct Y, not the
+    // bobbing Y), so a wisp sits on the pool at the right stacked height.
+    let cells: Vec<Vec3> = lava
+        .iter()
+        .map(|(t, surface)| Vec3::new(t.translation.x, world_y(surface.level, SURFACE_Y), t.translation.z))
+        .collect();
     if cells.is_empty() {
         return;
     }
@@ -433,7 +454,7 @@ pub(crate) fn lava_steam_system(
             // surface level (not the bobbing Y, so the wisp sits on the pool).
             let ox = (lcg(&mut rng) - 0.5) * 1.2;
             let oz = (lcg(&mut rng) - 0.5) * 1.2;
-            let point = Vec3::new(cell.x + ox, SURFACE_Y, cell.z + oz);
+            let point = Vec3::new(cell.x + ox, cell.y, cell.z + oz);
             // A cluster of tiny dots from that one point.
             for _ in 0..STEAM_CLUSTER {
                 let jx = (lcg(&mut rng) - 0.5) * 2.0 * STEAM_JITTER;

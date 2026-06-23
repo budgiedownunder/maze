@@ -13,7 +13,7 @@ use super::{
     WALL_MATERIAL_VARIANTS, WALL_TINT_VARIANTS,
 };
 use crate::state::GameConfig;
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{world_y, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::CellEntity;
 use std::collections::HashMap;
@@ -106,11 +106,14 @@ pub(crate) fn spawn_walls_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    level: usize,
 ) {
     let rows = grid.len();
     let cols = grid[r].len();
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    // Lift every panel in this cell to its stacked level; level 0 is the identity.
+    let panel_y = world_y(level, PANEL_Y);
 
     // A face is drawn against a solid `'W'` neighbour (any cell), or at the grid
     // edge only under an enclosed sky — under an open sky every maze-edge face shows
@@ -133,19 +136,19 @@ pub(crate) fn spawn_walls_for_cell(
         let default_kind = wall_material_index(r, c, rows, cols, config.seed);
         if let Some(n) = north {
             let kind = face_kind(cell_entities, n, default_kind);
-            ns_panel::spawn_ns_face_material(commands, &assets.ns, kind, Vec3::new(x, PANEL_Y, z - HALF_CELL));
+            ns_panel::spawn_ns_face_material(commands, &assets.ns, kind, Vec3::new(x, panel_y, z - HALF_CELL));
         }
         if let Some(n) = south {
             let kind = face_kind(cell_entities, n, default_kind);
-            ns_panel::spawn_ns_face_material(commands, &assets.ns, kind, Vec3::new(x, PANEL_Y, z + HALF_CELL));
+            ns_panel::spawn_ns_face_material(commands, &assets.ns, kind, Vec3::new(x, panel_y, z + HALF_CELL));
         }
         if let Some(n) = east {
             let kind = face_kind(cell_entities, n, default_kind);
-            ew_panel::spawn_ew_face_material(commands, &assets.ew, kind, Vec3::new(x + HALF_CELL, PANEL_Y, z));
+            ew_panel::spawn_ew_face_material(commands, &assets.ew, kind, Vec3::new(x + HALF_CELL, panel_y, z));
         }
         if let Some(n) = west {
             let kind = face_kind(cell_entities, n, default_kind);
-            ew_panel::spawn_ew_face_material(commands, &assets.ew, kind, Vec3::new(x - HALF_CELL, PANEL_Y, z));
+            ew_panel::spawn_ew_face_material(commands, &assets.ew, kind, Vec3::new(x - HALF_CELL, panel_y, z));
         }
         return;
     }
@@ -169,19 +172,19 @@ pub(crate) fn spawn_walls_for_cell(
 
     if let Some(n) = north {
         let kind = face_kind(cell_entities, n, default_kind);
-        ns_panel::spawn_ns_face_tinted(commands, &assets.ns, kind, tint, Vec3::new(x, PANEL_Y, z - HALF_CELL));
+        ns_panel::spawn_ns_face_tinted(commands, &assets.ns, kind, tint, Vec3::new(x, panel_y, z - HALF_CELL));
     }
     if let Some(n) = south {
         let kind = face_kind(cell_entities, n, default_kind);
-        ns_panel::spawn_ns_face_tinted(commands, &assets.ns, kind, tint, Vec3::new(x, PANEL_Y, z + HALF_CELL));
+        ns_panel::spawn_ns_face_tinted(commands, &assets.ns, kind, tint, Vec3::new(x, panel_y, z + HALF_CELL));
     }
     if let Some(n) = east {
         let kind = face_kind(cell_entities, n, default_kind);
-        ew_panel::spawn_ew_face_tinted(commands, &assets.ew, kind, tint, Vec3::new(x + HALF_CELL, PANEL_Y, z));
+        ew_panel::spawn_ew_face_tinted(commands, &assets.ew, kind, tint, Vec3::new(x + HALF_CELL, panel_y, z));
     }
     if let Some(n) = west {
         let kind = face_kind(cell_entities, n, default_kind);
-        ew_panel::spawn_ew_face_tinted(commands, &assets.ew, kind, tint, Vec3::new(x - HALF_CELL, PANEL_Y, z));
+        ew_panel::spawn_ew_face_tinted(commands, &assets.ew, kind, tint, Vec3::new(x - HALF_CELL, panel_y, z));
     }
 }
 

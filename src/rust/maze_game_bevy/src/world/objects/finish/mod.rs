@@ -21,11 +21,12 @@ pub(crate) fn spawn_finish_for_cell(
     cell: char,
     r: usize,
     c: usize,
+    level: usize,
 ) {
     // 'F'-cell predicate is enforced once here; the per-object spawn
     // helpers below run unconditionally and assume a finish cell.
     if cell != 'F' {
         return;
     }
-    orb::spawn_orb(commands, &assets.orb, r, c);
+    orb::spawn_orb(commands, &assets.orb, r, c, level);
 }

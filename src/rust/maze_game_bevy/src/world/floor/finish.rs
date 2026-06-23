@@ -1,6 +1,6 @@
 use super::{FloorAssets, FloorCell};
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::CELL_SIZE;
+use crate::world::{world_y, CELL_SIZE};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -30,21 +30,28 @@ pub(crate) fn build_finish_material(
     })
 }
 
-pub(crate) fn spawn_finish(commands: &mut Commands, assets: &FloorAssets, r: usize, c: usize) {
+pub(crate) fn spawn_finish(
+    commands: &mut Commands,
+    assets: &FloorAssets,
+    r: usize,
+    c: usize,
+    level: usize,
+) {
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    let y = world_y(level, 0.0);
     match (assets.floor_mesh.clone(), assets.finish_mat.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 FinishCell,
                 FloorCell,
-                Transform::from_xyz(x, 0.0, z),
+                Transform::from_xyz(x, y, z),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((FinishCell, FloorCell, Transform::from_xyz(x, 0.0, z)));
+            commands.spawn((FinishCell, FloorCell, Transform::from_xyz(x, y, z)));
         }
     }
 }

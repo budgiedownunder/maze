@@ -5,7 +5,7 @@ pub(crate) mod vent;
 
 use crate::state::GameConfig;
 use crate::world::walls::{is_non_occluding_wall, WALL_THICKNESS};
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{world_y, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::CellEntity;
 use std::collections::HashMap;
@@ -119,6 +119,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    level: usize,
 ) {
     if !config.landmarks.wall_decorations {
         return;
@@ -127,6 +128,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     let cols = grid[r].len();
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    let dec_y = world_y(level, DECORATION_Y);
     let seed = config.seed;
 
     // A decoration sits on a panel, so it's drawn only where a solid panel is —
@@ -151,7 +153,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             0,
             seed,
             assets.ns_mesh.clone(),
-            Vec3::new(x, DECORATION_Y, z - HALF_CELL + DECORATION_OFFSET),
+            Vec3::new(x, dec_y, z - HALF_CELL + DECORATION_OFFSET),
         );
     }
     // South face
@@ -164,7 +166,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             1,
             seed,
             assets.ns_mesh.clone(),
-            Vec3::new(x, DECORATION_Y, z + HALF_CELL - DECORATION_OFFSET),
+            Vec3::new(x, dec_y, z + HALF_CELL - DECORATION_OFFSET),
         );
     }
     // East face
@@ -177,7 +179,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             2,
             seed,
             assets.ew_mesh.clone(),
-            Vec3::new(x + HALF_CELL - DECORATION_OFFSET, DECORATION_Y, z),
+            Vec3::new(x + HALF_CELL - DECORATION_OFFSET, dec_y, z),
         );
     }
     // West face
@@ -190,7 +192,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             3,
             seed,
             assets.ew_mesh.clone(),
-            Vec3::new(x - HALF_CELL + DECORATION_OFFSET, DECORATION_Y, z),
+            Vec3::new(x - HALF_CELL + DECORATION_OFFSET, dec_y, z),
         );
     }
 }

@@ -32,7 +32,8 @@ pub(crate) fn spawn_decorations_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    level: usize,
 ) {
-    wall::spawn_wall_decorations_for_cell(commands, &assets.wall, grid, cell_entities, r, c, config);
-    floor::spawn_floor_accents_for_cell(commands, &assets.floor, grid, cell, r, c, config);
+    wall::spawn_wall_decorations_for_cell(commands, &assets.wall, grid, cell_entities, r, c, config, level);
+    floor::spawn_floor_accents_for_cell(commands, &assets.floor, grid, cell, r, c, config, level);
 }

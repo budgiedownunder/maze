@@ -1,7 +1,7 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameState;
-use crate::world::CELL_SIZE;
+use crate::world::{world_y, CELL_SIZE};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -30,8 +30,13 @@ const ORB_LIGHT_INTENSITY: f32 = 80_000.0;
 /// Point light source radius (units) — softens the shadow penumbra.
 const ORB_LIGHT_RADIUS: f32 = 0.35;
 
+/// The bobbing finish orb. Stores the run level it sits on so [`orb_system`],
+/// which sets the orb's absolute Y each frame from a constant resting height,
+/// keeps it at the stacked Y offset rather than snapping back to level 0.
 #[derive(Component)]
-pub(crate) struct FinishOrb;
+pub(crate) struct FinishOrb {
+    level: usize,
+}
 
 pub(crate) struct OrbAssets {
     pub(crate) mesh: Option<Handle<Mesh>>,
@@ -53,20 +58,21 @@ pub(crate) fn build_orb_assets(
     OrbAssets { mesh, mat }
 }
 
-pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c: usize) {
+pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c: usize, level: usize) {
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
+    let y = world_y(level, ORB_BASE_Y);
     match (assets.mesh.clone(), assets.mat.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
-                FinishOrb,
+                FinishOrb { level },
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
-                Transform::from_xyz(x, ORB_BASE_Y, z),
+                Transform::from_xyz(x, y, z),
             ));
         }
         _ => {
-            commands.spawn((FinishOrb, Transform::from_xyz(x, ORB_BASE_Y, z)));
+            commands.spawn((FinishOrb { level }, Transform::from_xyz(x, y, z)));
         }
     }
     commands.spawn((
@@ -77,7 +83,7 @@ pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(x, ORB_BASE_Y, z),
+        Transform::from_xyz(x, y, z),
     ));
 }
 
@@ -85,9 +91,9 @@ pub(crate) fn orb_system(
     mut commands: Commands,
     time: Res<Time>,
     state: Res<GameState>,
-    mut orb: Query<(Entity, &mut Transform), With<FinishOrb>>,
+    mut orb: Query<(Entity, &mut Transform, &FinishOrb)>,
 ) {
-    let Ok((entity, mut t)) = orb.single_mut() else {
+    let Ok((entity, mut t, finish_orb)) = orb.single_mut() else {
         return;
     };
     // On win, despawn the orb so its near-floor position doesn't read
@@ -99,6 +105,7 @@ pub(crate) fn orb_system(
         commands.entity(entity).despawn();
         return;
     }
-    t.translation.y = ORB_BASE_Y + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
+    t.translation.y =
+        world_y(finish_orb.level, ORB_BASE_Y) + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
     t.rotate_y(time.delta_secs() * SPIN_RATE);
 }

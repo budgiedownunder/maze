@@ -13,6 +13,13 @@ pub(crate) enum AppState {
 #[derive(Resource)]
 pub(crate) struct PendingMazeJson(pub(crate) Option<String>);
 
+/// Optional override for the whole run's level set, bottom level first. When
+/// present (and non-empty) it supplies the multi-level run directly, taking
+/// precedence over the single [`PendingMazeJson`] and the native demos — the seam
+/// a multi-level host launch (and the rendering tests) feed levels through.
+#[derive(Resource, Default)]
+pub(crate) struct PendingLevels(pub(crate) Vec<String>);
+
 #[derive(Resource)]
 pub(crate) struct TitleTimer(pub(crate) Timer);
 
@@ -103,6 +110,12 @@ pub(crate) struct GameState {
     /// no flash is active. Set on `PlayerDamaged` event and decremented by
     /// the damage-flash system; the overlay fades its alpha proportionally.
     pub(crate) damage_flash_timer: f32,
+    /// World-Y the camera is lifted by for the level currently being played
+    /// (`world_y(current_level, 0)` = `current_level * LEVEL_HEIGHT`). The move
+    /// animation stays at ground level; `movement_system` adds this when writing
+    /// the camera transform, so advancing a level lifts the camera onto it. `0.0`
+    /// on the bottom level, so single-level games are unchanged.
+    pub(crate) camera_y_offset: f32,
 }
 
 #[derive(Resource)]
@@ -139,12 +152,13 @@ pub(crate) struct MultiLevelRun {
 }
 
 impl MultiLevelRun {
-    /// A single-level run wrapping one maze — the shape `spawn_world` inserts
-    /// for every non-multi-level game (and the fallback when no multi-level
-    /// data is supplied).
-    pub(crate) fn single(maze_json: String) -> Self {
+    /// A run over the given per-level maze JSONs (bottom level first). A
+    /// one-element `levels` is a single-level game — the shape `spawn_world`
+    /// inserts for every non-multi-level game; every cross-level total starts
+    /// empty and the bag resets by default.
+    pub(crate) fn new(levels: Vec<String>) -> Self {
         Self {
-            levels: vec![maze_json],
+            levels,
             current_level: 0,
             banked_score: 0,
             carried_treasure: Vec::new(),
@@ -167,6 +181,30 @@ impl MultiLevelRun {
     /// live level's current score.
     pub(crate) fn cumulative_score(&self, live_score: u64) -> u64 {
         self.banked_score + live_score
+    }
+
+    /// The run's cumulative collected treasure for display: the banked
+    /// `carried_treasure` from completed levels merged with the live level's
+    /// `collected` counts (per style, in carried-then-live order). Each level's
+    /// `MazeGame` only tracks its own treasure, so the HUD reads this to keep the
+    /// treasure chips accumulating across the run rather than resetting on every
+    /// level transition.
+    pub(crate) fn cumulative_treasure(
+        &self,
+        live: &[(maze::TreasureStyle, u32)],
+    ) -> Vec<(maze::TreasureStyle, u32)> {
+        let mut acc = self.carried_treasure.clone();
+        for &(style, count) in live {
+            if count == 0 {
+                continue;
+            }
+            if let Some(entry) = acc.iter_mut().find(|(s, _)| *s == style) {
+                entry.1 += count;
+            } else {
+                acc.push((style, count));
+            }
+        }
+        acc
     }
 }
 
@@ -718,6 +756,34 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"score\":5"), "score missing from {json}");
         assert!(json.contains("\"elapsedMs\":83456"));
+    }
+
+    #[test]
+    fn cumulative_treasure_merges_banked_with_live_so_chips_persist_across_levels() {
+        use maze::TreasureStyle;
+        // A run that banked silver + gold on completed levels, now on a level
+        // where the player has picked up more gold and some diamonds.
+        let mut run = MultiLevelRun::new(vec!["a".into(), "b".into()]);
+        run.carried_treasure = vec![(TreasureStyle::Silver, 2), (TreasureStyle::Gold, 1)];
+        let live = [(TreasureStyle::Gold, 1), (TreasureStyle::Diamonds, 3)];
+
+        let cumulative = run.cumulative_treasure(&live);
+
+        // Banked styles persist (so the chips don't reset on a level transition),
+        // the live gold folds into the banked gold, and the new diamonds append.
+        assert_eq!(
+            cumulative,
+            vec![
+                (TreasureStyle::Silver, 2),
+                (TreasureStyle::Gold, 2),
+                (TreasureStyle::Diamonds, 3),
+            ],
+        );
+        // Zero-count live entries never add a chip.
+        assert_eq!(
+            run.cumulative_treasure(&[(TreasureStyle::Jewels, 0)]),
+            run.carried_treasure,
+        );
     }
 
     #[test]

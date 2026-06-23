@@ -1,6 +1,6 @@
 use super::common::{self, CommonObjectAssets};
 use crate::state::GameConfig;
-use crate::world::CELL_SIZE;
+use crate::world::{world_y, CELL_SIZE};
 use bevy::prelude::*;
 
 // Dead-end landmark object variants. Each cell flagged as a dead-end
@@ -31,6 +31,7 @@ pub(crate) fn dead_end_object_index(r: usize, c: usize, seed: u64) -> u32 {
     (h % DEAD_END_OBJECT_VARIANTS as u64) as u32
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_dead_end_object_for_cell(
     commands: &mut Commands,
     assets: &CommonObjectAssets,
@@ -39,6 +40,7 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    level: usize,
 ) {
     // A single distinctive object per dead-end cell — brazier / urn /
     // broken pillar / chest, picked by hashing (row, col, seed). Skipped
@@ -60,9 +62,9 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     let z = r as f32 * CELL_SIZE + 1.0;
     let kind = dead_end_object_index(r, c, config.seed);
     match kind {
-        0 => common::brazier::spawn_brazier(commands, assets, x, z),
-        1 => common::urn::spawn_urn(commands, assets, x, z),
-        2 => common::pillar::spawn_pillar(commands, assets, x, z, 1.0),
+        0 => common::brazier::spawn_brazier(commands, assets, x, z, level),
+        1 => common::urn::spawn_urn(commands, assets, x, z, level),
+        2 => common::pillar::spawn_pillar(commands, assets, x, z, 1.0, level),
         _ => common::chest::spawn_chest(
             commands,
             assets,
@@ -70,10 +72,11 @@ pub(crate) fn spawn_dead_end_object_for_cell(
             z,
             common::yaw_toward_open_neighbour(grid, r, c),
             common::chest::ChestLid::Closed,
+            level,
         ),
     }
     // Anchor entity tagging this cell as carrying a dead-end landmark.
-    commands.spawn((DeadEndObject, Transform::from_xyz(x, 0.0, z)));
+    commands.spawn((DeadEndObject, Transform::from_xyz(x, world_y(level, 0.0), z)));
 }
 
 #[cfg(test)]
