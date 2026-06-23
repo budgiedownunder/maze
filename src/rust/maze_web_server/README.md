@@ -118,6 +118,13 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.health_style` | Text (`heart` / `potion`) | `heart` | (config-file only — health-pickup rig kind to spawn at every `'H'` cell; unknown values fall back to `heart`)
 |                | `game.play3d.<difficulty>.enemy_move_period_ms` | Integer | `1500` | (config-file only — how often each enemy advances one cell, in milliseconds of real-game time; lower = harder)
 |                | `game.play3d.<difficulty>.max_hp` | Integer | `3` | (config-file only — player's HP cap and starting HP for this difficulty)
+|                | `game.play3d.<difficulty>.levels.count` | Integer | `1` | (config-file only — number of stacked maze levels in a run; `1` = single-level (no transitions); clamped to the renderer's maximum of 5. Each interim level's finish becomes the entry to the next; only the final level completes the run. Score and HP carry across levels)
+|                | `game.play3d.<difficulty>.levels.finish_type` | Text (`ladder` / `portal` / `random`) | `ladder` | (config-file only — the rig drawn at each interim finish instead of the gold orb; `random` picks a rig per interim finish cell, seeded; unknown values fall back to `ladder`; inert when `count == 1`)
+|                | `game.play3d.<difficulty>.levels.difficulty_change` | Text (`same` / `easier` / `harder`) | `easier` | (config-file only — how difficulty changes as the player climbs; `easier` = hardest at the bottom, easing upward (enemy count is the lever, footprint uniform); `harder` = the reverse; `same` = every level equally hard; unknown values fall back to `easier`; inert when `count == 1`)
+|                | `game.play3d.<difficulty>.levels.reset_bag` | Boolean | `true` | (config-file only — whether the player's bag (keys etc.) resets at each level; `true` = every level self-contained; `false` carries the whole bag forward; inert when `count == 1`)
+|                | `game.play3d.<difficulty>.levels.alignment` | Text (`edge` / `centre` / `random`) | `edge` | (config-file only — how a smaller upper level sits over the level below on open-sky stacks; `edge` corner-aligns all layers, `centre` centres each, `random` lets the generator pick per level; unknown values fall back to `edge`; inert when `count == 1` or under an enclosed sky)
+|                | `game.play3d.<difficulty>.levels.perimeter_random` | Boolean | `false` | (config-file only — when `true`, each level randomises its perimeter walls on/off independently; when `false`, every level uses the difficulty's `perimeter_walls`; inert when `count == 1`)
+|                | `game.play3d.<difficulty>.levels.top.sky_type` / `.perimeter_walls` | Text / Boolean | inherit base | (config-file only — optional `[…levels.top]` scene override for the final (top) level; each field falls back to the base difficulty's value when unset; only meaningful when `count > 1`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -234,6 +241,19 @@ wall_decorations = true
 floor_accents = true
 wall_material_variation = true
 
+[game.play3d.easy.levels]
+# Multi-level run settings. count = 1 is a single-level game (the default).
+# finish_type: ladder | portal | random. difficulty_change: same | easier |
+# harder. alignment: edge | centre | random. perimeter_random randomises each
+# level's perimeter walls when true. The optional [levels.top] table overrides
+# the top level's sky_type / perimeter_walls when count > 1.
+count = 1
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
+
 [game.play3d.tricky]
 mode = "Tricky"
 rows = 15
@@ -267,6 +287,14 @@ wall_decorations = true
 floor_accents = true
 wall_material_variation = true
 
+[game.play3d.tricky.levels]
+count = 2
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
+
 [game.play3d.hard]
 mode = "Hard"
 rows = 25
@@ -299,6 +327,18 @@ dead_end_objects = true
 wall_decorations = true
 floor_accents = true
 wall_material_variation = true
+
+[game.play3d.hard.levels]
+count = 3
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
+# Optional top-level scene override (only meaningful when count > 1):
+#[game.play3d.hard.levels.top]
+#sky_type = "day"
+#perimeter_walls = false
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).

@@ -200,6 +200,35 @@ floor_accents = true
 # when on. Default true.
 wall_material_variation = true
 
+[game.play3d.easy.levels]
+# Multi-level run settings. count = 1 is a single-level game (the default; no
+# transitions). Clamped to the renderer's maximum of 5.
+count = 1
+# Interim-finish transition rig — one of "ladder" | "portal" | "random".
+# "random" picks a concrete rig per interim finish cell, seeded. Default "ladder".
+finish_type = "ladder"
+# How difficulty changes as the player climbs — "same" | "easier" | "harder".
+# "easier" = hardest at the bottom, easing as you ascend (enemy count is the
+# lever; footprint stays uniform). Default "easier".
+difficulty_change = "easier"
+# Whether the bag (keys etc.) resets at each level. true (default) = every level
+# is self-contained; false carries the whole bag forward.
+reset_bag = true
+# How a smaller upper level sits over the level below (open-sky stacks only) —
+# "edge" (corner-aligned) | "centre" | "random" (the generator picks per level).
+# Default "edge".
+alignment = "edge"
+# When true, each level randomises its perimeter walls on/off independently; when
+# false (default) every level uses the perimeter_walls setting above.
+perimeter_random = false
+
+# Optional scene override for the final (top) level — its own sky_type /
+# perimeter_walls, inheriting the base difficulty where unset. Only meaningful
+# when count > 1 (e.g. climb from enclosed floors out to an open-sky summit).
+#[game.play3d.easy.levels.top]
+#sky_type = "day"
+#perimeter_walls = false
+
 [game.play3d.tricky]
 title = "TRICKY 3D"
 mode = "Tricky"
@@ -231,6 +260,14 @@ wall_decorations = true
 floor_accents = true
 wall_material_variation = true
 
+[game.play3d.tricky.levels]
+count = 2
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
+
 [game.play3d.hard]
 title = "HARD 3D"
 mode = "Hard"
@@ -261,6 +298,14 @@ dead_end_objects = true
 wall_decorations = true
 floor_accents = true
 wall_material_variation = true
+
+[game.play3d.hard.levels]
+count = 3
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in

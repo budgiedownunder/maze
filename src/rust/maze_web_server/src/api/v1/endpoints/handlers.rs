@@ -513,6 +513,47 @@ pub struct Play3dConfigResponse {
     /// Player's HP cap for this difficulty. Starting HP is set to this
     /// value.
     pub max_hp: u32,
+    /// Multi-level run settings. `levels.count == 1` (the default) is a
+    /// single-level game and the rest of this group is inert.
+    pub levels: LevelsResponse,
+}
+
+/// JSON shape of the multi-level run settings in [`Play3dConfigResponse`].
+/// Mirrors `crate::config::game::LevelsConfig`, renamed to `camelCase`.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LevelsResponse {
+    /// Number of stacked maze levels in a run (clamped to the renderer's
+    /// `MAX_LEVEL_COUNT`). `1` = a single-level game.
+    pub count: u32,
+    /// Interim-finish transition rig: `ladder`, `portal`, or `random`. Safely
+    /// degrades to `ladder` if unrecognised.
+    pub finish_type: String,
+    /// How difficulty changes as the player ascends: `same`, `easier`, or
+    /// `harder`. Safely degrades to `easier` if unrecognised.
+    pub difficulty_change: String,
+    /// Whether the player's bag resets at each level (`false` carries it
+    /// forward).
+    pub reset_bag: bool,
+    /// How a reduced upper level is positioned over the level below: `edge`,
+    /// `centre`, or `random`. Safely degrades to `edge` if unrecognised.
+    pub alignment: String,
+    /// When `true`, each level's perimeter walls are randomised independently;
+    /// when `false`, every level uses the difficulty's `perimeterWalls`.
+    pub perimeter_random: bool,
+    /// Optional scene override for the final (top) level. `null` when unset.
+    pub top: Option<TopLevelResponse>,
+}
+
+/// JSON shape of the optional top-level scene override in [`LevelsResponse`].
+/// Each field is `null` when the operator left it to inherit the base.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TopLevelResponse {
+    /// Sky type for the top level, or `null` to inherit the base.
+    pub sky_type: Option<String>,
+    /// Perimeter-walls flag for the top level, or `null` to inherit the base.
+    pub perimeter_walls: Option<bool>,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -594,6 +635,20 @@ pub async fn get_play3d_config(
         health_style: preset.health_style.as_wire_str().to_string(),
         enemy_move_period_ms: preset.enemy_move_period_ms,
         max_hp: preset.max_hp,
+        levels: LevelsResponse {
+            // Clamp to what the Bevy game can render so a misconfigured
+            // `count` never asks the client for more levels than it supports.
+            count: preset.levels.count.min(crate::config::game::MAX_LEVEL_COUNT),
+            finish_type: preset.levels.finish_type.as_wire_str().to_string(),
+            difficulty_change: preset.levels.difficulty_change.as_wire_str().to_string(),
+            reset_bag: preset.levels.reset_bag,
+            alignment: preset.levels.alignment.as_wire_str().to_string(),
+            perimeter_random: preset.levels.perimeter_random,
+            top: preset.levels.top.as_ref().map(|t| TopLevelResponse {
+                sky_type: t.sky_type.map(|s| s.as_wire_str().to_string()),
+                perimeter_walls: t.perimeter_walls,
+            }),
+        },
     }))
 }
 

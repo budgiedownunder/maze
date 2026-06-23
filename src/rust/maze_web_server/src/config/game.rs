@@ -147,6 +147,11 @@ pub struct Play3dDifficultyConfig {
     /// Default 3.
     #[serde(default = "default_play3d_max_hp")]
     pub max_hp: u32,
+    /// Multi-level run settings (`[game.play3d.<difficulty>.levels]`). A
+    /// wholly-omitted table degrades to `LevelsConfig::default()` — a
+    /// single-level game, today's behaviour.
+    #[serde(default)]
+    pub levels: LevelsConfig,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
@@ -316,6 +321,117 @@ impl<'de> Deserialize<'de> for KeyHolderStyleConfig {
     }
 }
 
+/// Interim-finish transition rig for a multi-level run. Wire form (TOML / JSON)
+/// is lowercase (`"ladder" | "portal" | "random"`). A fixed value draws that one
+/// rig at every interim finish; `random` picks a concrete rig per interim finish
+/// cell, seeded off the run. Unknown values deserialise as `Ladder` — same
+/// forgiving policy as [`SkyTypeConfig`]. Inert when `levels.count == 1`.
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum FinishTypeConfig {
+    #[default]
+    Ladder,
+    Portal,
+    Random,
+}
+
+impl FinishTypeConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Ladder => "ladder",
+            Self::Portal => "portal",
+            Self::Random => "random",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for FinishTypeConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "portal" => Self::Portal,
+            "random" => Self::Random,
+            _ => Self::Ladder,
+        })
+    }
+}
+
+/// How a multi-level run's difficulty changes as the player ascends. Wire form
+/// (TOML / JSON) is lowercase (`"same" | "easier" | "harder"`): `easier` =
+/// hardest at the bottom, easing as you climb; `harder` = the reverse; `same` =
+/// every level equally hard. Enemy count is the lever (footprint stays uniform).
+/// Unknown values deserialise as `Easier` — same forgiving policy as
+/// [`SkyTypeConfig`]. Inert when `levels.count == 1`.
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DifficultyChangeConfig {
+    Same,
+    #[default]
+    Easier,
+    Harder,
+}
+
+impl DifficultyChangeConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Same => "same",
+            Self::Easier => "easier",
+            Self::Harder => "harder",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DifficultyChangeConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "same" => Self::Same,
+            "harder" => Self::Harder,
+            _ => Self::Easier,
+        })
+    }
+}
+
+/// How a reduced upper level is positioned over the level below in a multi-level
+/// run. Wire form (TOML / JSON) is lowercase (`"edge" | "centre" | "random"`):
+/// `edge` corner-aligns every layer (zero X/Z offset); `centre` centres each
+/// smaller layer over the ground layer; `random` lets the client pick per level.
+/// Only meaningful under an open sky (enclosed stacks stay uniform). Unknown
+/// values deserialise as `Edge` — same forgiving policy as [`SkyTypeConfig`].
+/// Inert when `levels.count == 1`.
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum LayeredAlignmentConfig {
+    #[default]
+    Edge,
+    Centre,
+    Random,
+}
+
+impl LayeredAlignmentConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Edge => "edge",
+            Self::Centre => "centre",
+            Self::Random => "random",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LayeredAlignmentConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "centre" | "center" => Self::Centre,
+            "random" => Self::Random,
+            _ => Self::Edge,
+        })
+    }
+}
+
 /// Enemy rig kind for `'E'` cells in the 3D game. Wire form (TOML / JSON)
 /// is lowercase (`"goblin" | "ghost"`). Unknown values deserialise as
 /// `Goblin` — same forgiving policy as [`SkyTypeConfig`].
@@ -433,6 +549,78 @@ impl Default for LandmarksConfig {
     }
 }
 
+/// Upper bound on a multi-level run's level count. Mirrors `maze_game_bevy`'s
+/// `MAX_LEVEL_COUNT` (the source of truth for the renderer / generation cap);
+/// the server clamps the configured `levels.count` to it before reporting it so
+/// a client never has to render more levels than the Bevy game supports.
+pub const MAX_LEVEL_COUNT: u32 = 5;
+
+/// Multi-level run settings for a difficulty (`[game.play3d.<difficulty>.levels]`).
+///
+/// Every field is `#[serde(default)]` so the whole group can be omitted — that
+/// degrades to a single-level run (`count == 1`), byte-for-byte today's
+/// behaviour. The fields drop the `level_` / `layer_` prefix because the table
+/// name already scopes them.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct LevelsConfig {
+    /// Number of stacked maze levels in a run. `1` = a single-level game (the
+    /// default; no transitions). Clamped to [`MAX_LEVEL_COUNT`] when reported.
+    #[serde(default = "default_levels_count")]
+    pub count: u32,
+    /// Interim-finish transition rig. Default `ladder`.
+    #[serde(default = "default_finish_type")]
+    pub finish_type: FinishTypeConfig,
+    /// How difficulty changes as the player ascends. Default `easier` (hardest
+    /// at the bottom).
+    #[serde(default = "default_difficulty_change")]
+    pub difficulty_change: DifficultyChangeConfig,
+    /// Whether the player's bag resets at each level. `true` (default) = each
+    /// level is self-contained; `false` carries the whole bag forward.
+    #[serde(default = "default_reset_bag")]
+    pub reset_bag: bool,
+    /// How a reduced upper level is positioned over the level below. Default
+    /// `edge` (corner-aligned). Only meaningful under an open sky.
+    #[serde(default = "default_alignment")]
+    pub alignment: LayeredAlignmentConfig,
+    /// When `true`, each level's perimeter walls are randomised on / off
+    /// independently; when `false` (default) every level uses the difficulty's
+    /// `perimeter_walls` setting.
+    #[serde(default = "default_perimeter_random")]
+    pub perimeter_random: bool,
+    /// Optional scene override for the final (top) level — its own `sky_type` /
+    /// `perimeter_walls`, inheriting the base where unset. Only meaningful when
+    /// `count > 1`. `[game.play3d.<difficulty>.levels.top]`.
+    #[serde(default)]
+    pub top: Option<TopLevelConfig>,
+}
+
+impl Default for LevelsConfig {
+    fn default() -> Self {
+        Self {
+            count: default_levels_count(),
+            finish_type: default_finish_type(),
+            difficulty_change: default_difficulty_change(),
+            reset_bag: default_reset_bag(),
+            alignment: default_alignment(),
+            perimeter_random: default_perimeter_random(),
+            top: None,
+        }
+    }
+}
+
+/// Top-level scene override (`[game.play3d.<difficulty>.levels.top]`). Each field
+/// is optional and falls back to the base difficulty's value when unset; the
+/// override only applies when `levels.count > 1`.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct TopLevelConfig {
+    /// Sky type for the top level, overriding the base when set.
+    #[serde(default)]
+    pub sky_type: Option<SkyTypeConfig>,
+    /// Perimeter-walls flag for the top level, overriding the base when set.
+    #[serde(default)]
+    pub perimeter_walls: Option<bool>,
+}
+
 impl Default for Play3dDifficultyConfig {
     fn default() -> Self {
         Self {
@@ -461,6 +649,7 @@ impl Default for Play3dDifficultyConfig {
             health_style: default_health_style(),
             enemy_move_period_ms: default_play3d_enemy_move_period_ms(),
             max_hp: default_play3d_max_hp(),
+            levels: LevelsConfig::default(),
         }
     }
 }
@@ -540,6 +729,7 @@ impl Default for Play3dConfig {
                 health_style: HealthStyleConfig::Heart,
                 enemy_move_period_ms: 1800,
                 max_hp: 3,
+                levels: LevelsConfig::default(),
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -567,6 +757,10 @@ impl Default for Play3dConfig {
                 health_style: HealthStyleConfig::Heart,
                 enemy_move_period_ms: 1500,
                 max_hp: 3,
+                levels: LevelsConfig {
+                    count: 2,
+                    ..LevelsConfig::default()
+                },
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -594,6 +788,10 @@ impl Default for Play3dConfig {
                 health_style: HealthStyleConfig::Heart,
                 enemy_move_period_ms: 1200,
                 max_hp: 3,
+                levels: LevelsConfig {
+                    count: 3,
+                    ..LevelsConfig::default()
+                },
             },
         }
     }
@@ -653,6 +851,43 @@ fn default_play3d_enemy_move_period_ms() -> u32 {
 }
 fn default_play3d_max_hp() -> u32 {
     3
+}
+
+/// A run is single-level unless an operator opts in via
+/// `[game.play3d.<difficulty>.levels] count = N`.
+fn default_levels_count() -> u32 {
+    1
+}
+
+/// Interim-finish rig defaults to ladder. Operators override per difficulty via
+/// `[game.play3d.<difficulty>.levels] finish_type = "portal"`.
+fn default_finish_type() -> FinishTypeConfig {
+    FinishTypeConfig::Ladder
+}
+
+/// Difficulty eases upward by default (hardest at the bottom). Operators
+/// override via `[game.play3d.<difficulty>.levels] difficulty_change = "harder"`.
+fn default_difficulty_change() -> DifficultyChangeConfig {
+    DifficultyChangeConfig::Easier
+}
+
+/// The bag resets each level by default. Operators carry it forward via
+/// `[game.play3d.<difficulty>.levels] reset_bag = false`.
+fn default_reset_bag() -> bool {
+    true
+}
+
+/// Layers corner-align by default. Operators override via
+/// `[game.play3d.<difficulty>.levels] alignment = "centre"`.
+fn default_alignment() -> LayeredAlignmentConfig {
+    LayeredAlignmentConfig::Edge
+}
+
+/// Per-level perimeter randomisation is off by default (every level uses the
+/// difficulty's `perimeter_walls`). Operators enable it via
+/// `[game.play3d.<difficulty>.levels] perimeter_random = true`.
+fn default_perimeter_random() -> bool {
+    false
 }
 
 /// Enemy rig kind defaults to goblin — the default rig the Bevy game ships
@@ -1491,5 +1726,186 @@ mod tests {
         "#;
         let cfg: GameConfig = toml::from_str(toml).unwrap();
         assert_eq!(cfg.play3d.easy.treasure_count, 0);
+    }
+
+    #[test]
+    fn levels_round_trips_from_toml_and_defaults_to_a_single_level() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            [play3d.easy.levels]
+            count = 3
+            finish_type = "random"
+            difficulty_change = "harder"
+            reset_bag = false
+            alignment = "centre"
+            perimeter_random = true
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            # levels table omitted entirely — must default to a single level
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            [play3d.hard.levels]
+            # only count present — the rest default
+            count = 2
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        // Easy overrides every field.
+        let easy = &cfg.play3d.easy.levels;
+        assert_eq!(easy.count, 3);
+        assert_eq!(easy.finish_type, FinishTypeConfig::Random);
+        assert_eq!(easy.difficulty_change, DifficultyChangeConfig::Harder);
+        assert!(!easy.reset_bag);
+        assert_eq!(easy.alignment, LayeredAlignmentConfig::Centre);
+        assert!(easy.perimeter_random);
+        assert!(easy.top.is_none());
+        // Tricky omits the whole table → single-level defaults.
+        let tricky = &cfg.play3d.tricky.levels;
+        assert_eq!(tricky.count, 1);
+        assert_eq!(tricky.finish_type, FinishTypeConfig::Ladder);
+        assert_eq!(tricky.difficulty_change, DifficultyChangeConfig::Easier);
+        assert!(tricky.reset_bag);
+        assert_eq!(tricky.alignment, LayeredAlignmentConfig::Edge);
+        assert!(!tricky.perimeter_random);
+        // Hard sets only count; the rest fall back to defaults.
+        assert_eq!(cfg.play3d.hard.levels.count, 2);
+        assert_eq!(cfg.play3d.hard.levels.finish_type, FinishTypeConfig::Ladder);
+        assert!(cfg.play3d.hard.levels.reset_bag);
+    }
+
+    #[test]
+    fn unknown_levels_enum_values_fall_back_to_defaults() {
+        // Forgiving deserialisers — typos (or values from a future version)
+        // must not kill config load; they degrade to the documented defaults.
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            [play3d.easy.levels]
+            count = 2
+            finish_type = "trapdoor"
+            difficulty_change = "spicier"
+            alignment = "diagonal"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typos must not fail load");
+        let easy = &cfg.play3d.easy.levels;
+        assert_eq!(easy.finish_type, FinishTypeConfig::Ladder);
+        assert_eq!(easy.difficulty_change, DifficultyChangeConfig::Easier);
+        assert_eq!(easy.alignment, LayeredAlignmentConfig::Edge);
+        // `center` (US spelling) still resolves to Centre.
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            [play3d.easy.levels]
+            alignment = "center"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.levels.alignment, LayeredAlignmentConfig::Centre);
+    }
+
+    #[test]
+    fn levels_top_override_round_trips_and_defaults_to_none() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            [play3d.easy.levels]
+            count = 3
+            [play3d.easy.levels.top]
+            sky_type = "day"
+            perimeter_walls = false
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            [play3d.tricky.levels]
+            count = 2
+            # no [levels.top] table — override stays None
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            [play3d.hard.levels.top]
+            # present but empty — both fields default to None
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        let top = cfg.play3d.easy.levels.top.as_ref().expect("easy has a top override");
+        assert_eq!(top.sky_type, Some(SkyTypeConfig::Day));
+        assert_eq!(top.perimeter_walls, Some(false));
+        // Tricky has no top table at all.
+        assert!(cfg.play3d.tricky.levels.top.is_none());
+        // Hard's table is present but empty — the struct exists, fields None.
+        let hard = cfg.play3d.hard.levels.top.as_ref().expect("hard has an (empty) top table");
+        assert!(hard.sky_type.is_none());
+        assert!(hard.perimeter_walls.is_none());
+    }
+
+    #[test]
+    fn levels_enums_as_wire_str_match_serde_form() {
+        assert_eq!(FinishTypeConfig::Ladder.as_wire_str(), "ladder");
+        assert_eq!(FinishTypeConfig::Portal.as_wire_str(), "portal");
+        assert_eq!(FinishTypeConfig::Random.as_wire_str(), "random");
+        assert_eq!(DifficultyChangeConfig::Same.as_wire_str(), "same");
+        assert_eq!(DifficultyChangeConfig::Easier.as_wire_str(), "easier");
+        assert_eq!(DifficultyChangeConfig::Harder.as_wire_str(), "harder");
+        assert_eq!(LayeredAlignmentConfig::Edge.as_wire_str(), "edge");
+        assert_eq!(LayeredAlignmentConfig::Centre.as_wire_str(), "centre");
+        assert_eq!(LayeredAlignmentConfig::Random.as_wire_str(), "random");
+    }
+
+    #[test]
+    fn default_presets_ramp_the_level_count_by_difficulty() {
+        let cfg = Play3dConfig::default();
+        assert_eq!(cfg.easy.levels.count, 1);
+        assert_eq!(cfg.tricky.levels.count, 2);
+        assert_eq!(cfg.hard.levels.count, 3);
+        // Everything else stays at the documented single-level defaults.
+        assert_eq!(cfg.hard.levels.finish_type, FinishTypeConfig::Ladder);
+        assert_eq!(cfg.hard.levels.difficulty_change, DifficultyChangeConfig::Easier);
+        assert!(cfg.hard.levels.reset_bag);
+        assert_eq!(cfg.hard.levels.alignment, LayeredAlignmentConfig::Edge);
+        assert!(!cfg.hard.levels.perimeter_random);
+        assert!(cfg.hard.levels.top.is_none());
     }
 }

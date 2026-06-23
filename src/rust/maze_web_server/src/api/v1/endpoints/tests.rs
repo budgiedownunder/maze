@@ -6171,6 +6171,14 @@ mod test_definitions {
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1800);
         assert_eq!(body.max_hp, 3);
+        // Easy is a single-level run; the rest of the group is at its defaults.
+        assert_eq!(body.levels.count, 1);
+        assert_eq!(body.levels.finish_type, "ladder");
+        assert_eq!(body.levels.difficulty_change, "easier");
+        assert!(body.levels.reset_bag);
+        assert_eq!(body.levels.alignment, "edge");
+        assert!(!body.levels.perimeter_random);
+        assert!(body.levels.top.is_none());
     }
 
     #[actix_web::test]
@@ -6198,6 +6206,7 @@ mod test_definitions {
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1500);
         assert_eq!(body.max_hp, 3);
+        assert_eq!(body.levels.count, 2, "tricky is a two-level run by default");
 
         let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
         let resp = test::call_service(&app, req).await;
@@ -6219,6 +6228,48 @@ mod test_definitions {
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1200);
         assert_eq!(body.max_hp, 3);
+        assert_eq!(body.levels.count, 3, "hard is a three-level run by default");
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_levels_group_and_clamps_the_count() {
+        use crate::config::game::{
+            DifficultyChangeConfig, FinishTypeConfig, LayeredAlignmentConfig, LevelsConfig,
+            TopLevelConfig, SkyTypeConfig, MAX_LEVEL_COUNT,
+        };
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = true;
+        // A fully-specified levels group with an over-the-cap count + a top override.
+        app_config.game.play3d.easy.levels = LevelsConfig {
+            count: 99,
+            finish_type: FinishTypeConfig::Random,
+            difficulty_change: DifficultyChangeConfig::Harder,
+            reset_bag: false,
+            alignment: LayeredAlignmentConfig::Centre,
+            perimeter_random: true,
+            top: Some(TopLevelConfig {
+                sky_type: Some(SkyTypeConfig::Day),
+                perimeter_walls: Some(false),
+            }),
+        };
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.levels.count, MAX_LEVEL_COUNT, "count clamps to MAX_LEVEL_COUNT");
+        assert_eq!(body.levels.finish_type, "random");
+        assert_eq!(body.levels.difficulty_change, "harder");
+        assert!(!body.levels.reset_bag);
+        assert_eq!(body.levels.alignment, "centre");
+        assert!(body.levels.perimeter_random);
+        let top = body.levels.top.expect("top override is surfaced");
+        assert_eq!(top.sky_type.as_deref(), Some("day"));
+        assert_eq!(top.perimeter_walls, Some(false));
     }
 
     #[actix_web::test]
