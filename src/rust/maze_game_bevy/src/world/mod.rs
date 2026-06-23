@@ -581,45 +581,93 @@ fn spawn_level(
 /// the grids to a common corner; `multilevel_centre` centres each smaller grid
 /// over the bottom level (a centred pyramid). The run's single finish **orb is on
 /// the far corner of the top `3×3`**, in the open, so it reads from below.
-/// Collectible cells are kept off each other's `(row, col)` across levels
-/// (bottom's outside the upper footprints) so the live game's collection events
-/// never disturb an upper level's matching marker. (Under `centre` the
-/// start/finish cells aren't world-aligned vertically, so the camera hops across
-/// as it snaps up — proper ladder-vertical placement is dedicated follow-on work.)
-fn multilevel_demo_levels() -> Vec<String> {
+///
+/// Each demo's two interim transitions are designed to exercise **both** concrete
+/// finish types in a single walkthrough: the **bottom→middle** climb is a **ladder**
+/// (the middle's start cell sits directly above the bottom's finish in world XZ, so
+/// the climb lands on real floor through the hatch) and the **middle→top** step is a
+/// **portal** (the top's start is *not* world-aligned over the middle's finish, so it
+/// falls back to a portal). Because `edge` and `centre` shift the upper grids
+/// differently — `edge` keeps a common corner (aligned ⇔ same grid `(row, col)`),
+/// `centre` shifts each smaller grid in by half the size difference — the finish/
+/// start cells that line up vertically differ between the two, so each alignment
+/// gets its own grids. Collectible cells are kept off each other's `(row, col)`
+/// across levels so the live game's collection events never disturb an upper level's
+/// matching marker.
+fn multilevel_demo_levels(alignment: LayeredAlignment) -> Vec<String> {
     let build = |rows: &[&str]| -> Vec<Vec<char>> {
         rows.iter().map(|row| row.chars().collect()).collect()
     };
-    // Bottom: 9×9 open platform (live). Climbs at F(2,2); objects sit OUTSIDE the
-    // 5×5/3×3 upper footprints (rows/cols ≥ 5) so they never collide with an
-    // upper level's marker cell.
-    let bottom = build(&[
-        "         ",
-        "         ",
-        "  F      ",
-        "         ",
-        "         ",
-        "         ",
-        "  K   E  ",
-        "       S ",
-        "    T    ",
-    ]);
-    // Middle: 5×5 open platform. S(2,2) sits above the bottom's F(2,2); F(1,1)
-    // below the top's S. Health + treasure kept off the top's 3×3 footprint.
-    let middle = build(&[
-        "     ",
-        " F  H",
-        "  S  ",
-        "     ",
-        " T   ",
-    ]);
-    // Top: 3×3 open platform. S(1,1) sits above the middle's F(1,1); F(2,2) — the
-    // orb — is the far corner, in the open, the easiest to spot from below.
-    let top = build(&[
-        "   ",
-        " S ",
-        "  F",
-    ]);
+    let (bottom, middle, top) = match alignment {
+        // Corner-aligned: cell (r,c) maps to the same world XZ on every level, so a
+        // ladder needs the next start at the *same* grid (r,c) as the finish.
+        LayeredAlignment::Edge => (
+            // Bottom 9×9 (live). Ladder at F(2,2) — the middle's S(2,2) is directly
+            // above. Objects sit OUTSIDE the 5×5/3×3 upper footprints (rows ≥ 6) so
+            // they never share an upper level's marker cell.
+            build(&[
+                "         ",
+                "         ",
+                "  F      ",
+                "         ",
+                "         ",
+                "         ",
+                "  K   E  ",
+                "       S ",
+                "    T    ",
+            ]),
+            // Middle 5×5. S(2,2) sits above the bottom's F(2,2) (ladder up); F(1,1)
+            // is its finish, NOT below the top's start (portal up).
+            build(&[
+                "     ",
+                " F  H",
+                "  S  ",
+                "     ",
+                " T   ",
+            ]),
+            // Top 3×3. S(0,1) is offset from the middle's F(1,1) → portal arrival;
+            // F(2,2) — the orb — is the far corner, in the open.
+            build(&[
+                " S ",
+                "   ",
+                "  F",
+            ]),
+        ),
+        // Centre-aligned (base 9×9): the 5×5 shifts in by 2 cells, the 3×3 by 3, so
+        // a ladder needs the next start offset by that shift from the finish.
+        LayeredAlignment::Centre => (
+            // Bottom 9×9 (live). Ladder at F(4,4) — world-centred under the middle's
+            // S(2,2). Objects ride the outer ring (rows/cols 0 or 8) so they clear
+            // the centred upper footprints and don't share an upper marker cell.
+            build(&[
+                "S       E",
+                "         ",
+                "         ",
+                "         ",
+                "    F    ",
+                "         ",
+                "         ",
+                "         ",
+                "K   T    ",
+            ]),
+            // Middle 5×5. S(2,2) sits world-above the bottom's F(4,4) (ladder up);
+            // F(1,1) is its finish, not world-aligned under the top's start (portal).
+            build(&[
+                "     ",
+                " F H ",
+                "  S  ",
+                " T   ",
+                "     ",
+            ]),
+            // Top 3×3. S(1,1) is world-offset from the middle's F(1,1) → portal
+            // arrival; F(2,2) — the orb — is the far corner, in the open.
+            build(&[
+                "   ",
+                " S ",
+                "  F",
+            ]),
+        ),
+    };
     [bottom, middle, top]
         .iter()
         .map(|grid| grid_to_json(grid))
@@ -694,8 +742,8 @@ pub(crate) fn spawn_world(
         // Native-only — the web/WASM path always supplies a maze via
         // `PendingMazeJson`. The gallery places every entity rig beside its default.
         vec![gallery::json(focus)]
-    } else if multilevel_demo.is_some() {
-        multilevel_demo_levels()
+    } else if let Some(alignment) = multilevel_demo {
+        multilevel_demo_levels(alignment)
     } else {
         vec![grid_to_json(&demo_grid())]
     };
@@ -1106,26 +1154,68 @@ mod multi_level_tests {
     }
 
     #[test]
-    fn edge_demo_both_interim_transitions_are_ladders() {
-        use crate::state::FinishType;
-        let levels = super::multilevel_demo_levels();
+    fn edge_demo_shows_a_ladder_then_a_portal() {
+        use crate::state::{FinishType, LayeredAlignment};
+        let levels = super::multilevel_demo_levels(LayeredAlignment::Edge);
         let refs: Vec<&str> = levels.iter().map(|s| s.as_str()).collect();
         let config = GameConfig::default(); // Edge alignment, Ladder finish type.
 
         let mut state = state_from(&levels[0]);
         let mut run = run_of(&refs, true);
 
-        walk_to(&mut state, 2, 2); // bottom finish
+        walk_to(&mut state, 2, 2); // bottom finish, directly below the middle start
         assert!(state.game.is_complete(), "reached the bottom finish");
         crate::transition::start_level_transition(&mut state, &run, &config);
-        assert_eq!(state.transition.as_ref().unwrap().kind, FinishType::Ladder, "0→1");
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Ladder,
+            "0→1 climbs a ladder (middle start sits above the bottom finish)",
+        );
         state.transition = None;
         advance_to_next_level(&mut state, &mut run, &config);
 
-        walk_to(&mut state, 1, 1); // middle finish
+        walk_to(&mut state, 1, 1); // middle finish, NOT below the top start
         assert!(state.game.is_complete(), "reached the middle finish");
         crate::transition::start_level_transition(&mut state, &run, &config);
-        assert_eq!(state.transition.as_ref().unwrap().kind, FinishType::Ladder, "1→2");
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Portal,
+            "1→2 steps through a portal (top start is offset from the middle finish)",
+        );
+    }
+
+    #[test]
+    fn centre_demo_shows_a_ladder_then_a_portal() {
+        use crate::state::{FinishType, LayeredAlignment};
+        let levels = super::multilevel_demo_levels(LayeredAlignment::Centre);
+        let refs: Vec<&str> = levels.iter().map(|s| s.as_str()).collect();
+        let config = GameConfig {
+            layered_alignment: LayeredAlignment::Centre,
+            ..GameConfig::default()
+        };
+
+        let mut state = state_from(&levels[0]);
+        let mut run = run_of(&refs, true);
+
+        walk_to(&mut state, 4, 4); // bottom finish, world-centred under the middle start
+        assert!(state.game.is_complete(), "reached the bottom finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Ladder,
+            "0→1 climbs a ladder (middle start sits world-above the bottom finish)",
+        );
+        state.transition = None;
+        advance_to_next_level(&mut state, &mut run, &config);
+
+        walk_to(&mut state, 1, 1); // middle finish, not world-aligned under the top start
+        assert!(state.game.is_complete(), "reached the middle finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Portal,
+            "1→2 steps through a portal (top start is world-offset from the middle finish)",
+        );
     }
 
     #[test]
@@ -1272,21 +1362,24 @@ mod multi_level_tests {
 
     #[test]
     fn multilevel_demo_levels_taper() {
-        // The native `MAZE_DEMO=multilevel` stack: at least two levels, each a
+        use crate::state::LayeredAlignment;
+        // Both native `MAZE_DEMO=multilevel_*` stacks: at least two levels, each a
         // parseable maze with its own start + finish, and a strictly shrinking
         // (square) grid as you climb — the open-platform pyramid.
-        let levels = super::multilevel_demo_levels();
-        assert!(levels.len() >= 2, "the demo stacks at least two levels");
-        let mut prev_dim: Option<usize> = None;
-        for json in &levels {
-            let game = MazeGame::from_json(json).expect("each demo level parses");
-            let grid = game.grid();
-            assert_eq!(grid.len(), grid[0].len(), "each demo level is square");
-            let dim = grid.len();
-            if let Some(prev) = prev_dim {
-                assert!(dim < prev, "each level up is a strictly smaller grid ({dim} < {prev})");
+        for alignment in [LayeredAlignment::Edge, LayeredAlignment::Centre] {
+            let levels = super::multilevel_demo_levels(alignment);
+            assert!(levels.len() >= 2, "the demo stacks at least two levels");
+            let mut prev_dim: Option<usize> = None;
+            for json in &levels {
+                let game = MazeGame::from_json(json).expect("each demo level parses");
+                let grid = game.grid();
+                assert_eq!(grid.len(), grid[0].len(), "each demo level is square");
+                let dim = grid.len();
+                if let Some(prev) = prev_dim {
+                    assert!(dim < prev, "each level up is a strictly smaller grid ({dim} < {prev})");
+                }
+                prev_dim = Some(dim);
             }
-            prev_dim = Some(dim);
         }
     }
 
