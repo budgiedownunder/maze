@@ -64,8 +64,13 @@ pub(crate) fn movement_system(
         }
     }
 
-    // Movement — only when idle and the game is still in play
-    if state.anim.is_none() && !state.won && !state.lost {
+    // Movement — only when idle and the game is still in play. `!is_complete`
+    // stops a held forward key from walking straight off an interim finish before
+    // `outcome_watcher_system` starts the level transition (the two systems'
+    // order is ambiguous, so without this the held key races the transition and
+    // the climb stutters). On a completing finish we simply hold position and let
+    // the transition take over.
+    if state.anim.is_none() && !state.won && !state.lost && !state.game.is_complete() {
         let Some(keys) = keys else { return; };
         let left = keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::KeyA);
         let right = keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::KeyD);

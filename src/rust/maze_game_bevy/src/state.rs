@@ -60,6 +60,7 @@ impl GridFacing {
     }
 
 
+
     pub(crate) fn to_yaw(self) -> f32 {
         match self {
             Self::North => 0.0,
@@ -111,6 +112,14 @@ pub(crate) struct LevelTransition {
     pub(crate) target_yaw: f32,
     pub(crate) start_pitch: f32,
     pub(crate) target_pitch: f32,
+    /// Ladder only: the head-on facing into the rung plane that the camera turns
+    /// to before climbing and holds for the whole rise (so the view never twists
+    /// or whips, whatever direction the player approached from). Unused by portals.
+    pub(crate) climb_yaw: f32,
+    /// Ladder only: the camera world position that goes with [`Self::climb_yaw`]
+    /// (behind the cell relative to the head-on facing), so the rungs sit centred
+    /// in view rather than off to one side after a side approach. Unused by portals.
+    pub(crate) climb_pos: Vec3,
 }
 
 impl LevelTransition {

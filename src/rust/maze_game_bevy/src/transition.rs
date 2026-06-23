@@ -25,14 +25,13 @@ use std::f32::consts::PI;
 const LADDER_DUR: f32 = 1.6;
 /// Duration of a portal step-through (seconds).
 const PORTAL_DUR: f32 = 1.0;
-/// Upward pitch the ladder camera holds while climbing (radians) — looks up the
-/// rungs, easing back to level after the turn.
-const LADDER_UP_PITCH: f32 = 25.0 * PI / 180.0;
-/// Fraction of the ladder transition spent rising (facing fixed), then pausing at
-/// the top; the remainder turns to the start cell's default facing. Splitting the
-/// climb and the turn keeps the camera from twisting *while* climbing.
-const CLIMB_FRAC: f32 = 0.55;
-const PAUSE_FRAC: f32 = 0.15;
+/// The ladder transition's phase split (fractions of its duration): first turn to
+/// face the rungs head-on, then rise (facing fixed), then pause at the top; the
+/// remainder turns to the start cell's default facing. Keeping the facing fixed
+/// for the whole rise is what stops the view twisting *while* climbing.
+const FACE_FRAC: f32 = 0.15;
+const CLIMB_FRAC: f32 = 0.45;
+const PAUSE_FRAC: f32 = 0.12;
 
 /// Begins the transition off the just-completed interim finish. Resolves the rig
 /// kind (the same `finish_type` + ladder-validity logic the finish drew with) and
@@ -74,11 +73,18 @@ pub(crate) fn start_level_transition(
         FinishType::Portal => PORTAL_DUR,
         _ => LADDER_DUR,
     };
-    // Keep the player's entry facing for the start of the transition; the ladder
-    // holds it fixed while climbing (so the view doesn't twist mid-climb), the
-    // portal keeps it through the flash. The turn to the start-cell default
-    // happens at the very end (ladder) or behind the flash (portal).
-    let (start_yaw, start_pitch) = (state.visual_yaw, state.visual_pitch);
+    // The transition starts from the player's actual entry facing. The ladder
+    // first turns to face the rungs head-on (`climb_yaw`) and holds that while
+    // rising — so the climb reads the same however the player approached — then
+    // turns to the start-cell default at the top. The ladder is flat, so it has
+    // two head-on views (the rung-plane normal and its flip); pick whichever is
+    // the shorter turn from the entry facing so the camera never swings the long
+    // way. The portal ignores `climb_yaw` and jumps behind the flash instead.
+    let climb_yaw = nearest_facing(state.visual_yaw, initial_facing(&state.grid, fr, fc).to_yaw());
+    // The camera position that matches `climb_yaw` — behind the finish cell
+    // relative to the head-on facing — so the rungs centre in view during the
+    // climb instead of sitting off to one side after a side approach.
+    let climb_pos = camera_pos_for(fr, fc, climb_yaw) + state.camera_offset;
 
     state.transition = Some(LevelTransition {
         kind,
@@ -86,10 +92,12 @@ pub(crate) fn start_level_transition(
         duration,
         start_pos,
         target_pos,
-        start_yaw,
+        start_yaw: state.visual_yaw,
         target_yaw,
-        start_pitch,
+        start_pitch: state.visual_pitch,
         target_pitch: 0.0,
+        climb_yaw,
+        climb_pos,
     });
 }
 
@@ -155,23 +163,28 @@ fn camera_pose(t: &LevelTransition) -> (Vec3, f32, f32) {
     }
 }
 
-/// The ladder transition's three phases: rise (entry facing fixed, tilting up to
-/// look up the rungs), a brief pause at the top, then a turn to the start cell's
-/// default facing while levelling the pitch.
+/// The ladder transition's four phases, all at a level (un-tilted) view: turn to
+/// face the rungs head-on, then rise (facing fixed), a brief pause at the top,
+/// then a turn to the start cell's default facing.
 fn ladder_pose(t: &LevelTransition) -> (Vec3, f32, f32) {
     let raw = (t.elapsed / t.duration).clamp(0.0, 1.0);
-    if raw < CLIMB_FRAC {
-        let p = smoothstep(raw / CLIMB_FRAC);
-        let pos = t.start_pos.lerp(t.target_pos, p);
-        let pitch = t.start_pitch + (LADDER_UP_PITCH - t.start_pitch) * p;
-        (pos, t.start_yaw, pitch)
-    } else if raw < CLIMB_FRAC + PAUSE_FRAC {
-        (t.target_pos, t.start_yaw, LADDER_UP_PITCH)
+    let climb_end = FACE_FRAC + CLIMB_FRAC;
+    let pause_end = climb_end + PAUSE_FRAC;
+    if raw < FACE_FRAC {
+        // Turn to head-on and slide behind the ladder (and level the pitch), at
+        // the bottom — so the rungs are centred before the rise begins.
+        let p = smoothstep(raw / FACE_FRAC);
+        let yaw = lerp_angle(t.start_yaw, t.climb_yaw, p);
+        (t.start_pos.lerp(t.climb_pos, p), yaw, t.start_pitch * (1.0 - p))
+    } else if raw < climb_end {
+        // Climb: rise facing the rungs head-on (fixed), level.
+        let p = smoothstep((raw - FACE_FRAC) / CLIMB_FRAC);
+        (t.climb_pos.lerp(t.target_pos, p), t.climb_yaw, 0.0)
+    } else if raw < pause_end {
+        (t.target_pos, t.climb_yaw, 0.0)
     } else {
-        let p = smoothstep((raw - CLIMB_FRAC - PAUSE_FRAC) / (1.0 - CLIMB_FRAC - PAUSE_FRAC));
-        let yaw = lerp_angle(t.start_yaw, t.target_yaw, p);
-        let pitch = LADDER_UP_PITCH + (t.target_pitch - LADDER_UP_PITCH) * p;
-        (t.target_pos, yaw, pitch)
+        let p = smoothstep((raw - pause_end) / (1.0 - pause_end));
+        (t.target_pos, lerp_angle(t.climb_yaw, t.target_yaw, p), 0.0)
     }
 }
 
@@ -180,16 +193,33 @@ fn smoothstep(x: f32) -> f32 {
     x * x * (3.0 - 2.0 * x)
 }
 
-/// Lerp between two angles along the shortest arc, so a near-180° climb-to-default
-/// turn doesn't spin the long way round.
-fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
+/// Signed shortest angular delta from `a` to `b`, in `(-π, π]`.
+fn shortest_delta(a: f32, b: f32) -> f32 {
     let mut delta = (b - a) % (2.0 * PI);
     if delta > PI {
         delta -= 2.0 * PI;
     } else if delta < -PI {
         delta += 2.0 * PI;
     }
-    a + delta * t
+    delta
+}
+
+/// Lerp between two angles along the shortest arc, so a near-180° turn doesn't
+/// spin the long way round.
+fn lerp_angle(a: f32, b: f32, t: f32) -> f32 {
+    a + shortest_delta(a, b) * t
+}
+
+/// Of a flat ladder's two head-on views — `face` (the rung-plane normal) and its
+/// 180° flip — the one reached by the shorter turn from `from`, so the camera
+/// turns the short way to look at the rungs whatever side the player came from.
+fn nearest_facing(from: f32, face: f32) -> f32 {
+    let flip = face + PI;
+    if shortest_delta(from, face).abs() <= shortest_delta(from, flip).abs() {
+        face
+    } else {
+        flip
+    }
 }
 
 /// Peak opacity of the portal white-out flash.
