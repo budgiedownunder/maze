@@ -63,6 +63,8 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, crate::transition::transition_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, crate::transition::transition_fx_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::floor::hatch::hatch_close_watcher.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::floor::hatch::hatch_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, outcome_watcher_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::leaf_system.run_if(in_state(AppState::Playing)))
@@ -729,6 +731,61 @@ mod tests {
             1,
             "it falls back to a portal instead",
         );
+    }
+
+    #[test]
+    fn hatch_spawns_in_the_start_above_a_ladder_finish_only() {
+        use crate::world::floor::hatch::LevelHatch;
+        // Aligned: l1's start (0,1) sits above l0's ladder finish (0,1), so level 1's
+        // start cell carries a hatch (and the bottom level never does).
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["F","S"]]}"#;
+        let mut ladder = make_playing_app_with_levels(&[lower, upper]);
+        let levels: Vec<usize> = ladder
+            .world_mut()
+            .query::<&LevelHatch>()
+            .iter(ladder.world())
+            .map(|h| h.level)
+            .collect();
+        assert_eq!(levels, vec![1], "one hatch, on the level above the ladder finish");
+
+        // Misaligned → portal finish → no hatch anywhere.
+        let mut portal =
+            make_playing_app_with_levels(&[r#"{"grid":[["S","F"]]}"#, r#"{"grid":[["S","F"]]}"#]);
+        assert_eq!(
+            portal.world_mut().query::<&LevelHatch>().iter(portal.world()).count(),
+            0,
+            "a portal finish needs no hatch above it",
+        );
+    }
+
+    #[test]
+    fn hatch_closes_when_the_player_climbs_onto_its_level() {
+        use crate::state::{GameConfig, GameState, MultiLevelRun};
+        use crate::world::floor::hatch::LevelHatch;
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["F","S"]]}"#;
+        let mut app = make_playing_app_with_levels(&[lower, upper]);
+
+        let closing = |app: &mut App| -> bool {
+            app.world_mut()
+                .query::<&LevelHatch>()
+                .iter(app.world())
+                .next()
+                .map(|h| h.closing)
+                .unwrap_or(false)
+        };
+        assert!(!closing(&mut app), "the hatch starts open");
+
+        // Climb onto level 1, then let the close watcher run.
+        app.world_mut().resource_scope(|world, mut state: Mut<GameState>| {
+            world.resource_scope(|world, mut run: Mut<MultiLevelRun>| {
+                let config = world.resource::<GameConfig>().clone();
+                crate::world::advance_to_next_level(&mut state, &mut run, &config);
+            });
+        });
+        app.update();
+        assert!(closing(&mut app), "the hatch closes once the player arrives on its level");
     }
 
     #[test]

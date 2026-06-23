@@ -513,6 +513,9 @@ fn spawn_level(
     ladder_allowed: bool,
     // Cells whose dead-end landmark to suppress (gallery finish-rig alcoves).
     dead_end_skip: &[(usize, usize)],
+    // True when this level's start cell sits above a ladder finish on the level
+    // below — its floor becomes an (open) hatch the climb emerges through.
+    hatch_at_start: bool,
 ) {
     // Sparkle rays each treasure chest gets — the same count for every chest in
     // this level (so they look uniform), with the total bounded for treasure-dense
@@ -551,7 +554,7 @@ fn spawn_level(
             }
             walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
             decorations::spawn_decorations_for_cell(commands, assets.decoration, grid, cell_entities, cell, r, c, config, placement);
-            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement);
+            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start);
             // A static level's enemies never match a live runtime enemy, so they
             // get a non-matching id and stand frozen as scenery.
             let spawn_enemy_id = if is_live { enemy_id } else { u32::MAX };
@@ -815,17 +818,19 @@ pub(crate) fn spawn_world(
     // level's start is offset off the lower finish, so a ladder won't be used
     // there — exactly the constraint that a portal can always replace a ladder
     // but not the reverse.
-    let cell_world_xz = |g: &[Vec<char>], target: char, p: LevelPlacement| -> Option<Vec2> {
-        g.iter().enumerate().find_map(|(r, row)| {
-            row.iter().position(|&ch| ch == target).map(|c| {
-                Vec2::new(
-                    p.world_x(c as f32 * CELL_SIZE + 1.0),
-                    p.world_z(r as f32 * CELL_SIZE + 1.0),
-                )
-            })
-        })
+    let find_cell = |g: &[Vec<char>], target: char| -> Option<(usize, usize)> {
+        g.iter()
+            .enumerate()
+            .find_map(|(r, row)| row.iter().position(|&ch| ch == target).map(|c| (r, c)))
     };
-    let level_anchors: Vec<(Option<Vec2>, Option<Vec2>)> = levels
+    let cell_world_xz = |g: &[Vec<char>], target: char, p: LevelPlacement| -> Option<Vec2> {
+        find_cell(g, target).map(|(r, c)| cell_world_xz(r, c, p))
+    };
+    // Per level: world (start XZ, finish XZ) + the finish cell coords. The XZ pair
+    // decides whether the next start sits directly above (the ladder-vs-portal
+    // constraint); the finish cell resolves the concrete rig kind for the hatch.
+    type LevelAnchor = (Option<Vec2>, Option<Vec2>, Option<(usize, usize)>);
+    let level_anchors: Vec<LevelAnchor> = levels
         .iter()
         .enumerate()
         .map(|(level, json)| {
@@ -845,7 +850,33 @@ pub(crate) fn spawn_world(
                 base_dims.1,
                 config.layered_alignment,
             );
-            (cell_world_xz(&lgrid, 'S', placement), cell_world_xz(&lgrid, 'F', placement))
+            (
+                cell_world_xz(&lgrid, 'S', placement),
+                cell_world_xz(&lgrid, 'F', placement),
+                find_cell(&lgrid, 'F'),
+            )
+        })
+        .collect();
+
+    // Whether each level's interim finish resolved to a LADDER (start above AND the
+    // configured finish type picks a ladder there). The level above a ladder finish
+    // gets a hatch in its start cell's floor (the "roof" the climb emerges through).
+    let finish_is_ladder: Vec<bool> = (0..level_count)
+        .map(|level| {
+            if level + 1 == level_count {
+                return false; // final level: orb, never a transition rig
+            }
+            let aligned = match (
+                level_anchors.get(level).and_then(|a| a.1),
+                level_anchors.get(level + 1).and_then(|a| a.0),
+            ) {
+                (Some(finish), Some(next_start)) => finish.distance_squared(next_start) < 1e-3,
+                _ => false,
+            };
+            aligned
+                && level_anchors.get(level).and_then(|a| a.2).is_some_and(|(r, c)| {
+                    config.finish_type.concrete_for_cell(r, c, config.seed) == FinishType::Ladder
+                })
         })
         .collect();
 
@@ -872,6 +903,10 @@ pub(crate) fn spawn_world(
         } else {
             Vec::new()
         };
+        // This level's start gets a hatch in its floor when the level below it has
+        // a ladder finish — the opening the climb emerges through, closing once the
+        // player has come up. The bottom level (no level below) never has one.
+        let hatch_at_start = level >= 1 && finish_is_ladder.get(level - 1).copied().unwrap_or(false);
         if level == 0 {
             // The live level reuses the already-parsed grid + per-cell overrides.
             let placement = LevelPlacement::for_level(
@@ -882,7 +917,7 @@ pub(crate) fn spawn_world(
                 base_dims.1,
                 config.layered_alignment,
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -898,7 +933,7 @@ pub(crate) fn spawn_world(
                 base_dims.1,
                 config.layered_alignment,
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start);
         }
     }
 

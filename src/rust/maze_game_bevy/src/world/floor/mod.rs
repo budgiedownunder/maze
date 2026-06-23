@@ -1,4 +1,5 @@
 pub(crate) mod finish;
+pub(crate) mod hatch;
 pub(crate) mod lines;
 pub(crate) mod start;
 pub(crate) mod tile;
@@ -78,6 +79,8 @@ pub(crate) struct FloorAssets {
     pub(crate) start_mat: Option<Handle<StandardMaterial>>,
     pub(crate) finish_mat: Option<Handle<StandardMaterial>>,
     pub(crate) lines: lines::LineAssets,
+    /// Round-hatch meshes + materials (start cells above a ladder finish).
+    pub(crate) hatch: hatch::HatchAssets,
 }
 
 pub(crate) fn build_floor_assets(
@@ -98,9 +101,11 @@ pub(crate) fn build_floor_assets(
         start_mat: start::build_start_material(materials, &tile_tex),
         finish_mat: finish::build_finish_material(materials, &tile_tex),
         lines: lines::build_line_assets(meshes, materials),
+        hatch: hatch::build_hatch_assets(meshes, materials, &tile_tex),
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_floor_for_cell(
     commands: &mut Commands,
     assets: &FloorAssets,
@@ -109,9 +114,14 @@ pub(crate) fn spawn_floor_for_cell(
     r: usize,
     c: usize,
     placement: LevelPlacement,
+    // True for a start cell sitting above a ladder finish on the level below: the
+    // solid start tile is replaced by an (open) hatch lid the climb emerges
+    // through. Ignored for every other cell.
+    hatch_at_start: bool,
 ) {
     lines::spawn_lines_for_cell(commands, &assets.lines, grid, r, c, placement);
     match cell {
+        'S' if hatch_at_start => hatch::spawn_hatch(commands, assets, r, c, placement),
         'S' => start::spawn_start(commands, assets, r, c, placement),
         'F' => finish::spawn_finish(commands, assets, r, c, placement),
         _ => tile::spawn_tile(commands, assets, r, c, placement),

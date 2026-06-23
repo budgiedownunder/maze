@@ -150,11 +150,12 @@ src/
 │   │   ├── tile.rs         make_tile_texture (consumed by floor tile/start/finish)
 │   │   └── wood.rs         make_wood_texture (wall material variant)
 │   ├── floor/              floor cells, grid lines, start, finish
-│   │   ├── mod.rs          FloorCell marker + FloorAssets bundle + spawn_floor_for_cell
+│   │   ├── mod.rs          FloorCell marker + FloorAssets bundle + spawn_floor_for_cell (+ spawn_capped_tile: stone-underside start/finish)
 │   │   ├── tile.rs         default-tile material + spawn helper
 │   │   ├── lines.rs        FloorLine, line meshes + material + spawn_lines_for_cell
 │   │   ├── start.rs        StartCell + start material + spawn helper
-│   │   └── finish.rs       FinishCell + finish material + spawn helper
+│   │   ├── finish.rs       FinishCell + finish material + spawn helper
+│   │   └── hatch.rs        LevelHatch: a round submersible-style hatch in a start cell above a ladder finish — holed floor + metal rim + dark hinged lid with a crossed wheel; stands open, swings closed when the player climbs up (close watcher + animation)
 │   ├── walls/              wall panels + non-occluding wall types
 │   │   ├── mod.rs          WallAssets bundle, wall-material kinds + override resolver, wall-type classifiers, non-occluding dispatch
 │   │   ├── solid/          solid-wall panel rendering
