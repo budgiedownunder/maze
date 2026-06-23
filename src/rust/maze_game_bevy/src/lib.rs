@@ -76,6 +76,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, minimap::minimap_dimensions_update_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::portal::portal_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
@@ -264,6 +265,36 @@ mod tests {
             .map(|t| t.0.clone())
             .collect();
         assert_eq!(labels, vec![expected], "one dimensions readout, cols x rows");
+    }
+
+    #[test]
+    fn minimap_dimensions_readout_follows_the_active_level() {
+        use crate::hud::minimap::MinimapDimensions;
+        use crate::state::{GameConfig, GameState, MultiLevelRun};
+        // Two differently-sized levels: 1×2 ("2 x 1") then 1×3 ("3 x 1").
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+
+        let read = |app: &mut App| -> String {
+            app.world_mut()
+                .query_filtered::<&Text2d, With<MinimapDimensions>>()
+                .iter(app.world())
+                .next()
+                .map(|t| t.0.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(read(&mut app), "2 x 1", "bottom level dims");
+
+        // Swap to the taller-footprint level 1; the readout should follow.
+        app.world_mut().resource_scope(|world, mut state: Mut<GameState>| {
+            world.resource_scope(|world, mut run: Mut<MultiLevelRun>| {
+                let config = world.resource::<GameConfig>().clone();
+                crate::world::advance_to_next_level(&mut state, &mut run, &config);
+            });
+        });
+        app.update();
+        assert_eq!(read(&mut app), "3 x 1", "readout follows the active level");
     }
 
     #[test]

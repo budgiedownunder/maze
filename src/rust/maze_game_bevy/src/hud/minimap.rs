@@ -248,6 +248,26 @@ pub(crate) fn dimensions_label(rows: usize, cols: usize) -> String {
     format!("{cols} x {rows}")
 }
 
+/// Keeps the dimensions footer in step with the level currently being played:
+/// each level of a multi-level run can have a different footprint, so the readout
+/// follows `state.grid` rather than staying on the bottom level's size. Updated
+/// only when the label actually changes (i.e. on a level transition).
+pub(crate) fn minimap_dimensions_update_system(
+    state: Res<GameState>,
+    mut text: Query<&mut Text2d, With<MinimapDimensions>>,
+) {
+    let Ok(mut text) = text.single_mut() else {
+        return;
+    };
+    let label = dimensions_label(
+        state.grid.len(),
+        state.grid.first().map_or(0, |row| row.len()),
+    );
+    if text.0 != label {
+        text.0 = label;
+    }
+}
+
 /// The y of the dimensions strip: centred just below the minimap's dark
 /// background (which is `map_size + 4` tall, centred on `center_y`), with a
 /// small gap.
