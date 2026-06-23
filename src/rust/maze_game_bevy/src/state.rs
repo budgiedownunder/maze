@@ -110,12 +110,14 @@ pub(crate) struct GameState {
     /// no flash is active. Set on `PlayerDamaged` event and decremented by
     /// the damage-flash system; the overlay fades its alpha proportionally.
     pub(crate) damage_flash_timer: f32,
-    /// World-Y the camera is lifted by for the level currently being played
-    /// (`world_y(current_level, 0)` = `current_level * LEVEL_HEIGHT`). The move
-    /// animation stays at ground level; `movement_system` adds this when writing
-    /// the camera transform, so advancing a level lifts the camera onto it. `0.0`
-    /// on the bottom level, so single-level games are unchanged.
-    pub(crate) camera_y_offset: f32,
+    /// World-space offset the camera is shifted by for the level currently being
+    /// played: the level's Y lift plus its X/Z centring offset (see
+    /// [`crate::world::LevelPlacement::camera_offset`]). The move animation stays
+    /// in the level's local (ground) frame; `movement_system` adds this when
+    /// writing the camera transform, so advancing a level lifts + centres the
+    /// camera onto it. `Vec3::ZERO` on the bottom level, so single-level games
+    /// (and `Edge` stacks) are unchanged.
+    pub(crate) camera_offset: Vec3,
 }
 
 #[derive(Resource)]
@@ -149,6 +151,10 @@ pub(crate) struct MultiLevelRun {
     /// When `true` (the default) each level starts with an empty bag; when
     /// `false` the player's whole bag carries from one level into the next.
     pub(crate) reset_bag_between_levels: bool,
+    /// `(rows, cols)` of the bottom level's grid — the reference footprint the
+    /// upper levels' `Centre` X/Z offsets are measured against. Used on a level
+    /// transition to compute the new level's camera placement.
+    pub(crate) base_dims: (usize, usize),
 }
 
 impl MultiLevelRun {
@@ -157,12 +163,22 @@ impl MultiLevelRun {
     /// inserts for every non-multi-level game; every cross-level total starts
     /// empty and the bag resets by default.
     pub(crate) fn new(levels: Vec<String>) -> Self {
+        // The bottom level's footprint anchors the upper levels' `Centre` offsets.
+        let base_dims = levels
+            .first()
+            .and_then(|json| MazeGame::from_json(json).ok())
+            .map(|game| {
+                let grid = game.grid();
+                (grid.len(), grid.first().map_or(0, |row| row.len()))
+            })
+            .unwrap_or((0, 0));
         Self {
             levels,
             current_level: 0,
             banked_score: 0,
             carried_treasure: Vec::new(),
             reset_bag_between_levels: true,
+            base_dims,
         }
     }
 
@@ -279,6 +295,11 @@ pub struct GameConfig {
     /// Default `Heart`. The auto-pickup + heal mechanics are identical
     /// across variants — only the spawned rig differs.
     pub health_style: HealthStyle,
+    /// How smaller upper levels of a multi-level run are positioned over the
+    /// bottom level — `Edge` (common corner, zero offset) or `Centre`. Only
+    /// meaningful for an open-sky multi-level stack; a no-op for single-level
+    /// games (level 0 has zero offset under either mode). Default `Edge`.
+    pub layered_alignment: LayeredAlignment,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -574,6 +595,39 @@ impl TreasureStyle {
     }
 }
 
+/// How the layers of a multi-level run are positioned over one another when the
+/// upper levels are smaller mazes than the bottom (only meaningful for an
+/// open-sky stack — a roofed stack seals each level so alignment is invisible).
+/// `Edge` stacks every layer to a common origin corner (zero X/Z offset — the
+/// historical behaviour); `Centre` centres each smaller layer over the bottom
+/// layer. Default `Edge` so single-level games and uniform stacks are unchanged.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LayeredAlignment {
+    #[default]
+    Edge,
+    Centre,
+}
+
+impl LayeredAlignment {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Edge => "edge",
+            Self::Centre => "centre",
+        }
+    }
+
+    /// Parses a wire string into a [`LayeredAlignment`]. Unknown values fall back
+    /// to [`LayeredAlignment::Edge`] — same forgiving policy as the other config
+    /// enums. Accepts the US spelling `center` as well.
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "centre" | "center" => Self::Centre,
+            _ => Self::Edge,
+        }
+    }
+}
+
 /// Toggle bag for the spatial-orientation landmark techniques. Each new
 /// landmark sub-step adds one field (default `true`). The host populates
 /// this from `[game.play3d.<difficulty>.landmarks]` in the server config.
@@ -644,6 +698,7 @@ impl Default for GameConfig {
             starting_hp: 3,
             enemy_type: EnemyType::default(),
             health_style: HealthStyle::default(),
+            layered_alignment: LayeredAlignment::default(),
         }
     }
 }

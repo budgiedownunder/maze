@@ -4,7 +4,7 @@ pub(crate) mod start;
 pub(crate) mod tile;
 
 use crate::world::textures::tile::make_tile_texture;
-use crate::world::CELL_SIZE;
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -53,12 +53,12 @@ pub(crate) fn spawn_floor_for_cell(
     cell: char,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    lines::spawn_lines_for_cell(commands, &assets.lines, grid, r, c, level);
+    lines::spawn_lines_for_cell(commands, &assets.lines, grid, r, c, placement);
     match cell {
-        'S' => start::spawn_start(commands, assets, r, c, level),
-        'F' => finish::spawn_finish(commands, assets, r, c, level),
-        _ => tile::spawn_tile(commands, assets, r, c, level),
+        'S' => start::spawn_start(commands, assets, r, c, placement),
+        'F' => finish::spawn_finish(commands, assets, r, c, placement),
+        _ => tile::spawn_tile(commands, assets, r, c, placement),
     }
 }

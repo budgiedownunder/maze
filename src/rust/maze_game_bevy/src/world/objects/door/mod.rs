@@ -41,7 +41,7 @@ use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
 use crate::world::walls::{is_non_occluding_wall, wall_kind_for_cell, WallAssets, PANEL_W};
-use crate::world::{world_y, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
@@ -329,7 +329,7 @@ pub(crate) fn spawn_door_for_cell(
     c: usize,
     config: &GameConfig,
     cell_entity: Option<&CellEntity>,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     if cell != 'D' {
         return;
@@ -338,13 +338,13 @@ pub(crate) fn spawn_door_for_cell(
     let door_style = super::overrides::resolve_door_style(cell_entity, config.door_style);
     let rows = grid.len();
     let cols = grid[r].len();
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     // The leaf-anchor Y for this level; every edge centre / pivot below derives
     // from it, and the leaf-motion systems offset from the captured base
     // translation, so the whole leaf stays on its stacked floor. Level 0 is the
     // identity.
-    let base_y = world_y(level, 0.0);
+    let base_y = placement.world_y(0.0);
     let kind = wall_kind_for_cell(r, c, rows, cols, config);
 
     // A swinging door only reads well between two facing walls, so it's the one

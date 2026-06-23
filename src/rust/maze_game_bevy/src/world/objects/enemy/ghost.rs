@@ -4,7 +4,7 @@
 //! sit on the face, each with a central black eyeball; there's no mouth.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -195,19 +195,19 @@ pub(crate) fn spawn_ghost(
     r: usize,
     c: usize,
     id: u32,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let root = commands
         .spawn((
             super::EnemyMarker {
                 id,
                 spawn_cell: (r, c),
-                level,
+                placement,
             },
             GhostTag,
-            Transform::from_xyz(x, world_y(level, ENEMY_BASE_Y), z),
+            Transform::from_xyz(x, placement.world_y(ENEMY_BASE_Y), z),
             Visibility::default(),
         ))
         .id();

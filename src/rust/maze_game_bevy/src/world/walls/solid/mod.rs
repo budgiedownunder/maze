@@ -13,7 +13,7 @@ use super::{
     WALL_MATERIAL_VARIANTS, WALL_TINT_VARIANTS,
 };
 use crate::state::GameConfig;
-use crate::world::{world_y, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::CellEntity;
 use std::collections::HashMap;
@@ -106,14 +106,14 @@ pub(crate) fn spawn_walls_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     let rows = grid.len();
     let cols = grid[r].len();
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     // Lift every panel in this cell to its stacked level; level 0 is the identity.
-    let panel_y = world_y(level, PANEL_Y);
+    let panel_y = placement.world_y(PANEL_Y);
 
     // A face is drawn against a solid `'W'` neighbour (any cell), or at the grid
     // edge only under an enclosed sky — under an open sky every maze-edge face shows

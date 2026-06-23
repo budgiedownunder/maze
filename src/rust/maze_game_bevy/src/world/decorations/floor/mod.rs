@@ -4,7 +4,7 @@ pub(crate) mod moss;
 pub(crate) mod sigil;
 
 use crate::state::GameConfig;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -103,7 +103,7 @@ pub(crate) fn spawn_floor_accents_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     // A single flat accent per junction cell — moss / cracked tile /
     // mosaic / sigil, picked by hashing (row, col, seed). Skipped for
@@ -116,9 +116,9 @@ pub(crate) fn spawn_floor_accents_for_cell(
     {
         return;
     }
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let y = world_y(level, FLOOR_ACCENT_Y);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let y = placement.world_y(FLOOR_ACCENT_Y);
     let kind = floor_accent_index(r, c, config.seed);
     let mat = assets.mats[kind as usize].clone();
     match (assets.mesh.clone(), mat) {

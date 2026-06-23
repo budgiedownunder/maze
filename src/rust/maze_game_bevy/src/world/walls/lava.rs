@@ -12,7 +12,7 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{lcg, world_y, CELL_SIZE};
+use crate::world::{lcg, world_y, LevelPlacement, CELL_SIZE};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -250,11 +250,13 @@ pub(crate) fn spawn_lava(
     assets: &LavaAssets,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let surface_y = world_y(level, SURFACE_Y);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let surface_y = placement.world_y(SURFACE_Y);
+    // The animations re-derive Y from the stored level; X/Z (offset above) are fixed.
+    let level = placement.level;
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((

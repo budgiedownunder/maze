@@ -9,7 +9,7 @@
 //! gently undulates the surface and scrolls a tileable ripple texture across it.
 
 use super::rim::RECESS_DEPTH;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{world_y, LevelPlacement, CELL_SIZE};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -109,11 +109,14 @@ pub(crate) fn spawn_water(
     assets: &WaterAssets,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let y = world_y(level, SURFACE_Y);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let y = placement.world_y(SURFACE_Y);
+    // Only the level is stored: the animation re-derives the resting Y from it,
+    // and the surface's X/Z (offset above) are fixed for the level's lifetime.
+    let level = placement.level;
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((

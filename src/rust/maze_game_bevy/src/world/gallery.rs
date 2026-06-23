@@ -20,12 +20,64 @@ use serde_json::{json, Value};
 /// on a single entity type.
 const FOCUSES: &[&str] = &["gallery", "enemies", "health", "keysdoors", "treasure", "walls"];
 
+/// The multi-level demo selectors (dispatched in `world::spawn_world`, not here).
+/// Listed so [`validate_demo_env`] can recognise them.
+const MULTILEVEL_DEMOS: &[&str] = &["multilevel_edge", "multilevel_centre"];
+
 /// The requested gallery focus from `MAZE_DEMO`, or `None` when it is unset or
 /// names something other than a known gallery (in which case the caller falls
 /// back to the normal demo maze).
 pub(crate) fn requested_focus() -> Option<String> {
     let value = std::env::var("MAZE_DEMO").ok()?;
     FOCUSES.contains(&value.as_str()).then_some(value)
+}
+
+/// Validates the `MAZE_DEMO` environment variable at startup. `Ok(())` when it is
+/// unset / empty (the normal game) or names a known demo (a rig gallery focus or a
+/// multi-level demo); `Err(message)` for any other value, so a typo fails loudly
+/// with the valid list rather than silently falling back to the default demo grid.
+pub fn validate_demo_env() -> Result<(), String> {
+    validate_demo_value(std::env::var("MAZE_DEMO").ok().as_deref())
+}
+
+/// The env-free core of [`validate_demo_env`], so the policy is unit-testable
+/// without touching the process-global `MAZE_DEMO`.
+fn validate_demo_value(value: Option<&str>) -> Result<(), String> {
+    match value {
+        None | Some("") => Ok(()),
+        Some(v) if FOCUSES.contains(&v) || MULTILEVEL_DEMOS.contains(&v) => Ok(()),
+        Some(v) => Err(format!(
+            "MAZE_DEMO='{v}' is not a recognised demo.\n  Valid values: {}, {}\n  (or leave MAZE_DEMO unset for the normal game).",
+            FOCUSES.join(", "),
+            MULTILEVEL_DEMOS.join(", "),
+        )),
+    }
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::validate_demo_value;
+
+    #[test]
+    fn validate_demo_value_accepts_known_demos_and_unset() {
+        assert!(validate_demo_value(None).is_ok(), "unset is the normal game");
+        assert!(validate_demo_value(Some("")).is_ok(), "empty is the normal game");
+        assert!(validate_demo_value(Some("gallery")).is_ok());
+        assert!(validate_demo_value(Some("walls")).is_ok());
+        assert!(validate_demo_value(Some("multilevel_edge")).is_ok());
+        assert!(validate_demo_value(Some("multilevel_centre")).is_ok());
+    }
+
+    #[test]
+    fn validate_demo_value_rejects_unknown_values_with_a_helpful_message() {
+        // A typo / the old name / an unknown value all fail, and the message
+        // lists the valid values to guide the fix.
+        for bad in ["multilevel", "multilevel_center", "typo", "Gallery"] {
+            let err = validate_demo_value(Some(bad)).unwrap_err();
+            assert!(err.contains(bad), "message should quote the bad value: {err}");
+            assert!(err.contains("multilevel_centre"), "message should list valid values: {err}");
+        }
+    }
 }
 
 /// The gallery maze JSON for `focus` (`enemies` / `health` / `keysdoors`, or any

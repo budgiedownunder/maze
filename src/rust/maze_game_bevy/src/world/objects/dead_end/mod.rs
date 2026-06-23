@@ -1,6 +1,6 @@
 use super::common::{self, CommonObjectAssets};
 use crate::state::GameConfig;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 // Dead-end landmark object variants. Each cell flagged as a dead-end
@@ -40,7 +40,7 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     // A single distinctive object per dead-end cell — brazier / urn /
     // broken pillar / chest, picked by hashing (row, col, seed). Skipped
@@ -58,8 +58,11 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     {
         return;
     }
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    // The prop rigs take the (already offset) world `x`/`z` and the level for their
+    // own Y, so they don't each need the full placement.
+    let level = placement.level;
     let kind = dead_end_object_index(r, c, config.seed);
     match kind {
         0 => common::brazier::spawn_brazier(commands, assets, x, z, level),
@@ -76,7 +79,7 @@ pub(crate) fn spawn_dead_end_object_for_cell(
         ),
     }
     // Anchor entity tagging this cell as carrying a dead-end landmark.
-    commands.spawn((DeadEndObject, Transform::from_xyz(x, world_y(level, 0.0), z)));
+    commands.spawn((DeadEndObject, Transform::from_xyz(x, placement.world_y(0.0), z)));
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 pub(crate) mod orb;
 
+use crate::world::LevelPlacement;
 use bevy::prelude::*;
 
 pub(crate) struct FinishAssets {
@@ -21,12 +22,12 @@ pub(crate) fn spawn_finish_for_cell(
     cell: char,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     // 'F'-cell predicate is enforced once here; the per-object spawn
     // helpers below run unconditionally and assume a finish cell.
     if cell != 'F' {
         return;
     }
-    orb::spawn_orb(commands, &assets.orb, r, c, level);
+    orb::spawn_orb(commands, &assets.orb, r, c, placement);
 }

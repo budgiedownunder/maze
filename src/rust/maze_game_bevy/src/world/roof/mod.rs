@@ -19,7 +19,7 @@ pub(crate) mod dungeon;
 
 use crate::state::{GameConfig, SkyType};
 use crate::world::walls::{WallAssets, WALL_HEIGHT};
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 /// Ceiling-tile thickness (units).
@@ -81,14 +81,14 @@ pub(crate) fn spawn_roof_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     let material = match config.sky_type {
         SkyType::Dungeon => roof_assets.dungeon_material.clone(),
         SkyType::Chamber => chamber::material_for_cell(wall_assets, grid, r, c, config),
         _ => return,
     };
-    spawn_tile(commands, roof_assets.mesh.clone(), material, r, c, level);
+    spawn_tile(commands, roof_assets.mesh.clone(), material, r, c, placement);
 }
 
 /// Spawns one ceiling tile at the top of the walls over cell `(r, c)`.
@@ -98,11 +98,11 @@ fn spawn_tile(
     material: Option<Handle<StandardMaterial>>,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let roof_y = world_y(level, WALL_HEIGHT);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let roof_y = placement.world_y(WALL_HEIGHT);
     match (mesh, material) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((

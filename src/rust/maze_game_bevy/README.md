@@ -91,7 +91,8 @@ without authoring a maze. The value selects which types to show:
 | `keysdoors` | key + door rigs only (key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
 | `treasure`  | treasure rigs only — open chests of each style (silver / gold coins, diamond / jewel gems) in dead-end alcoves |
 | `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
-| `multilevel`| a walkable multi-level pyramid (bottom level live, the rest static): an open `9×9` platform at the bottom, a `5×5` above, a `3×3` on top, each rendered a `LEVEL_HEIGHT` higher with an open perimeter so the platforms read as floating layers; reaching a level's finish lifts you onto the next. Only the top platform keeps the finish orb, on its far corner in the open - layers currently edge-aligned to a common corner.|
+| `multilevel_centre` | a walkable centred multi-level pyramid (bottom level live, the rest static): an open `9×9` platform at the bottom, a `5×5` centred above, a `3×3` centred on top, each rendered a `LEVEL_HEIGHT` higher with an open perimeter so the platforms read as floating layers; reaching a level's finish lifts + centres you onto the next. Only the top platform keeps the finish orb, on its far corner in the open. |
+| `multilevel_edge`   | the same `9×9 → 5×5 → 3×3` stack but edge-aligned — every level shares a common origin corner (zero X/Z offset) instead of being centred, for verifying the `edge` layout mode. |
 
 Focused values make it easy to verify one type in isolation. Enemies are
 stationary and harmless so you can inspect them freely; in the key/door galleries
@@ -256,8 +257,11 @@ sky, builds per-domain asset bundles (`walls`, `floor`, `decorations`,
 per-cell loop calling each domain's `spawn_*_for_cell` (including the door leaves,
 enemy rigs, and health-pickup rigs, which are spawned alongside the loop
 because they borrow either the cell's wall material or the per-config rig
-choice), lifting every Y by `world_y(level, …)` (`LEVEL_HEIGHT` per level, so
-level 0 is unchanged). Only the top level keeps the finish orb. It finishes with
+choice), placing every cell via the level's `LevelPlacement` — `LEVEL_HEIGHT` per
+level on Y, plus an X/Z centring offset when `layered_maze_alignment` is `centre`
+(zero on level 0 and under `edge`, so single-level games are unchanged). The
+camera is lifted + centred onto the live level the same way. Only the top level
+keeps the finish orb. It finishes with
 the HUD (clock, score, status bar, minimap, HP, bag) + paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, `generate_level_maze_jsons` (multi-level:
 N chained level grids, bottom first), `MAX_LEVEL_COUNT`, and the public types

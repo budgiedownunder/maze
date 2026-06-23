@@ -9,6 +9,7 @@ pub(crate) mod overrides;
 pub(crate) mod treasure;
 
 use crate::state::{GameConfig, TreasureStyle};
+use crate::world::LevelPlacement;
 use bevy::prelude::*;
 use maze::CellEntity;
 
@@ -63,16 +64,16 @@ pub(crate) fn spawn_objects_for_cell(
     // Sparkle rays a treasure in this cell gets — uniform across the maze (see
     // treasure::rays_per_chest); ignored for non-treasure cells.
     treasure_rays: usize,
-    level: usize,
+    placement: LevelPlacement,
     // The finish orb is drawn only on the run's top (final) level; interim levels
     // omit it (a transition rig replaces it). A single-level game is its own final
     // level, so the orb always shows — unchanged from before multi-level runs.
     spawn_finish: bool,
 ) {
     if spawn_finish {
-        finish::spawn_finish_for_cell(commands, &assets.finish, cell, r, c, level);
+        finish::spawn_finish_for_cell(commands, &assets.finish, cell, r, c, placement);
     }
-    dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, level);
+    dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, placement);
     let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
     let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
     let health_style = overrides::resolve_health_style(cell_entity, config.health_style);
@@ -86,10 +87,10 @@ pub(crate) fn spawn_objects_for_cell(
         cell,
         r,
         c,
-        level,
+        placement,
     );
-    enemy::spawn_enemy_for_cell(commands, &assets.enemy, enemy_type, cell, r, c, enemy_id, level);
-    health::spawn_health_for_cell(commands, &assets.health, health_style, cell, r, c, level);
+    enemy::spawn_enemy_for_cell(commands, &assets.enemy, enemy_type, cell, r, c, enemy_id, placement);
+    health::spawn_health_for_cell(commands, &assets.health, health_style, cell, r, c, placement);
     treasure::spawn_treasure_for_cell(
         commands,
         &assets.treasure,
@@ -100,6 +101,6 @@ pub(crate) fn spawn_objects_for_cell(
         r,
         c,
         treasure_rays,
-        level,
+        placement,
     );
 }

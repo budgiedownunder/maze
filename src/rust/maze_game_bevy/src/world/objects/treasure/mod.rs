@@ -50,7 +50,7 @@ pub(crate) mod silver;
 
 use super::common::{self, CommonObjectAssets};
 use crate::state::TreasureStyle;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{world_y, LevelPlacement, CELL_SIZE};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -429,16 +429,18 @@ pub(crate) fn spawn_treasure_for_cell(
     c: usize,
     // Sparkle rays for this chest — uniform across the maze (see rays_per_treasure).
     ray_count: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     if cell != 'T' {
         return;
     }
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let level = placement.level;
     let yaw = common::yaw_toward_open_neighbour(grid, r, c);
 
     // The open chest stands free so it stays behind, emptied, after collection.
+    // It takes the (already offset) world `x`/`z` and the level for its own Y.
     common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, level);
 
     // Collectible loot root — positioned + yawed at the cell so its children use
@@ -447,7 +449,7 @@ pub(crate) fn spawn_treasure_for_cell(
     let root = commands
         .spawn((
             TreasureMarker { cell: (r, c), level },
-            Transform::from_xyz(x, world_y(level, 0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
+            Transform::from_xyz(x, placement.world_y(0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
             Visibility::default(),
         ))
         .id();

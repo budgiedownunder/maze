@@ -13,6 +13,7 @@ pub(crate) mod heart;
 pub(crate) mod potion;
 
 use crate::state::HealthStyle;
+use crate::world::LevelPlacement;
 use bevy::prelude::*;
 
 /// Scale-pulse frequency (radians/sec) applied to every health pickup.
@@ -55,14 +56,14 @@ pub(crate) fn spawn_health_for_cell(
     cell: char,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     if cell != 'H' {
         return;
     }
     match health_style {
-        HealthStyle::Heart => heart::spawn_heart(commands, &assets.heart, r, c, level),
-        HealthStyle::Potion => potion::spawn_potion(commands, &assets.potion, r, c, level),
+        HealthStyle::Heart => heart::spawn_heart(commands, &assets.heart, r, c, placement),
+        HealthStyle::Potion => potion::spawn_potion(commands, &assets.potion, r, c, placement),
     }
 }
 

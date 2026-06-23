@@ -1,6 +1,6 @@
 use super::{FloorAssets, FloorCell};
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -36,11 +36,11 @@ pub(crate) fn spawn_start(
     assets: &FloorAssets,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let y = world_y(level, 0.0);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let y = placement.world_y(0.0);
     match (assets.floor_mesh.clone(), assets.start_mat.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((

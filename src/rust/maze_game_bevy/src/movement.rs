@@ -146,11 +146,11 @@ pub(crate) fn movement_system(
         }
     }
 
-    // Update camera transform every frame. The move animation runs at ground
-    // level; lift it onto the level currently being played (0 on the bottom
-    // level, so single-level games are unchanged).
+    // Update camera transform every frame. The move animation runs in the level's
+    // local (ground) frame; lift + centre it onto the level currently being played
+    // (zero on the bottom level, so single-level games are unchanged).
     if let Ok(mut transform) = camera.single_mut() {
-        transform.translation = state.visual_pos + Vec3::Y * state.camera_y_offset;
+        transform.translation = state.visual_pos + state.camera_offset;
         transform.rotation =
             Quat::from_rotation_y(state.visual_yaw) * Quat::from_rotation_x(state.visual_pitch);
     }

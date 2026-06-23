@@ -13,7 +13,7 @@ use crate::world::textures::brick::make_brick_texture;
 use crate::world::textures::cobblestone::make_cobblestone_texture;
 use crate::world::textures::dressed_stone::make_dressed_stone_texture;
 use crate::world::textures::wood::make_wood_texture;
-use crate::world::CELL_SIZE;
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 use maze::CellEntity;
 use solid::ew_panel::EwPanelAssets;
@@ -374,23 +374,23 @@ pub(crate) fn spawn_non_occluding_for_cell(
     wall_type: WallType,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     match wall_type {
         // Water / lava render a recessed surface plus rim skirts filling the band
         // up to floor level on every edge facing a non-pool cell.
         WallType::Water => {
-            water::spawn_water(commands, &assets.water, r, c, level);
-            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, level);
+            water::spawn_water(commands, &assets.water, r, c, placement);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
         }
         WallType::Lava => {
-            lava::spawn_lava(commands, &assets.lava, r, c, level);
-            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, level);
+            lava::spawn_lava(commands, &assets.lava, r, c, placement);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
         }
         // The fence needs the grid + overrides to bar only the edges facing a
         // passable cell or a water/lava pool.
         WallType::IronFence => {
-            iron_fence::spawn_iron_fence(commands, &assets.iron_fence, grid, cell_entities, config, r, c, level)
+            iron_fence::spawn_iron_fence(commands, &assets.iron_fence, grid, cell_entities, config, r, c, placement)
         }
         WallType::Brick | WallType::DressedStone | WallType::Wood | WallType::Cobblestone => {}
     }

@@ -13,7 +13,7 @@ pub(crate) mod ghost;
 pub(crate) mod goblin;
 
 use crate::state::{EnemyType, GameConfig, GameState};
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -28,10 +28,11 @@ pub(crate) struct EnemyMarker {
     /// `state.game.enemies()` each frame.
     #[allow(dead_code)]
     pub(crate) spawn_cell: (usize, usize),
-    /// Run level this enemy sits on. [`enemy_animation_system`] rewrites the
-    /// rig's absolute Y each frame from a per-type resting height, so it must
-    /// re-apply the level offset to keep the enemy on its stacked floor.
-    pub(crate) level: usize,
+    /// Where this enemy's level sits in world space. [`enemy_animation_system`]
+    /// recomputes the rig's absolute position each frame from its `(row, col)`,
+    /// so it re-applies this placement's X/Z centring + Y lift to keep the enemy
+    /// on its stacked, centred floor.
+    pub(crate) placement: LevelPlacement,
 }
 
 /// Composite enemy assets. One sub-struct per rig variant.
@@ -62,14 +63,14 @@ pub(crate) fn spawn_enemy_for_cell(
     r: usize,
     c: usize,
     id: u32,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     if cell != 'E' {
         return;
     }
     match enemy_type {
-        EnemyType::Goblin => goblin::spawn_goblin(commands, &assets.goblin, r, c, id, level),
-        EnemyType::Ghost => ghost::spawn_ghost(commands, &assets.ghost, r, c, id, level),
+        EnemyType::Goblin => goblin::spawn_goblin(commands, &assets.goblin, r, c, id, placement),
+        EnemyType::Ghost => ghost::spawn_ghost(commands, &assets.ghost, r, c, id, placement),
     }
 }
 
@@ -109,9 +110,9 @@ pub(crate) fn enemy_animation_system(
         let from = world_pos_for(enemy.row, enemy.col);
         let to = world_pos_for(enemy.target_row, enemy.target_col);
         let interp = from.lerp(to, enemy.move_progress());
-        t.translation.x = interp.x;
-        t.translation.z = interp.z;
-        t.translation.y = world_y(marker.level, base_y) + bob;
+        t.translation.x = marker.placement.world_x(interp.x);
+        t.translation.z = marker.placement.world_z(interp.z);
+        t.translation.y = marker.placement.world_y(base_y) + bob;
         // Face the direction of travel — eyes (and teeth, when present)
         // are positioned on the rig's local +Z face, so rotating around Y
         // by the heading-angle aims them along the movement vector. A

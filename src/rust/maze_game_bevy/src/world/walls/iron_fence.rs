@@ -12,7 +12,7 @@
 use super::{can_be_looked_across, WALL_HEIGHT};
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameConfig;
-use crate::world::{world_y, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::CellEntity;
 use std::collections::HashMap;
@@ -113,14 +113,14 @@ pub(crate) fn spawn_iron_fence(
     config: &GameConfig,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let root = commands
         .spawn((
             IronFenceBars,
-            Transform::from_xyz(x, world_y(level, WALL_HEIGHT / 2.0), z),
+            Transform::from_xyz(x, placement.world_y(WALL_HEIGHT / 2.0), z),
             Visibility::default(),
         ))
         .id();

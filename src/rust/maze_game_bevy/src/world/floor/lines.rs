@@ -1,5 +1,5 @@
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{world_y, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -73,11 +73,11 @@ pub(crate) fn spawn_lines_for_cell(
     grid: &[Vec<char>],
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let line_y = world_y(level, LINE_Y);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let line_y = placement.world_y(LINE_Y);
 
     // Each shared edge is spawned once: always South + East; North/West only
     // when the neighbour in that direction is a wall or grid boundary.

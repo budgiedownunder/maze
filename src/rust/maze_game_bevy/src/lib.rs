@@ -10,8 +10,9 @@ mod world;
 
 pub use state::{
     DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
-    Landmarks, SkyType, TreasureStyle, WallType,
+    Landmarks, LayeredAlignment, SkyType, TreasureStyle, WallType,
 };
+pub use world::gallery::validate_demo_env;
 pub use world::{
     generate_level_maze_jsons, generate_maze_json, LevelDifficultyChange, MAX_LEVEL_COUNT,
 };
@@ -190,8 +191,15 @@ mod tests {
     /// first), supplied via the `PendingLevels` override so the multi-level
     /// rendering path can be exercised headlessly without the native env var.
     fn make_playing_app_with_levels(levels: &[&str]) -> App {
+        make_playing_app_with_levels_and_config(levels, GameConfig::default())
+    }
+
+    /// As [`make_playing_app_with_levels`] but with a custom `GameConfig` (e.g. a
+    /// `layered_alignment`), so the alignment-dependent rendering can be checked.
+    fn make_playing_app_with_levels_and_config(levels: &[&str], config: GameConfig) -> App {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
         app.insert_resource(crate::state::PendingLevels(
             levels.iter().map(|s| s.to_string()).collect(),
         ));
@@ -622,6 +630,43 @@ mod tests {
             orbs[0] > crate::world::LEVEL_HEIGHT,
             "the orb rides the upper level, a full LEVEL_HEIGHT up — got y = {}",
             orbs[0],
+        );
+    }
+
+    #[test]
+    fn centre_alignment_shifts_a_smaller_upper_level_in_x_relative_to_edge() {
+        use crate::state::LayeredAlignment;
+        // A 1×9 bottom level + a 1×5 upper level (a smaller grid). Under `Edge`
+        // the upper level's floor sits at the origin corner; under `Centre` it
+        // shifts in by (9-5)/2 = 2 cells, so the whole demo reads as a centred
+        // stack — and, crucially, the geometry honours the configured alignment.
+        let l0 = r#"{"grid":[["S"," "," "," "," "," "," "," ","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," "," "," ","F"]]}"#;
+
+        // Minimum X of the upper level's floor tiles (those a `LEVEL_HEIGHT` up).
+        fn upper_floor_min_x(app: &mut App) -> f32 {
+            let mut query = app.world_mut().query::<(&FloorCell, &Transform)>();
+            query
+                .iter(app.world())
+                .map(|(_, t)| t.translation)
+                .filter(|p| p.y > crate::world::LEVEL_HEIGHT / 2.0)
+                .map(|p| p.x)
+                .fold(f32::INFINITY, f32::min)
+        }
+
+        let mut edge = make_playing_app_with_levels_and_config(
+            &[l0, l1],
+            GameConfig { layered_alignment: LayeredAlignment::Edge, ..GameConfig::default() },
+        );
+        let mut centre = make_playing_app_with_levels_and_config(
+            &[l0, l1],
+            GameConfig { layered_alignment: LayeredAlignment::Centre, ..GameConfig::default() },
+        );
+
+        let shift = upper_floor_min_x(&mut centre) - upper_floor_min_x(&mut edge);
+        assert!(
+            (shift - 2.0 * crate::world::CELL_SIZE).abs() < 1e-3,
+            "Centre should shift the 1×5 level in by 2 cells vs Edge, got {shift}",
         );
     }
 

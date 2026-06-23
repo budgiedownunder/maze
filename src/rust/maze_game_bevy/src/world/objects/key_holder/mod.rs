@@ -21,7 +21,7 @@
 
 use super::common::{self, CommonObjectAssets};
 use crate::state::KeyHolderStyle;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{world_y, LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
@@ -144,13 +144,14 @@ pub(crate) fn spawn_key_holder_for_cell(
     cell: char,
     r: usize,
     c: usize,
-    level: usize,
+    placement: LevelPlacement,
 ) {
     if cell != 'K' {
         return;
     }
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let level = placement.level;
 
     // Holder root — owns the floating key (added below), positioned at the cell
     // floor (lifted to its level) so the collection flourish can rise it from the
@@ -158,7 +159,7 @@ pub(crate) fn spawn_key_holder_for_cell(
     let holder = commands
         .spawn((
             KeyMarker { cell: (r, c), level },
-            Transform::from_xyz(x, world_y(level, 0.0), z),
+            Transform::from_xyz(x, placement.world_y(0.0), z),
             Visibility::default(),
         ))
         .id();

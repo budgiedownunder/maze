@@ -1,7 +1,7 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameState;
-use crate::world::{world_y, CELL_SIZE};
+use crate::world::{world_y, LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -58,10 +58,13 @@ pub(crate) fn build_orb_assets(
     OrbAssets { mesh, mat }
 }
 
-pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c: usize, level: usize) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
-    let y = world_y(level, ORB_BASE_Y);
+pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c: usize, placement: LevelPlacement) {
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let y = placement.world_y(ORB_BASE_Y);
+    // Only the level is stored: `orb_system` re-derives the bob Y from it; the
+    // orb's X/Z (offset above) are fixed for the level's lifetime.
+    let level = placement.level;
     match (assets.mesh.clone(), assets.mat.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
