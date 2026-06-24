@@ -21,7 +21,7 @@
 
 use super::common::{self, CommonObjectAssets};
 use crate::state::KeyHolderStyle;
-use crate::world::{world_y, LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
@@ -76,11 +76,11 @@ const SPARK_EMISSIVE: LinearRgba = LinearRgba::new(1.6, 1.35, 0.7, 1.0);
 #[derive(Component)]
 pub(crate) struct KeyMarker {
     pub(crate) cell: (usize, usize),
-    /// Run level this holder sits on. The holder root rests at this level's
-    /// floor and [`key_collection_system`] rewrites its absolute Y during the
-    /// rise flourish, so it must re-apply the level offset. (The floating key is
-    /// a child in the holder's local frame, so its idle bob needs no offset.)
-    pub(crate) level: usize,
+    /// This holder's level floor Y (`base_level_y[level]`). The holder root rests
+    /// at the floor and [`key_collection_system`] rewrites its absolute Y during
+    /// the rise flourish, so it must re-apply this base. (The floating key is a
+    /// child in the holder's local frame, so its idle bob needs no offset.)
+    pub(crate) base_y: f32,
 }
 
 /// Tags a key holder whose key was just auto-collected. [`key_collection_system`]
@@ -151,14 +151,14 @@ pub(crate) fn spawn_key_holder_for_cell(
     }
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
-    let level = placement.level;
+    let base_y = placement.base_y();
 
     // Holder root — owns the floating key (added below), positioned at the cell
     // floor (lifted to its level) so the collection flourish can rise it from the
     // level's floor.
     let holder = commands
         .spawn((
-            KeyMarker { cell: (r, c), level },
+            KeyMarker { cell: (r, c), base_y },
             Transform::from_xyz(x, placement.world_y(0.0), z),
             Visibility::default(),
         ))
@@ -170,12 +170,12 @@ pub(crate) fn spawn_key_holder_for_cell(
     let base_top = match style {
         KeyHolderStyle::Pedestal => {
             let h = common::pillar::KEYHOLDER_HEIGHT_SCALE;
-            common::pillar::spawn_pillar(commands, common_assets, x, z, h, level);
+            common::pillar::spawn_pillar(commands, common_assets, x, z, h, base_y);
             common::pillar::TOP_Y * h
         }
         KeyHolderStyle::Chest => {
             let yaw = common::yaw_toward_open_neighbour(grid, r, c);
-            common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Closed, level);
+            common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Closed, base_y);
             common::chest::TOP_Y
         }
         KeyHolderStyle::FloatingKey => 0.0, // key floats alone, no base
@@ -319,7 +319,7 @@ pub(crate) fn key_collection_system(
         }
         // Ease-out so the key leaps up quickly then settles into nothing.
         let eased = 1.0 - (1.0 - progress) * (1.0 - progress);
-        transform.translation.y = world_y(marker.level, KEY_COLLECT_RISE * eased);
+        transform.translation.y = marker.base_y + KEY_COLLECT_RISE * eased;
         transform.scale = Vec3::splat(1.0 - eased);
         transform.rotate_y(dt * KEY_COLLECT_SPIN_RATE);
     }

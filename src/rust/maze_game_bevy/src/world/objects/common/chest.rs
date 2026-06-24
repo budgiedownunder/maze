@@ -1,5 +1,4 @@
 use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
-use crate::world::world_y;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -241,10 +240,10 @@ fn hinge_open(local: Transform) -> Transform {
 /// Every chest is free-standing: the dead-end / key-holder chests are
 /// landmarks, and the treasure chest stays behind (open, emptied) once its
 /// contents are collected — only the loot (a separate entity) is whisked away.
-fn world_xform(x: f32, z: f32, yaw: f32, level: usize, local: Transform) -> Transform {
+fn world_xform(x: f32, z: f32, yaw: f32, base_y: f32, local: Transform) -> Transform {
     let yaw_rot = Quat::from_rotation_y(yaw);
     Transform {
-        translation: Vec3::new(x, world_y(level, 0.0), z) + yaw_rot * local.translation,
+        translation: Vec3::new(x, base_y, z) + yaw_rot * local.translation,
         rotation: yaw_rot * local.rotation,
         scale: local.scale,
     }
@@ -260,16 +259,16 @@ pub(crate) fn spawn_chest(
     z: f32,
     yaw: f32,
     lid: ChestLid,
-    level: usize,
+    base_y: f32,
 ) {
     let outline = || assets.outline_mat.clone();
     let cuboid = || assets.cuboid.clone();
     // Body / hinge / straps / lock stay anchored to the trunk; the lid + lid
     // bindings additionally swing open when `lid == Open`.
-    let place = |local: Transform| world_xform(x, z, yaw, level, local);
+    let place = |local: Transform| world_xform(x, z, yaw, base_y, local);
     let lid_place = |local: Transform| {
         let l = if lid == ChestLid::Open { hinge_open(local) } else { local };
-        world_xform(x, z, yaw, level, l)
+        world_xform(x, z, yaw, base_y, l)
     };
 
     // Hollow trunk: a floor slab + four wall panels instead of a solid block, so

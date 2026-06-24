@@ -50,7 +50,7 @@ pub(crate) mod silver;
 
 use super::common::{self, CommonObjectAssets};
 use crate::state::TreasureStyle;
-use crate::world::{world_y, LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -209,10 +209,10 @@ fn baked_handle(
 #[derive(Component)]
 pub(crate) struct TreasureMarker {
     pub(crate) cell: (usize, usize),
-    /// Run level this chest sits on. The collectible loot root rests at this
-    /// level's floor and [`treasure_collection_system`] rewrites its absolute Y
-    /// during the rise flourish, so it must re-apply the level offset.
-    pub(crate) level: usize,
+    /// This chest's level floor Y (`base_level_y[level]`). The collectible loot
+    /// root rests at the floor and [`treasure_collection_system`] rewrites its
+    /// absolute Y during the rise flourish, so it must re-apply this base.
+    pub(crate) base_y: f32,
 }
 
 /// Tags each baked loot mesh (the coin pile, or one gem colour group). Lets the
@@ -436,19 +436,19 @@ pub(crate) fn spawn_treasure_for_cell(
     }
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
-    let level = placement.level;
+    let base_y = placement.base_y();
     let yaw = common::yaw_toward_open_neighbour(grid, r, c);
 
     // The open chest stands free so it stays behind, emptied, after collection.
     // It takes the (already offset) world `x`/`z` and the level for its own Y.
-    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, level);
+    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, base_y);
 
     // Collectible loot root — positioned + yawed at the cell so its children use
     // the same local frame as the chest interior. The flourish rises/shrinks
     // this root, leaving the chest.
     let root = commands
         .spawn((
-            TreasureMarker { cell: (r, c), level },
+            TreasureMarker { cell: (r, c), base_y },
             Transform::from_xyz(x, placement.world_y(0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
             Visibility::default(),
         ))
@@ -645,7 +645,7 @@ pub(crate) fn treasure_collection_system(
         }
         // Ease-out so the loot leaps up quickly then settles into nothing.
         let eased = 1.0 - (1.0 - progress) * (1.0 - progress);
-        transform.translation.y = world_y(marker.level, COLLECT_RISE * eased);
+        transform.translation.y = marker.base_y + COLLECT_RISE * eased;
         transform.scale = Vec3::splat(1.0 - eased);
         transform.rotate_y(dt * COLLECT_SPIN_RATE);
     }

@@ -13,7 +13,7 @@ use bevy::prelude::*;
 /// Floor-tile mesh thickness (units, vertical extent). Thin enough to
 /// look flat from the player's eye height without z-fighting the grid
 /// lines that sit just above it.
-const FLOOR_THICKNESS: f32 = 0.01;
+pub(crate) const FLOOR_THICKNESS: f32 = 0.01;
 
 /// Fraction of a start / finish tile's thickness given to a plain-stone underside
 /// cap. The cell then reads as ordinary floor from the level below — so an open

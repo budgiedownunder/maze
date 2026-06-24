@@ -1,7 +1,7 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameState;
-use crate::world::{world_y, LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -35,7 +35,7 @@ const ORB_LIGHT_RADIUS: f32 = 0.35;
 /// keeps it at the stacked Y offset rather than snapping back to level 0.
 #[derive(Component)]
 pub(crate) struct FinishOrb {
-    level: usize,
+    base_y: f32,
 }
 
 pub(crate) struct OrbAssets {
@@ -62,20 +62,20 @@ pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let y = placement.world_y(ORB_BASE_Y);
-    // Only the level is stored: `orb_system` re-derives the bob Y from it; the
-    // orb's X/Z (offset above) are fixed for the level's lifetime.
-    let level = placement.level;
+    // Only the level's floor base is stored: `orb_system` re-derives the bob Y
+    // from it; the orb's X/Z (offset above) are fixed for the level's lifetime.
+    let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.mat.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
-                FinishOrb { level },
+                FinishOrb { base_y },
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
                 Transform::from_xyz(x, y, z),
             ));
         }
         _ => {
-            commands.spawn((FinishOrb { level }, Transform::from_xyz(x, y, z)));
+            commands.spawn((FinishOrb { base_y }, Transform::from_xyz(x, y, z)));
         }
     }
     commands.spawn((
@@ -109,6 +109,6 @@ pub(crate) fn orb_system(
         return;
     }
     t.translation.y =
-        world_y(finish_orb.level, ORB_BASE_Y) + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
+        finish_orb.base_y + ORB_BASE_Y + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
     t.rotate_y(time.delta_secs() * SPIN_RATE);
 }

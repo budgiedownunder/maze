@@ -29,12 +29,36 @@ const EYE_HEIGHT: f32 = 1.7;
 /// below — on the ceiling for a roofed level. Level 0 is the bottom.
 pub(crate) const LEVEL_HEIGHT: f32 = crate::world::walls::WALL_HEIGHT;
 
-/// Maps a level-local Y coordinate into world space for the given level index:
-/// `y + level * LEVEL_HEIGHT`. Used everywhere a level's geometry sets a Y — at
-/// spawn and in the per-frame animation systems — so every level is built the
-/// same way, just lifted by its offset. Level 0 is the identity.
+/// The gapless world Y of a level's floor: `level * LEVEL_HEIGHT`. The actual
+/// base used by the renderer is the precomputed `base_level_y` table (see
+/// [`level_bases`]), which adds a per-level gap below any level that carries
+/// pools; this is the no-gap fallback used for single-level games and tests.
 pub(crate) fn world_y(level: usize, y: f32) -> f32 {
     y + level as f32 * LEVEL_HEIGHT
+}
+
+/// Vertical clearance reserved **below** a level's floor when that level carries a
+/// recessed pool (water / lava). A pool's surface, basin and bobbing rocks all sit
+/// below the floor plane; lifting the whole level by this much keeps that
+/// subterranean geometry above the level below's wall-top (where the cell's
+/// underside is sealed), so nothing pokes through into the level beneath. Covers
+/// the deepest case (lava rocks) plus a safety margin.
+pub(crate) const POOL_GAP: f32 = 0.7;
+
+/// Precomputes each level's world-space floor Y in one pass (the `base_level_y`
+/// table). `world(0) = 0`; `world(L) = world(L-1) + LEVEL_HEIGHT + gap(L)`, where
+/// `gap(L)` is [`POOL_GAP`] when level `L` carries a pool and `0` otherwise — so
+/// the stack only grows where a pool's subterranean geometry needs the clearance.
+pub(crate) fn level_bases(level_has_pool: &[bool]) -> Vec<f32> {
+    let mut bases = Vec::with_capacity(level_has_pool.len());
+    let mut y = 0.0;
+    for (level, &has_pool) in level_has_pool.iter().enumerate() {
+        if level > 0 {
+            y += LEVEL_HEIGHT + if has_pool { POOL_GAP } else { 0.0 };
+        }
+        bases.push(y);
+    }
+    bases
 }
 
 /// Where a level sits in world space: its index (for the Y lift) plus the X/Z
@@ -47,15 +71,20 @@ pub(crate) fn world_y(level: usize, y: f32) -> f32 {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LevelPlacement {
     pub(crate) level: usize,
+    /// This level's world-space floor Y — the precomputed `base_level_y[level]`
+    /// (see [`level_bases`]). Replaces the bare `level * LEVEL_HEIGHT` lift so a
+    /// pool-bearing level can be raised to make room for its sunken pool.
+    base_y: f32,
     offset_x: f32,
     offset_z: f32,
 }
 
 impl LevelPlacement {
     /// The placement for `level`, whose grid is `rows × cols`, stacked over a
-    /// bottom level of `base_rows × base_cols` under `alignment`. `Edge` keeps the
-    /// X/Z offset at zero (corner-aligned); `Centre` shifts a smaller grid in by
-    /// half the size difference so it sits centred over the bottom. (`x` maps to
+    /// bottom level of `base_rows × base_cols` under `alignment`, with its floor at
+    /// `base_y` (the precomputed [`level_bases`] entry). `Edge` keeps the X/Z
+    /// offset at zero (corner-aligned); `Centre` shifts a smaller grid in by half
+    /// the size difference so it sits centred over the bottom. (`x` maps to
     /// columns, `z` to rows.)
     pub(crate) fn for_level(
         level: usize,
@@ -64,6 +93,7 @@ impl LevelPlacement {
         base_rows: usize,
         base_cols: usize,
         alignment: LayeredAlignment,
+        base_y: f32,
     ) -> Self {
         let (offset_x, offset_z) = match alignment {
             LayeredAlignment::Edge => (0.0, 0.0),
@@ -74,6 +104,7 @@ impl LevelPlacement {
         };
         Self {
             level,
+            base_y,
             offset_x,
             offset_z,
         }
@@ -84,9 +115,14 @@ impl LevelPlacement {
         x + self.offset_x
     }
 
-    /// Maps a cell-local Y into world space for this level (the `LEVEL_HEIGHT` lift).
+    /// Maps a cell-local Y into world space for this level: `base_level_y[level] + y`.
     pub(crate) fn world_y(&self, y: f32) -> f32 {
-        world_y(self.level, y)
+        self.base_y + y
+    }
+
+    /// This level's world-space floor Y (`base_level_y[level]`).
+    pub(crate) fn base_y(&self) -> f32 {
+        self.base_y
     }
 
     /// Maps a cell-local Z (row centre) into world space for this level.
@@ -97,7 +133,7 @@ impl LevelPlacement {
     /// World-space offset added to a ground-level camera position to lift + centre
     /// it onto this level (X/Z centring + the level's Y).
     pub(crate) fn camera_offset(&self) -> Vec3 {
-        Vec3::new(self.offset_x, world_y(self.level, 0.0), self.offset_z)
+        Vec3::new(self.offset_x, self.base_y, self.offset_z)
     }
 }
 
@@ -314,6 +350,7 @@ pub(crate) fn advance_to_next_level(
         run.base_dims.0,
         run.base_dims.1,
         config.layered_alignment,
+        run.level_bases.get(next_index).copied().unwrap_or(next_index as f32 * LEVEL_HEIGHT),
     );
     state.camera_offset = placement.camera_offset();
     run.current_level = next_index;
@@ -516,6 +553,10 @@ fn spawn_level(
     // True when this level's start cell sits above a ladder finish on the level
     // below — its floor becomes an (open) hatch the climb emerges through.
     hatch_at_start: bool,
+    // How far this level was lifted to make room for its sunken pools (0 when it
+    // carries none, or for the bottom level). When non-zero, each cell's underside
+    // is sealed `gap` below the floor so the level below sees a clean ceiling.
+    gap: f32,
 ) {
     // Sparkle rays each treasure chest gets — the same count for every chest in
     // this level (so they look uniform), with the total bounded for treasure-dense
@@ -532,6 +573,22 @@ fn spawn_level(
     for (r, row) in grid.iter().enumerate() {
         for (c, &cell) in row.iter().enumerate() {
             let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
+            // Seal this cell's underside when the level was lifted for its pools:
+            // a non-pool cell gets a solid stone block filling the gap below its
+            // floor; a pool cell gets a thin cap at the gap bottom (its sunken
+            // basin sits above). Either way, from the level below every cell shows
+            // one clean stone underside at the same Y, never the pool beneath.
+            if gap > 0.0 {
+                spawn_underside_seal(
+                    commands,
+                    assets.floor,
+                    r,
+                    c,
+                    placement,
+                    gap,
+                    walls::pool_type_at(grid, cell_entities, config, r, c).is_some(),
+                );
+            }
             if cell == 'W' {
                 // A solid wall renders nothing itself — the adjacent open cell
                 // draws the panel. A non-occluding wall (water / lava / iron
@@ -569,6 +626,58 @@ fn spawn_level(
             roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement);
         }
     }
+}
+
+/// Marker on a cell's underside seal — the stone block / cap that closes the
+/// vertical gap a pool-bearing level was lifted by, so the level below sees a
+/// clean ceiling instead of the sunken pool. Tagged so the rendering tests can
+/// count them.
+#[derive(Component)]
+pub(crate) struct UndersideSeal;
+
+/// Thin cap height under a pool cell's basin (the rest of the gap is open above
+/// it, holding the recessed surface + rocks).
+const UNDERSIDE_CAP_THICKNESS: f32 = 0.06;
+
+/// Seals a cell's underside on a level lifted by `gap` to hold its pools. A
+/// non-pool cell gets a solid stone block filling the whole gap below its floor
+/// (so there's no hollow at an open edge); a pool cell gets a thin cap at the gap
+/// bottom, its recessed basin sitting in the space above. Both present the same
+/// flat stone underside at the gap bottom to the level below, so a pool cell reads
+/// no differently from any other when viewed from beneath.
+fn spawn_underside_seal(
+    commands: &mut Commands,
+    floor: &floor::FloorAssets,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+    gap: f32,
+    is_pool: bool,
+) {
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let gap_bottom = placement.base_y() - gap;
+    let top = if is_pool {
+        gap_bottom + UNDERSIDE_CAP_THICKNESS
+    } else {
+        placement.base_y()
+    };
+    let height = (top - gap_bottom).max(UNDERSIDE_CAP_THICKNESS);
+    let centre_y = gap_bottom + height / 2.0;
+    match (floor.floor_mesh.clone(), floor.tile_mat.clone()) {
+        (Some(mesh), Some(mat)) => {
+            commands.spawn((
+                UndersideSeal,
+                Transform::from_xyz(x, centre_y, z)
+                    .with_scale(Vec3::new(1.0, height / floor::FLOOR_THICKNESS, 1.0)),
+                Mesh3d(mesh),
+                MeshMaterial3d(mat),
+            ));
+        }
+        _ => {
+            commands.spawn((UndersideSeal, Transform::from_xyz(x, centre_y, z)));
+        }
+    };
 }
 
 /// Hand-built level set for the `MAZE_DEMO=multilevel_edge` / `multilevel_centre`
@@ -859,6 +968,30 @@ pub(crate) fn spawn_world(
     let base_dims = (grid.len(), grid.first().map_or(0, |row| row.len()));
     let level_count = levels.len();
 
+    // Precompute each level's world-space floor Y (the `base_level_y` table) before
+    // building any geometry: a level that carries a sunken pool (water / lava) is
+    // lifted by `POOL_GAP` so its recessed surface + bobbing rocks clear the
+    // wall-top of the level below — where each cell's underside is sealed — instead
+    // of poking through into it. A pool-free level adds nothing (sits on the walls
+    // below as before). `level_bases` accumulates this in one pass.
+    let level_has_pool: Vec<bool> = levels
+        .iter()
+        .enumerate()
+        .map(|(level, json)| {
+            let (lgrid, lcells) = if level == 0 {
+                (grid.clone(), cell_entities.clone())
+            } else {
+                let g = MazeGame::from_json(json)
+                    .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+                (g.grid().to_vec(), g.cell_entities().clone())
+            };
+            lgrid.iter().enumerate().any(|(r, row)| {
+                (0..row.len()).any(|c| walls::pool_type_at(&lgrid, &lcells, &config, r, c).is_some())
+            })
+        })
+        .collect();
+    let bases = level_bases(&level_has_pool);
+
     // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
     // only when the next level's start sits directly above it (same world XZ) so
     // the climb lands on real floor; otherwise the finish falls back to a portal,
@@ -897,6 +1030,7 @@ pub(crate) fn spawn_world(
                 base_dims.0,
                 base_dims.1,
                 config.layered_alignment,
+                bases[level],
             );
             (
                 cell_world_xz(&lgrid, 'S', placement),
@@ -930,6 +1064,11 @@ pub(crate) fn spawn_world(
 
     for (level, level_json) in levels.iter().enumerate() {
         let is_final = level + 1 == level_count;
+        // The vertical gap this level was lifted by — non-zero only for an upper
+        // level that carries a pool. Where non-zero, each cell's underside is
+        // sealed `gap` below the floor so the level beneath sees a clean ceiling
+        // rather than the sunken pool. Level 0 is never lifted (nothing below it).
+        let gap = if level > 0 && level_has_pool[level] { POOL_GAP } else { 0.0 };
         // A ladder needs the next level's start directly above this level's finish.
         let ladder_allowed = !is_final
             && match (
@@ -964,8 +1103,9 @@ pub(crate) fn spawn_world(
                 base_dims.0,
                 base_dims.1,
                 config.layered_alignment,
+                bases[0],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start, gap);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -980,8 +1120,9 @@ pub(crate) fn spawn_world(
                 base_dims.0,
                 base_dims.1,
                 config.layered_alignment,
+                bases[level],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start, gap);
         }
     }
 
@@ -997,6 +1138,7 @@ pub(crate) fn spawn_world(
             base_dims.0,
             base_dims.1,
             config.layered_alignment,
+            bases[0],
         );
         for (rig, r, c) in gallery::finish_rig_cells(focus) {
             match rig {
@@ -1046,6 +1188,9 @@ pub(crate) fn spawn_world(
     // `MultiLevelRun` holds every level's JSON plus the per-level totals + the
     // level index for the indicator and the win/transition decision.
     let mut run = MultiLevelRun::new(levels);
+    // Hand the run the pool-gap-aware floor table computed above, so a level
+    // transition lifts the camera by the same base the geometry was built with.
+    run.level_bases = bases;
     // The bag-carry policy comes from the session config (the server's
     // `levels.reset_bag`); single-level games never transition, so it's inert.
     run.reset_bag_between_levels = config.reset_bag_between_levels;
@@ -1327,20 +1472,20 @@ mod multi_level_tests {
         use bevy::prelude::Vec3;
 
         // Edge: never any X/Z offset, just the Y lift.
-        let edge = LevelPlacement::for_level(2, 5, 5, 9, 9, LayeredAlignment::Edge);
+        let edge = LevelPlacement::for_level(2, 5, 5, 9, 9, LayeredAlignment::Edge, 2.0 * LEVEL_HEIGHT);
         assert_eq!(edge.world_x(1.0), 1.0);
         assert_eq!(edge.world_z(1.0), 1.0);
         assert_eq!(edge.camera_offset(), Vec3::new(0.0, 2.0 * LEVEL_HEIGHT, 0.0));
 
         // Centre: a 5×5 grid centred in a 9×9 base shifts in by (9-5)/2 = 2 cells.
-        let centre = LevelPlacement::for_level(1, 5, 5, 9, 9, LayeredAlignment::Centre);
+        let centre = LevelPlacement::for_level(1, 5, 5, 9, 9, LayeredAlignment::Centre, LEVEL_HEIGHT);
         let shift = 2.0 * CELL_SIZE;
         assert_eq!(centre.world_x(1.0), 1.0 + shift);
         assert_eq!(centre.world_z(1.0), 1.0 + shift);
         assert_eq!(centre.camera_offset(), Vec3::new(shift, LEVEL_HEIGHT, shift));
 
         // The base level (same dims) has zero X/Z offset under either mode.
-        let base = LevelPlacement::for_level(0, 9, 9, 9, 9, LayeredAlignment::Centre);
+        let base = LevelPlacement::for_level(0, 9, 9, 9, 9, LayeredAlignment::Centre, 0.0);
         assert_eq!(base.camera_offset(), Vec3::ZERO);
     }
 

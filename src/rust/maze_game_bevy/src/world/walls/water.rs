@@ -9,7 +9,7 @@
 //! gently undulates the surface and scrolls a tileable ripple texture across it.
 
 use super::rim::RECESS_DEPTH;
-use crate::world::{world_y, LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -61,11 +61,11 @@ const RIPPLE_AMP: f32 = 0.24;
 
 /// Marker on a water pool surface. Spawned per non-occluding water `'W'` cell;
 /// [`water_animation_system`] queries it to undulate the surface. The stored
-/// `level` is the run level the pool belongs to, so the animation can keep the
-/// surface at its stacked Y offset rather than snapping back to level 0.
+/// `base_y` is the pool's level floor Y (`base_level_y[level]`), so the animation
+/// keeps the surface at its stacked — possibly pool-gap-lifted — height.
 #[derive(Component)]
 pub(crate) struct WaterSurface {
-    level: usize,
+    base_y: f32,
 }
 
 pub(crate) struct WaterAssets {
@@ -114,20 +114,20 @@ pub(crate) fn spawn_water(
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let y = placement.world_y(SURFACE_Y);
-    // Only the level is stored: the animation re-derives the resting Y from it,
-    // and the surface's X/Z (offset above) are fixed for the level's lifetime.
-    let level = placement.level;
+    // Only the level's floor base is stored: the animation re-derives the resting
+    // Y from it, and the surface's X/Z (offset above) are fixed for its lifetime.
+    let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
-                WaterSurface { level },
+                WaterSurface { base_y },
                 Transform::from_xyz(x, y, z),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((WaterSurface { level }, Transform::from_xyz(x, y, z)));
+            commands.spawn((WaterSurface { base_y }, Transform::from_xyz(x, y, z)));
         }
     }
 }
@@ -148,7 +148,7 @@ pub(crate) fn water_animation_system(
     let t = time.elapsed_secs();
     for (mut tr, surface) in surfaces.iter_mut() {
         let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
-        tr.translation.y = world_y(surface.level, SURFACE_Y) + dy;
+        tr.translation.y = surface.base_y + SURFACE_Y + dy;
         tr.rotation = rot;
     }
     // Drift the ripple texture. The surfaces share one material, so updating it

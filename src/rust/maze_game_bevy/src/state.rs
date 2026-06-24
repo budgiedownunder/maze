@@ -202,6 +202,11 @@ pub(crate) struct MultiLevelRun {
     /// upper levels' `Centre` X/Z offsets are measured against. Used on a level
     /// transition to compute the new level's camera placement.
     pub(crate) base_dims: (usize, usize),
+    /// Each level's world-space floor Y (the `base_level_y` table). Set by
+    /// `spawn_world` to the pool-gap-aware bases; defaults to the gapless
+    /// `level * LEVEL_HEIGHT` so a run built outside `spawn_world` (tests) still
+    /// has a usable table. Read on a level transition for the camera placement.
+    pub(crate) level_bases: Vec<f32>,
 }
 
 impl MultiLevelRun {
@@ -219,6 +224,9 @@ impl MultiLevelRun {
                 (grid.len(), grid.first().map_or(0, |row| row.len()))
             })
             .unwrap_or((0, 0));
+        let level_bases = (0..levels.len())
+            .map(|level| crate::world::world_y(level, 0.0))
+            .collect();
         Self {
             levels,
             current_level: 0,
@@ -226,6 +234,7 @@ impl MultiLevelRun {
             carried_treasure: Vec::new(),
             reset_bag_between_levels: true,
             base_dims,
+            level_bases,
         }
     }
 

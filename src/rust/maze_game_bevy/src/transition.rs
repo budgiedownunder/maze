@@ -115,6 +115,10 @@ fn level_placement(
         run.base_dims.0,
         run.base_dims.1,
         config.layered_alignment,
+        run.level_bases
+            .get(level)
+            .copied()
+            .unwrap_or(level as f32 * crate::world::LEVEL_HEIGHT),
     )
 }
 

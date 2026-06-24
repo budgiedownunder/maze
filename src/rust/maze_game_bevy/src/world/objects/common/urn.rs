@@ -1,5 +1,4 @@
 use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
-use crate::world::world_y;
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -76,11 +75,11 @@ pub(crate) fn build_dark_terracotta_material(
     build_emissive_material(materials, BAND_EMISSIVE)
 }
 
-pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, level: usize) {
+pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32) {
     let body = assets.urn_mat.clone();
     let band = assets.dark_terracotta_mat.clone();
-    // Lift each stacked-cylinder part to its run level; level 0 is the identity.
-    let pos = |y: f32| Vec3::new(x, world_y(level, y), z);
+    // Lift each stacked-cylinder part to its run level's floor base; level 0 is `0.0`.
+    let pos = |y: f32| Vec3::new(x, base_y + y, z);
     // The urn deliberately skips the inverted-hull outline: the stacked
     // cylinders' vertical silhouettes are slightly offset from each
     // other in radius, and a black outline at each layer's edge fails

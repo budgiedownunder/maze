@@ -1,6 +1,5 @@
 use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::world_y;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -86,9 +85,9 @@ pub(crate) fn flicker_factor(t: f32) -> f32 {
     1.0 + FLICKER_AMPLITUDE * phase * 0.5
 }
 
-pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, level: usize) {
-    // Lift each part to its run level; level 0 is the identity.
-    let pos = |y: f32| Vec3::new(x, world_y(level, y), z);
+pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32) {
+    // Lift each part to its run level's floor base; level 0 is `0.0`.
+    let pos = |y: f32| Vec3::new(x, base_y + y, z);
     // Stone column — steady, no flicker.
     spawn_with_outline(
         commands,

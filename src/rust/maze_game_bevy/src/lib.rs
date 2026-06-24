@@ -1768,6 +1768,51 @@ mod tests {
     }
 
     #[test]
+    fn an_upper_pool_level_is_lifted_and_its_underside_sealed() {
+        use crate::world::{UndersideSeal, LEVEL_HEIGHT, POOL_GAP};
+
+        // A pool-free two-level run is NOT lifted: no underside seals.
+        let plain0 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let plain1 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[plain0, plain1]);
+        assert_eq!(
+            app.world_mut().query::<&UndersideSeal>().iter(app.world()).count(),
+            0,
+            "a pool-free stack needs no underside seal and isn't lifted",
+        );
+
+        // Level 1 carries a lava pool → that level is lifted by POOL_GAP and every
+        // cell's underside is sealed, so from below the pool reads like any cell.
+        let l0 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        assert!(
+            app.world_mut().query::<&UndersideSeal>().iter(app.world()).count() > 0,
+            "the pool-bearing upper level seals its cells' undersides",
+        );
+
+        // The lava surface rests at the LIFTED level-1 floor (LEVEL_HEIGHT +
+        // POOL_GAP), recessed RECESS_DEPTH (0.3) below it — so its basin sits well
+        // above the level-0 wall-top (LEVEL_HEIGHT), not poking into the level below.
+        let surf_y = app
+            .world_mut()
+            .query::<(&LavaSurface, &Transform)>()
+            .iter(app.world())
+            .map(|(_, t)| t.translation.y)
+            .next()
+            .expect("a lava surface on the upper level");
+        let lifted_floor = LEVEL_HEIGHT + POOL_GAP;
+        assert!(
+            (surf_y - (lifted_floor - 0.3)).abs() < 0.15,
+            "lava surface {surf_y} should rest just below the lifted floor {lifted_floor}",
+        );
+        assert!(
+            surf_y > LEVEL_HEIGHT,
+            "the pool surface must sit above the level-0 wall-top ({LEVEL_HEIGHT})",
+        );
+    }
+
+    #[test]
     fn pool_rim_skirts_every_non_pool_edge() {
         // A lone water cell ringed by four passable cells gets a rim skirt on each
         // of its four edges (the recess wall up to floor level).

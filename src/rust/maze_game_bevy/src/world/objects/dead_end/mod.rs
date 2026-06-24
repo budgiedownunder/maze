@@ -60,14 +60,14 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     }
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
-    // The prop rigs take the (already offset) world `x`/`z` and the level for their
-    // own Y, so they don't each need the full placement.
-    let level = placement.level;
+    // The prop rigs take the (already offset) world `x`/`z` and the level's floor
+    // base for their own Y, so they don't each need the full placement.
+    let base_y = placement.base_y();
     let kind = dead_end_object_index(r, c, config.seed);
     match kind {
-        0 => common::brazier::spawn_brazier(commands, assets, x, z, level),
-        1 => common::urn::spawn_urn(commands, assets, x, z, level),
-        2 => common::pillar::spawn_pillar(commands, assets, x, z, 1.0, level),
+        0 => common::brazier::spawn_brazier(commands, assets, x, z, base_y),
+        1 => common::urn::spawn_urn(commands, assets, x, z, base_y),
+        2 => common::pillar::spawn_pillar(commands, assets, x, z, 1.0, base_y),
         _ => common::chest::spawn_chest(
             commands,
             assets,
@@ -75,7 +75,7 @@ pub(crate) fn spawn_dead_end_object_for_cell(
             z,
             common::yaw_toward_open_neighbour(grid, r, c),
             common::chest::ChestLid::Closed,
-            level,
+            base_y,
         ),
     }
     // Anchor entity tagging this cell as carrying a dead-end landmark.

@@ -12,7 +12,7 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{lcg, world_y, LevelPlacement, CELL_SIZE};
+use crate::world::{lcg, LevelPlacement, CELL_SIZE};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -93,19 +93,19 @@ const ROCK_EMISSIVE: LinearRgba = LinearRgba::new(0.06, 0.02, 0.0, 1.0);
 
 /// Marker on a lava pool surface. Spawned per non-occluding lava `'W'` cell;
 /// [`lava_animation_system`] queries it to bubble the surface. The stored
-/// `level` is the run level the pool belongs to, so the animation keeps the
-/// surface at its stacked Y offset rather than snapping back to level 0.
+/// `base_y` is the pool's level floor Y (`base_level_y[level]`), so the animation
+/// keeps the surface at its stacked — possibly pool-gap-lifted — height.
 #[derive(Component)]
 pub(crate) struct LavaSurface {
-    level: usize,
+    base_y: f32,
 }
 
 /// Marker on a dark rock bobbing on a lava surface. [`lava_animation_system`]
 /// raises and lowers it through the molten surface, phased by its world position.
-/// The stored `level` keeps the bob centred on the pool's stacked Y offset.
+/// The stored `base_y` keeps the bob centred on the pool's stacked floor Y.
 #[derive(Component)]
 pub(crate) struct LavaRock {
-    level: usize,
+    base_y: f32,
 }
 
 pub(crate) struct LavaAssets {
@@ -255,19 +255,19 @@ pub(crate) fn spawn_lava(
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let surface_y = placement.world_y(SURFACE_Y);
-    // The animations re-derive Y from the stored level; X/Z (offset above) are fixed.
-    let level = placement.level;
+    // The animations re-derive Y from the stored floor base; X/Z (offset above) are fixed.
+    let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
-                LavaSurface { level },
+                LavaSurface { base_y },
                 Transform::from_xyz(x, surface_y, z),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((LavaSurface { level }, Transform::from_xyz(x, surface_y, z)));
+            commands.spawn((LavaSurface { base_y }, Transform::from_xyz(x, surface_y, z)));
         }
     }
     for (i, &(dx, dz)) in ROCK_OFFSETS.iter().enumerate() {
@@ -278,10 +278,10 @@ pub(crate) fn spawn_lava(
         let transform = Transform::from_translation(pos).with_scale(ROCK_SCALES[i]);
         match (assets.rock_mesh.clone(), assets.rock_material.clone()) {
             (Some(mesh), Some(mat)) => {
-                commands.spawn((LavaRock { level }, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
+                commands.spawn((LavaRock { base_y }, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
             }
             _ => {
-                commands.spawn((LavaRock { level }, transform));
+                commands.spawn((LavaRock { base_y }, transform));
             }
         };
     }
@@ -301,13 +301,13 @@ pub(crate) fn lava_animation_system(
     let t = time.elapsed_secs();
     for (mut tr, surface) in surfaces.iter_mut() {
         let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
-        tr.translation.y = world_y(surface.level, SURFACE_Y) + dy;
+        tr.translation.y = surface.base_y + SURFACE_Y + dy;
         tr.rotation = rot;
     }
     for (mut tr, rock) in rocks.iter_mut() {
         let phase = (tr.translation.x + tr.translation.z) * ROCK_K;
         tr.translation.y =
-            world_y(rock.level, SURFACE_Y - ROCK_SINK) + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
+            rock.base_y + (SURFACE_Y - ROCK_SINK) + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
         tr.rotation = Quat::from_rotation_y(t * ROCK_SPIN) * Quat::from_rotation_x(t * ROCK_SPIN * 0.6);
     }
     // Drift the shared ripple texture (one material across all lava tiles).
@@ -438,7 +438,7 @@ pub(crate) fn lava_steam_system(
     // bobbing Y), so a wisp sits on the pool at the right stacked height.
     let cells: Vec<Vec3> = lava
         .iter()
-        .map(|(t, surface)| Vec3::new(t.translation.x, world_y(surface.level, SURFACE_Y), t.translation.z))
+        .map(|(t, surface)| Vec3::new(t.translation.x, surface.base_y + SURFACE_Y, t.translation.z))
         .collect();
     if cells.is_empty() {
         return;
