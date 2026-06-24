@@ -1768,6 +1768,49 @@ mod tests {
     }
 
     #[test]
+    fn a_vertically_sliding_door_leaf_hides_when_it_would_intrude_on_an_adjacent_level() {
+        use crate::state::DoorStyle;
+        use maze::Direction;
+        // `S K D F` straight corridor: collect the key, walk into the door, open it.
+        let maze = r#"{"grid":[["S","K","D","F"]]}"#;
+        let upper = r#"{"grid":[["S"," "," ","F"]]}"#;
+        let open_door = |app: &mut App| {
+            {
+                let mut state = app.world_mut().resource_mut::<GameState>();
+                state.game.move_player(Direction::Right); // collect the key
+                state.game.move_player(Direction::Right); // into the door → unlock
+                let _ = state.game.tick(10_000.0); // Opening → Open
+            }
+            app.update(); // door_animation_system sets visibility
+        };
+        let hidden = |app: &mut App| {
+            app.world_mut()
+                .query::<(&DoorMarker, &Visibility)>()
+                .iter(app.world())
+                .filter(|(_, v)| matches!(v, Visibility::Hidden))
+                .count()
+        };
+
+        // Single-level portcullis: rises into open sky (no level above) → stays visible.
+        let cfg = GameConfig { door_style: DoorStyle::Portcullis, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(maze, cfg);
+        open_door(&mut app);
+        assert_eq!(hidden(&mut app), 0, "a top-level portcullis stays visibly raised");
+
+        // Two-level portcullis on the bottom level: a level sits above → hidden when open.
+        let cfg = GameConfig { door_style: DoorStyle::Portcullis, ..GameConfig::default() };
+        let mut app = make_playing_app_with_levels_and_config(&[maze, upper], cfg);
+        open_door(&mut app);
+        assert!(hidden(&mut app) > 0, "an intruding portcullis hides when open");
+
+        // Two-level SLIDE on the bottom level: no level below → stays visible.
+        let cfg = GameConfig { door_style: DoorStyle::Slide, ..GameConfig::default() };
+        let mut app = make_playing_app_with_levels_and_config(&[maze, upper], cfg);
+        open_door(&mut app);
+        assert_eq!(hidden(&mut app), 0, "a bottom-level slide has no level below → stays visible");
+    }
+
+    #[test]
     fn an_upper_pool_level_is_lifted_and_its_underside_sealed() {
         use crate::world::{UndersideSeal, LEVEL_HEIGHT, POOL_GAP};
 

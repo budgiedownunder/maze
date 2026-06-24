@@ -457,13 +457,14 @@ pub(crate) fn door_animation_system(
     state: Res<GameState>,
     run: Res<crate::state::MultiLevelRun>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
-    mut doors: Query<(&DoorMarker, &mut Transform)>,
+    mut doors: Query<(&DoorMarker, &mut Transform, &mut Visibility)>,
 ) {
     if doors.is_empty() {
         return;
     }
     let states = state.game.doors();
-    for (marker, mut transform) in &mut doors {
+    let level_count = run.level_count();
+    for (marker, mut transform, mut visibility) in &mut doors {
         // `state.game` is the live level's game, so only its leaves track it.
         // Leaves on other levels keep their last pose (closed on a level not yet
         // reached; held open on a completed one below), preventing an upper
@@ -508,6 +509,26 @@ pub(crate) fn door_animation_system(
                     .with_rotation(Quat::from_rotation_y(marker.closed_yaw))
             }
         };
+
+        // A vertically-travelling leaf, once open, ends up in the neighbouring
+        // level: a slid leaf below the floor (the level below), a raised portcullis
+        // above the ceiling (the level above). Hide it when fully open so it
+        // doesn't read as a phantom panel in that level. A bottom-level slide and a
+        // top-level portcullis travel into open space (no level there), so they
+        // stay visible. Swing / dissolve don't leave their own level.
+        let intrudes_when_open = match marker.motion {
+            DoorMotion::Slide => marker.level > 0,
+            DoorMotion::Portcullis => marker.level + 1 < level_count,
+            DoorMotion::Swing | DoorMotion::Dissolve => false,
+        };
+        let target = if intrudes_when_open && fraction >= 0.999 {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        if *visibility != target {
+            *visibility = target;
+        }
     }
 }
 
