@@ -11,7 +11,7 @@ mod world;
 
 pub use state::{
     DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult, HealthStyle,
-    KeyHolderStyle, Landmarks, LayeredAlignment, SkyType, TreasureStyle, WallType,
+    KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle, WallType,
 };
 pub use world::gallery::validate_demo_env;
 pub use world::{

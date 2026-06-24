@@ -16,9 +16,11 @@ pub(crate) struct PendingMazeJson(pub(crate) Option<String>);
 /// Optional override for the whole run's level set, bottom level first. When
 /// present (and non-empty) it supplies the multi-level run directly, taking
 /// precedence over the single [`PendingMazeJson`] and the native demos — the seam
-/// a multi-level host launch (and the rendering tests) feed levels through.
+/// a multi-level host launch (and the rendering tests) feed levels through. Public
+/// so the wasm host (`maze_game_bevy_wasm::start_with_config`) can inject a
+/// generated multi-level run, the same way it inserts the [`GameConfig`] resource.
 #[derive(Resource, Default)]
-pub(crate) struct PendingLevels(pub(crate) Vec<String>);
+pub struct PendingLevels(pub Vec<String>);
 
 #[derive(Resource)]
 pub(crate) struct TitleTimer(pub(crate) Timer);
@@ -349,6 +351,11 @@ pub struct GameConfig {
     /// The final level keeps the gold orb. Inert for a single-level game. Default
     /// `Ladder`.
     pub finish_type: FinishType,
+    /// Whether a multi-level run resets the player's bag at each level. `true`
+    /// (the default) makes every level self-contained; `false` carries the whole
+    /// bag forward. Inert for a single-level game. Drives
+    /// [`MultiLevelRun::reset_bag_between_levels`].
+    pub reset_bag_between_levels: bool,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -805,6 +812,7 @@ impl Default for GameConfig {
             health_style: HealthStyle::default(),
             layered_alignment: LayeredAlignment::default(),
             finish_type: FinishType::default(),
+            reset_bag_between_levels: true,
         }
     }
 }

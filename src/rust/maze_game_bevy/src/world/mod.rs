@@ -1046,9 +1046,12 @@ pub(crate) fn spawn_world(
     // `MultiLevelRun` holds every level's JSON plus the per-level totals + the
     // level index for the indicator and the win/transition decision.
     let mut run = MultiLevelRun::new(levels);
+    // The bag-carry policy comes from the session config (the server's
+    // `levels.reset_bag`); single-level games never transition, so it's inert.
+    run.reset_bag_between_levels = config.reset_bag_between_levels;
     // The native multilevel demos carry the bag forward between levels so the
     // carry behaviour is visible — the bottom level's key stays in the bag as you
-    // climb. Every other run keeps the default (bag resets each level).
+    // climb, overriding the config default.
     if multilevel_demo.is_some() {
         run.reset_bag_between_levels = false;
     }

@@ -37,6 +37,19 @@ pub enum LevelDifficultyChange {
     Harder,
 }
 
+impl LevelDifficultyChange {
+    /// Parses a wire string into a [`LevelDifficultyChange`]. Unknown values fall
+    /// back to [`LevelDifficultyChange::Easier`] — the same forgiving policy as the
+    /// other config enums, so a stale client or a typo still yields a playable run.
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "same" => Self::Same,
+            "harder" => Self::Harder,
+            _ => Self::Easier,
+        }
+    }
+}
+
 /// Number of candidate finish cells drawn per attempt; the farthest from the
 /// start is kept, biasing the finish away from the start so the level has a
 /// substantial path and the generator's own solvability retries rarely fail.

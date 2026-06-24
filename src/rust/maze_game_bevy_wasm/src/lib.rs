@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use maze_game_bevy::{
     DoorStyle, EnemyType, FinishType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks,
-    LayeredAlignment, SkyType, WallType,
+    LayeredAlignment, LevelDifficultyChange, PendingLevels, SkyType, WallType,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -99,6 +99,64 @@ struct StartConfig {
     health_style: String,
     #[serde(default)]
     maze_json: Option<String>,
+    /// Multi-level run settings. Mirrors the server's `levels` response group.
+    /// A `count` of 1 (the default) is a single-level game and every other field
+    /// is inert.
+    #[serde(default)]
+    levels: LevelsStartConfig,
+}
+
+/// Shape of the nested `levels` object in the host JSON payload — the
+/// multi-level run settings. Mirrors the server's `LevelsResponse`
+/// field-for-field (the host page forwards the whole play3d-config response, so
+/// the nested object arrives intact); kept as a separate type so it defaults
+/// field-wise. The server may also send `perimeterRandom` / `top`, which serde
+/// ignores here until a later step consumes them.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LevelsStartConfig {
+    #[serde(default = "default_levels_count")]
+    count: u32,
+    #[serde(default = "default_finish_type")]
+    finish_type: String,
+    #[serde(default = "default_difficulty_change")]
+    difficulty_change: String,
+    #[serde(default = "default_reset_bag")]
+    reset_bag: bool,
+    #[serde(default = "default_alignment")]
+    alignment: String,
+}
+
+impl Default for LevelsStartConfig {
+    fn default() -> Self {
+        Self {
+            count: default_levels_count(),
+            finish_type: default_finish_type(),
+            difficulty_change: default_difficulty_change(),
+            reset_bag: default_reset_bag(),
+            alignment: default_alignment(),
+        }
+    }
+}
+
+fn default_levels_count() -> u32 {
+    1
+}
+
+fn default_finish_type() -> String {
+    "ladder".to_string()
+}
+
+fn default_difficulty_change() -> String {
+    "easier".to_string()
+}
+
+fn default_reset_bag() -> bool {
+    true
+}
+
+fn default_alignment() -> String {
+    "edge".to_string()
 }
 
 /// Defaults for the per-game tuning knobs. Match the values in
@@ -228,30 +286,52 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
     let cfg: StartConfig = serde_json::from_str(json)
         .map_err(|err| JsValue::from_str(&format!("Invalid start_with_config payload: {err}")))?;
 
-    // Resolve the maze JSON: explicit `mazeJson` wins; otherwise, when
-    // dimensions are provided, generate from the seed/min-spine constraint.
-    // If neither is provided Bevy falls back to its built-in demo grid.
-    let maze_json: Option<String> = if let Some(json) = cfg.maze_json.clone() {
-        Some(json)
+    // Resolve the maze source. Explicit `mazeJson` always wins (the saved-maze
+    // path — single-level). Otherwise, when dimensions are provided, generate:
+    // a multi-level run (`levels.count > 1`) builds the whole stack up front and
+    // is injected via `PendingLevels`; a single-level run generates one maze. With
+    // neither, Bevy falls back to its built-in demo grid.
+    let mut maze_json: Option<String> = None;
+    let mut pending_levels: Option<Vec<String>> = None;
+    if let Some(json) = cfg.maze_json.clone() {
+        maze_json = Some(json);
     } else if cfg.rows > 0 && cfg.cols > 0 {
-        Some(
-            maze_game_bevy::generate_maze_json(
-                cfg.rows,
-                cfg.cols,
-                cfg.seed,
-                cfg.min_solution_length,
-                cfg.door_count,
-                cfg.spare_doors,
-                cfg.spare_keys,
-                cfg.enemy_count,
-                cfg.health_count,
-                cfg.treasure_count,
-            )
-            .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
-        )
-    } else {
-        None
-    };
+        if cfg.levels.count > 1 {
+            pending_levels = Some(
+                maze_game_bevy::generate_level_maze_jsons(
+                    cfg.rows,
+                    cfg.cols,
+                    cfg.seed,
+                    cfg.min_solution_length,
+                    cfg.door_count,
+                    cfg.spare_doors,
+                    cfg.spare_keys,
+                    cfg.enemy_count,
+                    cfg.health_count,
+                    cfg.treasure_count,
+                    cfg.levels.count,
+                    LevelDifficultyChange::from_wire_str(&cfg.levels.difficulty_change),
+                )
+                .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
+            );
+        } else {
+            maze_json = Some(
+                maze_game_bevy::generate_maze_json(
+                    cfg.rows,
+                    cfg.cols,
+                    cfg.seed,
+                    cfg.min_solution_length,
+                    cfg.door_count,
+                    cfg.spare_doors,
+                    cfg.spare_keys,
+                    cfg.enemy_count,
+                    cfg.health_count,
+                    cfg.treasure_count,
+                )
+                .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
+            );
+        }
+    }
 
     let mut app = make_app();
     app.insert_resource(GameConfig {
@@ -283,9 +363,15 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         starting_hp: cfg.starting_hp,
         enemy_type: EnemyType::from_wire_str(&cfg.enemy_type),
         health_style: HealthStyle::from_wire_str(&cfg.health_style),
-        layered_alignment: LayeredAlignment::default(),
-        finish_type: FinishType::default(),
+        layered_alignment: LayeredAlignment::from_wire_str(&cfg.levels.alignment),
+        finish_type: FinishType::from_wire_str(&cfg.levels.finish_type),
+        reset_bag_between_levels: cfg.levels.reset_bag,
     });
+    // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
+    // ahead of the single `PendingMazeJson` — the same seam the native demos use.
+    if let Some(levels) = pending_levels {
+        app.insert_resource(PendingLevels(levels));
+    }
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();
     Ok(())
@@ -360,5 +446,55 @@ mod tests {
         assert!(cfg.landmarks.dead_end_objects);
         assert!(cfg.landmarks.wall_decorations);
         assert!(cfg.landmarks.floor_accents);
+    }
+
+    #[test]
+    fn start_config_levels_default_to_a_single_level_when_omitted() {
+        // The saved-maze and single-level difficulty paths send no `levels`
+        // object; it must default to a single-level run with the documented
+        // per-field defaults.
+        let json = r#"{ "mazeJson": "{\"grid\":[[\"S\",\"F\"]]}" }"#;
+        let cfg: StartConfig = serde_json::from_str(json).expect("payload must parse");
+        assert_eq!(cfg.levels.count, 1);
+        assert_eq!(cfg.levels.finish_type, "ladder");
+        assert_eq!(cfg.levels.difficulty_change, "easier");
+        assert!(cfg.levels.reset_bag);
+        assert_eq!(cfg.levels.alignment, "edge");
+    }
+
+    #[test]
+    fn start_config_parses_a_multi_level_levels_group() {
+        // A curated multi-level preset forwards the server's whole response, so
+        // the nested `levels` object arrives intact. Fields it doesn't consume
+        // yet (`perimeterRandom`, `top`) are ignored without failing the parse.
+        let json = r#"{
+            "rows": 9,
+            "cols": 9,
+            "levels": {
+                "count": 3,
+                "finishType": "random",
+                "difficultyChange": "harder",
+                "resetBag": false,
+                "alignment": "centre",
+                "perimeterRandom": true,
+                "top": { "skyType": "day", "perimeterWalls": false }
+            }
+        }"#;
+        let cfg: StartConfig = serde_json::from_str(json).expect("payload must parse");
+        assert_eq!(cfg.levels.count, 3);
+        assert_eq!(cfg.levels.finish_type, "random");
+        assert_eq!(cfg.levels.difficulty_change, "harder");
+        assert!(!cfg.levels.reset_bag);
+        assert_eq!(cfg.levels.alignment, "centre");
+        // The wire strings resolve to the Bevy enums the GameConfig uses.
+        assert_eq!(FinishType::from_wire_str(&cfg.levels.finish_type), FinishType::Random);
+        assert_eq!(
+            LayeredAlignment::from_wire_str(&cfg.levels.alignment),
+            LayeredAlignment::Centre,
+        );
+        assert_eq!(
+            LevelDifficultyChange::from_wire_str(&cfg.levels.difficulty_change),
+            LevelDifficultyChange::Harder,
+        );
     }
 }
