@@ -51,10 +51,12 @@ pub(crate) struct DamageFlash;
 /// `FixedUpdate`: deterministic game-state tick driver. Pause / win /
 /// lost all short-circuit so the world freezes at the moment of the
 /// outcome.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn game_tick_system(
     mut commands: Commands,
     time: Res<Time>,
     mut state: ResMut<GameState>,
+    run: Res<crate::state::MultiLevelRun>,
     mut doors: Query<&mut DoorMarker>,
     health_pickups: Query<(Entity, &HealthMarker)>,
     key_holders: Query<(Entity, &KeyMarker)>,
@@ -67,8 +69,11 @@ pub(crate) fn game_tick_system(
     for event in state.game.tick(dt_ms) {
         match event {
             GameEvent::DoorOpened { cell } => {
+                // The event is from the live level, so only pin that level's
+                // leaves — a same-`(row, col)` door on another level keeps its own
+                // state (see `door_animation_system`).
                 for mut marker in &mut doors {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         marker.mark_opened();
                     }
                 }

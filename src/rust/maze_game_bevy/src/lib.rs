@@ -1726,6 +1726,48 @@ mod tests {
     }
 
     #[test]
+    fn upper_level_door_holds_when_a_same_cell_live_door_opens() {
+        use maze::Direction;
+        // Level 0 (live): door at (1,1), key at (2,1), start (2,0), finish (0,2).
+        // Level 1: ALSO a door at (1,1) (same grid coords). Opening level 0's door
+        // must NOT disturb level 1's leaf — a regression guard for the cross-level
+        // door bug where an upper-level leaf slid down into the live doorway.
+        let l0 = r#"{"grid":[[" "," ","F"],[" ","D"," "],["S","K"," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[" ","D"," "],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+
+        // The upper (level-1) leaves spawn near y = LEVEL_HEIGHT (3); the live
+        // (level-0) leaves near y = 0. Capture the upper leaves' resting heights.
+        let upper_ys = |app: &mut App| -> Vec<f32> {
+            let mut v: Vec<f32> = app
+                .world_mut()
+                .query::<(&DoorMarker, &Transform)>()
+                .iter(app.world())
+                .map(|(_, t)| t.translation.y)
+                .filter(|y| *y > 1.5)
+                .collect();
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v
+        };
+        let before = upper_ys(&mut app);
+        assert!(!before.is_empty(), "level 1 has door leaves up at LEVEL_HEIGHT");
+
+        {
+            let mut state = app.world_mut().resource_mut::<GameState>();
+            state.game.move_player(Direction::Right); // collect the key
+            state.game.move_player(Direction::Up); // walk into the level-0 door → unlock
+            let _ = state.game.tick(10_000.0); // Opening → Open
+        }
+        app.update(); // door_animation_system runs
+
+        let after = upper_ys(&mut app);
+        assert_eq!(
+            before, after,
+            "the level-1 door leaves must stay put when the level-0 door at the same (row, col) opens",
+        );
+    }
+
+    #[test]
     fn pool_rim_skirts_every_non_pool_edge() {
         // A lone water cell ringed by four passable cells gets a rim skirt on each
         // of its four edges (the recess wall up to floor level).

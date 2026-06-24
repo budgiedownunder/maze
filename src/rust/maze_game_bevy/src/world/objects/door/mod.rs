@@ -66,6 +66,11 @@ pub(crate) enum DoorMotion {
 pub(crate) struct DoorMarker {
     /// Grid cell this leaf belongs to.
     pub(crate) cell: (usize, usize),
+    /// Which stacked level this leaf is on. Only the live level's leaves react to
+    /// the running game's door state — without this, a door at the same `(row,
+    /// col)` on another level would slide in lock-step with the live one (an upper
+    /// level's leaf sliding down into the live doorway).
+    pub(crate) level: usize,
     /// Yaw orienting the leaf so its local +X spans the opening and its local
     /// +Z (keyhole / decoration face) points out toward the neighbour.
     closed_yaw: f32,
@@ -228,6 +233,7 @@ fn spawn_leaf(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     r: usize,
     c: usize,
+    level: usize,
     config: &GameConfig,
     spec: LeafSpec,
 ) {
@@ -254,6 +260,7 @@ fn spawn_leaf(
         .spawn((
             DoorMarker {
                 cell: (r, c),
+                level,
                 closed_yaw: spec.closed_yaw,
                 motion: spec.motion,
                 base_translation: spec.pivot_translation,
@@ -367,6 +374,7 @@ pub(crate) fn spawn_door_for_cell(
             materials,
             r,
             c,
+            placement.level,
             config,
             LeafSpec {
                 closed_yaw,
@@ -412,6 +420,7 @@ pub(crate) fn spawn_door_for_cell(
             materials,
             r,
             c,
+            placement.level,
             config,
             LeafSpec {
                 closed_yaw,
@@ -446,6 +455,7 @@ fn smoothstep(t: f32) -> f32 {
 /// with its progress; an open (or `opened`-pinned) leaf stays fully open.
 pub(crate) fn door_animation_system(
     state: Res<GameState>,
+    run: Res<crate::state::MultiLevelRun>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut doors: Query<(&DoorMarker, &mut Transform)>,
 ) {
@@ -454,6 +464,13 @@ pub(crate) fn door_animation_system(
     }
     let states = state.game.doors();
     for (marker, mut transform) in &mut doors {
+        // `state.game` is the live level's game, so only its leaves track it.
+        // Leaves on other levels keep their last pose (closed on a level not yet
+        // reached; held open on a completed one below), preventing an upper
+        // level's same-`(row, col)` door from sliding with the live one.
+        if marker.level != run.current_level {
+            continue;
+        }
         let fraction = if marker.opened {
             1.0
         } else {
