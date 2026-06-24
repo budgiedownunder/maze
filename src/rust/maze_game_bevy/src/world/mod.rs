@@ -560,9 +560,11 @@ fn spawn_level(
     // Sparkle rays each treasure chest on this level gets — the same count for
     // every chest across the whole run, computed once in `spawn_world` from the
     // total treasure over all levels so the additive overdraw stays bounded for the
-    // whole stack (the per-chest point light is comparatively cheap and kept). See
-    // `rays_per_chest`.
+    // whole stack. See `rays_per_chest`.
     treasure_rays: usize,
+    // Rocks each lava cell on this level gets — likewise a global across-levels
+    // budget computed once in `spawn_world`. See `lava::run_lava_rocks`.
+    lava_rocks: usize,
 ) {
     // Row-major scan order matches `MazeGame`'s enemy-id assignment, so bumping
     // this per `'E'` keeps the live level's `EnemyMarker.id` aligned with the
@@ -600,7 +602,7 @@ fn spawn_level(
                     continue;
                 }
                 walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
-                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement);
+                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_rocks);
                 if matches!(wall_type, WallType::IronFence) {
                     floor::tile::spawn_tile(commands, assets.floor, r, c, placement);
                 }
@@ -972,9 +974,9 @@ pub(crate) fn spawn_world(
     // wall-top of the level below — where each cell's underside is sealed — instead
     // of poking through into it. A pool-free level adds nothing (sits on the walls
     // below as before). `level_bases` accumulates this in one pass.
-    // Per level: whether it carries a pool, and its treasure-cell count. Both come
-    // from one parse of each level's grid.
-    let level_meta: Vec<(bool, usize)> = levels
+    // Per level, from one parse of its grid: whether it carries a pool, its
+    // treasure-cell count, and its lava-cell count.
+    let level_meta: Vec<(bool, usize, usize)> = levels
         .iter()
         .enumerate()
         .map(|(level, json)| {
@@ -985,20 +987,35 @@ pub(crate) fn spawn_world(
                     .expect("multi-level maze JSON is host-validated or a hardcoded demo");
                 (g.grid().to_vec(), g.cell_entities().clone())
             };
-            let has_pool = lgrid.iter().enumerate().any(|(r, row)| {
-                (0..row.len()).any(|c| walls::pool_type_at(&lgrid, &lcells, &config, r, c).is_some())
-            });
+            let mut has_pool = false;
+            let mut lava_cells = 0usize;
+            for (r, row) in lgrid.iter().enumerate() {
+                for c in 0..row.len() {
+                    match walls::pool_type_at(&lgrid, &lcells, &config, r, c) {
+                        Some(WallType::Lava) => {
+                            has_pool = true;
+                            lava_cells += 1;
+                        }
+                        Some(_) => has_pool = true,
+                        None => {}
+                    }
+                }
+            }
             let treasure = lgrid.iter().flatten().filter(|&&ch| ch == 'T').count();
-            (has_pool, treasure)
+            (has_pool, treasure, lava_cells)
         })
         .collect();
-    let level_has_pool: Vec<bool> = level_meta.iter().map(|(p, _)| *p).collect();
+    let level_has_pool: Vec<bool> = level_meta.iter().map(|(p, _, _)| *p).collect();
     let bases = level_bases(&level_has_pool);
     // The additive sparkle-ray overdraw is the mobile-GPU pain point, and EVERY
     // level's treasure renders at once, so the ray budget is global to the whole
     // stack: bound it by the total treasure across all levels, not per level. A
     // single-level run is byte-identical to the per-maze behaviour.
-    let treasure_rays = objects::treasure::run_treasure_rays(level_meta.iter().map(|(_, t)| *t));
+    let treasure_rays = objects::treasure::run_treasure_rays(level_meta.iter().map(|(_, t, _)| *t));
+    // Likewise every lava cell on every level bobs its rocks each frame, so the
+    // rock budget is global to the whole stack — bound by the total lava cells over
+    // all levels (see `run_lava_rocks`).
+    let lava_rocks = walls::lava::run_lava_rocks(level_meta.iter().map(|(_, _, l)| *l));
 
     // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
     // only when the next level's start sits directly above it (same world XZ) so
@@ -1113,7 +1130,7 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[0],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1130,7 +1147,7 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[level],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
         }
     }
 

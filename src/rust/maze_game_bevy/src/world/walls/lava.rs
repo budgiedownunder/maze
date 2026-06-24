@@ -54,8 +54,34 @@ const WAVE_AMP: f32 = 0.05;
 const WAVE_K: f32 = 0.9;
 const WAVE_SPEED: f32 = 1.1;
 
-/// Number of dark rocks bobbing on each lava cell.
-const ROCK_COUNT: usize = 3;
+/// Most dark rocks bobbing on a single lava cell. The actual per-cell count is
+/// scaled down from here by the global budget when a run holds a lot of lava — see
+/// [`rocks_per_lava_cell`].
+const ROCK_COUNT: usize = 2;
+
+/// Total animated lava rocks allowed across a whole run. Every lava cell on every
+/// level bobs its rocks each frame, so on a lava-dense multi-level stack the rock
+/// animation load multiplies and a low-memory device can drown; bounding the total
+/// keeps the whole stack within the mobile envelope. Mirrors the treasure
+/// sparkle-ray budget (`run_treasure_rays`).
+const MAX_TOTAL_ROCKS: usize = 200;
+
+/// Rocks each lava cell gets when a run holds `num_lava_cells` lava cells in
+/// total: `min(ROCK_COUNT, MAX_TOTAL_ROCKS / num_lava_cells)`. Falls to **0** — no
+/// rocks at all — once the lava is dense enough that even one rock per cell would
+/// blow the budget.
+pub(crate) fn rocks_per_lava_cell(num_lava_cells: usize) -> usize {
+    (MAX_TOTAL_ROCKS / num_lava_cells.max(1)).min(ROCK_COUNT)
+}
+
+/// Rocks each lava cell gets across a whole multi-level run, given the per-level
+/// lava-cell counts. Every level's lava bobs at once, so the [`MAX_TOTAL_ROCKS`]
+/// budget is global to the stack — bound by the **total** lava cells over all
+/// levels, not the per-level count. A single-level run is identical to
+/// [`rocks_per_lava_cell`] of that level's count.
+pub(crate) fn run_lava_rocks(level_lava_counts: impl IntoIterator<Item = usize>) -> usize {
+    rocks_per_lava_cell(level_lava_counts.into_iter().sum())
+}
 /// Rock geometry: a cube of half-size [`ROCK_HALF`] with each corner sliced back
 /// by [`ROCK_CHAMFER`] (a truncated cube). The cuts add small corner + face facets
 /// where the cube's faces met, so it reads as a chunky rock rather than a plain
@@ -65,16 +91,11 @@ const ROCK_CHAMFER: f32 = 0.032;
 /// Local `(x, z)` offsets of the rocks within the cell (relative to its centre),
 /// kept inside ±0.55 so they don't poke past the cell edges. Distinct positions
 /// also de-sync their bob (the world-position phase differs per rock).
-const ROCK_OFFSETS: [(f32, f32); ROCK_COUNT] = [(-0.45, -0.30), (0.40, 0.45), (0.05, -0.52)];
-/// Per-rock non-uniform scale so the three lumps read as distinct irregular
-/// boulders rather than identical blocks. Paired by index with [`ROCK_OFFSETS`].
-/// An overall size factor is baked in per rock so they range from full size down
-/// to about half (1.0 / 0.75 / 0.55).
-const ROCK_SCALES: [Vec3; ROCK_COUNT] = [
-    Vec3::new(1.00, 0.78, 1.18),
-    Vec3::new(0.92, 0.69, 0.62),
-    Vec3::new(0.47, 0.62, 0.56),
-];
+const ROCK_OFFSETS: [(f32, f32); ROCK_COUNT] = [(-0.45, -0.30), (0.40, 0.45)];
+/// Per-rock non-uniform scale so the lumps read as distinct irregular boulders
+/// rather than identical blocks. Paired by index with [`ROCK_OFFSETS`]. An overall
+/// size factor is baked in per rock so they differ in bulk.
+const ROCK_SCALES: [Vec3; ROCK_COUNT] = [Vec3::new(1.00, 0.78, 1.18), Vec3::new(0.92, 0.69, 0.62)];
 /// Vertical travel of a rock as it rises above and sinks below the surface.
 const ROCK_AMP: f32 = 0.10;
 /// How far below the surface a rock's bob is centred, so it spends most of its
@@ -243,14 +264,16 @@ pub(crate) fn build_lava_assets(
 }
 
 /// Spawns the recessed lava pool surface filling cell `(r, c)` on run level
-/// `level`, plus its bobbing rocks. The caller spawns the rim ([`super::rim`]);
-/// the cell has no floor tile.
+/// `level`, plus `rocks` bobbing rocks (`0..=ROCK_COUNT`, the global budget — see
+/// [`run_lava_rocks`]). The caller spawns the rim ([`super::rim`]); the cell has no
+/// floor tile.
 pub(crate) fn spawn_lava(
     commands: &mut Commands,
     assets: &LavaAssets,
     r: usize,
     c: usize,
     placement: LevelPlacement,
+    rocks: usize,
 ) {
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
@@ -270,7 +293,7 @@ pub(crate) fn spawn_lava(
             commands.spawn((LavaSurface { base_y }, Transform::from_xyz(x, surface_y, z)));
         }
     }
-    for (i, &(dx, dz)) in ROCK_OFFSETS.iter().enumerate() {
+    for (i, &(dx, dz)) in ROCK_OFFSETS.iter().take(rocks).enumerate() {
         let pos = Vec3::new(x + dx, surface_y - ROCK_SINK, z + dz);
         // Non-uniform scale stretches the sphere into an irregular boulder; the
         // animation system only rewrites the rock's Y and rotation, so this scale
@@ -516,6 +539,21 @@ mod tests {
             assert!((nv.length() - 1.0).abs() < 1e-3, "non-unit normal {nv:?}");
             assert!(nv.dot(Vec3::from_array(*p)) > 0.0, "normal not outward");
         }
+    }
+
+    #[test]
+    fn run_lava_rocks_budgets_the_total_across_levels() {
+        // A single level of 40 lava cells is under budget → the full per-cell base.
+        assert_eq!(run_lava_rocks([40]), 2);
+        // The SAME 40 cells on each of three levels (120 total) still fit at 1 each
+        // (200 / 120 == 1) — fewer than the 2 the per-level path would give.
+        assert_eq!(run_lava_rocks([40, 40, 40]), 1);
+        assert!(run_lava_rocks([40, 40, 40]) < rocks_per_lava_cell(40));
+        // Once the lava is dense enough that even one rock per cell blows the
+        // budget, rocks fall away entirely.
+        assert_eq!(run_lava_rocks([100, 100, 100]), 0); // 200 / 300 == 0
+        // Degenerate input must not divide by zero.
+        assert_eq!(rocks_per_lava_cell(0), 2);
     }
 
     #[test]

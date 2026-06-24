@@ -1867,12 +1867,13 @@ mod tests {
 
     #[test]
     fn lava_cell_spawns_bobbing_rocks() {
-        // Each lava cell seeds a small fixed number of dark rocks that the lava
-        // animation system bobs through the surface.
+        // A single lava cell is well under the global rock budget, so it seeds the
+        // full per-cell base of rocks that the lava animation system bobs through
+        // the surface.
         let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
         let mut app = make_playing_app_with(json);
         let rocks = app.world_mut().query::<&LavaRock>().iter(app.world()).count();
-        assert_eq!(rocks, 3, "one lava cell seeds three rocks");
+        assert_eq!(rocks, 2, "one lava cell (under budget) seeds two rocks");
     }
 
     #[test]
