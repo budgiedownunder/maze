@@ -417,6 +417,15 @@ pub(crate) fn rays_per_chest(num_chests: usize) -> usize {
     (MAX_TOTAL_RAYS / num_chests.max(1)).min(MAX_RAYS_PER_CHEST)
 }
 
+/// Sparkle rays each chest gets across a whole multi-level run, given the
+/// per-level treasure counts. Every level's treasure renders at once, so the
+/// [`MAX_TOTAL_RAYS`] overdraw budget is global to the stack — bound by the
+/// total treasure over all levels, not the per-level count. A single-level run
+/// is identical to [`rays_per_chest`] of that level's count.
+pub(crate) fn run_treasure_rays(level_treasure_counts: impl IntoIterator<Item = usize>) -> usize {
+    rays_per_chest(level_treasure_counts.into_iter().sum())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_treasure_for_cell(
     commands: &mut Commands,
@@ -653,7 +662,7 @@ pub(crate) fn treasure_collection_system(
 
 #[cfg(test)]
 mod tests {
-    use super::rays_per_chest;
+    use super::{rays_per_chest, run_treasure_rays};
 
     #[test]
     fn rays_per_chest_caps_then_scales_with_count() {
@@ -666,5 +675,17 @@ mod tests {
         assert_eq!(rays_per_chest(120), 1);
         // Degenerate input must not divide by zero.
         assert_eq!(rays_per_chest(0), 5);
+    }
+
+    #[test]
+    fn run_treasure_rays_budgets_the_total_across_levels() {
+        // A single level of 12 chests is under the cap → the full 5 rays each.
+        assert_eq!(run_treasure_rays([12]), 5);
+        // The SAME 12 chests on each of three levels (36 total) share the global
+        // 120-ray budget → 3 rays each — NOT the 5 the per-level path would give.
+        assert_eq!(run_treasure_rays([12, 12, 12]), 3);
+        assert!(run_treasure_rays([12, 12, 12]) < rays_per_chest(12));
+        // A sparse stack stays at the per-chest cap.
+        assert_eq!(run_treasure_rays([3, 2, 1]), 5);
     }
 }

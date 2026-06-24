@@ -557,15 +557,13 @@ fn spawn_level(
     // carries none, or for the bottom level). When non-zero, each cell's underside
     // is sealed `gap` below the floor so the level below sees a clean ceiling.
     gap: f32,
+    // Sparkle rays each treasure chest on this level gets — the same count for
+    // every chest across the whole run, computed once in `spawn_world` from the
+    // total treasure over all levels so the additive overdraw stays bounded for the
+    // whole stack (the per-chest point light is comparatively cheap and kept). See
+    // `rays_per_chest`.
+    treasure_rays: usize,
 ) {
-    // Sparkle rays each treasure chest gets — the same count for every chest in
-    // this level (so they look uniform), with the total bounded for treasure-dense
-    // levels (the additive sparkle overdraw is what overwhelms a mobile GPU; the
-    // per-chest point light is comparatively cheap and always kept). The global
-    // across-levels budget is a later refinement; per level matches the
-    // single-maze behaviour. See rays_per_chest.
-    let treasure_rays =
-        objects::treasure::rays_per_chest(grid.iter().flatten().filter(|&&ch| ch == 'T').count());
     // Row-major scan order matches `MazeGame`'s enemy-id assignment, so bumping
     // this per `'E'` keeps the live level's `EnemyMarker.id` aligned with the
     // runtime `maze::Enemy.id`.
@@ -974,7 +972,9 @@ pub(crate) fn spawn_world(
     // wall-top of the level below — where each cell's underside is sealed — instead
     // of poking through into it. A pool-free level adds nothing (sits on the walls
     // below as before). `level_bases` accumulates this in one pass.
-    let level_has_pool: Vec<bool> = levels
+    // Per level: whether it carries a pool, and its treasure-cell count. Both come
+    // from one parse of each level's grid.
+    let level_meta: Vec<(bool, usize)> = levels
         .iter()
         .enumerate()
         .map(|(level, json)| {
@@ -985,12 +985,20 @@ pub(crate) fn spawn_world(
                     .expect("multi-level maze JSON is host-validated or a hardcoded demo");
                 (g.grid().to_vec(), g.cell_entities().clone())
             };
-            lgrid.iter().enumerate().any(|(r, row)| {
+            let has_pool = lgrid.iter().enumerate().any(|(r, row)| {
                 (0..row.len()).any(|c| walls::pool_type_at(&lgrid, &lcells, &config, r, c).is_some())
-            })
+            });
+            let treasure = lgrid.iter().flatten().filter(|&&ch| ch == 'T').count();
+            (has_pool, treasure)
         })
         .collect();
+    let level_has_pool: Vec<bool> = level_meta.iter().map(|(p, _)| *p).collect();
     let bases = level_bases(&level_has_pool);
+    // The additive sparkle-ray overdraw is the mobile-GPU pain point, and EVERY
+    // level's treasure renders at once, so the ray budget is global to the whole
+    // stack: bound it by the total treasure across all levels, not per level. A
+    // single-level run is byte-identical to the per-maze behaviour.
+    let treasure_rays = objects::treasure::run_treasure_rays(level_meta.iter().map(|(_, t)| *t));
 
     // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
     // only when the next level's start sits directly above it (same world XZ) so
@@ -1105,7 +1113,7 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[0],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start, gap);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1122,7 +1130,7 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[level],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start, gap);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays);
         }
     }
 
