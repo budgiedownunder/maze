@@ -529,10 +529,9 @@ struct LevelRenderAssets<'a> {
 /// Renders one level's full geometry at its `placement` (the level's Y lift +
 /// X/Z centring offset, threaded through every spawn helper). `is_final` keeps the
 /// finish orb only on the top level — interim finishes omit it (a transition rig
-/// replaces it later). `is_live` marks the level whose enemies are driven by the
-/// live `MazeGame` in `GameState`; every other level's enemies are static
-/// scenery, so they get a non-matching id and `enemy_animation_system` leaves
-/// them at their spawn pose.
+/// replaces it later). Every level's enemies are spawned with their real per-level
+/// ids; `enemy_animation_system` drives only the current level's, so off-level
+/// enemies idle in place.
 #[allow(clippy::too_many_arguments)]
 fn spawn_level(
     commands: &mut Commands,
@@ -543,7 +542,6 @@ fn spawn_level(
     config: &GameConfig,
     placement: LevelPlacement,
     is_final: bool,
-    is_live: bool,
     // True only when an interim finish on this level has the next level's start
     // directly above it (so a ladder can land); otherwise a ladder finish falls
     // back to a portal. Irrelevant on the final level.
@@ -612,10 +610,12 @@ fn spawn_level(
             walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
             decorations::spawn_decorations_for_cell(commands, assets.decoration, grid, cell_entities, cell, r, c, config, placement);
             floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start);
-            // A static level's enemies never match a live runtime enemy, so they
-            // get a non-matching id and stand frozen as scenery.
-            let spawn_enemy_id = if is_live { enemy_id } else { u32::MAX };
-            objects::spawn_objects_for_cell(commands, assets.object, grid, cell, r, c, config, cell_entity, spawn_enemy_id, treasure_rays, placement, is_final, ladder_allowed, dead_end_skip);
+            // Every level's enemies get their real per-level row-major id (matching
+            // that level's `MazeGame`'s enemy ids), so each level's enemies come
+            // alive when it becomes the current level. `enemy_animation_system`
+            // moves only the current level's enemies; an off-level enemy holds its
+            // position and idle-bobs.
+            objects::spawn_objects_for_cell(commands, assets.object, grid, cell, r, c, config, cell_entity, enemy_id, treasure_rays, placement, is_final, ladder_allowed, dead_end_skip);
             if cell == 'E' {
                 enemy_id += 1;
             }
@@ -1130,7 +1130,7 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[0],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, true, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1147,7 +1147,7 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[level],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, false, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
         }
     }
 

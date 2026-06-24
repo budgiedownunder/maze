@@ -12,7 +12,7 @@
 pub(crate) mod ghost;
 pub(crate) mod goblin;
 
-use crate::state::{EnemyType, GameConfig, GameState};
+use crate::state::{EnemyType, GameConfig, GameState, MultiLevelRun};
 use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -82,17 +82,18 @@ pub(crate) fn spawn_enemy_for_cell(
 pub(crate) fn enemy_animation_system(
     state: Res<GameState>,
     config: Res<GameConfig>,
+    run: Res<MultiLevelRun>,
     time: Res<Time>,
     mut markers: Query<(&EnemyMarker, &mut Transform)>,
 ) {
+    // Build an id→Enemy lookup once per frame from the live (current) level's
+    // game. Enemy counts are bounded by `MAX_ENEMY_COUNT`, so the O(n) build cost
+    // is negligible. Only the current level's enemies are driven by it — the gate
+    // below also stops an off-level marker whose id happens to collide with a
+    // current-level enemy from being dragged around by it.
     let enemies = state.game.enemies();
-    if enemies.is_empty() {
-        return;
-    }
-    // Build an id→Enemy lookup once per frame. Enemy counts are bounded
-    // by `MAX_ENEMY_COUNT` in the maze crate, so the O(n) build cost is
-    // negligible vs the alternative of a nested per-marker scan.
     let lookup: HashMap<u32, &maze::Enemy> = enemies.iter().map(|e| (e.id, e)).collect();
+    let current_level = run.current_level;
     let (base_y, bob) = match config.enemy_type {
         EnemyType::Goblin => (
             goblin::ENEMY_BASE_Y,
@@ -104,28 +105,34 @@ pub(crate) fn enemy_animation_system(
         ),
     };
     for (marker, mut t) in markers.iter_mut() {
-        let Some(enemy) = lookup.get(&marker.id) else {
-            continue;
-        };
-        let from = world_pos_for(enemy.row, enemy.col);
-        let to = world_pos_for(enemy.target_row, enemy.target_col);
-        let interp = from.lerp(to, enemy.move_progress());
-        t.translation.x = marker.placement.world_x(interp.x);
-        t.translation.z = marker.placement.world_z(interp.z);
-        t.translation.y = marker.placement.world_y(base_y) + bob;
-        // Face the direction of travel — eyes (and teeth, when present)
-        // are positioned on the rig's local +Z face, so rotating around Y
-        // by the heading-angle aims them along the movement vector. A
-        // resting enemy (target == current) keeps its prior rotation:
-        // `dx` and `dz` are 0 so the conditional guard skips the update.
-        let dx = to.x - from.x;
-        let dz = to.z - from.z;
-        if dx != 0.0 || dz != 0.0 {
-            // `atan2(dx, dz)` gives the angle whose +Z heading aligns with
-            // the (dx, dz) vector, matching how player camera yaw is
-            // measured elsewhere in the crate.
-            t.rotation = Quat::from_rotation_y(dx.atan2(dz));
+        // Only the current level's enemies follow their runtime position. Every
+        // other level's enemies hold the position they were last left at (their
+        // `MazeGame` isn't ticked) — completed levels below, not-yet-reached levels
+        // above — and only take the idle bob, so they stay lively in place.
+        if marker.placement.level == current_level {
+            if let Some(enemy) = lookup.get(&marker.id) {
+                let from = world_pos_for(enemy.row, enemy.col);
+                let to = world_pos_for(enemy.target_row, enemy.target_col);
+                let interp = from.lerp(to, enemy.move_progress());
+                t.translation.x = marker.placement.world_x(interp.x);
+                t.translation.z = marker.placement.world_z(interp.z);
+                // Face the direction of travel — eyes (and teeth, when present)
+                // are positioned on the rig's local +Z face, so rotating around Y
+                // by the heading-angle aims them along the movement vector. A
+                // resting enemy (target == current) keeps its prior rotation:
+                // `dx` and `dz` are 0 so the conditional guard skips the update.
+                let dx = to.x - from.x;
+                let dz = to.z - from.z;
+                if dx != 0.0 || dz != 0.0 {
+                    // `atan2(dx, dz)` gives the angle whose +Z heading aligns with
+                    // the (dx, dz) vector, matching how player camera yaw is
+                    // measured elsewhere in the crate.
+                    t.rotation = Quat::from_rotation_y(dx.atan2(dz));
+                }
+            }
         }
+        // The idle bob keeps every enemy (current level or not) visually alive.
+        t.translation.y = marker.placement.world_y(base_y) + bob;
     }
 }
 

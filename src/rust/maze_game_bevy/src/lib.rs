@@ -1389,6 +1389,50 @@ mod tests {
     }
 
     #[test]
+    fn every_levels_enemies_spawn_with_real_per_level_ids() {
+        // Level 0 has two enemies, level 1 has one. EVERY level (not just the live
+        // bottom one) must spawn its enemies with real per-level row-major ids — no
+        // `u32::MAX` frozen-scenery stub — so each level's enemies come alive when
+        // it becomes the current level.
+        let l0 = r#"{"grid":[["S","E","E","F"]]}"#;
+        let l1 = r#"{"grid":[["S","E","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        let mut ids_by_level: std::collections::HashMap<usize, Vec<u32>> = std::collections::HashMap::new();
+        for marker in app.world_mut().query::<&EnemyMarker>().iter(app.world()) {
+            assert_ne!(marker.id, u32::MAX, "no enemy keeps the old frozen-scenery stub id");
+            ids_by_level.entry(marker.placement.level).or_default().push(marker.id);
+        }
+        for ids in ids_by_level.values_mut() {
+            ids.sort();
+        }
+        assert_eq!(ids_by_level.get(&0).cloned().unwrap_or_default(), vec![0, 1], "level 0 enemies are ids 0,1");
+        assert_eq!(ids_by_level.get(&1).cloned().unwrap_or_default(), vec![0], "level 1 enemy is id 0 (per-level)");
+    }
+
+    #[test]
+    fn an_off_level_enemy_holds_its_own_cell_and_is_not_hijacked() {
+        // Level 0's enemy (id 0) sits at cell (0,1); level 1's enemy (id 0) sits at
+        // a DIFFERENT cell (0,0). While we're on level 0, the level-1 marker must
+        // hold its OWN spawn cell (0,0) → world (1.0, 1.0), not be dragged to
+        // level-0's enemy at (0,1) → world x = 3.0 by the colliding id (the enemy
+        // analogue of the 6a cross-level door bug).
+        let l0 = r#"{"grid":[["S","E","F"]]}"#;
+        let l1 = r#"{"grid":[["E","S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        let (x, z) = app
+            .world_mut()
+            .query::<(&EnemyMarker, &Transform)>()
+            .iter(app.world())
+            .find(|(m, _)| m.placement.level == 1)
+            .map(|(_, t)| (t.translation.x, t.translation.z))
+            .expect("level 1 has an enemy marker");
+        assert!(
+            (x - 1.0).abs() < 1e-3 && (z - 1.0).abs() < 1e-3,
+            "level-1 enemy held its own cell (0,0) → (1.0, 1.0); got ({x}, {z})"
+        );
+    }
+
+    #[test]
     fn health_marker_spawned_per_h_cell() {
         let mut app = make_playing_app();
         let grid = demo_grid();
