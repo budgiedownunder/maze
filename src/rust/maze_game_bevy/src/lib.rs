@@ -32,7 +32,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
             self,
             common::brazier::brazier_flicker_system,
             door::door_animation_system,
-            enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
+            enemy::{despawn_completed_level_enemies_system, enemy_animation_system, ghost::ghost_hem_wave_system},
             health::health_animation_system,
             key_holder::{key_collection_system, key_holder_system, key_sparks_system},
             treasure::{treasure_collection_system, treasure_sparkle_system},
@@ -94,6 +94,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(FixedUpdate, game_tick_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, door_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, enemy_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, despawn_completed_level_enemies_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, ghost_hem_wave_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, health_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, water_animation_system.run_if(in_state(AppState::Playing)))
@@ -1430,6 +1431,45 @@ mod tests {
             (x - 1.0).abs() < 1e-3 && (z - 1.0).abs() < 1e-3,
             "level-1 enemy held its own cell (0,0) → (1.0, 1.0); got ({x}, {z})"
         );
+    }
+
+    #[test]
+    fn hide_completed_enemies_despawns_lower_levels_on_ascend_only_when_enabled() {
+        use crate::state::MultiLevelRun;
+        let l0 = r#"{"grid":[["S","E","F"]]}"#;
+        let l1 = r#"{"grid":[["S","E","F"]]}"#;
+
+        // Climb from level 0 to level 1 (swaps the live game) and run a frame.
+        fn ascend(app: &mut App) {
+            let config = app.world().resource::<GameConfig>().clone();
+            app.world_mut().resource_scope(|world, mut state: Mut<GameState>| {
+                world.resource_scope(|_world, mut run: Mut<MultiLevelRun>| {
+                    crate::world::advance_to_next_level(&mut state, &mut run, &config);
+                });
+            });
+            app.update();
+        }
+        fn level0_enemies(app: &mut App) -> usize {
+            app.world_mut()
+                .query::<&EnemyMarker>()
+                .iter(app.world())
+                .filter(|m| m.placement.level == 0)
+                .count()
+        }
+
+        // Flag ON → level 0's enemy is freed once we've climbed past it.
+        let mut app_on = make_playing_app_with_levels_and_config(
+            &[l0, l1],
+            GameConfig { hide_completed_enemies: true, ..GameConfig::default() },
+        );
+        assert_eq!(level0_enemies(&mut app_on), 1, "level 0 enemy present before ascending");
+        ascend(&mut app_on);
+        assert_eq!(level0_enemies(&mut app_on), 0, "flag on: level 0 enemy despawned on ascend");
+
+        // Flag OFF (default) → the completed level's enemy stays (idles in place).
+        let mut app_off = make_playing_app_with_levels_and_config(&[l0, l1], GameConfig::default());
+        ascend(&mut app_off);
+        assert_eq!(level0_enemies(&mut app_off), 1, "flag off: level 0 enemy retained");
     }
 
     #[test]

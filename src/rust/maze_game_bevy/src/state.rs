@@ -365,6 +365,11 @@ pub struct GameConfig {
     /// bag forward. Inert for a single-level game. Drives
     /// [`MultiLevelRun::reset_bag_between_levels`].
     pub reset_bag_between_levels: bool,
+    /// Whether a completed lower level's enemies are despawned once the player
+    /// climbs past it. `false` (the default) leaves them idle-bobbing in place;
+    /// `true` frees those entities on each ascend (you only ever ascend, so a
+    /// completed level is never revisited). Inert for a single-level game.
+    pub hide_completed_enemies: bool,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -822,6 +827,7 @@ impl Default for GameConfig {
             layered_alignment: LayeredAlignment::default(),
             finish_type: FinishType::default(),
             reset_bag_between_levels: true,
+            hide_completed_enemies: false,
         }
     }
 }

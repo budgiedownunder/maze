@@ -6178,6 +6178,7 @@ mod test_definitions {
         assert!(body.levels.reset_bag);
         assert_eq!(body.levels.alignment, "edge");
         assert!(!body.levels.perimeter_random);
+        assert!(!body.levels.hide_completed_enemies);
         assert!(body.levels.top.is_none());
     }
 
@@ -6250,6 +6251,7 @@ mod test_definitions {
             reset_bag: false,
             alignment: LayeredAlignmentConfig::Centre,
             perimeter_random: true,
+            hide_completed_enemies: true,
             top: Some(TopLevelConfig {
                 sky_type: Some(SkyTypeConfig::Day),
                 perimeter_walls: Some(false),
@@ -6267,6 +6269,7 @@ mod test_definitions {
         assert!(!body.levels.reset_bag);
         assert_eq!(body.levels.alignment, "centre");
         assert!(body.levels.perimeter_random);
+        assert!(body.levels.hide_completed_enemies);
         let top = body.levels.top.expect("top override is surfaced");
         assert_eq!(top.sky_type.as_deref(), Some("day"));
         assert_eq!(top.perimeter_walls, Some(false));

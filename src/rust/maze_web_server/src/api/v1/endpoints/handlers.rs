@@ -541,6 +541,9 @@ pub struct LevelsResponse {
     /// When `true`, each level's perimeter walls are randomised independently;
     /// when `false`, every level uses the difficulty's `perimeterWalls`.
     pub perimeter_random: bool,
+    /// When `true`, a completed lower level's enemies are despawned once the
+    /// player climbs past it; when `false` they idle in place.
+    pub hide_completed_enemies: bool,
     /// Optional scene override for the final (top) level. `null` when unset.
     pub top: Option<TopLevelResponse>,
 }
@@ -644,6 +647,7 @@ pub async fn get_play3d_config(
             reset_bag: preset.levels.reset_bag,
             alignment: preset.levels.alignment.as_wire_str().to_string(),
             perimeter_random: preset.levels.perimeter_random,
+            hide_completed_enemies: preset.levels.hide_completed_enemies,
             top: preset.levels.top.as_ref().map(|t| TopLevelResponse {
                 sky_type: t.sky_type.map(|s| s.as_wire_str().to_string()),
                 perimeter_walls: t.perimeter_walls,

@@ -30,7 +30,12 @@ const FOCUSES: &[&str] =
 
 /// The multi-level demo selectors (dispatched in `world::spawn_world`, not here).
 /// Listed so [`validate_demo_env`] can recognise them.
-const MULTILEVEL_DEMOS: &[&str] = &["multilevel_edge", "multilevel_centre"];
+const MULTILEVEL_DEMOS: &[&str] = &[
+    "multilevel_edge",
+    "multilevel_centre",
+    "multilevel_centre_no_hide_enemies",
+    "multilevel_centre_hide_enemies",
+];
 
 /// The requested gallery focus from `MAZE_DEMO`, or `None` when it is unset or
 /// names something other than a known gallery (in which case the caller falls
@@ -74,6 +79,8 @@ mod validation_tests {
         assert!(validate_demo_value(Some("walls")).is_ok());
         assert!(validate_demo_value(Some("multilevel_edge")).is_ok());
         assert!(validate_demo_value(Some("multilevel_centre")).is_ok());
+        assert!(validate_demo_value(Some("multilevel_centre_hide_enemies")).is_ok());
+        assert!(validate_demo_value(Some("multilevel_centre_no_hide_enemies")).is_ok());
     }
 
     #[test]

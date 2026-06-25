@@ -125,6 +125,8 @@ struct LevelsStartConfig {
     reset_bag: bool,
     #[serde(default = "default_alignment")]
     alignment: String,
+    #[serde(default)]
+    hide_completed_enemies: bool,
 }
 
 impl Default for LevelsStartConfig {
@@ -135,6 +137,7 @@ impl Default for LevelsStartConfig {
             difficulty_change: default_difficulty_change(),
             reset_bag: default_reset_bag(),
             alignment: default_alignment(),
+            hide_completed_enemies: false,
         }
     }
 }
@@ -366,6 +369,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         layered_alignment: LayeredAlignment::from_wire_str(&cfg.levels.alignment),
         finish_type: FinishType::from_wire_str(&cfg.levels.finish_type),
         reset_bag_between_levels: cfg.levels.reset_bag,
+        hide_completed_enemies: cfg.levels.hide_completed_enemies,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -460,6 +464,7 @@ mod tests {
         assert_eq!(cfg.levels.difficulty_change, "easier");
         assert!(cfg.levels.reset_bag);
         assert_eq!(cfg.levels.alignment, "edge");
+        assert!(!cfg.levels.hide_completed_enemies);
     }
 
     #[test]
@@ -477,6 +482,7 @@ mod tests {
                 "resetBag": false,
                 "alignment": "centre",
                 "perimeterRandom": true,
+                "hideCompletedEnemies": true,
                 "top": { "skyType": "day", "perimeterWalls": false }
             }
         }"#;
@@ -486,6 +492,7 @@ mod tests {
         assert_eq!(cfg.levels.difficulty_change, "harder");
         assert!(!cfg.levels.reset_bag);
         assert_eq!(cfg.levels.alignment, "centre");
+        assert!(cfg.levels.hide_completed_enemies);
         // The wire strings resolve to the Bevy enums the GameConfig uses.
         assert_eq!(FinishType::from_wire_str(&cfg.levels.finish_type), FinishType::Random);
         assert_eq!(

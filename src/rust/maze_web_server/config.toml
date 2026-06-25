@@ -221,6 +221,10 @@ alignment = "edge"
 # When true, each level randomises its perimeter walls on/off independently; when
 # false (default) every level uses the perimeter_walls setting above.
 perimeter_random = false
+# When true, a completed lower level's enemies are despawned once the player
+# climbs past it; when false (default) they idle in place. Only meaningful when
+# count > 1.
+hide_completed_enemies = false
 
 # Optional scene override for the final (top) level — its own sky_type /
 # perimeter_walls, inheriting the base difficulty where unset. Only meaningful
@@ -267,6 +271,7 @@ difficulty_change = "easier"
 reset_bag = true
 alignment = "edge"
 perimeter_random = false
+hide_completed_enemies = false
 
 [game.play3d.hard]
 title = "HARD 3D"
@@ -306,6 +311,7 @@ difficulty_change = "easier"
 reset_bag = true
 alignment = "edge"
 perimeter_random = false
+hide_completed_enemies = false
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in

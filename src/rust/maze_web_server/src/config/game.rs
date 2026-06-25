@@ -587,6 +587,12 @@ pub struct LevelsConfig {
     /// `perimeter_walls` setting.
     #[serde(default = "default_perimeter_random")]
     pub perimeter_random: bool,
+    /// When `true`, a completed lower level's enemies are despawned once the
+    /// player climbs past it (the player only ever ascends, so a completed level is
+    /// never revisited); when `false` (default) they idle in place. Only meaningful
+    /// when `count > 1`.
+    #[serde(default)]
+    pub hide_completed_enemies: bool,
     /// Optional scene override for the final (top) level — its own `sky_type` /
     /// `perimeter_walls`, inheriting the base where unset. Only meaningful when
     /// `count > 1`. `[game.play3d.<difficulty>.levels.top]`.
@@ -603,6 +609,7 @@ impl Default for LevelsConfig {
             reset_bag: default_reset_bag(),
             alignment: default_alignment(),
             perimeter_random: default_perimeter_random(),
+            hide_completed_enemies: false,
             top: None,
         }
     }
@@ -1747,6 +1754,7 @@ mod tests {
             reset_bag = false
             alignment = "centre"
             perimeter_random = true
+            hide_completed_enemies = true
 
             [play3d.tricky]
             rows = 12
@@ -1775,6 +1783,7 @@ mod tests {
         assert!(!easy.reset_bag);
         assert_eq!(easy.alignment, LayeredAlignmentConfig::Centre);
         assert!(easy.perimeter_random);
+        assert!(easy.hide_completed_enemies);
         assert!(easy.top.is_none());
         // Tricky omits the whole table → single-level defaults.
         let tricky = &cfg.play3d.tricky.levels;
@@ -1784,6 +1793,7 @@ mod tests {
         assert!(tricky.reset_bag);
         assert_eq!(tricky.alignment, LayeredAlignmentConfig::Edge);
         assert!(!tricky.perimeter_random);
+        assert!(!tricky.hide_completed_enemies);
         // Hard sets only count; the rest fall back to defaults.
         assert_eq!(cfg.play3d.hard.levels.count, 2);
         assert_eq!(cfg.play3d.hard.levels.finish_type, FinishTypeConfig::Ladder);

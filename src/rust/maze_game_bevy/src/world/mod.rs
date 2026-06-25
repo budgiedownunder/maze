@@ -783,6 +783,102 @@ fn multilevel_demo_levels(alignment: LayeredAlignment) -> Vec<String> {
         .collect()
 }
 
+/// Hand-built stack for the `MAZE_DEMO=multilevel_centre_hide_enemies` /
+/// `multilevel_centre_no_hide_enemies` demos — the `multilevel_centre` tapered,
+/// centred setup (so the bottom `9×9`'s outer ring stays exposed beneath the
+/// smaller `5×5` / `3×3` upper levels) with eight **stationary** enemies parked
+/// around that exposed ring. Each is neutralised the same way the gallery does it —
+/// a per-cell `damage: 0` + huge `movePeriodMs` override — so it never leaves its
+/// cell and never hurts the walkthrough. Climb off the bottom level and look down:
+/// with `hide_completed_enemies` on (`…_hide_enemies`) the ring of enemies vanishes;
+/// with it off (`…_no_hide_enemies`) they stay in view. Because the enemies never
+/// move, "gone" can't be mistaken for "wandered out of sight". The middle/top grids
+/// are identical to `multilevel_centre`, so bottom→middle is a ladder and
+/// middle→top a portal exactly as there.
+fn multilevel_hide_demo_levels() -> Vec<String> {
+    use serde_json::{json, Value};
+    // A stationary, harmless enemy cell — matches the gallery's neutralised display
+    // enemies (huge move period pins it on its cell; zero damage keeps the
+    // walkthrough safe).
+    let enemy = || json!([{ "type": "E", "damage": 0, "movePeriodMs": 3_600_000.0 }]);
+    let build = |rows: &[&str]| -> Vec<Vec<Value>> {
+        rows.iter()
+            .map(|r| r.chars().map(|c| Value::String(c.to_string())).collect())
+            .collect()
+    };
+    // Bottom 9×9 (live): S(0,0) start, F(4,4) ladder up. Eight stationary enemies
+    // ride the top (row 0) and bottom (row 8) edges — clear of the centred 5×5/3×3
+    // upper footprints (world rows 2–6) and of the S→F interior path, so they stay
+    // visible from the levels above and aren't bumped on the way to the finish.
+    let mut bottom = build(&[
+        "S        ",
+        "         ",
+        "         ",
+        "         ",
+        "    F    ",
+        "         ",
+        "         ",
+        "         ",
+        "         ",
+    ]);
+    for &(r, c) in &[(0, 4), (0, 6), (0, 8), (8, 0), (8, 2), (8, 4), (8, 6), (8, 8)] {
+        bottom[r][c] = enemy();
+    }
+    // Middle 5×5 + top 3×3 — identical to `multilevel_centre` so the ladder/portal
+    // transitions and the hatch all behave the same.
+    let middle = build(&[
+        "     ",
+        " F H ",
+        "  S  ",
+        " T   ",
+        "     ",
+    ]);
+    let top = build(&[
+        "   ",
+        " S ",
+        "  F",
+    ]);
+    [bottom, middle, top]
+        .iter()
+        .map(|grid| json!({ "grid": grid }).to_string())
+        .collect()
+}
+
+/// Which native multi-level demo `MAZE_DEMO` selected, if any.
+#[derive(Clone, Copy)]
+enum MultilevelDemo {
+    /// `multilevel_edge` / `multilevel_centre`: a walkable tapered stack under the
+    /// given layer alignment.
+    Walk(LayeredAlignment),
+    /// `multilevel_centre_hide_enemies` (`hide = true`) /
+    /// `multilevel_centre_no_hide_enemies` (`hide = false`): the centred stack with
+    /// frozen edge enemies, for eyeballing `hide_completed_enemies`.
+    HideEnemies { hide: bool },
+}
+
+impl MultilevelDemo {
+    /// Layer alignment to render under — the hide demos are always centred.
+    fn alignment(self) -> LayeredAlignment {
+        match self {
+            MultilevelDemo::Walk(a) => a,
+            MultilevelDemo::HideEnemies { .. } => LayeredAlignment::Centre,
+        }
+    }
+    /// The hand-built level stack for this demo.
+    fn levels(self) -> Vec<String> {
+        match self {
+            MultilevelDemo::Walk(a) => multilevel_demo_levels(a),
+            MultilevelDemo::HideEnemies { .. } => multilevel_hide_demo_levels(),
+        }
+    }
+    /// Value `GameConfig::hide_completed_enemies` is forced to for this demo. The
+    /// hide demos' enemies are pinned + neutralised per cell in their grids, so no
+    /// move-period override is needed here.
+    fn hide_completed_enemies(self) -> bool {
+        matches!(self, MultilevelDemo::HideEnemies { hide: true })
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_world(
     mut commands: Commands,
@@ -827,10 +923,11 @@ pub(crate) fn spawn_world(
         .as_ref()
         .map(|p| p.0.clone())
         .filter(|levels| !levels.is_empty());
-    // `MAZE_DEMO=multilevel_edge` / `multilevel_centre` both select the hand-built
-    // demo stack (same grids); they differ only in the layer alignment, so each
-    // alignment can be walked and verified. `Some(alignment)` when one is active.
-    let multilevel_demo: Option<LayeredAlignment> = if cfg!(test)
+    // `MAZE_DEMO` multi-level demos: `multilevel_edge` / `multilevel_centre` walk a
+    // tapered stack under each layer alignment; `multilevel_centre_hide_enemies` /
+    // `multilevel_centre_no_hide_enemies` park frozen enemies on the bottom level's
+    // exposed edge ring to eyeball `hide_completed_enemies`. `Some` when active.
+    let multilevel_demo: Option<MultilevelDemo> = if cfg!(test)
         || injected_levels.is_some()
         || pending.0.is_some()
         || gallery_focus.is_some()
@@ -838,8 +935,10 @@ pub(crate) fn spawn_world(
         None
     } else {
         match std::env::var("MAZE_DEMO").as_deref() {
-            Ok("multilevel_edge") => Some(LayeredAlignment::Edge),
-            Ok("multilevel_centre") => Some(LayeredAlignment::Centre),
+            Ok("multilevel_edge") => Some(MultilevelDemo::Walk(LayeredAlignment::Edge)),
+            Ok("multilevel_centre") => Some(MultilevelDemo::Walk(LayeredAlignment::Centre)),
+            Ok("multilevel_centre_no_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: false }),
+            Ok("multilevel_centre_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: true }),
             _ => None,
         }
     };
@@ -851,20 +950,23 @@ pub(crate) fn spawn_world(
         // Native-only — the web/WASM path always supplies a maze via
         // `PendingMazeJson`. The gallery places every entity rig beside its default.
         vec![gallery::json(focus)]
-    } else if let Some(alignment) = multilevel_demo {
-        multilevel_demo_levels(alignment)
+    } else if let Some(demo) = multilevel_demo {
+        demo.levels()
     } else {
         vec![grid_to_json(&demo_grid())]
     };
 
     // The multilevel demo opens the perimeter so the stack is genuinely
     // see-through (decision 8) and applies the demo's chosen layer alignment
-    // (`edge` corner-stacks, `centre` centres each smaller level). Demo-only;
-    // every other launch keeps its configured perimeter + alignment.
-    let config: GameConfig = if let Some(alignment) = multilevel_demo {
+    // (`edge` corner-stacks, `centre` centres each smaller level). The hide demos
+    // additionally force `hide_completed_enemies` (their edge enemies are pinned +
+    // neutralised per cell in the grid). Demo-only; every other launch keeps its
+    // configured values.
+    let config: GameConfig = if let Some(demo) = multilevel_demo {
         GameConfig {
             perimeter_walls: false,
-            layered_alignment: alignment,
+            layered_alignment: demo.alignment(),
+            hide_completed_enemies: demo.hide_completed_enemies(),
             ..(*config).clone()
         }
     } else {
@@ -1554,6 +1656,44 @@ mod multi_level_tests {
                 prev_dim = Some(dim);
             }
         }
+    }
+
+    #[test]
+    fn multilevel_hide_demo_parks_frozen_enemies_on_the_exposed_bottom_edges() {
+        use super::MultilevelDemo;
+        use crate::state::LayeredAlignment;
+
+        let levels = super::multilevel_hide_demo_levels();
+        assert_eq!(levels.len(), 3, "the hide demo is a three-level stack");
+        // The bottom level must parse as a valid maze...
+        MazeGame::from_json(&levels[0]).expect("bottom level parses");
+        // ...with eight enemy cells, all on the exposed edge rows (0 / 8) and each
+        // neutralised per cell (stationary via a huge move period + harmless).
+        let bottom: serde_json::Value = serde_json::from_str(&levels[0]).unwrap();
+        let grid = bottom["grid"].as_array().unwrap();
+        let last = grid.len() - 1;
+        let mut enemies = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for cell in row.as_array().unwrap() {
+                if let Some(entities) = cell.as_array() {
+                    let e = &entities[0];
+                    assert_eq!(e["type"], "E");
+                    assert_eq!(e["damage"], 0, "enemies are harmless");
+                    assert!(e["movePeriodMs"].as_f64().unwrap() >= 3_600_000.0, "enemies are stationary");
+                    assert!(r == 0 || r == last, "enemy on an exposed edge row, not row {r}");
+                    enemies += 1;
+                }
+            }
+        }
+        assert_eq!(enemies, 8, "eight stationary, harmless edge enemies to watch (dis)appear");
+
+        // Both hide variants centre and differ only in the hide flag; a walk demo
+        // never hides.
+        let hide = MultilevelDemo::HideEnemies { hide: true };
+        let keep = MultilevelDemo::HideEnemies { hide: false };
+        assert!(hide.hide_completed_enemies() && !keep.hide_completed_enemies());
+        assert!(matches!(hide.alignment(), LayeredAlignment::Centre));
+        assert!(!MultilevelDemo::Walk(LayeredAlignment::Edge).hide_completed_enemies());
     }
 
     #[test]

@@ -136,6 +136,31 @@ pub(crate) fn enemy_animation_system(
     }
 }
 
+/// Despawns a completed lower level's enemies the moment the player climbs past
+/// it, when [`GameConfig::hide_completed_enemies`] is set. The player only ever
+/// ascends, so a level below `current_level` is never revisited — freeing its
+/// enemy rigs (root + children) trims the live entity/memory load on a multi-level
+/// stack. A no-op when the flag is off, before the first ascend, or for
+/// single-level games. Shaped like `hatch_close_watcher` (fires once per level
+/// change via a `Local` cursor).
+pub(crate) fn despawn_completed_level_enemies_system(
+    mut commands: Commands,
+    config: Res<GameConfig>,
+    run: Res<MultiLevelRun>,
+    mut last_level: Local<usize>,
+    enemies: Query<(Entity, &EnemyMarker)>,
+) {
+    if !config.hide_completed_enemies || run.current_level == *last_level {
+        return;
+    }
+    *last_level = run.current_level;
+    for (entity, marker) in &enemies {
+        if marker.placement.level < run.current_level {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 /// World-space position for the centre of cell `(r, c)`. Matches the
 /// `+ 1.0` half-cell offset other object rigs use.
 fn world_pos_for(r: usize, c: usize) -> Vec3 {

@@ -124,6 +124,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.levels.reset_bag` | Boolean | `true` | (config-file only — whether the player's bag (keys etc.) resets at each level; `true` = every level self-contained; `false` carries the whole bag forward; inert when `count == 1`)
 |                | `game.play3d.<difficulty>.levels.alignment` | Text (`edge` / `centre` / `random`) | `edge` | (config-file only — how a smaller upper level sits over the level below on open-sky stacks; `edge` corner-aligns all layers, `centre` centres each, `random` lets the generator pick per level; unknown values fall back to `edge`; inert when `count == 1` or under an enclosed sky)
 |                | `game.play3d.<difficulty>.levels.perimeter_random` | Boolean | `false` | (config-file only — when `true`, each level randomises its perimeter walls on/off independently; when `false`, every level uses the difficulty's `perimeter_walls`; inert when `count == 1`)
+|                | `game.play3d.<difficulty>.levels.hide_completed_enemies` | Boolean | `false` | (config-file only — when `true`, a completed lower level's enemies are despawned once the player climbs past it; when `false`, they idle in place; inert when `count == 1`)
 |                | `game.play3d.<difficulty>.levels.top.sky_type` / `.perimeter_walls` | Text / Boolean | inherit base | (config-file only — optional `[…levels.top]` scene override for the final (top) level; each field falls back to the base difficulty's value when unset; only meaningful when `count > 1`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
@@ -245,14 +246,16 @@ wall_material_variation = true
 # Multi-level run settings. count = 1 is a single-level game (the default).
 # finish_type: ladder | portal | random. difficulty_change: same | easier |
 # harder. alignment: edge | centre | random. perimeter_random randomises each
-# level's perimeter walls when true. The optional [levels.top] table overrides
-# the top level's sky_type / perimeter_walls when count > 1.
+# level's perimeter walls when true. hide_completed_enemies despawns a lower
+# level's enemies once you climb past it. The optional [levels.top] table
+# overrides the top level's sky_type / perimeter_walls when count > 1.
 count = 1
 finish_type = "ladder"
 difficulty_change = "easier"
 reset_bag = true
 alignment = "edge"
 perimeter_random = false
+hide_completed_enemies = false
 
 [game.play3d.tricky]
 mode = "Tricky"
