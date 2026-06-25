@@ -33,6 +33,8 @@ const FOCUSES: &[&str] =
 const MULTILEVEL_DEMOS: &[&str] = &[
     "multilevel_edge",
     "multilevel_centre",
+    "multilevel_edge_with_perimeter",
+    "multilevel_centre_with_perimeter",
     "multilevel_centre_no_hide_enemies",
     "multilevel_centre_hide_enemies",
 ];
@@ -79,6 +81,8 @@ mod validation_tests {
         assert!(validate_demo_value(Some("walls")).is_ok());
         assert!(validate_demo_value(Some("multilevel_edge")).is_ok());
         assert!(validate_demo_value(Some("multilevel_centre")).is_ok());
+        assert!(validate_demo_value(Some("multilevel_edge_with_perimeter")).is_ok());
+        assert!(validate_demo_value(Some("multilevel_centre_with_perimeter")).is_ok());
         assert!(validate_demo_value(Some("multilevel_centre_hide_enemies")).is_ok());
         assert!(validate_demo_value(Some("multilevel_centre_no_hide_enemies")).is_ok());
     }

@@ -5,6 +5,7 @@ pub(crate) mod levels;
 pub(crate) mod objects;
 pub(crate) mod roof;
 pub(crate) mod sky;
+pub(crate) mod support_pole;
 pub(crate) mod textures;
 pub(crate) mod walls;
 
@@ -847,9 +848,11 @@ fn multilevel_hide_demo_levels() -> Vec<String> {
 /// Which native multi-level demo `MAZE_DEMO` selected, if any.
 #[derive(Clone, Copy)]
 enum MultilevelDemo {
-    /// `multilevel_edge` / `multilevel_centre`: a walkable tapered stack under the
-    /// given layer alignment.
-    Walk(LayeredAlignment),
+    /// `multilevel_edge` / `multilevel_centre` (`perimeter = false`) and their
+    /// `…_with_perimeter` variants (`perimeter = true`): a walkable tapered stack
+    /// under the given layer alignment. The perimeter variants add a solid wall ring
+    /// so the support-pole placement can be eyeballed with edges carried by walls.
+    Walk { alignment: LayeredAlignment, perimeter: bool },
     /// `multilevel_centre_hide_enemies` (`hide = true`) /
     /// `multilevel_centre_no_hide_enemies` (`hide = false`): the centred stack with
     /// frozen edge enemies, for eyeballing `hide_completed_enemies`.
@@ -860,16 +863,22 @@ impl MultilevelDemo {
     /// Layer alignment to render under — the hide demos are always centred.
     fn alignment(self) -> LayeredAlignment {
         match self {
-            MultilevelDemo::Walk(a) => a,
+            MultilevelDemo::Walk { alignment, .. } => alignment,
             MultilevelDemo::HideEnemies { .. } => LayeredAlignment::Centre,
         }
     }
     /// The hand-built level stack for this demo.
     fn levels(self) -> Vec<String> {
         match self {
-            MultilevelDemo::Walk(a) => multilevel_demo_levels(a),
+            MultilevelDemo::Walk { alignment, .. } => multilevel_demo_levels(alignment),
             MultilevelDemo::HideEnemies { .. } => multilevel_hide_demo_levels(),
         }
+    }
+    /// Whether to wall the perimeter. Off for the open see-through demos; on for the
+    /// `…_with_perimeter` walk variants (a solid ring carries the upper levels'
+    /// edge-touching corners, so fewer support poles).
+    fn perimeter_walls(self) -> bool {
+        matches!(self, MultilevelDemo::Walk { perimeter: true, .. })
     }
     /// Value `GameConfig::hide_completed_enemies` is forced to for this demo. The
     /// hide demos' enemies are pinned + neutralised per cell in their grids, so no
@@ -935,8 +944,10 @@ pub(crate) fn spawn_world(
         None
     } else {
         match std::env::var("MAZE_DEMO").as_deref() {
-            Ok("multilevel_edge") => Some(MultilevelDemo::Walk(LayeredAlignment::Edge)),
-            Ok("multilevel_centre") => Some(MultilevelDemo::Walk(LayeredAlignment::Centre)),
+            Ok("multilevel_edge") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Edge, perimeter: false }),
+            Ok("multilevel_centre") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: false }),
+            Ok("multilevel_edge_with_perimeter") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Edge, perimeter: true }),
+            Ok("multilevel_centre_with_perimeter") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: true }),
             Ok("multilevel_centre_no_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: false }),
             Ok("multilevel_centre_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: true }),
             _ => None,
@@ -956,15 +967,16 @@ pub(crate) fn spawn_world(
         vec![grid_to_json(&demo_grid())]
     };
 
-    // The multilevel demo opens the perimeter so the stack is genuinely
-    // see-through (decision 8) and applies the demo's chosen layer alignment
-    // (`edge` corner-stacks, `centre` centres each smaller level). The hide demos
-    // additionally force `hide_completed_enemies` (their edge enemies are pinned +
-    // neutralised per cell in the grid). Demo-only; every other launch keeps its
-    // configured values.
+    // The multilevel demo applies the demo's chosen layer alignment (`edge`
+    // corner-stacks, `centre` centres each smaller level) and opens the perimeter so
+    // the stack is genuinely see-through (decision 8) — except the `…_with_perimeter`
+    // variants, which wall it (solid default brick) to eyeball support poles with
+    // edges carried by walls. The hide demos additionally force
+    // `hide_completed_enemies` (their edge enemies are pinned + neutralised per cell
+    // in the grid). Demo-only; every other launch keeps its configured values.
     let config: GameConfig = if let Some(demo) = multilevel_demo {
         GameConfig {
-            perimeter_walls: false,
+            perimeter_walls: demo.perimeter_walls(),
             layered_alignment: demo.alignment(),
             hide_completed_enemies: demo.hide_completed_enemies(),
             ..(*config).clone()
@@ -1250,6 +1262,83 @@ pub(crate) fn spawn_world(
                 bases[level],
             );
             spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+        }
+    }
+
+    // Support poles: a level with no solid walls (e.g. all water / lava) carries
+    // nothing, so on an open-perimeter stack the floor above it floats. Brace each
+    // UPPER level at its corners — one pole per corner that isn't already held up by
+    // a solid perimeter wall at the lower level's edge, or by a solid wall directly
+    // below it. Max four per level; poles rise from a lower level to the one above,
+    // never from the top level. Visual-only.
+    if level_count > 1 {
+        let pole_assets = support_pole::build_support_pole_assets(&mut meshes, &mut materials);
+        // (grid, cell-entities, placement) per level — level 0 reuses the live grid.
+        let level_info = levels
+            .iter()
+            .enumerate()
+            .map(|(level, json)| {
+                let (g, cells) = if level == 0 {
+                    (grid.clone(), cell_entities.clone())
+                } else {
+                    let lg = MazeGame::from_json(json)
+                        .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+                    (lg.grid().to_vec(), lg.cell_entities().clone())
+                };
+                let placement = LevelPlacement::for_level(
+                    level,
+                    g.len(),
+                    g.first().map_or(0, |r| r.len()),
+                    base_dims.0,
+                    base_dims.1,
+                    config.layered_alignment,
+                    bases[level],
+                );
+                (g, cells, placement)
+            })
+            .collect::<Vec<_>>();
+        // A perimeter wall carries the upper floor's edges only when it's solid (a
+        // water/lava perimeter is a non-occluding pool ring and can't).
+        let perimeter_solid = config.perimeter_walls && !config.wall_type.is_non_occluding();
+        for i in 0..level_count - 1 {
+            let (gi, ci, pi) = &level_info[i];
+            let (gj, _, pj) = &level_info[i + 1];
+            let rows_i = gi.len();
+            let cols_i = gi.first().map_or(0, |r| r.len());
+            let rows_j = gj.len();
+            let cols_j = gj.first().map_or(0, |r| r.len());
+            // Map an upper (i+1) cell down to the level-`i` cell directly beneath it.
+            // Centring offsets are whole multiples of `CELL_SIZE`, so it's an integer
+            // shift (0 under edge alignment); the upper footprint is contained in the
+            // lower one, so the mapped cell is in bounds.
+            let dr = ((pj.world_z(0.0) - pi.world_z(0.0)) / CELL_SIZE).round() as isize;
+            let dc = ((pj.world_x(0.0) - pi.world_x(0.0)) / CELL_SIZE).round() as isize;
+            let supported = |cr: usize, cc: usize| {
+                let (mr, mc) = (cr as isize + dr, cc as isize + dc);
+                if mr < 0 || mc < 0 || mr as usize >= rows_i || mc as usize >= cols_i {
+                    return false;
+                }
+                let (mr, mc) = (mr as usize, mc as usize);
+                let at_edge = mr == 0 || mr == rows_i - 1 || mc == 0 || mc == cols_i - 1;
+                let solid_below =
+                    gi[mr][mc] == 'W' && !walls::is_non_occluding_wall(gi, ci, &config, mr, mc);
+                (at_edge && perimeter_solid) || solid_below
+            };
+            for (cr, cc) in support_pole::corner_poles(rows_j, cols_j, supported) {
+                // The corner cell's OUTWARD corner, tucked just inside the footprint.
+                let inset = support_pole::CORNER_INSET;
+                let x = if cc == 0 {
+                    pj.world_x(cc as f32 * CELL_SIZE) + inset
+                } else {
+                    pj.world_x(cc as f32 * CELL_SIZE + CELL_SIZE) - inset
+                };
+                let z = if cr == 0 {
+                    pj.world_z(cr as f32 * CELL_SIZE) + inset
+                } else {
+                    pj.world_z(cr as f32 * CELL_SIZE + CELL_SIZE) - inset
+                };
+                support_pole::spawn_support_pole(&mut commands, &pole_assets, x, z, bases[i], bases[i + 1]);
+            }
         }
     }
 
@@ -1693,7 +1782,11 @@ mod multi_level_tests {
         let keep = MultilevelDemo::HideEnemies { hide: false };
         assert!(hide.hide_completed_enemies() && !keep.hide_completed_enemies());
         assert!(matches!(hide.alignment(), LayeredAlignment::Centre));
-        assert!(!MultilevelDemo::Walk(LayeredAlignment::Edge).hide_completed_enemies());
+        let walk = MultilevelDemo::Walk { alignment: LayeredAlignment::Edge, perimeter: false };
+        assert!(!walk.hide_completed_enemies() && !walk.perimeter_walls());
+        // The `…_with_perimeter` walk variants wall the perimeter.
+        let walled = MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: true };
+        assert!(walled.perimeter_walls() && !walled.hide_completed_enemies());
     }
 
     #[test]

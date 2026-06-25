@@ -1940,6 +1940,41 @@ mod tests {
     }
 
     #[test]
+    fn support_poles_brace_a_floating_upper_level_at_its_corners() {
+        use crate::world::support_pole::SupportPole;
+        let l0 = r#"{"grid":[["S"," ","F"],[" ","W"," "],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[" ","W"," "],[" "," "," "]]}"#;
+
+        // Lava walls + open perimeter: nothing solid holds up level 1, so it's
+        // braced at all four corners (none over a solid wall or a perimeter wall).
+        let floating = GameConfig {
+            wall_type: WallType::Lava,
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[l0, l1], floating);
+        assert_eq!(
+            app.world_mut().query::<&SupportPole>().iter(app.world()).count(),
+            4,
+            "a floating, no-solid-walls upper level is braced at all four corners",
+        );
+
+        // A solid (brick) perimeter wall carries the same-size upper level's edges,
+        // so its corners need no poles.
+        let walled = GameConfig {
+            wall_type: WallType::Brick,
+            perimeter_walls: true,
+            ..GameConfig::default()
+        };
+        let mut app2 = make_playing_app_with_levels_and_config(&[l0, l1], walled);
+        assert_eq!(
+            app2.world_mut().query::<&SupportPole>().iter(app2.world()).count(),
+            0,
+            "a solid perimeter carries the corners, so no poles",
+        );
+    }
+
+    #[test]
     fn pool_rim_skirts_every_non_pool_edge() {
         // A lone water cell ringed by four passable cells gets a rim skirt on each
         // of its four edges (the recess wall up to floor level).
