@@ -888,6 +888,41 @@ impl MultilevelDemo {
     }
 }
 
+/// A deterministic per-level perimeter coin-flip for `perimeter_random`. Hashed
+/// from the level's grid + index (FNV-1a) so the same maze always randomises the
+/// same way, but each level lands independently.
+fn perimeter_random_for_level(grid: &[Vec<char>], level: usize) -> bool {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ (level as u64).wrapping_mul(0x0100_0000_01b3);
+    for row in grid {
+        for &c in row {
+            h = (h ^ c as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h & 1 == 0
+}
+
+/// The per-level `GameConfig` a level renders under — a clone of the base config
+/// with only its `sky_type` / `perimeter_walls` resolved to this level's effective
+/// values. The final (top) level takes the `[levels.top]` override where set; any
+/// level may have its perimeter randomised by `perimeter_random` (the top override
+/// still wins). Single-level runs render under the base config unchanged.
+fn level_render_config(config: &GameConfig, is_final: bool, multi_level: bool, grid: &[Vec<char>], level: usize) -> GameConfig {
+    if !multi_level {
+        return config.clone();
+    }
+    let sky_type = if is_final {
+        config.top_sky_type.unwrap_or(config.sky_type)
+    } else {
+        config.sky_type
+    };
+    let perimeter_walls = match config.top_perimeter_walls {
+        Some(top) if is_final => top,
+        _ if config.perimeter_random => perimeter_random_for_level(grid, level),
+        _ => config.perimeter_walls,
+    };
+    GameConfig { sky_type, perimeter_walls, ..config.clone() }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_world(
     mut commands: Commands,
@@ -1244,7 +1279,8 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[0],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+            let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1261,7 +1297,8 @@ pub(crate) fn spawn_world(
                 config.layered_alignment,
                 bases[level],
             );
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+            let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
         }
     }
 
@@ -1745,6 +1782,38 @@ mod multi_level_tests {
                 prev_dim = Some(dim);
             }
         }
+    }
+
+    #[test]
+    fn level_render_config_applies_top_override_and_perimeter_random() {
+        use super::level_render_config;
+        use crate::state::SkyType;
+        let grid = vec![vec!['S', 'F']];
+        let base = GameConfig {
+            sky_type: SkyType::Dungeon,
+            perimeter_walls: true,
+            top_sky_type: Some(SkyType::Day),
+            top_perimeter_walls: Some(false),
+            ..GameConfig::default()
+        };
+        // The final (top) level takes the `[levels.top]` override...
+        let top = level_render_config(&base, true, true, &grid, 1);
+        assert_eq!(top.sky_type, SkyType::Day);
+        assert!(!top.perimeter_walls);
+        // ...a lower level keeps the base scene...
+        let lower = level_render_config(&base, false, true, &grid, 0);
+        assert_eq!(lower.sky_type, SkyType::Dungeon);
+        assert!(lower.perimeter_walls);
+        // ...and a single-level run is untouched even though level 0 is "final".
+        let single = level_render_config(&base, true, false, &grid, 0);
+        assert_eq!(single.sky_type, SkyType::Dungeon);
+        assert!(single.perimeter_walls);
+
+        // `perimeter_random` flips a non-top level's perimeter, deterministically.
+        let rnd = GameConfig { perimeter_walls: true, perimeter_random: true, ..GameConfig::default() };
+        let a = level_render_config(&rnd, false, true, &grid, 0).perimeter_walls;
+        let b = level_render_config(&rnd, false, true, &grid, 0).perimeter_walls;
+        assert_eq!(a, b, "same (grid, level) → same flip");
     }
 
     #[test]

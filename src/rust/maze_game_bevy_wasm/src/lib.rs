@@ -127,6 +127,21 @@ struct LevelsStartConfig {
     alignment: String,
     #[serde(default)]
     hide_completed_enemies: bool,
+    #[serde(default)]
+    perimeter_random: bool,
+    #[serde(default)]
+    top: Option<TopStartConfig>,
+}
+
+/// Optional final-level scene override in the host's `levels` object — its own
+/// `skyType` / `perimeterWalls`, each absent to inherit the base difficulty.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TopStartConfig {
+    #[serde(default)]
+    sky_type: Option<String>,
+    #[serde(default)]
+    perimeter_walls: Option<bool>,
 }
 
 impl Default for LevelsStartConfig {
@@ -138,6 +153,8 @@ impl Default for LevelsStartConfig {
             reset_bag: default_reset_bag(),
             alignment: default_alignment(),
             hide_completed_enemies: false,
+            perimeter_random: false,
+            top: None,
         }
     }
 }
@@ -370,6 +387,9 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         finish_type: FinishType::from_wire_str(&cfg.levels.finish_type),
         reset_bag_between_levels: cfg.levels.reset_bag,
         hide_completed_enemies: cfg.levels.hide_completed_enemies,
+        top_sky_type: cfg.levels.top.as_ref().and_then(|t| t.sky_type.as_deref()).map(SkyType::from_wire_str),
+        top_perimeter_walls: cfg.levels.top.as_ref().and_then(|t| t.perimeter_walls),
+        perimeter_random: cfg.levels.perimeter_random,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -465,13 +485,15 @@ mod tests {
         assert!(cfg.levels.reset_bag);
         assert_eq!(cfg.levels.alignment, "edge");
         assert!(!cfg.levels.hide_completed_enemies);
+        assert!(!cfg.levels.perimeter_random);
+        assert!(cfg.levels.top.is_none());
     }
 
     #[test]
     fn start_config_parses_a_multi_level_levels_group() {
         // A curated multi-level preset forwards the server's whole response, so
-        // the nested `levels` object arrives intact. Fields it doesn't consume
-        // yet (`perimeterRandom`, `top`) are ignored without failing the parse.
+        // the nested `levels` object arrives intact, including `perimeterRandom`
+        // and the optional `top` scene override.
         let json = r#"{
             "rows": 9,
             "cols": 9,
@@ -493,6 +515,10 @@ mod tests {
         assert!(!cfg.levels.reset_bag);
         assert_eq!(cfg.levels.alignment, "centre");
         assert!(cfg.levels.hide_completed_enemies);
+        assert!(cfg.levels.perimeter_random);
+        let top = cfg.levels.top.as_ref().expect("top override parsed");
+        assert_eq!(top.sky_type.as_deref(), Some("day"));
+        assert_eq!(top.perimeter_walls, Some(false));
         // The wire strings resolve to the Bevy enums the GameConfig uses.
         assert_eq!(FinishType::from_wire_str(&cfg.levels.finish_type), FinishType::Random);
         assert_eq!(

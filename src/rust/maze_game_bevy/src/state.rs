@@ -370,6 +370,18 @@ pub struct GameConfig {
     /// `true` frees those entities on each ascend (you only ever ascend, so a
     /// completed level is never revisited). Inert for a single-level game.
     pub hide_completed_enemies: bool,
+    /// Scene override for the final (top) level of a multi-level run. `None` (the
+    /// default) inherits the base [`Self::sky_type`] / [`Self::perimeter_walls`];
+    /// `Some` makes the top level render with its own value, so a run can climb from
+    /// enclosed lower floors out to an open-sky summit. Inert for a single-level
+    /// game (the only level is the top).
+    pub top_sky_type: Option<SkyType>,
+    pub top_perimeter_walls: Option<bool>,
+    /// When `true`, each level's perimeter walls are randomised on / off
+    /// independently (seeded per level, deterministic per maze) rather than all
+    /// using [`Self::perimeter_walls`]. The top-level override still wins. Inert for
+    /// a single-level game.
+    pub perimeter_random: bool,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -828,6 +840,9 @@ impl Default for GameConfig {
             finish_type: FinishType::default(),
             reset_bag_between_levels: true,
             hide_completed_enemies: false,
+            top_sky_type: None,
+            top_perimeter_walls: None,
+            perimeter_random: false,
         }
     }
 }
