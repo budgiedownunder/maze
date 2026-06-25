@@ -552,6 +552,14 @@ fn spawn_level(
     // True when this level's start cell sits above a ladder finish on the level
     // below — its floor becomes an (open) hatch the climb emerges through.
     hatch_at_start: bool,
+    // True when this level's own finish resolved to a ladder: if the level is
+    // roofed, its finish-cell roof tile carries the climb's opening (a holed tile)
+    // so the ladder isn't sealed under a solid ceiling. Irrelevant on open levels
+    // (no roof) and on the final level (orb, no ladder).
+    finish_is_ladder_here: bool,
+    // True when the level below this one is roofed — the start-cell hatch then
+    // leaves its underside to that level's holed roof tile.
+    below_roofed: bool,
     // How far this level was lifted to make room for its sunken pools (0 when it
     // carries none, or for the bottom level). When non-zero, each cell's underside
     // is sealed `gap` below the floor so the level below sees a clean ceiling.
@@ -605,12 +613,12 @@ fn spawn_level(
                 if matches!(wall_type, WallType::IronFence) {
                     floor::tile::spawn_tile(commands, assets.floor, r, c, placement);
                 }
-                roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement);
+                roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement, false);
                 continue;
             }
             walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
             decorations::spawn_decorations_for_cell(commands, assets.decoration, grid, cell_entities, cell, r, c, config, placement);
-            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start);
+            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start, below_roofed);
             // Every level's enemies get their real per-level row-major id (matching
             // that level's `MazeGame`'s enemy ids), so each level's enemies come
             // alive when it becomes the current level. `enemy_animation_system`
@@ -624,7 +632,10 @@ fn spawn_level(
             // because the panel borrows the cell's wall material from
             // `wall_assets`.
             objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, placement);
-            roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement);
+            // The ladder finish's roof tile carries the climb's opening (holed) so
+            // the ladder isn't sealed under a solid ceiling on a roofed level.
+            let holed = cell == 'F' && finish_is_ladder_here;
+            roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement, holed);
         }
     }
 }
@@ -857,26 +868,34 @@ enum MultilevelDemo {
     /// `multilevel_centre_no_hide_enemies` (`hide = false`): the centred stack with
     /// frozen edge enemies, for eyeballing `hide_completed_enemies`.
     HideEnemies { hide: bool },
+    /// `multilevel_edge_roofed`: the edge-aligned tapered stack under an enclosed
+    /// (dungeon) sky, so every level is roofed. Its bottom→middle transition is a
+    /// ladder, so the bottom (roofed) level's finish exercises the holed roof tile
+    /// + the level-above hatch's dropped underside — the roof-aware hatch path.
+    Roofed { alignment: LayeredAlignment },
 }
 
 impl MultilevelDemo {
     /// Layer alignment to render under — the hide demos are always centred.
     fn alignment(self) -> LayeredAlignment {
         match self {
-            MultilevelDemo::Walk { alignment, .. } => alignment,
+            MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => alignment,
             MultilevelDemo::HideEnemies { .. } => LayeredAlignment::Centre,
         }
     }
     /// The hand-built level stack for this demo.
     fn levels(self) -> Vec<String> {
         match self {
-            MultilevelDemo::Walk { alignment, .. } => multilevel_demo_levels(alignment),
+            MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => {
+                multilevel_demo_levels(alignment)
+            }
             MultilevelDemo::HideEnemies { .. } => multilevel_hide_demo_levels(),
         }
     }
     /// Whether to wall the perimeter. Off for the open see-through demos; on for the
     /// `…_with_perimeter` walk variants (a solid ring carries the upper levels'
-    /// edge-touching corners, so fewer support poles).
+    /// edge-touching corners, so fewer support poles). The roofed demo leaves it
+    /// off — its enclosed sky walls the perimeter anyway.
     fn perimeter_walls(self) -> bool {
         matches!(self, MultilevelDemo::Walk { perimeter: true, .. })
     }
@@ -885,6 +904,15 @@ impl MultilevelDemo {
     /// move-period override is needed here.
     fn hide_completed_enemies(self) -> bool {
         matches!(self, MultilevelDemo::HideEnemies { hide: true })
+    }
+    /// Sky type this demo forces, if any — the roofed demo overrides the base sky
+    /// to an enclosed (dungeon) one so every level is roofed. `None` leaves the
+    /// configured sky untouched (the open walk / hide demos).
+    fn sky_type_override(self) -> Option<SkyType> {
+        match self {
+            MultilevelDemo::Roofed { .. } => Some(SkyType::Dungeon),
+            _ => None,
+        }
     }
 }
 
@@ -994,6 +1022,7 @@ pub(crate) fn spawn_world(
             Ok("multilevel_centre_with_perimeter") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: true }),
             Ok("multilevel_centre_no_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: false }),
             Ok("multilevel_centre_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: true }),
+            Ok("multilevel_edge_roofed") => Some(MultilevelDemo::Roofed { alignment: LayeredAlignment::Edge }),
             _ => None,
         }
     };
@@ -1017,12 +1046,15 @@ pub(crate) fn spawn_world(
     // variants, which wall it (solid default brick) to eyeball support poles with
     // edges carried by walls. The hide demos additionally force
     // `hide_completed_enemies` (their edge enemies are pinned + neutralised per cell
-    // in the grid). Demo-only; every other launch keeps its configured values.
+    // in the grid); the roofed demo forces an enclosed (dungeon) sky so every level
+    // is roofed (eyeballing the roof-aware hatch over the bottom ladder finish).
+    // Demo-only; every other launch keeps its configured values.
     let config: GameConfig = if let Some(demo) = multilevel_demo {
         GameConfig {
             perimeter_walls: demo.perimeter_walls(),
             layered_alignment: demo.alignment(),
             hide_completed_enemies: demo.hide_completed_enemies(),
+            sky_type: demo.sky_type_override().unwrap_or(config.sky_type),
             ..(*config).clone()
         }
     } else {
@@ -1290,6 +1322,13 @@ pub(crate) fn spawn_world(
         // a ladder finish — the opening the climb emerges through, closing once the
         // player has come up. The bottom level (no level below) never has one.
         let hatch_at_start = level >= 1 && finish_is_ladder.get(level - 1).copied().unwrap_or(false);
+        // This level's own finish resolved to a ladder — on a roofed level its
+        // finish-cell roof tile is holed so the climb isn't sealed under a ceiling.
+        let finish_is_ladder_here = finish_is_ladder.get(level).copied().unwrap_or(false);
+        // Whether the level directly below is roofed. A lower level is never the
+        // top, so it always renders under the base sky — hence the base sky's
+        // enclosure decides it. Drives the start-cell hatch's underside.
+        let below_roofed = level >= 1 && config.sky_type.is_enclosed();
         if level == 0 {
             // The live level reuses the already-parsed grid + per-cell overrides.
             let placement = LevelPlacement::for_level(
@@ -1302,7 +1341,7 @@ pub(crate) fn spawn_world(
                 bases[0],
             );
             let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks);
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1320,7 +1359,7 @@ pub(crate) fn spawn_world(
                 bases[level],
             );
             let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, gap, treasure_rays, lava_rocks);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks);
         }
     }
 
@@ -1804,6 +1843,27 @@ mod multi_level_tests {
                 prev_dim = Some(dim);
             }
         }
+    }
+
+    #[test]
+    fn roofed_demo_uses_an_enclosed_sky_over_the_edge_ladder_stack() {
+        use super::MultilevelDemo;
+        use crate::state::{LayeredAlignment, SkyType};
+        let demo = MultilevelDemo::Roofed { alignment: LayeredAlignment::Edge };
+        // Forces an enclosed (roofed) sky so every level is roofed — the bottom
+        // ladder finish then exercises the holed roof + dropped hatch underside.
+        assert_eq!(demo.sky_type_override(), Some(SkyType::Dungeon));
+        assert!(demo.sky_type_override().unwrap().is_enclosed());
+        // Reuses the edge walk stack, whose bottom→middle transition is a ladder.
+        assert_eq!(demo.alignment(), LayeredAlignment::Edge);
+        assert_eq!(
+            demo.levels().len(),
+            super::multilevel_demo_levels(LayeredAlignment::Edge).len()
+        );
+        // The enclosed sky walls the perimeter itself, so no perimeter override; and
+        // it isn't a hide demo.
+        assert!(!demo.perimeter_walls());
+        assert!(!demo.hide_completed_enemies());
     }
 
     #[test]

@@ -93,7 +93,8 @@ without authoring a maze. The value selects which types to show:
 | `multilevel_centre` | a walkable centred multi-level pyramid (bottom level live, the rest static): an open `9×9` platform at the bottom, a `5×5` centred above, a `3×3` centred on top, each rendered a `LEVEL_HEIGHT` higher with an open perimeter so the platforms read as floating layers; reaching a level's finish lifts + centres you onto the next. The bottom→middle transition is a **ladder** (middle start world-above the bottom finish) and middle→top a **portal**, so a single walkthrough exercises both. Only the top platform keeps the finish orb, on its far corner in the open. |
 | `multilevel_edge`   | the same `9×9 → 5×5 → 3×3` stack but edge-aligned — every level shares a common origin corner (zero X/Z offset) instead of being centred, for verifying the `edge` layout mode. Like `multilevel_centre`, the walkthrough climbs a ladder then steps through a portal (the cells that line up vertically differ from the centred stack, so the grids do too). |
 | `multilevel_centre_with_perimeter` / `multilevel_edge_with_perimeter` | copies of `multilevel_centre` / `multilevel_edge` but with a solid (brick) perimeter wall instead of an open edge, for eyeballing support-pole placement with edges carried by walls: an upper corner sitting over the lower level's perimeter gets no pole. So `…_edge_with_perimeter` braces only each upper level's interior corner(s), while `…_centre_with_perimeter` (centred corners don't sit over the lower perimeter) still braces all four. |
-| `multilevel_centre_hide_enemies` / `multilevel_centre_no_hide_enemies` | the centred stack with **eight stationary, harmless enemies** parked on the bottom level's exposed outer ring (neutralised per cell like the gallery — a huge move period pins each in place so it can't wander out of view, zero damage keeps the walk safe), for eyeballing the `hide_completed_enemies` levels flag. Climb off the bottom level and look down: with `…_hide_enemies` the ring of enemies vanishes; with `…_no_hide_enemies` it stays. |
+| `multilevel_centre_hide_enemies` / `multilevel_centre_no_hide_enemies` | the centred stack with eight stationary, harmless enemies parked on the bottom level's exposed outer ring (neutralised per cell like the gallery — a huge move period pins each in place so it can't wander out of view, zero damage keeps the walk safe), for eyeballing the `hide_completed_enemies` levels flag. Climb off the bottom level and look down: with `…_hide_enemies` the ring of enemies vanishes; with `…_no_hide_enemies` it stays. |
+| `multilevel_edge_roofed` | the edge-aligned stack under an enclosed (dungeon) sky, so every level is roofed, for eyeballing the roof-aware ladder hatch. Its bottom→middle transition is a ladder, so the bottom (roofed) level's finish gets a holed roof tile (the climb reads as inset into the dark-rock ceiling instead of sealed under it) and the hatch above it drops its stone underside in favour of that roof. Look up at the bottom finish before climbing, then climb through. |
 | `treasure`  | treasure rigs only — open chests of each style (silver / gold coins, diamond / jewel gems) in dead-end alcoves |
 | `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
 
@@ -158,7 +159,7 @@ src/
 │   │   ├── lines.rs        FloorLine, line meshes + material + spawn_lines_for_cell
 │   │   ├── start.rs        StartCell + start material + spawn helper
 │   │   ├── finish.rs       FinishCell + finish material + spawn helper
-│   │   └── hatch.rs        LevelHatch: a round submersible-style hatch in a start cell above a ladder finish — holed floor + metal rim + dark hinged lid with a crossed wheel; stands open, swings closed when the player climbs up (close watcher + animation)
+│   │   └── hatch.rs        LevelHatch: a round submersible-style hatch in a start cell above a ladder finish — holed floor + metal rim + dark hinged lid with a crossed wheel; stands open, swings closed when the player climbs up (close watcher + animation). Stone-caps its underside on an open-sky stack; on a roofed stack below it drops that cap (the level-below's holed roof tile is the ceiling).
 │   ├── walls/              wall panels + non-occluding wall types
 │   │   ├── mod.rs          WallAssets bundle, wall-material kinds + override resolver, wall-type classifiers, non-occluding dispatch
 │   │   ├── solid/          solid-wall panel rendering
@@ -234,7 +235,7 @@ src/
 │   │   ├── dungeon/mod.rs  enclosed: near-black cool dome + dim light (pairs with roof/dungeon.rs)
 │   │   └── chamber/mod.rs  enclosed: near-black warm dome + dim light (pairs with roof/chamber.rs)
 │   └── roof/               per-cell ceiling for the enclosed sky types
-│       ├── mod.rs          RoofCell + shared inset-tile mesh + per-sky-type dispatch
+│       ├── mod.rs          RoofCell + shared inset-tile mesh (+ a holed variant over a ladder finish, so the climb isn't sealed under the ceiling) + per-sky-type dispatch
 │       ├── dungeon.rs      dark-rock ceiling material (textures/rock.rs)
 │       └── chamber.rs      ceiling in the cell's wall material
 ├── hud/                    HUD overlays

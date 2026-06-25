@@ -189,6 +189,7 @@ pub(crate) fn spawn_hatch(
     r: usize,
     c: usize,
     placement: LevelPlacement,
+    below_roofed: bool,
 ) {
     let cx = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let cz = placement.world_z(r as f32 * CELL_SIZE + 1.0);
@@ -203,8 +204,12 @@ pub(crate) fn spawn_hatch(
     match (h.hole_mesh.clone(), assets.start_mat.clone()) {
         (Some(mesh), Some(green)) => {
             commands.spawn((FloorCell, pos, Mesh3d(mesh.clone()), MeshMaterial3d(green)));
-            if let Some(stone) = h.hole_mat.clone() {
-                commands.spawn((pos, Mesh3d(mesh), MeshMaterial3d(stone)));
+            // Stone underside cap only on an open-sky stack; a roofed level below
+            // caps the opening with its own holed roof tile instead.
+            if !below_roofed {
+                if let Some(stone) = h.hole_mat.clone() {
+                    commands.spawn((pos, Mesh3d(mesh), MeshMaterial3d(stone)));
+                }
             }
         }
         _ => {
