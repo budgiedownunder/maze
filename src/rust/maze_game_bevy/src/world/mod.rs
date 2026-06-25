@@ -15,7 +15,7 @@ use crate::hud;
 use crate::overlays::pause;
 use crate::state::{
     FinishType, GameClock, GameConfig, GameState, GridFacing, LayeredAlignment, MultiLevelRun,
-    PendingLevels, PendingMazeJson, WallType,
+    PendingLevels, PendingMazeJson, SkyType, WallType,
 };
 use bevy::prelude::*;
 use maze::{CellEntity, GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
@@ -901,6 +901,19 @@ fn perimeter_random_for_level(grid: &[Vec<char>], level: usize) -> bool {
     h & 1 == 0
 }
 
+/// This level's effective sky type: the top level takes the `[levels.top]`
+/// override where set, every other level (and any single-level run) the base sky.
+/// The single source of truth for both [`level_render_config`] (each level's
+/// ceilings/perimeter render under this) and the [`sky::LevelSkies`] table the
+/// dome-swap watcher reads on a level transition.
+fn effective_sky(config: &GameConfig, is_final: bool, multi_level: bool) -> SkyType {
+    if multi_level && is_final {
+        config.top_sky_type.unwrap_or(config.sky_type)
+    } else {
+        config.sky_type
+    }
+}
+
 /// The per-level `GameConfig` a level renders under — a clone of the base config
 /// with only its `sky_type` / `perimeter_walls` resolved to this level's effective
 /// values. The final (top) level takes the `[levels.top]` override where set; any
@@ -910,11 +923,7 @@ fn level_render_config(config: &GameConfig, is_final: bool, multi_level: bool, g
     if !multi_level {
         return config.clone();
     }
-    let sky_type = if is_final {
-        config.top_sky_type.unwrap_or(config.sky_type)
-    } else {
-        config.sky_type
-    };
+    let sky_type = effective_sky(config, is_final, true);
     let perimeter_walls = match config.top_perimeter_walls {
         Some(top) if is_final => top,
         _ if config.perimeter_random => perimeter_random_for_level(grid, level),
@@ -1078,13 +1087,27 @@ pub(crate) fn spawn_world(
     });
 
     spawn_camera(&mut commands, start_pos, start_yaw);
+    // Each level's effective sky (the top level may override it). The global dome
+    // can only show one at a time, so spawn the bottom level's now and let
+    // `sky_switch_on_level_change` re-skin it as the player climbs into a level
+    // with a different sky. A single-level run holds one entry and never swaps —
+    // byte-for-byte the previous single-dome behaviour.
+    let level_count = levels.len();
+    let level_skies: Vec<SkyType> = (0..level_count)
+        .map(|level| effective_sky(&config, level + 1 == level_count, level_count > 1))
+        .collect();
+    let bottom_sky = level_skies.first().copied().unwrap_or(config.sky_type);
     sky::spawn_sky(
         &mut commands,
         &mut meshes,
         &mut materials,
         &mut images,
-        &config,
+        &GameConfig {
+            sky_type: bottom_sky,
+            ..config.clone()
+        },
     );
+    commands.insert_resource(sky::LevelSkies(level_skies));
 
     let wall_assets = walls::build_wall_assets(&mut meshes, &mut materials, &mut images);
     let nonoccluding_assets =
@@ -1115,7 +1138,6 @@ pub(crate) fn spawn_world(
     // The bottom level's footprint is the reference the upper levels' `Centre`
     // offsets are measured against.
     let base_dims = (grid.len(), grid.first().map_or(0, |row| row.len()));
-    let level_count = levels.len();
 
     // Precompute each level's world-space floor Y (the `base_level_y` table) before
     // building any geometry: a level that carries a sunken pool (water / lava) is

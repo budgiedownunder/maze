@@ -192,6 +192,21 @@ fn ladder_pose(t: &LevelTransition) -> (Vec3, f32, f32) {
     }
 }
 
+/// Whether the global sky should have swapped to the *next* level's sky by this
+/// point in the transition — timed to the moment the change is visually masked, so
+/// the player keeps the level-below sky until then and emerges already in the new
+/// one. A **portal** swaps at the white-out flash peak (`raw 0.5`, the same instant
+/// [`camera_pose`] hides the camera jump); a **ladder** swaps as the camera clears
+/// the hatch hole onto the upper level (the end of the climb phase). Read by
+/// [`crate::world::sky::sky_switch_on_level_change`].
+pub(crate) fn sky_swap_due(t: &LevelTransition) -> bool {
+    let raw = (t.elapsed / t.duration).clamp(0.0, 1.0);
+    match t.kind {
+        FinishType::Portal => raw >= 0.5,
+        _ => raw >= FACE_FRAC + CLIMB_FRAC,
+    }
+}
+
 /// Smoothstep easing (0→1).
 fn smoothstep(x: f32) -> f32 {
     x * x * (3.0 - 2.0 * x)

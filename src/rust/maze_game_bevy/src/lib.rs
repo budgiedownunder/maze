@@ -65,6 +65,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, crate::transition::transition_fx_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::floor::hatch::hatch_close_watcher.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::floor::hatch::hatch_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::sky::sky_switch_on_level_change.run_if(in_state(AppState::Playing)))
         .add_systems(Update, outcome_watcher_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::leaf_system.run_if(in_state(AppState::Playing)))
@@ -1208,6 +1209,180 @@ mod tests {
     #[test]
     fn chamber_sky_spawns_dome_and_lights() {
         assert_sky_spawns_dome_and_light(SkyType::Chamber);
+    }
+
+    /// Two stacked levels — a minimal solvable grid each level reuses.
+    const SKY_L0: &str = r#"{"grid":[["S"," "],[" ","F"]]}"#;
+    const SKY_L1: &str = r#"{"grid":[["S"," "],[" ","F"]]}"#;
+
+    /// The single live `SkyDome` entity (there is always exactly one).
+    fn sky_dome_entity(app: &mut App) -> Entity {
+        let mut q = app.world_mut().query_filtered::<Entity, With<SkyDome>>();
+        let domes: Vec<Entity> = q.iter(app.world()).collect();
+        assert_eq!(domes.len(), 1, "expected exactly one SkyDome, got {}", domes.len());
+        domes[0]
+    }
+
+    /// Drives the run up one level (as `advance_to_next_level` does) and pumps a
+    /// frame so the swap watcher runs.
+    fn climb_one_level(app: &mut App) {
+        app.world_mut()
+            .resource_mut::<crate::state::MultiLevelRun>()
+            .current_level = 1;
+        app.update();
+    }
+
+    #[test]
+    fn level_skies_holds_each_levels_effective_sky() {
+        // Enclosed dungeon base with an open day summit — the two ends of a climb.
+        let config = GameConfig {
+            sky_type: SkyType::Dungeon,
+            top_sky_type: Some(SkyType::Day),
+            ..GameConfig::default()
+        };
+        let app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let skies = &app.world().resource::<crate::world::sky::LevelSkies>().0;
+        assert_eq!(skies, &[SkyType::Dungeon, SkyType::Day]);
+    }
+
+    #[test]
+    fn sky_switch_respawns_the_dome_on_a_differing_sky() {
+        let config = GameConfig {
+            sky_type: SkyType::Dungeon,
+            top_sky_type: Some(SkyType::Day),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        climb_one_level(&mut app);
+        // The old dome is gone and a fresh one stands in its place — still exactly
+        // one dome, but a different entity (the day sky replaced the dungeon one).
+        let after = sky_dome_entity(&mut app);
+        assert_ne!(before, after, "the dome should be respawned for the new sky");
+    }
+
+    /// Arms a level transition of `kind` at fraction `raw` of its duration, without
+    /// advancing `current_level` — the player is mid-climb / mid-step-through, not
+    /// yet arrived (as `transition_system` has it before completion).
+    fn arm_transition(app: &mut App, kind: crate::state::FinishType, raw: f32) {
+        use crate::state::{GameState, LevelTransition};
+        app.world_mut().resource_mut::<GameState>().transition = Some(LevelTransition {
+            kind,
+            elapsed: raw,
+            duration: 1.0,
+            start_pos: Vec3::ZERO,
+            target_pos: Vec3::ZERO,
+            start_yaw: 0.0,
+            target_yaw: 0.0,
+            start_pitch: 0.0,
+            target_pitch: 0.0,
+            climb_yaw: 0.0,
+            climb_pos: Vec3::ZERO,
+        });
+    }
+
+    #[test]
+    fn ladder_sky_swap_holds_until_the_camera_clears_the_hatch() {
+        use crate::state::{FinishType, MultiLevelRun};
+        let config = GameConfig {
+            sky_type: SkyType::Sunset,
+            top_sky_type: Some(SkyType::Night),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        // Early in the climb (still below the hatch) the level-below sunset holds.
+        arm_transition(&mut app, FinishType::Ladder, 0.2);
+        app.update();
+        assert_eq!(
+            sky_dome_entity(&mut app),
+            before,
+            "the sunset sky should hold while the player is still climbing"
+        );
+        assert_eq!(
+            app.world().resource::<MultiLevelRun>().current_level,
+            0,
+            "arrival hasn't happened — current_level is still the lower level"
+        );
+        // Past the end of the climb (camera clears the hole) the night sky is up,
+        // though arrival (current_level) hasn't advanced yet.
+        arm_transition(&mut app, FinishType::Ladder, 0.7);
+        app.update();
+        assert_ne!(
+            sky_dome_entity(&mut app),
+            before,
+            "the night sky should be in place as the player emerges through the hatch"
+        );
+    }
+
+    #[test]
+    fn portal_sky_swap_fires_at_the_flash_peak() {
+        use crate::state::FinishType;
+        let config = GameConfig {
+            sky_type: SkyType::Sunset,
+            top_sky_type: Some(SkyType::Night),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        // Before the flash peak the old sky holds.
+        arm_transition(&mut app, FinishType::Portal, 0.3);
+        app.update();
+        assert_eq!(
+            sky_dome_entity(&mut app),
+            before,
+            "the sky should hold until the portal flash whites out"
+        );
+        // At/after the peak (the white-out) the swap is masked by the flash.
+        arm_transition(&mut app, FinishType::Portal, 0.6);
+        app.update();
+        assert_ne!(
+            sky_dome_entity(&mut app),
+            before,
+            "the new sky should swap in behind the portal flash"
+        );
+    }
+
+    #[test]
+    fn sky_switch_is_a_no_op_when_the_sky_is_unchanged() {
+        // No top override → every level shares the base sky, so climbing must not
+        // tear down and rebuild the dome.
+        let config = GameConfig {
+            sky_type: SkyType::Day,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        climb_one_level(&mut app);
+        let after = sky_dome_entity(&mut app);
+        assert_eq!(before, after, "an unchanged sky must keep the same dome entity");
+    }
+
+    #[test]
+    fn sky_swap_does_not_accumulate_sky_entities() {
+        // The point of the marker-despawn is memory neutrality: only one sky exists
+        // at a time, so the swap must despawn the whole old set before spawning the
+        // new one rather than stacking them. The headless app has no `AssetPlugin`
+        // (so no `Assets<Image>` to count), but the asset handles are ref-counted to
+        // these entities — proving the set doesn't grow proves the old dome's
+        // material + texture handles are dropped on the next sweep.
+        let config = GameConfig {
+            sky_type: SkyType::Dungeon,
+            top_sky_type: Some(SkyType::Day),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let count_sky = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<Entity, With<crate::world::sky::SkyEntity>>()
+                .iter(app.world())
+                .count()
+        };
+        let before = count_sky(&mut app);
+        assert!(before > 0, "the bottom sky should have spawned");
+        climb_one_level(&mut app);
+        let after = count_sky(&mut app);
+        assert_eq!(before, after, "a swap must replace the sky set, not accumulate it");
     }
 
     #[test]
