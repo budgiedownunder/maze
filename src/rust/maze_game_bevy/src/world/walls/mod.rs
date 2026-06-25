@@ -66,7 +66,7 @@ pub(crate) const WALL_MATERIAL_COBBLESTONE: usize = 3;
 // whether the texture is monochrome or RGB-coloured:
 //   - Greyscale textures (brick, dressed_stone): emissive carries the
 //     chromaticity. Texture is greyscale, emissive RGB tints it.
-//   - RGB-coloured textures (wood, cobblestone — Step 11.S): texture
+//   - RGB-coloured textures (wood, cobblestone): texture
 //     carries per-pixel chromaticity AND per-plank/per-cobble tone
 //     variation. Emissive must stay near-neutral brightness or it
 //     compounds with the texture and saturates.

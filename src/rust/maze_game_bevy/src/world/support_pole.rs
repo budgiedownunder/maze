@@ -12,7 +12,7 @@
 //! inside the footprint, and rises from the lower floor to the floor it braces.
 //!
 //! Visual-only: placed by [`crate::world::spawn_world`] after the per-level
-//! geometry, carries no collision, and spans the (possibly 6b-lifted) gap. Poles
+//! geometry, carries no collision, and spans the (possibly pool-lifted) gap. Poles
 //! rise from a lower level to the one above it — never from the top level, which
 //! holds nothing up.
 

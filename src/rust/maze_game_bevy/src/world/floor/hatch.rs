@@ -48,12 +48,21 @@ const METAL_EMISSIVE: LinearRgba = LinearRgba::new(0.06, 0.06, 0.07, 1.0);
 /// Dark-grey lid disc (per the submersible look) — same metallic finish, darker.
 const LID_BASE: Color = Color::srgb(0.20, 0.21, 0.23);
 
+/// Marker on the hatch's stone underside cap — the holed ring the level below sees
+/// as the ceiling around the opening. Tagged so its placement (dropped to the gap
+/// bottom on a lifted level) can be checked in tests.
+#[derive(Component)]
+pub(crate) struct HatchUnderside;
+
 /// Shared meshes + materials for the round hatch, built once into [`FloorAssets`].
 pub(crate) struct HatchAssets {
-    /// The start tile with a round hole — a flat ring from the cell square in to
-    /// the hole circle. Its top reuses the green start material (so the surface
-    /// matches a plain start cell); `hole_mat` below caps the underside in stone.
+    /// The start tile with a round hole, normals **up** — reuses the green start
+    /// material so the surface matches a plain start cell viewed from above.
     pub(crate) hole_mesh: Option<Handle<Mesh>>,
+    /// The same hole, normals **down** with the cuboid bottom-face UV, for the
+    /// underside the level below looks up at — so it tiles identically to the
+    /// surrounding floor tiles' undersides instead of reading 180° rotated.
+    pub(crate) underside_mesh: Option<Handle<Mesh>>,
     /// Flat disc lid.
     pub(crate) lid_mesh: Option<Handle<Mesh>>,
     /// Rim torus framing the hole.
@@ -72,6 +81,7 @@ pub(crate) fn build_hatch_assets(
     tile_tex: &Option<Handle<Image>>,
 ) -> HatchAssets {
     let hole_mesh = meshes.as_mut().map(|m| m.add(square_hole_mesh()));
+    let underside_mesh = meshes.as_mut().map(|m| m.add(hole_underside_mesh()));
     let lid_mesh = meshes
         .as_mut()
         .map(|m| m.add(Cylinder::new(LID_RADIUS, LID_THICKNESS)));
@@ -91,13 +101,15 @@ pub(crate) fn build_hatch_assets(
     };
     let metal_mat = materials.as_mut().map(|m| m.add(metal(METAL_BASE)));
     let lid_mat = materials.as_mut().map(|m| m.add(metal(LID_BASE)));
-    // Underside cap for the holed floor: the shared floor-tile material on the
-    // ring's back faces only, so from the level below the hole reads as inset into
-    // the same ceiling surface as every other cell (today the stone floor tile;
-    // it would follow a wooden / dungeon roof material the same way).
-    let hole_mat = tile::build_underside_material(materials, tile_tex);
+    // Underside cap material: the PLAIN floor-tile material (default cull). The
+    // underside mesh faces DOWN, so its front renders from the level below and reads
+    // as the same stone tiling as every surrounding floor cell's underside. (The old
+    // cull-front approach reused the up-facing green-top mesh, which showed the
+    // top-face UV from below — 180° off from the neighbours.)
+    let hole_mat = tile::build_tile_material(materials, tile_tex);
     HatchAssets {
         hole_mesh,
+        underside_mesh,
         lid_mesh,
         rim_mesh,
         wheel_mesh,
@@ -108,9 +120,10 @@ pub(crate) fn build_hatch_assets(
     }
 }
 
-/// A flat mesh filling the cell square except for a central circular hole — a ring
-/// of quads from the hole circle out to the square boundary, normals up, drawn
-/// double-sided so the underside reads as stone (not a glowing gap) from below.
+/// The hatch's **top** surface — a flat ring filling the cell square except for the
+/// central hole, normals **up**, with the cuboid **top**-face UV so it tiles exactly
+/// like a plain start tile when the level above looks down on it. (The underside the
+/// level below sees is a separate mesh, [`hole_underside_mesh`].)
 fn square_hole_mesh() -> Mesh {
     const N: usize = 48;
     let h = CELL_SIZE / 2.0;
@@ -118,9 +131,7 @@ fn square_hole_mesh() -> Mesh {
     let mut normals: Vec<[f32; 3]> = Vec::new();
     let mut uvs: Vec<[f32; 2]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
-    // UVs map cell-local X/Z to [0,1] across the cell so the shared tile texture
-    // (scaled by the start material's uv_transform) tiles exactly like a plain
-    // start tile.
+    // Top-face UV (cuboid top: `u = (x + h)/size`, `v = (z + h)/size`).
     let uv = |p: Vec2| [(p.x + h) / CELL_SIZE, (p.y + h) / CELL_SIZE];
     for i in 0..=N {
         let t = i as f32 / N as f32 * TAU;
@@ -138,10 +149,50 @@ fn square_hole_mesh() -> Mesh {
     for i in 0..N as u32 {
         let (a, b) = (i * 2, i * 2 + 1); // inner / outer at i
         let (c, d) = ((i + 1) * 2, (i + 1) * 2 + 1); // inner / outer at i+1
-        // Wound so the front face points UP (matching the +Y normals), so the
-        // green top renders for the level above and the stone cull-front underside
-        // renders for the level below.
+        // Wound so the front face points UP (matching the +Y normals) for the level above.
         indices.extend_from_slice(&[a, d, b, a, c, d]);
+    }
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
+
+/// The hatch's **underside** — the same square-with-a-hole ring but normals **down**
+/// and UVs matching a Bevy [`Cuboid`]'s **bottom** face (`u = (h - x)/size`,
+/// `v = (h - z)/size`). The surrounding floor tiles are cuboids, so from the level
+/// below they show their bottom face; this matches that exactly (same texels, same
+/// orientation), so the hole reads as inset into one continuous ceiling rather than a
+/// lighter, mis-tiled patch. Rendered with the plain (default-cull) floor-tile
+/// material on its down-facing front.
+fn hole_underside_mesh() -> Mesh {
+    const N: usize = 48;
+    let h = CELL_SIZE / 2.0;
+    let uv = |p: Vec2| [(h - p.x) / CELL_SIZE, (h - p.y) / CELL_SIZE];
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+    for i in 0..=N {
+        let t = i as f32 / N as f32 * TAU;
+        let (s, c) = t.sin_cos();
+        let m = c.abs().max(s.abs()).max(1e-3);
+        let inner = Vec2::new(c, s) * HOLE_RADIUS;
+        let outer = Vec2::new(c, s) * (h / m);
+        positions.push([inner.x, 0.0, inner.y]);
+        normals.push([0.0, -1.0, 0.0]);
+        uvs.push(uv(inner));
+        positions.push([outer.x, 0.0, outer.y]);
+        normals.push([0.0, -1.0, 0.0]);
+        uvs.push(uv(outer));
+    }
+    for i in 0..N as u32 {
+        let (a, b) = (i * 2, i * 2 + 1); // inner / outer at i
+        let (c, d) = ((i + 1) * 2, (i + 1) * 2 + 1); // inner / outer at i+1
+        // Wound so the front face points DOWN (matching the -Y normals) for the level below.
+        indices.extend_from_slice(&[a, b, d, a, d, c]);
     }
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -190,6 +241,11 @@ pub(crate) fn spawn_hatch(
     c: usize,
     placement: LevelPlacement,
     below_roofed: bool,
+    // How far this level was lifted to clear its pools (0 when it carries none). The
+    // neighbouring cells' undersides are sealed at the gap *bottom*, so the hatch's
+    // stone underside cap drops by `gap` to sit at that same plane — else it floats a
+    // `gap` above the surrounding ceiling on a lifted (pool) level.
+    gap: f32,
 ) {
     let cx = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let cz = placement.world_z(r as f32 * CELL_SIZE + 1.0);
@@ -198,17 +254,21 @@ pub(crate) fn spawn_hatch(
 
     // Holed floor (static) — the start tile with a round opening. The top reuses
     // the green start material so the surface matches a plain start cell viewed
-    // from above; a stone underside (cull-front) caps it so the level below sees
-    // plain stone around the hole.
+    // from above; a separate down-facing underside mesh caps it so the level below
+    // sees plain stone around the hole.
     let pos = Transform::from_xyz(cx, floor_y, cz);
     match (h.hole_mesh.clone(), assets.start_mat.clone()) {
         (Some(mesh), Some(green)) => {
-            commands.spawn((FloorCell, pos, Mesh3d(mesh.clone()), MeshMaterial3d(green)));
+            commands.spawn((FloorCell, pos, Mesh3d(mesh), MeshMaterial3d(green)));
             // Stone underside cap only on an open-sky stack; a roofed level below
-            // caps the opening with its own holed roof tile instead.
+            // caps the opening with its own holed roof tile instead. The down-facing
+            // `underside_mesh` (bottom-face UV) matches the surrounding floor
+            // undersides, dropped to the gap bottom (`floor_y - gap`) so it's flush
+            // with the sealed cells on a lifted (pool) level.
             if !below_roofed {
-                if let Some(stone) = h.hole_mat.clone() {
-                    commands.spawn((pos, Mesh3d(mesh), MeshMaterial3d(stone)));
+                if let (Some(under), Some(stone)) = (h.underside_mesh.clone(), h.hole_mat.clone()) {
+                    let cap = Transform::from_xyz(cx, floor_y - gap, cz);
+                    commands.spawn((HatchUnderside, cap, Mesh3d(under), MeshMaterial3d(stone)));
                 }
             }
         }
@@ -296,4 +356,113 @@ pub(crate) fn hatch_animation_system(
 
 fn smoothstep(x: f32) -> f32 {
     x * x * (3.0 - 2.0 * x)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::LayeredAlignment;
+
+    /// A minimal `FloorAssets` whose holed-floor mesh + start/hole materials are set
+    /// (the rest left `None`), so `spawn_hatch` reaches the cap-spawning branch.
+    fn dummy_assets() -> FloorAssets {
+        FloorAssets {
+            floor_mesh: None,
+            tile_mat: None,
+            start_mat: Some(Handle::default()),
+            finish_mat: None,
+            lines: crate::world::floor::lines::LineAssets {
+                line_ew: None,
+                line_ns: None,
+                line_mat: None,
+            },
+            hatch: HatchAssets {
+                hole_mesh: Some(Handle::default()),
+                underside_mesh: Some(Handle::default()),
+                lid_mesh: None,
+                rim_mesh: None,
+                wheel_mesh: None,
+                spoke_mesh: None,
+                metal_mat: None,
+                lid_mat: None,
+                hole_mat: Some(Handle::default()),
+            },
+        }
+    }
+
+    #[test]
+    fn the_underside_cap_drops_to_the_gap_bottom_on_a_lifted_level() {
+        // A level lifted by `gap` for its pools: the stone underside cap must sit at
+        // the gap bottom (`floor_y - gap`), flush with the surrounding sealed cells —
+        // not floating a `gap` above them.
+        let gap = 0.7_f32;
+        let base_y = 3.7_f32; // a single upper level whose floor is lifted by the gap
+        let placement = LevelPlacement::for_level(1, 1, 1, 1, 1, LayeredAlignment::Edge, base_y);
+        let assets = dummy_assets();
+        let mut app = App::new();
+        app.add_systems(Update, move |mut commands: Commands| {
+            spawn_hatch(&mut commands, &assets, 0, 0, placement, false, gap);
+        });
+        app.update();
+        let mut q = app.world_mut().query_filtered::<&Transform, With<HatchUnderside>>();
+        let cap = q.iter(app.world()).next().expect("a hatch underside cap spawned");
+        assert!(
+            (cap.translation.y - (base_y - gap)).abs() < 1e-6,
+            "cap y {} should be the gap bottom {}",
+            cap.translation.y,
+            base_y - gap,
+        );
+    }
+
+    #[test]
+    fn the_underside_cap_is_skipped_when_the_level_below_is_roofed() {
+        // On a roofed (dungeon/chamber) stack the level below caps the opening with
+        // its own holed roof tile, so the hatch must NOT also spawn an underside —
+        // otherwise the two overlap. `below_roofed = true` ⇒ no `HatchUnderside`.
+        let placement = LevelPlacement::for_level(1, 1, 1, 1, 1, LayeredAlignment::Edge, 3.0);
+        let assets = dummy_assets();
+        let mut app = App::new();
+        app.add_systems(Update, move |mut commands: Commands| {
+            spawn_hatch(&mut commands, &assets, 0, 0, placement, true, 0.0);
+        });
+        app.update();
+        assert_eq!(
+            app.world_mut().query::<&HatchUnderside>().iter(app.world()).count(),
+            0,
+            "a roofed level below leaves the underside to its holed roof tile",
+        );
+    }
+
+    #[test]
+    fn the_underside_mesh_faces_down_with_the_cuboid_bottom_face_uv() {
+        // The underside the level below sees must match the surrounding floor tiles'
+        // undersides (Bevy Cuboid bottom faces): normals down, and UVs
+        // `u = (h - x)/size, v = (h - z)/size` — NOT the up-facing top-face mapping
+        // the green surface uses, which would read 180° rotated (lighter, mis-tiled).
+        let mesh = hole_underside_mesh();
+        let h = CELL_SIZE / 2.0;
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(normals)) =
+            mesh.attribute(Mesh::ATTRIBUTE_NORMAL)
+        else {
+            panic!("expected Float32x3 normals");
+        };
+        assert!(normals.iter().all(|n| *n == [0.0, -1.0, 0.0]), "underside normals face down");
+        let Some(bevy::mesh::VertexAttributeValues::Float32x3(positions)) =
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            panic!("expected Float32x3 positions");
+        };
+        let Some(bevy::mesh::VertexAttributeValues::Float32x2(uvs)) =
+            mesh.attribute(Mesh::ATTRIBUTE_UV_0)
+        else {
+            panic!("expected Float32x2 UVs");
+        };
+        for (p, uv) in positions.iter().zip(uvs) {
+            let want = [(h - p[0]) / CELL_SIZE, (h - p[2]) / CELL_SIZE];
+            assert!(
+                (uv[0] - want[0]).abs() < 1e-4 && (uv[1] - want[1]).abs() < 1e-4,
+                "underside UV {uv:?} should match the cuboid bottom face {want:?}"
+            );
+        }
+    }
 }

@@ -27,25 +27,6 @@ pub(crate) fn build_tile_material(
     })
 }
 
-/// The same floor-tile material rendered on **back faces only**
-/// (`cull_mode: Front`) — for capping the underside of a holed start tile so the
-/// level below sees the identical stone tiling as every other ceiling cell.
-pub(crate) fn build_underside_material(
-    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-    tile_tex: &Option<Handle<Image>>,
-) -> Option<Handle<StandardMaterial>> {
-    materials.as_mut().map(|m| {
-        m.add(StandardMaterial {
-            base_color: EMISSIVE_ONLY_BASE,
-            emissive: TILE_EMISSIVE,
-            emissive_texture: tile_tex.clone(),
-            uv_transform: Affine2::from_scale(TILE_UV_SCALE),
-            cull_mode: Some(bevy::render::render_resource::Face::Front),
-            ..default()
-        })
-    })
-}
-
 pub(crate) fn spawn_tile(
     commands: &mut Commands,
     assets: &FloorAssets,

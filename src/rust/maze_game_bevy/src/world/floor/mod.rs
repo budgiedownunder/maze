@@ -121,10 +121,13 @@ pub(crate) fn spawn_floor_for_cell(
     // True when the level below is roofed — the hatch then leaves its underside
     // to that level's holed roof tile. Only meaningful with `hatch_at_start`.
     below_roofed: bool,
+    // How far this level was lifted for its pools — the hatch drops its underside
+    // cap by this so it's flush with the surrounding sealed cells.
+    gap: f32,
 ) {
     lines::spawn_lines_for_cell(commands, &assets.lines, grid, r, c, placement);
     match cell {
-        'S' if hatch_at_start => hatch::spawn_hatch(commands, assets, r, c, placement, below_roofed),
+        'S' if hatch_at_start => hatch::spawn_hatch(commands, assets, r, c, placement, below_roofed, gap),
         'S' => start::spawn_start(commands, assets, r, c, placement),
         'F' => finish::spawn_finish(commands, assets, r, c, placement),
         _ => tile::spawn_tile(commands, assets, r, c, placement),

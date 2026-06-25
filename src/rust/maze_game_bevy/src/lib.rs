@@ -1591,7 +1591,8 @@ mod tests {
         // a DIFFERENT cell (0,0). While we're on level 0, the level-1 marker must
         // hold its OWN spawn cell (0,0) → world (1.0, 1.0), not be dragged to
         // level-0's enemy at (0,1) → world x = 3.0 by the colliding id (the enemy
-        // analogue of the 6a cross-level door bug).
+        // analogue of the cross-level door-marker bug, where a marker keyed only by
+        // cell — not level — is driven by a same-keyed entity on another level).
         let l0 = r#"{"grid":[["S","E","F"]]}"#;
         let l1 = r#"{"grid":[["E","S","F"]]}"#;
         let mut app = make_playing_app_with_levels(&[l0, l1]);
@@ -2111,6 +2112,36 @@ mod tests {
         assert!(
             surf_y > LEVEL_HEIGHT,
             "the pool surface must sit above the level-0 wall-top ({LEVEL_HEIGHT})",
+        );
+    }
+
+    #[test]
+    fn the_underside_seal_skips_a_hatch_start_cell_so_the_hole_stays_open() {
+        use crate::world::UndersideSeal;
+        // Level 1's start sits directly above level 0's ladder finish (edge-aligned),
+        // so it carries a hatch; level 1 also has a lava pool, so it's lifted and its
+        // cells get underside seals — every cell EXCEPT the hatch, which must stay
+        // open or the climb's hole is blocked from below.
+        let l0 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["F"," ","S"],[" ",[{"type":"W","wallType":"lava"}]," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        // CELL_SIZE = 2, edge offset 0 → cell (r, c) is at world (x = 2c+1, z = 2r+1).
+        let seal_xz: Vec<(f32, f32)> = app
+            .world_mut()
+            .query_filtered::<&Transform, With<UndersideSeal>>()
+            .iter(app.world())
+            .map(|t| (t.translation.x, t.translation.z))
+            .collect();
+        let near = |xz: &(f32, f32), x: f32, z: f32| (xz.0 - x).abs() < 0.5 && (xz.1 - z).abs() < 0.5;
+        // A non-hatch cell (0,0) → world (1,1) IS sealed (the lift seals as before)...
+        assert!(
+            seal_xz.iter().any(|p| near(p, 1.0, 1.0)),
+            "a non-hatch cell on the lifted level is still sealed",
+        );
+        // ...but the hatch start cell (0,2) → world (5,1) is NOT sealed.
+        assert!(
+            !seal_xz.iter().any(|p| near(p, 5.0, 1.0)),
+            "the hatch start cell must be left clear so its hole isn't blocked",
         );
     }
 

@@ -14,8 +14,8 @@ pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COU
 use crate::hud;
 use crate::overlays::pause;
 use crate::state::{
-    FinishType, GameClock, GameConfig, GameState, GridFacing, LayeredAlignment, MultiLevelRun,
-    PendingLevels, PendingMazeJson, SkyType, WallType,
+    DoorStyle, FinishType, GameClock, GameConfig, GameState, GridFacing, LayeredAlignment,
+    MultiLevelRun, PendingLevels, PendingMazeJson, SkyType, WallType,
 };
 use bevy::prelude::*;
 use maze::{CellEntity, GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
@@ -585,7 +585,10 @@ fn spawn_level(
             // floor; a pool cell gets a thin cap at the gap bottom (its sunken
             // basin sits above). Either way, from the level below every cell shows
             // one clean stone underside at the same Y, never the pool beneath.
-            if gap > 0.0 {
+            // A hatch start cell is the exception: it's an opening the climb emerges
+            // through, so sealing it would block the hole — leave it clear.
+            let is_hatch_cell = cell == 'S' && hatch_at_start;
+            if gap > 0.0 && !is_hatch_cell {
                 spawn_underside_seal(
                     commands,
                     assets.floor,
@@ -618,7 +621,7 @@ fn spawn_level(
             }
             walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
             decorations::spawn_decorations_for_cell(commands, assets.decoration, grid, cell_entities, cell, r, c, config, placement);
-            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start, below_roofed);
+            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start, below_roofed, gap);
             // Every level's enemies get their real per-level row-major id (matching
             // that level's `MazeGame`'s enemy ids), so each level's enemies come
             // alive when it becomes the current level. `enemy_animation_system`
@@ -856,6 +859,84 @@ fn multilevel_hide_demo_levels() -> Vec<String> {
         .collect()
 }
 
+/// Hand-built 2-level stack for `MAZE_DEMO=multilevel_portcullis` — a **pool-free**
+/// edge-aligned stack (so no level is lifted) with a **portcullis** door on the
+/// bottom (non-top) level. The door's static frame includes a horizontal **lintel**
+/// beam above the opening; today it's placed on top of the full-height posts, so it
+/// pokes `LINTEL_HEIGHT (0.22)` above the cell — i.e. up through the **floor of the
+/// level above**. The top level's floor fully covers the bottom (same-size grids),
+/// so climbing up and standing over the door cell `(2,2)` you look **down** and see
+/// the lintel poking up through the floor. The demo forces `door_style = Portcullis`.
+fn multilevel_portcullis_demo_levels() -> Vec<String> {
+    let build = |rows: &[&str]| -> Vec<Vec<char>> {
+        rows.iter().map(|row| row.chars().collect()).collect()
+    };
+    // Bottom 5×5 (live): S(0,0) → F(4,4) ladder up. A door at (2,2) in a short N–S
+    // corridor (walls at (2,1)/(2,3)) so it reads as one clean gate, with a key at
+    // (3,2) just below it: collect the key and push north to open the portcullis,
+    // then climb and look down to confirm the raised grille isn't visible from above.
+    // The S→F route runs along the open border (row 0 then col 4), so neither the
+    // door nor the key is on the critical path.
+    let bottom = build(&[
+        "S    ",
+        "     ",
+        " WDW ",
+        "  K  ",
+        "    F",
+    ]);
+    // Top 5×5 (edge-aligned, same coords): S(4,4) sits directly above the bottom's
+    // F(4,4) (ladder + hatch). F(0,0) is the orb; (2,2) is open so you can stand
+    // over the door cell and look down at the lintel.
+    let top = build(&[
+        "F    ",
+        "     ",
+        "     ",
+        "     ",
+        "    S",
+    ]);
+    [bottom, top].iter().map(|grid| grid_to_json(grid)).collect()
+}
+
+/// Hand-built 2-level stack for `MAZE_DEMO=multilevel_pool_hatch` — an edge-aligned
+/// stack whose **bottom level has a ladder finish** (so the top level's start carries
+/// a hatch) and whose **top level carries a lava pool**, so that level is **lifted**
+/// by `POOL_GAP`. Today the per-cell underside seal that closes that lift gap is
+/// spawned for *every* cell of the lifted level — **including the hatch start cell**
+/// — so it fills the opening and blocks the hole. Stand on the bottom level and look
+/// **up** at the finish before climbing: the ladder should rise through a hole in the
+/// ceiling, but the seal caps it with solid stone.
+fn multilevel_pool_hatch_demo_levels() -> Vec<String> {
+    use serde_json::{json, Value};
+    let build = |rows: &[&str]| -> Vec<Vec<Value>> {
+        rows.iter()
+            .map(|r| r.chars().map(|c| Value::String(c.to_string())).collect())
+            .collect()
+    };
+    // Bottom 5×5 (live): S(0,0) → F(4,4) ladder up — look up at F before climbing.
+    let bottom = build(&[
+        "S    ",
+        "     ",
+        "     ",
+        "     ",
+        "    F",
+    ]);
+    // Top 5×5 (edge-aligned): S(4,4) above the bottom's F(4,4) (ladder + hatch). A
+    // lava pool at (2,2) makes this level pool-bearing → lifted; F(0,0) is the orb.
+    // The S→F route skirts the pool along the borders.
+    let mut top = build(&[
+        "F    ",
+        "     ",
+        "     ",
+        "     ",
+        "    S",
+    ]);
+    top[2][2] = json!([{ "type": "W", "wallType": "lava" }]);
+    [bottom, top]
+        .iter()
+        .map(|grid| json!({ "grid": grid }).to_string())
+        .collect()
+}
+
 /// Which native multi-level demo `MAZE_DEMO` selected, if any.
 #[derive(Clone, Copy)]
 enum MultilevelDemo {
@@ -873,14 +954,25 @@ enum MultilevelDemo {
     /// ladder, so the bottom (roofed) level's finish exercises the holed roof tile
     /// + the level-above hatch's dropped underside — the roof-aware hatch path.
     Roofed { alignment: LayeredAlignment },
+    /// `multilevel_portcullis`: a pool-free 2-level stack with a portcullis door on
+    /// the bottom level, for eyeballing whether the door frame's lintel pokes up
+    /// through the floor of the level above.
+    Portcullis,
+    /// `multilevel_pool_hatch`: a 2-level stack with a ladder finish + a lava pool on
+    /// the (lifted) top level, for eyeballing whether the underside seal blocks the
+    /// hatch hole over the ladder.
+    PoolHatch,
 }
 
 impl MultilevelDemo {
-    /// Layer alignment to render under — the hide demos are always centred.
+    /// Layer alignment to render under — the hide demos are always centred, the
+    /// portcullis / pool-hatch demos always edge-aligned (so an upper cell sits
+    /// directly over the one below).
     fn alignment(self) -> LayeredAlignment {
         match self {
             MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => alignment,
             MultilevelDemo::HideEnemies { .. } => LayeredAlignment::Centre,
+            MultilevelDemo::Portcullis | MultilevelDemo::PoolHatch => LayeredAlignment::Edge,
         }
     }
     /// The hand-built level stack for this demo.
@@ -890,6 +982,8 @@ impl MultilevelDemo {
                 multilevel_demo_levels(alignment)
             }
             MultilevelDemo::HideEnemies { .. } => multilevel_hide_demo_levels(),
+            MultilevelDemo::Portcullis => multilevel_portcullis_demo_levels(),
+            MultilevelDemo::PoolHatch => multilevel_pool_hatch_demo_levels(),
         }
     }
     /// Whether to wall the perimeter. Off for the open see-through demos; on for the
@@ -911,6 +1005,15 @@ impl MultilevelDemo {
     fn sky_type_override(self) -> Option<SkyType> {
         match self {
             MultilevelDemo::Roofed { .. } => Some(SkyType::Dungeon),
+            _ => None,
+        }
+    }
+    /// Door style this demo forces, if any — the portcullis demo overrides it so its
+    /// one door renders as a portcullis (the rig whose lintel we're inspecting).
+    /// `None` leaves the configured style untouched.
+    fn door_style_override(self) -> Option<DoorStyle> {
+        match self {
+            MultilevelDemo::Portcullis => Some(DoorStyle::Portcullis),
             _ => None,
         }
     }
@@ -1023,6 +1126,8 @@ pub(crate) fn spawn_world(
             Ok("multilevel_centre_no_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: false }),
             Ok("multilevel_centre_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: true }),
             Ok("multilevel_edge_roofed") => Some(MultilevelDemo::Roofed { alignment: LayeredAlignment::Edge }),
+            Ok("multilevel_portcullis") => Some(MultilevelDemo::Portcullis),
+            Ok("multilevel_pool_hatch") => Some(MultilevelDemo::PoolHatch),
             _ => None,
         }
     };
@@ -1042,7 +1147,7 @@ pub(crate) fn spawn_world(
 
     // The multilevel demo applies the demo's chosen layer alignment (`edge`
     // corner-stacks, `centre` centres each smaller level) and opens the perimeter so
-    // the stack is genuinely see-through (decision 8) — except the `…_with_perimeter`
+    // the stack is genuinely see-through — except the `…_with_perimeter`
     // variants, which wall it (solid default brick) to eyeball support poles with
     // edges carried by walls. The hide demos additionally force
     // `hide_completed_enemies` (their edge enemies are pinned + neutralised per cell
@@ -1055,6 +1160,7 @@ pub(crate) fn spawn_world(
             layered_alignment: demo.alignment(),
             hide_completed_enemies: demo.hide_completed_enemies(),
             sky_type: demo.sky_type_override().unwrap_or(config.sky_type),
+            door_style: demo.door_style_override().unwrap_or(config.door_style),
             ..(*config).clone()
         }
     } else {
@@ -1864,6 +1970,42 @@ mod multi_level_tests {
         // it isn't a hide demo.
         assert!(!demo.perimeter_walls());
         assert!(!demo.hide_completed_enemies());
+    }
+
+    #[test]
+    fn the_portcullis_and_pool_hatch_demos_are_edge_aligned_ladder_hatch_stacks() {
+        use super::MultilevelDemo;
+        use crate::state::{DoorStyle, LayeredAlignment};
+        let find = |g: &[Vec<char>], ch: char| {
+            g.iter().enumerate().find_map(|(r, row)| row.iter().position(|&c| c == ch).map(|c| (r, c)))
+        };
+        // Both demos are a 2-level EDGE stack whose bottom finish sits directly under
+        // the top start, so a ladder + hatch form (each issue needs the hatch).
+        for demo in [MultilevelDemo::Portcullis, MultilevelDemo::PoolHatch] {
+            assert_eq!(demo.alignment(), LayeredAlignment::Edge);
+            let levels = demo.levels();
+            assert_eq!(levels.len(), 2, "a 2-level stack");
+            let bottom = MazeGame::from_json(&levels[0]).expect("bottom parses");
+            let top = MazeGame::from_json(&levels[1]).expect("top parses");
+            assert_eq!(
+                find(bottom.grid(), 'F'),
+                find(top.grid(), 'S'),
+                "edge-aligned: the top start sits directly above the bottom finish"
+            );
+        }
+        // Portcullis demo forces a portcullis door, present on the bottom level.
+        let pc = MultilevelDemo::Portcullis;
+        assert_eq!(pc.door_style_override(), Some(DoorStyle::Portcullis));
+        let pc_bottom = MazeGame::from_json(&pc.levels()[0]).expect("parses");
+        assert!(pc_bottom.grid().iter().flatten().any(|&c| c == 'D'), "bottom level has a door");
+        // Pool-hatch demo: no door override; the top level carries a lava pool cell
+        // (a 'W' cell with a lava override) so it'll be lifted, exercising the seal.
+        let ph = MultilevelDemo::PoolHatch;
+        assert_eq!(ph.door_style_override(), None);
+        let ph_levels = ph.levels();
+        assert!(ph_levels[1].contains("lava"), "top level carries a lava pool");
+        let ph_top = MazeGame::from_json(&ph_levels[1]).expect("parses");
+        assert_eq!(ph_top.grid()[2][2], 'W', "the lava pool is a wall-type cell at (2,2)");
     }
 
     #[test]

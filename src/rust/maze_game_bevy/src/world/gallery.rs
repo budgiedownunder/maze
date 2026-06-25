@@ -38,6 +38,8 @@ const MULTILEVEL_DEMOS: &[&str] = &[
     "multilevel_centre_no_hide_enemies",
     "multilevel_centre_hide_enemies",
     "multilevel_edge_roofed",
+    "multilevel_portcullis",
+    "multilevel_pool_hatch",
 ];
 
 /// The requested gallery focus from `MAZE_DEMO`, or `None` when it is unset or

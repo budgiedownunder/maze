@@ -283,7 +283,7 @@ impl MultiLevelRun {
 /// Per-session game configuration handed down from the JS host (via
 /// `maze_game_bevy_wasm::start_with_config`). When no host config is provided
 /// (native `cargo run`, or the bare wasm `start()` path), `Default` produces
-/// values that preserve the Step 2 hardcoded behaviour: a 60-second clock,
+/// the fallback game's hardcoded behaviour: a 60-second clock,
 /// the splash title "MAZE 3D", and `rows`/`cols == 0` so `spawn_world` knows
 /// to fall back to the built-in demo grid instead of running the maze
 /// generator.
