@@ -237,6 +237,31 @@ pub(crate) fn time_bonus(time_taken_secs: f32, total_time_secs: f32) -> u64 {
     (TIME_BONUS_MAX as f32 * fraction).round() as u64
 }
 
+/// Whether a won run's final score sets a new high score — strictly greater than
+/// the global `score`-board top it's measured against. Only on a leaderboard-
+/// tracked run; an empty board (`tracked` with `None`) makes the first run a
+/// record. Ties don't count, and the board top includes the player's own prior
+/// runs, so re-winning below your own best does not re-trigger the banner.
+pub(crate) fn is_high_score(
+    final_score: u64,
+    leaderboard_tracked: bool,
+    high_score_to_beat: Option<u64>,
+) -> bool {
+    leaderboard_tracked && high_score_to_beat.is_none_or(|top| final_score > top)
+}
+
+/// Whether a won run sets a new fastest time — strictly less than the global
+/// `time`-board best (`elapsed_ms`) it's measured against. Only on a
+/// leaderboard-tracked run; an empty board (`tracked` with `None`) makes the
+/// first run a record. Ties don't count.
+pub(crate) fn is_fastest_time(
+    elapsed_ms: u64,
+    leaderboard_tracked: bool,
+    fastest_time_to_beat: Option<u64>,
+) -> bool {
+    leaderboard_tracked && fastest_time_to_beat.is_none_or(|best| elapsed_ms < best)
+}
+
 /// Run-level state for a multi-level game: the per-level maze JSON, the active
 /// level index, and the totals that carry across levels. A single-level game
 /// is just a run with one level — every multi-level branch collapses to the
@@ -445,6 +470,22 @@ pub struct GameConfig {
     /// using [`Self::perimeter_walls`]. The top-level override still wins. Inert for
     /// a single-level game.
     pub perimeter_random: bool,
+    /// Whether this run is recorded on a leaderboard (a real subject + an
+    /// authenticated player), so the win overlay's record banners are meaningful.
+    /// `false` for signed-out / demo / no-subject runs → no banner ever shows.
+    /// The host sets it; default `false`.
+    pub leaderboard_tracked: bool,
+    /// The global `score`-metric board top for this run's subject, fetched by the
+    /// host before launch. `Some(top)` compares a won run's final score against
+    /// it; `None` while [`Self::leaderboard_tracked`] means an **empty board**, so
+    /// the first run is itself a record (see [`is_high_score`]).
+    pub high_score_to_beat: Option<u64>,
+    /// The global `time`-metric board best (fastest `elapsed_ms`) for this run's
+    /// subject, fetched by the host before launch. `Some(best)` compares a won
+    /// run's elapsed time against it; `None` while [`Self::leaderboard_tracked`]
+    /// means an empty board, so the first run is itself a record (see
+    /// [`is_fastest_time`]).
+    pub fastest_time_to_beat: Option<u64>,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -906,6 +947,9 @@ impl Default for GameConfig {
             top_sky_type: None,
             top_perimeter_walls: None,
             perimeter_random: false,
+            leaderboard_tracked: false,
+            high_score_to_beat: None,
+            fastest_time_to_beat: None,
         }
     }
 }
@@ -1024,6 +1068,33 @@ mod tests {
         assert_eq!(time_bonus(10.0, 0.0), 0);
         // Negative time-taken (shouldn't occur) floors into the lead time.
         assert_eq!(time_bonus(-5.0, 120.0), TIME_BONUS_MAX);
+    }
+
+    #[test]
+    fn is_high_score_requires_tracking_and_strictly_beats_the_board_top() {
+        // Untracked run → never a high score, whatever the threshold.
+        assert!(!is_high_score(1000, false, Some(0)));
+        assert!(!is_high_score(1000, false, None));
+        // Tracked + empty board (None) → the first run is itself a record.
+        assert!(is_high_score(5, true, None));
+        assert!(is_high_score(0, true, None));
+        // Tracked + populated → strictly greater; ties don't count.
+        assert!(!is_high_score(849, true, Some(850)));
+        assert!(!is_high_score(850, true, Some(850)));
+        assert!(is_high_score(851, true, Some(850)));
+    }
+
+    #[test]
+    fn is_fastest_time_requires_tracking_and_strictly_beats_the_best() {
+        // Untracked run → never the fastest, whatever the threshold.
+        assert!(!is_fastest_time(1000, false, None));
+        assert!(!is_fastest_time(1000, false, Some(2000)));
+        // Tracked + empty board (None) → the first run is itself a record.
+        assert!(is_fastest_time(50_000, true, None));
+        // Tracked + populated → strictly less (faster); ties don't count.
+        assert!(!is_fastest_time(2001, true, Some(2000)));
+        assert!(!is_fastest_time(2000, true, Some(2000)));
+        assert!(is_fastest_time(1999, true, Some(2000)));
     }
 
     #[test]

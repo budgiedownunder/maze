@@ -104,6 +104,20 @@ struct StartConfig {
     /// is inert.
     #[serde(default)]
     levels: LevelsStartConfig,
+    /// Whether this run is recorded on a leaderboard (real subject + an
+    /// authenticated player), set by the host. Gates the win overlay's record
+    /// banners; absent (the default) → no banner.
+    #[serde(default)]
+    leaderboard_tracked: bool,
+    /// The global `score`-board top for this run's subject, fetched by the host
+    /// before launch. Drives the "High Score" banner. Absent → an empty board
+    /// (with `leaderboardTracked`, the first run is a record).
+    #[serde(default)]
+    high_score_to_beat: Option<u64>,
+    /// The global `time`-board best (fastest `elapsed_ms`) for this run's
+    /// subject. Drives the "Fastest Time" banner. Absent → an empty board.
+    #[serde(default)]
+    fastest_time_to_beat: Option<u64>,
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -390,6 +404,9 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         top_sky_type: cfg.levels.top.as_ref().and_then(|t| t.sky_type.as_deref()).map(SkyType::from_wire_str),
         top_perimeter_walls: cfg.levels.top.as_ref().and_then(|t| t.perimeter_walls),
         perimeter_random: cfg.levels.perimeter_random,
+        leaderboard_tracked: cfg.leaderboard_tracked,
+        high_score_to_beat: cfg.high_score_to_beat,
+        fastest_time_to_beat: cfg.fastest_time_to_beat,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -445,6 +462,10 @@ mod tests {
         assert_eq!(cfg.health_style, "heart");
         assert!(cfg.difficulty.is_none());
         assert!(cfg.maze_json.is_some());
+        // Omitting the record fields leaves the run un-tracked → no banner.
+        assert!(!cfg.leaderboard_tracked);
+        assert!(cfg.high_score_to_beat.is_none());
+        assert!(cfg.fastest_time_to_beat.is_none());
         // The single landmark override must take effect; the rest fall
         // back to true.
         assert!(cfg.landmarks.wall_tint);
@@ -470,6 +491,24 @@ mod tests {
         assert!(cfg.landmarks.dead_end_objects);
         assert!(cfg.landmarks.wall_decorations);
         assert!(cfg.landmarks.floor_accents);
+    }
+
+    #[test]
+    fn start_config_parses_the_record_thresholds() {
+        // A populated board: tracked + both thresholds present.
+        let populated: StartConfig = serde_json::from_str(
+            r#"{ "leaderboardTracked": true, "highScoreToBeat": 850, "fastestTimeToBeat": 42137 }"#,
+        )
+        .expect("payload must parse");
+        assert!(populated.leaderboard_tracked);
+        assert_eq!(populated.high_score_to_beat, Some(850));
+        assert_eq!(populated.fastest_time_to_beat, Some(42137));
+        // An empty board: tracked, but no thresholds → the first run is a record.
+        let empty: StartConfig =
+            serde_json::from_str(r#"{ "leaderboardTracked": true }"#).expect("payload must parse");
+        assert!(empty.leaderboard_tracked);
+        assert!(empty.high_score_to_beat.is_none());
+        assert!(empty.fastest_time_to_beat.is_none());
     }
 
     #[test]
