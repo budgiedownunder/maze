@@ -96,9 +96,30 @@ pub(crate) fn spawn_objects_for_cell(
     if !dead_end_skip.contains(&(r, c)) {
         dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, placement);
     }
-    let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
-    let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
-    let health_style = overrides::resolve_health_style(cell_entity, config.health_style);
+    let key_holder = overrides::resolve_key_holder(
+        cell_entity,
+        config.key_holder,
+        config.key_holder_random,
+        config.seed,
+        r,
+        c,
+    );
+    let enemy_type = overrides::resolve_enemy_type(
+        cell_entity,
+        config.enemy_type,
+        config.enemy_type_random,
+        config.seed,
+        r,
+        c,
+    );
+    let health_style = overrides::resolve_health_style(
+        cell_entity,
+        config.health_style,
+        config.health_style_random,
+        config.seed,
+        r,
+        c,
+    );
     let treasure_style = overrides::resolve_treasure_style(cell_entity, TreasureStyle::default());
     key_holder::spawn_key_holder_for_cell(
         commands,

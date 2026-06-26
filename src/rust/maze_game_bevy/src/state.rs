@@ -470,6 +470,17 @@ pub struct GameConfig {
     /// using [`Self::perimeter_walls`]. The top-level override still wins. Inert for
     /// a single-level game.
     pub perimeter_random: bool,
+    /// `random`-type selectors. When set (the per-difficulty config used the
+    /// `"random"` value), the concrete type is chosen deterministically from the
+    /// `seed` instead of from the fixed field above — **per cell** for enemies /
+    /// health / key holders (`(seed, row, col)`, see the enums' `random_for_cell`)
+    /// and **per level** for walls (`(seed, level)`, see [`WallType::random_for_level`],
+    /// resolved when the per-level render config is built). A per-cell override in
+    /// the maze JSON still wins. Each defaults `false` (use the fixed field).
+    pub enemy_type_random: bool,
+    pub health_style_random: bool,
+    pub key_holder_random: bool,
+    pub wall_type_random: bool,
     /// Whether this run is recorded on a leaderboard (a real subject + an
     /// authenticated player), so the win overlay's record banners are meaningful.
     /// `false` for signed-out / demo / no-subject runs → no banner ever shows.
@@ -546,6 +557,21 @@ impl SkyType {
     }
 }
 
+/// Deterministic index in `[0, n)` from a seed, two coordinates, and a salt — the
+/// backing for the `random` type selectors. Mirrors the `(seed, row, col)`
+/// hashing of [`FinishType::concrete_for_cell`]; the salt decorrelates different
+/// selectors that share the same coordinates (e.g. an enemy and a key in one
+/// cell, which would otherwise always roll in lock-step). Used per-cell with
+/// `(row, col)` and per-level with `(level, 0)`.
+fn seeded_index(seed: u64, a: u64, b: u64, salt: u64, n: usize) -> usize {
+    let mut h = seed.wrapping_mul(0xD1B5_4A32_D192_ED03);
+    h = h.wrapping_add(a.wrapping_mul(0xA076_1D64_78BD_642F));
+    h = h.wrapping_add(b.wrapping_mul(0xE703_7ED1_A0B4_28DB));
+    h = h.wrapping_add(salt.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    h ^= h >> 31;
+    (h % n as u64) as usize
+}
+
 /// Wall types. The four solid-wall textures (`Brick` / `DressedStone` / `Wood` /
 /// `Cobblestone`) each map to a `WALL_MATERIAL_*` index for the panel material;
 /// the three special types (`Water` / `Lava` / `IronFence`) are **non-occluding**
@@ -553,7 +579,7 @@ impl SkyType {
 /// bars) instead of a solid panel. Shares its wire vocabulary with the
 /// `data_model` `WallType` and the per-cell `wallType` override. Default is
 /// `Brick` so a missing or unrecognised wire value preserves the standard look.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum WallType {
     #[default]
     Brick,
@@ -618,6 +644,25 @@ impl WallType {
     pub fn is_non_occluding(self) -> bool {
         matches!(self, Self::Water | Self::Lava | Self::IronFence)
     }
+
+    /// The concrete wall type for a level when the difficulty selected
+    /// `wall_type = "random"` — one of all seven types (solid textures *and* the
+    /// non-occluding water / lava / iron-fence), chosen per `(seed, level)` so the
+    /// whole level reads as one coherent style and a maze is deterministic. A
+    /// rolled water / lava level rides the same pool lift / rim path as a fixed one.
+    pub fn random_for_level(level: usize, seed: u64) -> Self {
+        // All seven types — the four solid textures and the non-occluding
+        // water / lava / iron-fence.
+        [
+            Self::Brick,
+            Self::DressedStone,
+            Self::Wood,
+            Self::Cobblestone,
+            Self::Water,
+            Self::Lava,
+            Self::IronFence,
+        ][seeded_index(seed, level as u64, 0, 4, 7)]
+    }
 }
 
 /// Door open-animation styles. `Swing` only applies to a straight-corridor
@@ -660,7 +705,7 @@ impl DoorStyle {
 
 /// Key-holder styles for `'K'` cells. Default `Pedestal` preserves the shipped
 /// look. (These variants may later distinguish key *types*, not just looks.)
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum KeyHolderStyle {
     #[default]
     Pedestal,
@@ -686,6 +731,18 @@ impl KeyHolderStyle {
             "floating_key" => Self::FloatingKey,
             _ => Self::Pedestal,
         }
+    }
+
+    /// The concrete key-holder rig for a cell when the difficulty selected
+    /// `key_holder = "random"` — chosen per `(seed, row, col)`.
+    pub fn random_for_cell(row: usize, col: usize, seed: u64) -> Self {
+        [Self::Pedestal, Self::Chest, Self::FloatingKey][seeded_index(
+            seed,
+            row as u64,
+            col as u64,
+            3,
+            3,
+        )]
     }
 }
 
@@ -715,6 +772,13 @@ impl EnemyType {
             _ => Self::Goblin,
         }
     }
+
+    /// The concrete enemy rig for a cell when the difficulty selected
+    /// `enemy_type = "random"` — chosen per `(seed, row, col)` so each enemy cell
+    /// rolls independently and a maze is deterministic.
+    pub fn random_for_cell(row: usize, col: usize, seed: u64) -> Self {
+        [Self::Goblin, Self::Ghost][seeded_index(seed, row as u64, col as u64, 1, 2)]
+    }
 }
 
 /// Health-pickup visual variants. Both variants use the same auto-pickup
@@ -742,6 +806,12 @@ impl HealthStyle {
             "potion" => Self::Potion,
             _ => Self::Heart,
         }
+    }
+
+    /// The concrete health-pickup rig for a cell when the difficulty selected
+    /// `health_style = "random"` — chosen per `(seed, row, col)`.
+    pub fn random_for_cell(row: usize, col: usize, seed: u64) -> Self {
+        [Self::Heart, Self::Potion][seeded_index(seed, row as u64, col as u64, 2, 2)]
     }
 }
 
@@ -947,6 +1017,10 @@ impl Default for GameConfig {
             top_sky_type: None,
             top_perimeter_walls: None,
             perimeter_random: false,
+            enemy_type_random: false,
+            health_style_random: false,
+            key_holder_random: false,
+            wall_type_random: false,
             leaderboard_tracked: false,
             high_score_to_beat: None,
             fastest_time_to_beat: None,
@@ -1095,6 +1169,36 @@ mod tests {
         assert!(!is_fastest_time(2001, true, Some(2000)));
         assert!(!is_fastest_time(2000, true, Some(2000)));
         assert!(is_fastest_time(1999, true, Some(2000)));
+    }
+
+    #[test]
+    fn random_type_selectors_are_deterministic_seed_dependent_and_span_their_pools() {
+        // Stable for a given (cell / level, seed).
+        assert_eq!(EnemyType::random_for_cell(2, 3, 7), EnemyType::random_for_cell(2, 3, 7));
+        assert_eq!(WallType::random_for_level(1, 7), WallType::random_for_level(1, 7));
+        // The seed actually moves the roll (not a constant).
+        assert!((0..16u64).any(|s| {
+            EnemyType::random_for_cell(0, 0, s) != EnemyType::random_for_cell(0, 0, s + 1)
+        }));
+        assert!((0..16u64).any(|s| {
+            WallType::random_for_level(0, s) != WallType::random_for_level(0, s + 1)
+        }));
+        // The per-level wall roll reaches all seven types.
+        let mut walls = std::collections::HashSet::new();
+        for level in 0..60usize {
+            for seed in 0..60u64 {
+                walls.insert(WallType::random_for_level(level, seed));
+            }
+        }
+        assert_eq!(walls.len(), 7, "every wall type should be reachable");
+        // The per-cell key-holder roll reaches all three rigs.
+        let mut keys = std::collections::HashSet::new();
+        for r in 0..30usize {
+            for c in 0..30usize {
+                keys.insert(KeyHolderStyle::random_for_cell(r, c, 9));
+            }
+        }
+        assert_eq!(keys.len(), 3);
     }
 
     #[test]

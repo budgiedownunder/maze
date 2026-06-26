@@ -1051,8 +1051,16 @@ fn effective_sky(config: &GameConfig, is_final: bool, multi_level: bool) -> SkyT
 /// level may have its perimeter randomised by `perimeter_random` (the top override
 /// still wins). Single-level runs render under the base config unchanged.
 fn level_render_config(config: &GameConfig, is_final: bool, multi_level: bool, grid: &[Vec<char>], level: usize) -> GameConfig {
+    // `wall_type = "random"` rolls one concrete type for the whole level, seeded by
+    // (seed, level) — resolved here (even single-level) so every downstream
+    // `resolve_wall_type` reads a concrete type and the level is one coherent style.
+    let wall_type = if config.wall_type_random {
+        WallType::random_for_level(level, config.seed)
+    } else {
+        config.wall_type
+    };
     if !multi_level {
-        return config.clone();
+        return GameConfig { wall_type, ..config.clone() };
     }
     let sky_type = effective_sky(config, is_final, true);
     let perimeter_walls = match config.top_perimeter_walls {
@@ -1060,7 +1068,7 @@ fn level_render_config(config: &GameConfig, is_final: bool, multi_level: bool, g
         _ if config.perimeter_random => perimeter_random_for_level(grid, level),
         _ => config.perimeter_walls,
     };
-    GameConfig { sky_type, perimeter_walls, ..config.clone() }
+    GameConfig { sky_type, perimeter_walls, wall_type, ..config.clone() }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1296,11 +1304,22 @@ pub(crate) fn spawn_world(
                     .expect("multi-level maze JSON is host-validated or a hardcoded demo");
                 (g.grid().to_vec(), g.cell_entities().clone())
             };
+            // Detect pools against this level's effective wall type — a rolled
+            // `random` water / lava level must be counted here too (it drives the
+            // pool lift + the cross-level lava-rocks budget below).
+            let lcfg = GameConfig {
+                wall_type: if config.wall_type_random {
+                    WallType::random_for_level(level, config.seed)
+                } else {
+                    config.wall_type
+                },
+                ..config.clone()
+            };
             let mut has_pool = false;
             let mut lava_cells = 0usize;
             for (r, row) in lgrid.iter().enumerate() {
                 for c in 0..row.len() {
-                    match walls::pool_type_at(&lgrid, &lcells, &config, r, c) {
+                    match walls::pool_type_at(&lgrid, &lcells, &lcfg, r, c) {
                         Some(WallType::Lava) => {
                             has_pool = true;
                             lava_cells += 1;

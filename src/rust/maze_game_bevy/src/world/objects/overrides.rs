@@ -14,32 +14,68 @@
 use crate::state::{DoorStyle, EnemyType, HealthStyle, KeyHolderStyle, TreasureStyle, WallType};
 use maze::CellEntity;
 
-/// The enemy rig for a cell: the cell's `enemyType` override, else `default`.
-pub(crate) fn resolve_enemy_type(entity: Option<&CellEntity>, default: EnemyType) -> EnemyType {
+/// The enemy rig for a cell: the cell's `enemyType` override; else, when the
+/// difficulty selected `enemy_type = "random"` (`random`), a concrete rig rolled
+/// per `(seed, row, col)`; else `default`.
+pub(crate) fn resolve_enemy_type(
+    entity: Option<&CellEntity>,
+    default: EnemyType,
+    random: bool,
+    seed: u64,
+    row: usize,
+    col: usize,
+) -> EnemyType {
     if let Some(CellEntity::Enemy(over)) = entity {
         if let Some(t) = over.enemy_type {
             return EnemyType::from_wire_str(t.as_wire_str());
         }
     }
+    if random {
+        return EnemyType::random_for_cell(row, col, seed);
+    }
     default
 }
 
-/// The health-pickup rig for a cell: the cell's `healthStyle` override, else `default`.
-pub(crate) fn resolve_health_style(entity: Option<&CellEntity>, default: HealthStyle) -> HealthStyle {
+/// The health-pickup rig for a cell: the cell's `healthStyle` override; else,
+/// when the difficulty selected `health_style = "random"`, a concrete rig rolled
+/// per `(seed, row, col)`; else `default`.
+pub(crate) fn resolve_health_style(
+    entity: Option<&CellEntity>,
+    default: HealthStyle,
+    random: bool,
+    seed: u64,
+    row: usize,
+    col: usize,
+) -> HealthStyle {
     if let Some(CellEntity::Health(over)) = entity {
         if let Some(s) = over.health_style {
             return HealthStyle::from_wire_str(s.as_wire_str());
         }
     }
+    if random {
+        return HealthStyle::random_for_cell(row, col, seed);
+    }
     default
 }
 
-/// The key-holder rig for a cell: the cell's `keyHolder` override, else `default`.
-pub(crate) fn resolve_key_holder(entity: Option<&CellEntity>, default: KeyHolderStyle) -> KeyHolderStyle {
+/// The key-holder rig for a cell: the cell's `keyHolder` override; else, when the
+/// difficulty selected `key_holder = "random"`, a concrete rig rolled per
+/// `(seed, row, col)`; else `default`.
+pub(crate) fn resolve_key_holder(
+    entity: Option<&CellEntity>,
+    default: KeyHolderStyle,
+    random: bool,
+    seed: u64,
+    row: usize,
+    col: usize,
+) -> KeyHolderStyle {
     if let Some(CellEntity::Key(over)) = entity {
         if let Some(h) = over.key_holder {
             return KeyHolderStyle::from_wire_str(h.as_wire_str());
         }
+    }
+    if random {
+        return KeyHolderStyle::random_for_cell(row, col, seed);
     }
     default
 }
@@ -95,7 +131,7 @@ mod tests {
     fn enemy_override_picks_the_overridden_rig() {
         let e = entity(r#"{ "type": "E", "enemyType": "ghost" }"#);
         assert_eq!(
-            resolve_enemy_type(Some(&e), EnemyType::Goblin),
+            resolve_enemy_type(Some(&e), EnemyType::Goblin, false, 0, 0, 0),
             EnemyType::Ghost,
         );
     }
@@ -106,48 +142,83 @@ mod tests {
         // rig choice, so the config default wins.
         let e = entity(r#"{ "type": "E", "damage": 5 }"#);
         assert_eq!(
-            resolve_enemy_type(Some(&e), EnemyType::Ghost),
+            resolve_enemy_type(Some(&e), EnemyType::Ghost, false, 0, 0, 0),
             EnemyType::Ghost,
         );
     }
 
     #[test]
     fn enemy_with_no_entity_falls_back_to_default() {
-        assert_eq!(resolve_enemy_type(None, EnemyType::Ghost), EnemyType::Ghost);
+        assert_eq!(
+            resolve_enemy_type(None, EnemyType::Ghost, false, 0, 0, 0),
+            EnemyType::Ghost,
+        );
     }
 
     #[test]
     fn wrong_variant_falls_back_to_default() {
         // A health override on the lookup must not satisfy an enemy resolve.
         let h = entity(r#"{ "type": "H", "healthStyle": "potion" }"#);
-        assert_eq!(resolve_enemy_type(Some(&h), EnemyType::Goblin), EnemyType::Goblin);
+        assert_eq!(
+            resolve_enemy_type(Some(&h), EnemyType::Goblin, false, 0, 0, 0),
+            EnemyType::Goblin,
+        );
     }
 
     #[test]
     fn health_override_picks_the_overridden_rig() {
         let h = entity(r#"{ "type": "H", "healthStyle": "potion" }"#);
         assert_eq!(
-            resolve_health_style(Some(&h), HealthStyle::Heart),
+            resolve_health_style(Some(&h), HealthStyle::Heart, false, 0, 0, 0),
             HealthStyle::Potion,
         );
-        assert_eq!(resolve_health_style(None, HealthStyle::Heart), HealthStyle::Heart);
+        assert_eq!(
+            resolve_health_style(None, HealthStyle::Heart, false, 0, 0, 0),
+            HealthStyle::Heart,
+        );
     }
 
     #[test]
     fn key_override_picks_the_overridden_rig() {
         let k = entity(r#"{ "type": "K", "keyHolder": "chest" }"#);
         assert_eq!(
-            resolve_key_holder(Some(&k), KeyHolderStyle::Pedestal),
+            resolve_key_holder(Some(&k), KeyHolderStyle::Pedestal, false, 0, 0, 0),
             KeyHolderStyle::Chest,
         );
         let floating = entity(r#"{ "type": "K", "keyHolder": "floating_key" }"#);
         assert_eq!(
-            resolve_key_holder(Some(&floating), KeyHolderStyle::Pedestal),
+            resolve_key_holder(Some(&floating), KeyHolderStyle::Pedestal, false, 0, 0, 0),
             KeyHolderStyle::FloatingKey,
         );
         assert_eq!(
-            resolve_key_holder(None, KeyHolderStyle::Pedestal),
+            resolve_key_holder(None, KeyHolderStyle::Pedestal, false, 0, 0, 0),
             KeyHolderStyle::Pedestal,
+        );
+    }
+
+    #[test]
+    fn random_selectors_roll_a_concrete_rig_only_without_an_override() {
+        // With `random` on and no override, the rig is the seeded per-cell roll
+        // (not the `default`), and it is stable for a given (seed, cell).
+        let want = EnemyType::random_for_cell(2, 3, 99);
+        assert_eq!(
+            resolve_enemy_type(None, EnemyType::Goblin, true, 99, 2, 3),
+            want,
+        );
+        // An explicit override still wins over `random`.
+        let e = entity(r#"{ "type": "E", "enemyType": "ghost" }"#);
+        assert_eq!(
+            resolve_enemy_type(Some(&e), EnemyType::Goblin, true, 99, 2, 3),
+            EnemyType::Ghost,
+        );
+        // Health + key roll their own seeded rigs too.
+        assert_eq!(
+            resolve_health_style(None, HealthStyle::Heart, true, 99, 2, 3),
+            HealthStyle::random_for_cell(2, 3, 99),
+        );
+        assert_eq!(
+            resolve_key_holder(None, KeyHolderStyle::Pedestal, true, 99, 2, 3),
+            KeyHolderStyle::random_for_cell(2, 3, 99),
         );
     }
 

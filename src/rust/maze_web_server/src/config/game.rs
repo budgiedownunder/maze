@@ -217,6 +217,7 @@ pub enum WallTypeConfig {
     Water,
     Lava,
     IronFence,
+    Random,
 }
 
 impl WallTypeConfig {
@@ -230,6 +231,7 @@ impl WallTypeConfig {
             Self::Water => "water",
             Self::Lava => "lava",
             Self::IronFence => "iron_fence",
+            Self::Random => "random",
         }
     }
 }
@@ -244,6 +246,7 @@ impl<'de> Deserialize<'de> for WallTypeConfig {
             "water" => Self::Water,
             "lava" => Self::Lava,
             "iron_fence" => Self::IronFence,
+            "random" => Self::Random,
             _ => Self::Brick,
         })
     }
@@ -297,6 +300,7 @@ pub enum KeyHolderStyleConfig {
     Pedestal,
     Chest,
     FloatingKey,
+    Random,
 }
 
 impl KeyHolderStyleConfig {
@@ -306,6 +310,7 @@ impl KeyHolderStyleConfig {
             Self::Pedestal => "pedestal",
             Self::Chest => "chest",
             Self::FloatingKey => "floating_key",
+            Self::Random => "random",
         }
     }
 }
@@ -316,6 +321,7 @@ impl<'de> Deserialize<'de> for KeyHolderStyleConfig {
         Ok(match s.to_ascii_lowercase().as_str() {
             "chest" => Self::Chest,
             "floating_key" => Self::FloatingKey,
+            "random" => Self::Random,
             _ => Self::Pedestal,
         })
     }
@@ -441,6 +447,7 @@ pub enum EnemyTypeConfig {
     #[default]
     Goblin,
     Ghost,
+    Random,
 }
 
 impl EnemyTypeConfig {
@@ -449,6 +456,7 @@ impl EnemyTypeConfig {
         match self {
             Self::Goblin => "goblin",
             Self::Ghost => "ghost",
+            Self::Random => "random",
         }
     }
 }
@@ -458,6 +466,7 @@ impl<'de> Deserialize<'de> for EnemyTypeConfig {
         let s = String::deserialize(d)?;
         Ok(match s.to_ascii_lowercase().as_str() {
             "ghost" => Self::Ghost,
+            "random" => Self::Random,
             _ => Self::Goblin,
         })
     }
@@ -472,6 +481,7 @@ pub enum HealthStyleConfig {
     #[default]
     Heart,
     Potion,
+    Random,
 }
 
 impl HealthStyleConfig {
@@ -480,6 +490,7 @@ impl HealthStyleConfig {
         match self {
             Self::Heart => "heart",
             Self::Potion => "potion",
+            Self::Random => "random",
         }
     }
 }
@@ -489,6 +500,7 @@ impl<'de> Deserialize<'de> for HealthStyleConfig {
         let s = String::deserialize(d)?;
         Ok(match s.to_ascii_lowercase().as_str() {
             "potion" => Self::Potion,
+            "random" => Self::Random,
             _ => Self::Heart,
         })
     }
@@ -1297,6 +1309,7 @@ mod tests {
         assert_eq!(WallTypeConfig::Water.as_wire_str(), "water");
         assert_eq!(WallTypeConfig::Lava.as_wire_str(), "lava");
         assert_eq!(WallTypeConfig::IronFence.as_wire_str(), "iron_fence");
+        assert_eq!(WallTypeConfig::Random.as_wire_str(), "random");
     }
 
     #[test]
@@ -1565,6 +1578,39 @@ mod tests {
         assert_eq!(KeyHolderStyleConfig::Pedestal.as_wire_str(), "pedestal");
         assert_eq!(KeyHolderStyleConfig::Chest.as_wire_str(), "chest");
         assert_eq!(KeyHolderStyleConfig::FloatingKey.as_wire_str(), "floating_key");
+        assert_eq!(KeyHolderStyleConfig::Random.as_wire_str(), "random");
+    }
+
+    #[test]
+    fn random_type_selectors_round_trip_from_toml() {
+        // The per-difficulty type knobs accept `"random"`, which the client
+        // resolves to a concrete type; the server just round-trips the value.
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            enemy_type = "random"
+            health_style = "random"
+            key_holder = "random"
+            wall_type = "random"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        let preset = &cfg.play3d.easy;
+        assert_eq!(preset.enemy_type, EnemyTypeConfig::Random);
+        assert_eq!(preset.health_style, HealthStyleConfig::Random);
+        assert_eq!(preset.key_holder, KeyHolderStyleConfig::Random);
+        assert_eq!(preset.wall_type, WallTypeConfig::Random);
+        // And each emits `"random"` back on the wire for the client.
+        assert_eq!(preset.enemy_type.as_wire_str(), "random");
+        assert_eq!(preset.health_style.as_wire_str(), "random");
+        assert_eq!(preset.key_holder.as_wire_str(), "random");
+        assert_eq!(preset.wall_type.as_wire_str(), "random");
     }
 
     #[test]
@@ -1683,8 +1729,10 @@ mod tests {
     fn enemy_type_and_health_style_as_wire_str_matches_serde_form() {
         assert_eq!(EnemyTypeConfig::Goblin.as_wire_str(), "goblin");
         assert_eq!(EnemyTypeConfig::Ghost.as_wire_str(), "ghost");
+        assert_eq!(EnemyTypeConfig::Random.as_wire_str(), "random");
         assert_eq!(HealthStyleConfig::Heart.as_wire_str(), "heart");
         assert_eq!(HealthStyleConfig::Potion.as_wire_str(), "potion");
+        assert_eq!(HealthStyleConfig::Random.as_wire_str(), "random");
     }
 
     #[test]

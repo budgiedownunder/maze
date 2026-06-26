@@ -404,6 +404,13 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         top_sky_type: cfg.levels.top.as_ref().and_then(|t| t.sky_type.as_deref()).map(SkyType::from_wire_str),
         top_perimeter_walls: cfg.levels.top.as_ref().and_then(|t| t.perimeter_walls),
         perimeter_random: cfg.levels.perimeter_random,
+        // `"random"` type selectors: the concrete enum above falls back to its
+        // default for `"random"` (a harmless placeholder), and the flag drives the
+        // seeded per-cell / per-level roll on the Bevy side.
+        enemy_type_random: cfg.enemy_type.eq_ignore_ascii_case("random"),
+        health_style_random: cfg.health_style.eq_ignore_ascii_case("random"),
+        key_holder_random: cfg.key_holder.eq_ignore_ascii_case("random"),
+        wall_type_random: cfg.wall_type.eq_ignore_ascii_case("random"),
         leaderboard_tracked: cfg.leaderboard_tracked,
         high_score_to_beat: cfg.high_score_to_beat,
         fastest_time_to_beat: cfg.fastest_time_to_beat,

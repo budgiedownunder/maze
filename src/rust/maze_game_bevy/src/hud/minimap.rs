@@ -1,5 +1,5 @@
 use crate::images::make_image;
-use crate::state::{GameConfig, GameState, WallType};
+use crate::state::{GameConfig, GameState, MultiLevelRun, WallType};
 use crate::world::objects::overrides::resolve_wall_type;
 use bevy::prelude::*;
 use maze::CellEntity;
@@ -46,20 +46,23 @@ enum CellLook {
 }
 
 /// The minimap look for an in-grid, explored cell `(r, c)`. A `'W'` cell reads its
-/// per-cell wall-type override (resolved against the per-maze default), so water /
+/// per-cell wall-type override (resolved against `default_wall_type`), so water /
 /// lava show as distinct flat colours and iron-fence shows its barred look, while
-/// solid-wall textures keep the neutral wall grey.
+/// solid-wall textures keep the neutral wall grey. `default_wall_type` is the
+/// level's effective wall type — the per-maze `wall_type`, or, under
+/// `wall_type = "random"`, the type rolled for the level currently shown — so the
+/// minimap matches the 3D view rather than the placeholder default.
 fn explored_cell_look(
     grid: &[Vec<char>],
     cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
-    config: &GameConfig,
+    default_wall_type: WallType,
     r: usize,
     c: usize,
 ) -> CellLook {
     match grid[r][c] {
         'W' => {
             let entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
-            match resolve_wall_type(entity, config.wall_type) {
+            match resolve_wall_type(entity, default_wall_type) {
                 WallType::Water => CellLook::Flat(COLOR_MINIMAP_WATER),
                 WallType::Lava => CellLook::Flat(COLOR_MINIMAP_LAVA),
                 WallType::IronFence => CellLook::IronBars,
@@ -278,6 +281,7 @@ fn minimap_dimensions_y(center_y: f32, map_size: f32) -> f32 {
 pub(crate) fn minimap_system(
     state: Res<GameState>,
     game_config: Res<GameConfig>,
+    run: Res<MultiLevelRun>,
     config: Res<MinimapConfig>,
     mut cells: Query<(&MinimapCell, &mut Sprite)>,
     mut player_q: Query<&mut Transform, With<MinimapPlayer>>,
@@ -286,6 +290,13 @@ pub(crate) fn minimap_system(
     let pc = state.game.player_col() as i32;
     let nrows = state.grid.len() as i32;
     let ncols = if state.grid.is_empty() { 0 } else { state.grid[0].len() as i32 };
+    // The wall type for the level currently shown — rolled per level under
+    // `wall_type = "random"` so the minimap colours match the 3D walls.
+    let level_wall_type = if game_config.wall_type_random {
+        WallType::random_for_level(run.current_level, game_config.seed)
+    } else {
+        game_config.wall_type
+    };
 
     for (cell, mut sprite) in &mut cells {
         let mr = pr + cell.dr;
@@ -298,7 +309,7 @@ pub(crate) fn minimap_system(
             if !state.explored.contains(&(r, c)) {
                 CellLook::Flat(COLOR_MINIMAP_DARK)
             } else {
-                explored_cell_look(&state.grid, state.game.cell_entities(), &game_config, r, c)
+                explored_cell_look(&state.grid, state.game.cell_entities(), level_wall_type, r, c)
             }
         };
         match look {
@@ -416,25 +427,30 @@ mod tests {
         // (solid) wall. Water/lava are distinct flat colours, iron-fence is the
         // barred look, and the plain wall keeps the neutral wall grey.
         let grid = vec![vec!['W', 'W', 'W', 'W']];
-        let config = GameConfig::default();
         let mut ce: HashMap<(usize, usize), Vec<CellEntity>> = HashMap::new();
         ce.insert((0, 0), vec![entity(r#"{"type":"W","wallType":"water"}"#)]);
         ce.insert((0, 1), vec![entity(r#"{"type":"W","wallType":"lava"}"#)]);
         ce.insert((0, 2), vec![entity(r#"{"type":"W","wallType":"iron_fence"}"#)]);
-        // (0, 3) has no override → solid wall.
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 0), CellLook::Flat(COLOR_MINIMAP_WATER));
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 1), CellLook::Flat(COLOR_MINIMAP_LAVA));
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 2), CellLook::IronBars);
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 3), CellLook::Flat(COLOR_MINIMAP_WALL));
+        // (0, 3) has no override → the level default (a solid wall here).
+        let d = WallType::Brick;
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 0), CellLook::Flat(COLOR_MINIMAP_WATER));
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 1), CellLook::Flat(COLOR_MINIMAP_LAVA));
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 2), CellLook::IronBars);
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 3), CellLook::Flat(COLOR_MINIMAP_WALL));
+        // A level whose rolled default is lava paints an un-overridden 'W' as lava.
+        assert_eq!(
+            explored_cell_look(&grid, &ce, WallType::Lava, 0, 3),
+            CellLook::Flat(COLOR_MINIMAP_LAVA),
+        );
     }
 
     #[test]
     fn minimap_colours_non_wall_cells_by_char() {
-        let config = GameConfig::default();
         let ce = HashMap::new();
         let grid = vec![vec!['S', 'F', ' ']];
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 0), CellLook::Flat(COLOR_MINIMAP_START));
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 1), CellLook::Flat(COLOR_MINIMAP_FINISH));
-        assert_eq!(explored_cell_look(&grid, &ce, &config, 0, 2), CellLook::Flat(COLOR_MINIMAP_FLOOR));
+        let d = WallType::Brick;
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 0), CellLook::Flat(COLOR_MINIMAP_START));
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 1), CellLook::Flat(COLOR_MINIMAP_FINISH));
+        assert_eq!(explored_cell_look(&grid, &ce, d, 0, 2), CellLook::Flat(COLOR_MINIMAP_FLOOR));
     }
 }

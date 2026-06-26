@@ -123,7 +123,9 @@ sky_type = "night"
 # "cobblestone" — apply on the per-cell tinted path (used when the
 # wall_material_variation landmark below is false). The non-occluding types —
 # "water" | "lava" | "iron_fence" — turn every wall cell into a floor-level pool
-# or see-through bars (not subject to material variation). Default "brick".
+# or see-through bars (not subject to material variation). "random" rolls one of
+# the seven types per level (seeded off the maze), so each level reads as one
+# coherent — but independently chosen — style. Default "brick".
 wall_type = "brick"
 #wall_type = "dressed_stone"
 #wall_type = "wood"
@@ -131,6 +133,7 @@ wall_type = "brick"
 #wall_type = "water"
 #wall_type = "lava"
 #wall_type = "iron_fence"
+#wall_type = "random"
 # Whether the maze perimeter is walled at the grid edge under an open sky.
 # Enclosed skies ("dungeon" / "chamber") always wall it regardless. true =
 # walled (the traditional enclosed-maze look); false = the skybox shows past the
@@ -144,10 +147,12 @@ perimeter_walls = true
 #door_style = "portcullis"
 #door_style = "dissolve"
 # Key-holder style for 'K' cells — one of "pedestal" | "chest" |
-# "floating_key". Default "pedestal".
+# "floating_key" | "random". "random" rolls a rig per cell (seeded off the
+# maze). Default "pedestal".
 #key_holder = "pedestal"
 #key_holder = "chest"
 #key_holder = "floating_key"
+#key_holder = "random"
 # Number of doors (each with one key) the generator auto-places into this
 # difficulty's maze. Doors gate the solution path and the maze stays solvable.
 # Clamped to what the maze can hold (max 8). Default 0 = a lock-free maze.
@@ -164,12 +169,14 @@ health_count = 2
 # Number of treasure cells the generator auto-places, dead-end-first and
 # type-weighted. Clamped to maze::MAX_TREASURE_COUNT (= 12). Default 0 = none.
 treasure_count = 3
-# Enemy rig kind to spawn at every 'E' cell. One of "goblin" | "ghost".
-# Default "goblin".
+# Enemy rig kind to spawn at every 'E' cell. One of "goblin" | "ghost" |
+# "random". "random" rolls a rig per cell (seeded off the maze). Default "goblin".
 enemy_type = "goblin"
-# Health-pickup rig kind to spawn at every 'H' cell. One of "heart" |
-# "potion". Default "heart".
+#enemy_type = "random"
+# Health-pickup rig kind to spawn at every 'H' cell. One of "heart" | "potion" |
+# "random". "random" rolls a rig per cell (seeded off the maze). Default "heart".
 health_style = "heart"
+#health_style = "random"
 # How often each enemy advances one cell, in milliseconds of real-game time.
 # Lower = harder. Default 1500.
 enemy_move_period_ms = 1800
