@@ -21,7 +21,7 @@ pub use world::{
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{bag, clock, hp, level, minimap, score, statusbar};
+    use crate::hud::{bag, clock, hp, level, minimap, score, statusbar, time_bonus};
     use crate::movement::{movement_system, quit_system};
     use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
@@ -104,6 +104,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, hp::hp_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, score::score_hud_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, time_bonus::time_bonus_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, level::level_indicator_system.run_if(in_state(AppState::Playing)))
         // Damage flash runs through pause/lost so an in-flight flash from
         // the last live tick finishes fading rather than freezing on screen.

@@ -174,6 +174,69 @@ pub(crate) struct GameClock {
     pub(crate) last_displayed_secs: i32,
 }
 
+/// Maximum time bonus a won run can earn — the points added for an effectively
+/// instant finish. The bonus ramps linearly down to zero across the cutoff
+/// window (see [`time_bonus`] / [`BONUS_CUTOFF_TIME_PERCENTAGE`]). Sized so it
+/// rewards a fast finish meaningfully without eclipsing collected treasure
+/// (silver/gold/jewels/diamonds are worth 50–400 each), keeping the collection
+/// score the base and speed a strong secondary axis.
+pub(crate) const TIME_BONUS_MAX: u64 = 750;
+
+/// Lead time at the start of a run, as a fraction of the run's total starting
+/// time, during which the bonus holds at the full [`TIME_BONUS_MAX`] before it
+/// begins to drop. At `0.05` the first twentieth of the clock earns the whole
+/// bonus.
+pub(crate) const BONUS_LEAD_TIME_PERCENTAGE: f32 = 0.05;
+
+/// Fraction of the run's total starting time within which a finish still earns a
+/// bonus. The cutoff is `BONUS_CUTOFF_TIME_PERCENTAGE × total_time`; a run that
+/// takes longer than the cutoff earns zero. At `0.5` the bonus is gone once half
+/// the clock has been spent.
+pub(crate) const BONUS_CUTOFF_TIME_PERCENTAGE: f32 = 0.5;
+
+/// Time bonus added to a won run's collection score (keys + treasure), as a
+/// function of the time taken. The bonus holds at the full [`TIME_BONUS_MAX`]
+/// through an initial lead time, then ramps linearly to zero at the cutoff;
+/// past the cutoff it is zero:
+///
+/// ```text
+/// lead   = BONUS_LEAD_TIME_PERCENTAGE   × total_time
+/// cutoff = BONUS_CUTOFF_TIME_PERCENTAGE × total_time
+/// bonus  = TIME_BONUS_MAX                                          when time_taken ≤ lead
+///        = TIME_BONUS_MAX × (cutoff − time_taken) / (cutoff − lead) when lead < time_taken < cutoff
+///        = 0                                                        otherwise
+/// ```
+///
+/// `total_time_secs` is the run's total available game time at the start — the
+/// value the clock began counting down from. Callers derive it from the clock as
+/// `elapsed + remaining` (an invariant during play) rather than the configured
+/// timer, so the demo path's long fixed clock is honoured rather than the small
+/// config default.
+///
+/// The bonus is run-level (applied once on the final-level win), not per level,
+/// and the lead/cutoff are shares of the run's own whole-run clock, so it is fair
+/// across single- and multi-level runs of a difficulty. A non-positive total
+/// yields no bonus (no cutoff window).
+pub(crate) fn time_bonus(time_taken_secs: f32, total_time_secs: f32) -> u64 {
+    let cutoff = BONUS_CUTOFF_TIME_PERCENTAGE * total_time_secs;
+    if cutoff <= 0.0 {
+        return 0;
+    }
+    let taken = time_taken_secs.max(0.0);
+    if taken >= cutoff {
+        return 0;
+    }
+    let lead = BONUS_LEAD_TIME_PERCENTAGE * total_time_secs;
+    if taken <= lead {
+        return TIME_BONUS_MAX;
+    }
+    // Linear ramp from the full max at the end of the lead time down to zero at
+    // the cutoff. `cutoff > lead` here (both guards above passed and the lead
+    // fraction is below the cutoff fraction), so the denominator is positive.
+    let fraction = (cutoff - taken) / (cutoff - lead);
+    (TIME_BONUS_MAX as f32 * fraction).round() as u64
+}
+
 /// Run-level state for a multi-level game: the per-level maze JSON, the active
 /// level index, and the totals that carry across levels. A single-level game
 /// is just a run with one level — every multi-level branch collapses to the
@@ -938,6 +1001,29 @@ mod tests {
             elapsed,
             duration,
         }
+    }
+
+    #[test]
+    fn time_bonus_holds_through_the_lead_time_then_ramps_to_zero_at_the_cutoff() {
+        // For 120 s total: lead = 0.05 × 120 = 6 s, cutoff = 0.5 × 120 = 60 s.
+        // Flat at the max anywhere within the lead time.
+        assert_eq!(time_bonus(0.0, 120.0), TIME_BONUS_MAX);
+        assert_eq!(time_bonus(3.0, 120.0), TIME_BONUS_MAX);
+        assert_eq!(time_bonus(6.0, 120.0), TIME_BONUS_MAX);
+        // Half-way down the ramp [6, 60] s → half the max.
+        assert_eq!(time_bonus(33.0, 120.0), TIME_BONUS_MAX / 2);
+        // At the cutoff and beyond → nothing.
+        assert_eq!(time_bonus(60.0, 120.0), 0);
+        assert_eq!(time_bonus(90.0, 120.0), 0);
+        assert_eq!(time_bonus(120.0, 120.0), 0);
+    }
+
+    #[test]
+    fn time_bonus_guards_nonpositive_inputs() {
+        // A non-positive total → no cutoff window → no bonus (no divide).
+        assert_eq!(time_bonus(10.0, 0.0), 0);
+        // Negative time-taken (shouldn't occur) floors into the lead time.
+        assert_eq!(time_bonus(-5.0, 120.0), TIME_BONUS_MAX);
     }
 
     #[test]

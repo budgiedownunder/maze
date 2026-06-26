@@ -3,15 +3,16 @@
 //! A top-left readout of the current level within a multi-level run, e.g.
 //! `LEVEL  1 of 2`. Spawned only when the run has more than one level, so
 //! single-level games show no indicator and look exactly as before. Anchored
-//! below the score readout and left-aligned so it grows rightward.
+//! below the score + time-bonus readouts and left-aligned so it grows rightward.
 
 use crate::state::MultiLevelRun;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 /// Distance of the readout from the top / left screen edges. The top margin
-/// sits below the score readout (`SCORE_MARGIN_TOP` = 30).
-const LEVEL_MARGIN_TOP: f32 = 62.0;
+/// sits below the score readout (`SCORE_MARGIN_TOP` = 30) and the time-bonus
+/// readout (`BONUS_MARGIN_TOP` = 62) stacked above it.
+const LEVEL_MARGIN_TOP: f32 = 94.0;
 const LEVEL_MARGIN_LEFT: f32 = 12.0;
 
 const COLOR_LEVEL: Color = Color::srgb(0.82, 0.84, 0.9);
@@ -86,7 +87,7 @@ fn anchor(window: &Query<&Window>) -> (f32, f32) {
                 w.height() / 2.0 - LEVEL_MARGIN_TOP,
             )
         })
-        .unwrap_or((-628.0, 298.0))
+        .unwrap_or((-628.0, 266.0))
 }
 
 /// The indicator label, e.g. `LEVEL  1 of 2` (1-based current level).

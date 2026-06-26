@@ -51,10 +51,10 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Adaptive FOV** — the camera's vertical FOV is configured at 60° for the reference 16:9 viewport (≈91° horizontal at that aspect). On viewports narrower than the reference (phone portrait, tall windows), the vertical FOV grows so the horizontal FOV stays constant — a perpendicular opening that's visible on desktop is still visible on a phone in portrait. Capped at 100° vertical to prevent fisheye on extreme-portrait viewports.
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted gold.
-- **Score overlay** (top-left corner) — a live readout of the run's score (`MazeGame::score()`), updated each frame as the player progresses.
+- **Score overlay** (top-left corner) — a live readout of the run's collection score (`MazeGame::score()` — keys + treasure), updated each frame as the player progresses. Directly below it a time-bonus readout shows the bonus the run would earn by finishing right now — held at the full maximum through an initial lead time (a twentieth of the run's total time), then ramping linearly to zero at a cutoff (half the total time, after which it stays zero) — ticking down as the clock runs, so the reward for a faster finish is visible in real time.
 - Status bar overlay (bottom-left corner) — a row container that displays the configured `mode` label.
 - **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. A muted footer strip directly below it shows the maze's dimensions as `width x height` (columns × rows). The whole panel (footer included) re-anchors to the window's top-right corner on resize.
-- **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen, showing the run's final score and its elapsed time to millisecond precision (`M:SS.mmm`). The on-screen clock only shows the remaining countdown to whole seconds, so the win panel is where the precise completion time surfaces.
+- **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen, showing the run's final score — collection score plus the locked-in time bonus, spelled out as `(+N bonus)` — and its elapsed time to millisecond precision (`M:SS.mmm`). The on-screen clock only shows the remaining countdown to whole seconds, so the win panel is where the precise completion time surfaces.
 - Gold-leaf rain — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
 - **Lose overlay** — on not completing in time, or on reaching 0 HP from enemy collisions, movement stops and a "You Lose!" panel appears centred on screen.
 - Rain-Lightning — on lose, rain sprites spawn continuously across the full screen width and fall accompanied by periodic lightning flashes.
@@ -245,6 +245,7 @@ src/
 │   ├── minimap.rs          top-right minimap overlay
 │   ├── statusbar.rs        bottom-left mode label
 │   ├── score.rs            top-left live score readout (cumulative across a multi-level run)
+│   ├── time_bonus.rs       top-left live time-bonus readout (ticks down as the timer runs)
 │   ├── level.rs            level readout (multi-level runs only)
 │   ├── clock.rs            top-centre countdown clock + lose-state trigger
 │   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change

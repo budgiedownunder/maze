@@ -15,7 +15,8 @@
 
 use crate::overlays::{lose, win};
 use crate::state::{
-    dispatch_game_result, GameClock, GameConfig, GameOutcome, GameResult, GameState, MultiLevelRun,
+    dispatch_game_result, time_bonus, GameClock, GameConfig, GameOutcome, GameResult, GameState,
+    MultiLevelRun,
 };
 use bevy::prelude::*;
 
@@ -40,8 +41,9 @@ pub(crate) fn outcome_watcher_system(
         }
         state.won = true;
         let elapsed_ms = (clock.elapsed_secs * 1000.0) as u64;
-        let score = run.cumulative_score(state.game.score());
-        win::spawn_win_overlay(&mut commands, score, elapsed_ms);
+        let bonus = time_bonus(clock.elapsed_secs, clock.elapsed_secs + clock.remaining_secs);
+        let score = run.cumulative_score(state.game.score()) + bonus;
+        win::spawn_win_overlay(&mut commands, score, bonus, elapsed_ms);
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Win,
             elapsed_ms,

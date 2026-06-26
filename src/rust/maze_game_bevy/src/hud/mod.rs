@@ -5,6 +5,7 @@ pub(crate) mod level;
 pub(crate) mod minimap;
 pub(crate) mod score;
 pub(crate) mod statusbar;
+pub(crate) mod time_bonus;
 
 /// Uniform downscale for the top-edge readouts (SCORE and the clock) on narrow
 /// windows. The SCORE is anchored to the left and grows rightward while the

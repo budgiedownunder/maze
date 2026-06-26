@@ -13,12 +13,13 @@ const STATUSBAR_LEFT: f32 = 12.0;
 /// Left padding of the text inside the background pill.
 const STATUSBAR_TEXT_PAD: f32 = 8.0;
 /// Distance of the pill's centre below the top edge — places this row (which
-/// shows the maze name) just under the top-left SCORE line.
-const STATUSBAR_TOP: f32 = 68.0;
+/// shows the maze name) below the top-left SCORE and BONUS lines (SCORE at 30,
+/// BONUS at 62).
+const STATUSBAR_TOP: f32 = 94.0;
 /// Extra drop applied **only** when the multi-level "LEVEL i of N" indicator is
-/// shown (it sits between SCORE and this row), so the maze name clears it instead
+/// shown (it sits between BONUS and this row), so the maze name clears it instead
 /// of overlapping. Single-level games show no indicator and keep `STATUSBAR_TOP`.
-const STATUSBAR_LEVEL_DROP: f32 = 30.0;
+const STATUSBAR_LEVEL_DROP: f32 = 32.0;
 
 #[derive(Component)]
 pub(crate) struct StatusBar;
@@ -41,7 +42,7 @@ pub(crate) fn spawn_statusbar(
     let (bg_x, text_x, y) = window
         .single()
         .map(|w| positions(w.width(), w.height(), level_shown))
-        .unwrap_or((-558.0, -628.0, 290.0));
+        .unwrap_or((-558.0, -628.0, 266.0));
     commands.spawn((
         StatusBar,
         Sprite {

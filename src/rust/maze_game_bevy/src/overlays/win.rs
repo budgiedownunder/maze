@@ -39,7 +39,7 @@ fn format_elapsed(ms: u64) -> String {
     format!("{}:{:02}.{:03}", total_secs / 60, total_secs % 60, ms % 1000)
 }
 
-pub(crate) fn spawn_win_overlay(commands: &mut Commands, score: u64, elapsed_ms: u64) {
+pub(crate) fn spawn_win_overlay(commands: &mut Commands, score: u64, bonus: u64, elapsed_ms: u64) {
     commands.spawn((
         WinOverlay,
         WinBackground,
@@ -61,7 +61,7 @@ pub(crate) fn spawn_win_overlay(commands: &mut Commands, score: u64, elapsed_ms:
     commands.spawn((
         WinOverlay,
         WinScoreText,
-        Text2d::new(format!("Score  {}", score)),
+        Text2d::new(format!("Score  {}  (+{} bonus)", score, bonus)),
         TextFont { font_size: 24.0, ..default() },
         TextColor(Color::WHITE),
         Transform::from_xyz(0.0, -18.0, 11.0),
