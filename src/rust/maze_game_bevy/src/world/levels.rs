@@ -19,7 +19,7 @@ use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazePoint};
 /// Upper bound on the number of levels a single run may stack. Caps the
 /// geometry rendered at once (every level is built up front) and bounds the
 /// generation cost.
-pub const MAX_LEVEL_COUNT: usize = 5;
+pub const MAX_LEVEL_COUNT: usize = 20;
 
 /// How a run's difficulty changes from the bottom level to the top. The
 /// player always climbs upward; this selects whether the climb gets harder,

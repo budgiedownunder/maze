@@ -565,7 +565,7 @@ impl Default for LandmarksConfig {
 /// `MAX_LEVEL_COUNT` (the source of truth for the renderer / generation cap);
 /// the server clamps the configured `levels.count` to it before reporting it so
 /// a client never has to render more levels than the Bevy game supports.
-pub const MAX_LEVEL_COUNT: u32 = 5;
+pub const MAX_LEVEL_COUNT: u32 = 20;
 
 /// Multi-level run settings for a difficulty (`[game.play3d.<difficulty>.levels]`).
 ///
