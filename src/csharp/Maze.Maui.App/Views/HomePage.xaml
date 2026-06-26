@@ -28,7 +28,7 @@
                         <Label Text="Play 3D"
                                FontSize="24"
                                TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
-                        <Label Text="Play in easy, tricky or hard mode" FontSize="14"/>
+                        <Label Text="Play single-level and multi-level 3D games in easy, tricky or hard mode" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>
@@ -51,7 +51,7 @@
                         <Label Text="Mazes"
                                FontSize="24"
                                TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
-                        <Label Text="Design and play your own mazes" FontSize="14"/>
+                        <Label Text="Design and play your own single-level mazes" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>
