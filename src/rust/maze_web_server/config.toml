@@ -209,11 +209,13 @@ wall_material_variation = true
 
 [game.play3d.easy.levels]
 # Multi-level run settings. count = 1 is a single-level game (the default; no
-# transitions). Clamped to the renderer's maximum of 5.
+# transitions). Clamped to the renderer's maximum of 20.
 count = 1
 # Interim-finish transition rig — one of "ladder" | "portal" | "random".
 # "random" picks a concrete rig per interim finish cell, seeded. Default "ladder".
 finish_type = "ladder"
+#finish_type = "portal"
+#finish_type = "random"
 # How difficulty changes as the player climbs — "same" | "easier" | "harder".
 # "easier" = hardest at the bottom, easing as you ascend (enemy count is the
 # lever; footprint stays uniform). Default "easier".
