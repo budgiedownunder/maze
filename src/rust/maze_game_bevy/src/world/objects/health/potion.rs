@@ -87,7 +87,7 @@ pub(crate) fn spawn_potion(commands: &mut Commands, assets: &PotionAssets, r: us
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let root = commands
         .spawn((
-            super::HealthMarker { cell: (r, c) },
+            super::HealthMarker { cell: (r, c), level: placement.level },
             Transform::from_xyz(x, placement.world_y(POTION_BASE_Y), z),
             Visibility::default(),
         ))

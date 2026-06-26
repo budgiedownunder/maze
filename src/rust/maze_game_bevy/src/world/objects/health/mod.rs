@@ -23,12 +23,12 @@ const PULSE_AMPLITUDE: f32 = 0.08;
 /// Y-axis rotation rate (radians/sec) for the slow idle spin.
 const SPIN_RATE: f32 = 1.0;
 
-/// Per-pickup entity marker. `cell` matches the `'H'` cell coordinate so
-/// the tick driver can despawn this entity from a
-/// `GameEvent::PlayerHealed { cell, .. }` payload directly.
+/// Per-pickup entity marker. The tick driver despawns this entity on a
+/// `GameEvent::PlayerHealed { cell, .. }` whose `(cell, level)` matches
 #[derive(Component)]
 pub(crate) struct HealthMarker {
     pub(crate) cell: (usize, usize),
+    pub(crate) level: usize,
 }
 
 /// Composite health-pickup assets. One sub-struct per rig variant.

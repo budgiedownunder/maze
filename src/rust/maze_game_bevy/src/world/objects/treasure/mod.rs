@@ -209,6 +209,8 @@ fn baked_handle(
 #[derive(Component)]
 pub(crate) struct TreasureMarker {
     pub(crate) cell: (usize, usize),
+    /// Which level this chest belongs to.
+    pub(crate) level: usize,
     /// This chest's level floor Y (`base_level_y[level]`). The collectible loot
     /// root rests at the floor and [`treasure_collection_system`] rewrites its
     /// absolute Y during the rise flourish, so it must re-apply this base.
@@ -457,7 +459,7 @@ pub(crate) fn spawn_treasure_for_cell(
     // this root, leaving the chest.
     let root = commands
         .spawn((
-            TreasureMarker { cell: (r, c), base_y },
+            TreasureMarker { cell: (r, c), level: placement.level, base_y },
             Transform::from_xyz(x, placement.world_y(0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
             Visibility::default(),
         ))

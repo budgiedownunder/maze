@@ -87,7 +87,7 @@ pub(crate) fn game_tick_system(
             }
             GameEvent::PlayerHealed { cell, .. } => {
                 for (entity, marker) in &health_pickups {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         commands.entity(entity).despawn();
                     }
                 }
@@ -100,14 +100,14 @@ pub(crate) fn game_tick_system(
             }
             GameEvent::KeyCollected { cell, .. } => {
                 for (entity, marker) in &key_holders {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         commands.entity(entity).insert(CollectingKey::default());
                     }
                 }
             }
             GameEvent::TreasureCollected { cell, .. } => {
                 for (entity, marker) in &treasures {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         commands.entity(entity).insert(CollectingTreasure::default());
                     }
                 }

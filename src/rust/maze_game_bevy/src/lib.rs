@@ -2029,6 +2029,54 @@ mod tests {
     }
 
     #[test]
+    fn collecting_a_key_only_affects_the_live_levels_same_cell_holder() {
+        use crate::tick::game_tick_system;
+        use crate::world::objects::key_holder::{CollectingKey, KeyMarker};
+        use bevy::ecs::system::RunSystemOnce;
+        use maze::Direction;
+        // Both levels have a key at (0,1). Collecting the live (level-0) key must
+        // tag only level 0's holder — a regression guard for the cross-level
+        // collection bug where a same-(row, col) key on another level was
+        // despawned, so it never drew when the player climbed to it even though
+        // the engine still collected it. (Health + treasure share the same fix.)
+        let lvl = r#"{"grid":[["S","K","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[lvl, lvl]);
+
+        // One key holder per level at (0,1), tagged with its own level.
+        let mut levels: Vec<usize> = app
+            .world_mut()
+            .query::<&KeyMarker>()
+            .iter(app.world())
+            .filter(|m| m.cell == (0, 1))
+            .map(|m| m.level)
+            .collect();
+        levels.sort();
+        assert_eq!(levels, vec![0, 1], "one key holder per level at (0,1)");
+
+        // Collect the live level's key, then run the tick driver once.
+        app.world_mut()
+            .resource_mut::<GameState>()
+            .game
+            .move_player(Direction::Right);
+        app.world_mut()
+            .run_system_once(game_tick_system)
+            .expect("game_tick_system runs");
+
+        // Only level 0's holder is collecting; level 1's same-cell key is untouched.
+        let collecting: Vec<usize> = app
+            .world_mut()
+            .query::<(&KeyMarker, &CollectingKey)>()
+            .iter(app.world())
+            .map(|(m, _)| m.level)
+            .collect();
+        assert_eq!(
+            collecting,
+            vec![0],
+            "only the live level's key holder is collected, not level 1's same-cell key",
+        );
+    }
+
+    #[test]
     fn a_vertically_sliding_door_leaf_hides_when_it_would_intrude_on_an_adjacent_level() {
         use crate::state::DoorStyle;
         use maze::Direction;

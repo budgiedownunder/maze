@@ -76,6 +76,8 @@ const SPARK_EMISSIVE: LinearRgba = LinearRgba::new(1.6, 1.35, 0.7, 1.0);
 #[derive(Component)]
 pub(crate) struct KeyMarker {
     pub(crate) cell: (usize, usize),
+    /// Which level this holder belongs to.
+    pub(crate) level: usize,
     /// This holder's level floor Y (`base_level_y[level]`). The holder root rests
     /// at the floor and [`key_collection_system`] rewrites its absolute Y during
     /// the rise flourish, so it must re-apply this base. (The floating key is a
@@ -158,7 +160,7 @@ pub(crate) fn spawn_key_holder_for_cell(
     // level's floor.
     let holder = commands
         .spawn((
-            KeyMarker { cell: (r, c), base_y },
+            KeyMarker { cell: (r, c), level: placement.level, base_y },
             Transform::from_xyz(x, placement.world_y(0.0), z),
             Visibility::default(),
         ))
