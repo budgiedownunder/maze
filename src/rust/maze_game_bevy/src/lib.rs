@@ -2120,6 +2120,58 @@ mod tests {
     }
 
     #[test]
+    fn a_portcullis_under_a_taper_gap_stays_visible_but_one_under_a_covered_cell_hides() {
+        use crate::state::{DoorStyle, LayeredAlignment};
+        use maze::Direction;
+        // Same bottom level both times: `S K D F`, with the portcullis door at
+        // column 2. Edge alignment corner-stacks the smaller upper level at column
+        // 0, so the only thing that changes the door's fate is whether the upper
+        // footprint reaches column 2. Under the old `level + 1 < level_count` rule
+        // BOTH would hide; the fix hides only the one with a cell actually above.
+        let bottom = r#"{"grid":[["S","K","D","F"]]}"#;
+        let open_door = |app: &mut App| {
+            {
+                let mut state = app.world_mut().resource_mut::<GameState>();
+                state.game.move_player(Direction::Right); // collect the key
+                state.game.move_player(Direction::Right); // into the door → unlock
+                let _ = state.game.tick(10_000.0); // Opening → Open
+            }
+            app.update(); // door_animation_system sets visibility
+        };
+        let hidden = |app: &mut App| {
+            app.world_mut()
+                .query::<(&DoorMarker, &Visibility)>()
+                .iter(app.world())
+                .filter(|(_, v)| matches!(v, Visibility::Hidden))
+                .count()
+        };
+
+        // Upper level is only 2 columns wide (a taper) and edge-stacked at column 0,
+        // so it covers columns 0–1 only — column 2's door rises into a gap → visible.
+        let narrow_upper = r#"{"grid":[["S","F"]]}"#;
+        let cfg = GameConfig {
+            door_style: DoorStyle::Portcullis,
+            layered_alignment: LayeredAlignment::Edge,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[bottom, narrow_upper], cfg);
+        open_door(&mut app);
+        assert_eq!(hidden(&mut app), 0, "a portcullis under a taper gap stays visibly raised");
+
+        // A 3-wide upper (still a taper vs the 4-wide base) reaches column 2, so the
+        // door now has a cell directly above → it hides when fully raised.
+        let wide_upper = r#"{"grid":[["S"," ","F"]]}"#;
+        let cfg = GameConfig {
+            door_style: DoorStyle::Portcullis,
+            layered_alignment: LayeredAlignment::Edge,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[bottom, wide_upper], cfg);
+        open_door(&mut app);
+        assert!(hidden(&mut app) > 0, "a portcullis under a covered cell still hides");
+    }
+
+    #[test]
     fn an_upper_pool_level_is_lifted_and_its_underside_sealed() {
         use crate::world::{UndersideSeal, LEVEL_HEIGHT, POOL_GAP};
 

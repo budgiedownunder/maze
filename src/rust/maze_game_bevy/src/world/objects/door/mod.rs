@@ -36,7 +36,7 @@ pub(crate) mod portcullis;
 pub(crate) mod slide;
 pub(crate) mod swing;
 
-use crate::state::{DoorStyle, GameConfig, GameState};
+use crate::state::{DoorStyle, GameConfig, GameState, LayeredAlignment};
 use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
@@ -71,6 +71,14 @@ pub(crate) struct DoorMarker {
     /// col)` on another level would slide in lock-step with the live one (an upper
     /// level's leaf sliding down into the live doorway).
     pub(crate) level: usize,
+    /// Whether a cell sits directly above this door's world XZ on the level above.
+    /// A raised portcullis travels up into the next level, so it must hide when
+    /// fully open only when there's actually a cell there to intrude on. Under a
+    /// uniform stack every non-top door has one (`level + 1 < level_count`); under
+    /// taper a smaller upper level may leave a gap above a lower door, so its
+    /// raised grille rises into open air and must stay visible (see
+    /// [`has_cell_above`]).
+    has_cell_above: bool,
     /// Yaw orienting the leaf so its local +X spans the opening and its local
     /// +Z (keyhole / decoration face) points out toward the neighbour.
     closed_yaw: f32,
@@ -206,6 +214,9 @@ struct LeafSpec {
     /// Swing leaves are seen from both ends of the corridor, so they get a
     /// keyhole on both faces; per-edge leaves only on the outward face.
     keyhole_both_faces: bool,
+    /// Whether a cell sits above this door's cell on the level above — see
+    /// [`DoorMarker::has_cell_above`]. Same for every leaf of a cell.
+    has_cell_above: bool,
 }
 
 /// Clones `src` into an alpha-blended dissolve material, records it in `out` so
@@ -264,6 +275,7 @@ fn spawn_leaf(
                 closed_yaw: spec.closed_yaw,
                 motion: spec.motion,
                 base_translation: spec.pivot_translation,
+                has_cell_above: spec.has_cell_above,
                 opened: false,
                 dissolve_materials,
             },
@@ -337,6 +349,9 @@ pub(crate) fn spawn_door_for_cell(
     config: &GameConfig,
     cell_entity: Option<&CellEntity>,
     placement: LevelPlacement,
+    // The level-above's `(rows, cols)` footprint, or `None` for the top level.
+    // Decides whether a raised portcullis here has a cell to intrude on above.
+    dims_above: Option<(usize, usize)>,
 ) {
     if cell != 'D' {
         return;
@@ -345,6 +360,10 @@ pub(crate) fn spawn_door_for_cell(
     let door_style = super::overrides::resolve_door_style(cell_entity, config.door_style);
     let rows = grid.len();
     let cols = grid[r].len();
+    // A raised portcullis travels into the level above; it must hide when open
+    // only when a cell actually sits there. Captured per cell (same for every
+    // leaf), used in `door_animation_system`.
+    let cell_above = has_cell_above(config.layered_alignment, r, c, (rows, cols), dims_above);
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     // The leaf-anchor Y for this level; every edge centre / pivot below derives
@@ -384,6 +403,7 @@ pub(crate) fn spawn_door_for_cell(
                 motion: DoorMotion::Swing,
                 face_id: if normal_z { 0 } else { 2 },
                 keyhole_both_faces: true,
+                has_cell_above: cell_above,
             },
         );
         return;
@@ -430,9 +450,41 @@ pub(crate) fn spawn_door_for_cell(
                 motion,
                 face_id,
                 keyhole_both_faces: false,
+                has_cell_above: cell_above,
             },
         );
     }
+}
+
+/// Whether a cell sits directly above `(r, c)` on this `dims`-sized level, on the
+/// next level up (`dims_above`), under `alignment`. The inverse of
+/// [`LevelPlacement`]'s X/Z offset — the same mapping as
+/// `crate::world::levels::aligned_landing`: `Centre` insets by half the per-axis
+/// size difference, `Edge` keeps the cell. `None` `dims_above` (the top level) has
+/// nothing above. Under a uniform stack the dims are equal, so the inset is zero
+/// and every cell has one (matching the old `level + 1 < level_count`); under
+/// taper a smaller upper grid may leave a lower cell uncovered.
+fn has_cell_above(
+    alignment: LayeredAlignment,
+    r: usize,
+    c: usize,
+    dims: (usize, usize),
+    dims_above: Option<(usize, usize)>,
+) -> bool {
+    let Some((rows_above, cols_above)) = dims_above else {
+        return false;
+    };
+    let (row_inset, col_inset) = match alignment {
+        LayeredAlignment::Edge => (0, 0),
+        LayeredAlignment::Centre => (
+            (dims.0 - rows_above) / 2,
+            (dims.1 - cols_above) / 2,
+        ),
+    };
+    let (Some(ur), Some(uc)) = (r.checked_sub(row_inset), c.checked_sub(col_inset)) else {
+        return false;
+    };
+    ur < rows_above && uc < cols_above
 }
 
 /// Smoothstep easing — the same `t·t·(3 − 2t)` curve [`crate::state::Animation`]
@@ -463,7 +515,6 @@ pub(crate) fn door_animation_system(
         return;
     }
     let states = state.game.doors();
-    let level_count = run.level_count();
     for (marker, mut transform, mut visibility) in &mut doors {
         // `state.game` is the live level's game, so only its leaves track it.
         // Leaves on other levels keep their last pose (closed on a level not yet
@@ -513,12 +564,15 @@ pub(crate) fn door_animation_system(
         // A vertically-travelling leaf, once open, ends up in the neighbouring
         // level: a slid leaf below the floor (the level below), a raised portcullis
         // above the ceiling (the level above). Hide it when fully open so it
-        // doesn't read as a phantom panel in that level. A bottom-level slide and a
-        // top-level portcullis travel into open space (no level there), so they
-        // stay visible. Swing / dissolve don't leave their own level.
+        // doesn't read as a phantom panel in that level. A bottom-level slide
+        // travels into open space (no level below), so it stays visible; a slide is
+        // never under a gap because the level below is always at least as large. A
+        // raised portcullis only intrudes when a cell actually sits above it — under
+        // taper a smaller upper level can leave a gap, where the grille rises into
+        // open air and must stay visible. Swing / dissolve don't leave their level.
         let intrudes_when_open = match marker.motion {
             DoorMotion::Slide => marker.level > 0,
-            DoorMotion::Portcullis => marker.level + 1 < level_count,
+            DoorMotion::Portcullis => marker.has_cell_above,
             DoorMotion::Swing | DoorMotion::Dissolve => false,
         };
         let target = if intrudes_when_open && fraction >= 0.999 {
@@ -550,6 +604,46 @@ mod tests {
             vec![serde_json::from_str::<CellEntity>(r#"{"type":"W","wallType":"water"}"#).unwrap()],
         );
         m
+    }
+
+    #[test]
+    fn has_cell_above_top_level_has_nothing_above() {
+        // `None` dims_above = the top level: a raised portcullis there rises into
+        // open sky, so it never has a cell above.
+        assert!(!has_cell_above(LayeredAlignment::Edge, 2, 2, (5, 5), None));
+        assert!(!has_cell_above(LayeredAlignment::Centre, 2, 2, (5, 5), None));
+    }
+
+    #[test]
+    fn has_cell_above_uniform_stack_every_cell_is_covered() {
+        // Equal footprints (no taper): zero inset, so every cell has one above —
+        // the old `level + 1 < level_count` behaviour.
+        for (r, c) in [(0, 0), (2, 2), (4, 4)] {
+            assert!(has_cell_above(LayeredAlignment::Edge, r, c, (5, 5), Some((5, 5))));
+            assert!(has_cell_above(LayeredAlignment::Centre, r, c, (5, 5), Some((5, 5))));
+        }
+    }
+
+    #[test]
+    fn has_cell_above_edge_taper_leaves_the_far_cells_uncovered() {
+        // Edge alignment corner-stacks the smaller upper grid at (0, 0), so only
+        // the low-row/low-col cells are covered.
+        let here = |r, c| has_cell_above(LayeredAlignment::Edge, r, c, (7, 7), Some((5, 5)));
+        assert!(here(0, 0), "the shared corner is covered");
+        assert!(here(4, 4), "the last covered cell");
+        assert!(!here(5, 5), "past the smaller grid → a gap above");
+        assert!(!here(0, 6), "an edge column with no cell above");
+    }
+
+    #[test]
+    fn has_cell_above_centre_taper_matches_the_inset() {
+        // Centre insets the upper grid by half the size difference (1 here), so the
+        // covered band is cells [1, 5] on each axis (mirrors `aligned_landing`).
+        let here = |r, c| has_cell_above(LayeredAlignment::Centre, r, c, (7, 7), Some((5, 5)));
+        assert!(!here(0, 0), "the outer ring sits over a gap");
+        assert!(here(1, 1), "first covered cell after the inset");
+        assert!(here(5, 5), "last covered cell");
+        assert!(!here(6, 6), "the far outer ring sits over a gap");
     }
 
     #[test]

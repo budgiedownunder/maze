@@ -572,6 +572,10 @@ fn spawn_level(
     // Rocks each lava cell on this level gets — likewise a global across-levels
     // budget computed once in `spawn_world`. See `lava::run_lava_rocks`.
     lava_rocks: usize,
+    // The level-above's `(rows, cols)` footprint, or `None` for the top level —
+    // forwarded to the door spawn so a raised portcullis under a taper gap (no cell
+    // above its world XZ) stays visible instead of hiding.
+    dims_above: Option<(usize, usize)>,
 ) {
     // Row-major scan order matches `MazeGame`'s enemy-id assignment, so bumping
     // this per `'E'` keeps the live level's `EnemyMarker.id` aligned with the
@@ -634,7 +638,7 @@ fn spawn_level(
             // Doors are spawned here (not inside `spawn_objects_for_cell`)
             // because the panel borrows the cell's wall material from
             // `wall_assets`.
-            objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, placement);
+            objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, placement, dims_above);
             // The ladder finish's roof tile carries the climb's opening (holed) so
             // the ladder isn't sealed under a solid ceiling on a roofed level.
             let holed = cell == 'F' && finish_is_ladder_here;
@@ -860,39 +864,45 @@ fn multilevel_hide_demo_levels() -> Vec<String> {
 }
 
 /// Hand-built 2-level stack for `MAZE_DEMO=multilevel_portcullis` — a **pool-free**
-/// edge-aligned stack (so no level is lifted) with a **portcullis** door on the
-/// bottom (non-top) level. The door's static frame includes a horizontal **lintel**
-/// beam above the opening; today it's placed on top of the full-height posts, so it
-/// pokes `LINTEL_HEIGHT (0.22)` above the cell — i.e. up through the **floor of the
-/// level above**. The top level's floor fully covers the bottom (same-size grids),
-/// so climbing up and standing over the door cell `(2,2)` you look **down** and see
-/// the lintel poking up through the floor. The demo forces `door_style = Portcullis`.
+/// edge-aligned tapered stack (so no level is lifted) carrying **two** portcullis
+/// gates on the bottom level, one under the upper floor and one under open sky, so
+/// the gap-aware grille hide can be eyeballed both ways:
+///
+/// * **Covered gate `(2,2)`** sits under the smaller top level. Its raised grille
+///   would poke into the floor above, so opening it on the bottom level rises the
+///   grille and then **hides** it. Its static frame's **lintel** still pokes
+///   `LINTEL_HEIGHT (0.22)` up through that floor, so climbing up and standing over
+///   `(2,2)` you look **down** and see the lintel.
+/// * **Outer-edge gate `(4,2)`** sits on the bottom's south edge, which the 3×3
+///   top doesn't cover — there's open sky above it, so its raised grille rises into
+///   open air and **stays visible**.
+///
+/// The demo forces `door_style = Portcullis`. Each gate needs its own key (keys are
+/// fungible, so collect both before opening both); neither gate nor key is on the
+/// S→F path (`F(0,2)` ladders straight up to the top start).
 fn multilevel_portcullis_demo_levels() -> Vec<String> {
     let build = |rows: &[&str]| -> Vec<Vec<char>> {
         rows.iter().map(|row| row.chars().collect()).collect()
     };
-    // Bottom 5×5 (live): S(0,0) → F(4,4) ladder up. A door at (2,2) in a short N–S
-    // corridor (walls at (2,1)/(2,3)) so it reads as one clean gate, with a key at
-    // (3,2) just below it: collect the key and push north to open the portcullis,
-    // then climb and look down to confirm the raised grille isn't visible from above.
-    // The S→F route runs along the open border (row 0 then col 4), so neither the
-    // door nor the key is on the critical path.
+    // Bottom 5×5 (live): S(0,0); F(0,2) ladders up to the top start. Gate D(2,2) in
+    // an N–S corridor (walls (2,1)/(2,3)) under the top floor → covered; gate D(4,2)
+    // on the south edge (walls (4,1)/(4,3)) under open sky → a taper gap. Keys K(3,2)
+    // and K(3,4) sit in the open row-3 band, reachable without passing either gate.
     let bottom = build(&[
-        "S    ",
+        "S F  ",
         "     ",
         " WDW ",
-        "  K  ",
-        "    F",
+        "  K K",
+        " WDW ",
     ]);
-    // Top 5×5 (edge-aligned, same coords): S(4,4) sits directly above the bottom's
-    // F(4,4) (ladder + hatch). F(0,0) is the orb; (2,2) is open so you can stand
-    // over the door cell and look down at the lintel.
+    // Top 3×3 (edge-aligned, smaller → a taper): S(0,2) sits directly above the
+    // bottom's F(0,2) (ladder + hatch). F(0,0) is the orb; (2,2) is open so you can
+    // stand over the covered gate and look down at its lintel. Cols 3–4 and row 3–4
+    // of the bottom have no cell here, exposing the south-edge gate to open sky.
     let top = build(&[
-        "F    ",
-        "     ",
-        "     ",
-        "     ",
-        "    S",
+        "  S",
+        "   ",
+        "F  ",
     ]);
     [bottom, top].iter().map(|grid| grid_to_json(grid)).collect()
 }
@@ -1285,6 +1295,24 @@ pub(crate) fn spawn_world(
     // offsets are measured against.
     let base_dims = (grid.len(), grid.first().map_or(0, |row| row.len()));
 
+    // Each level's `(rows, cols)` footprint. A door spawn reads the level-above's
+    // footprint to decide whether a raised portcullis has a cell to intrude on (a
+    // tapered upper level may leave a gap above a lower door — see
+    // `objects::door::has_cell_above`). Level 0 reuses the already-parsed grid.
+    let level_dims: Vec<(usize, usize)> = levels
+        .iter()
+        .enumerate()
+        .map(|(level, json)| {
+            if level == 0 {
+                base_dims
+            } else {
+                let g = MazeGame::from_json(json)
+                    .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+                (g.grid().len(), g.grid().first().map_or(0, |row| row.len()))
+            }
+        })
+        .collect();
+
     // Precompute each level's world-space floor Y (the `base_level_y` table) before
     // building any geometry: a level that carries a sunken pool (water / lava) is
     // lifted by `POOL_GAP` so its recessed surface + bobbing rocks clear the
@@ -1466,7 +1494,7 @@ pub(crate) fn spawn_world(
                 bases[0],
             );
             let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_dims.get(level + 1).copied());
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1484,7 +1512,7 @@ pub(crate) fn spawn_world(
                 bases[level],
             );
             let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_dims.get(level + 1).copied());
         }
     }
 
@@ -2013,11 +2041,35 @@ mod multi_level_tests {
                 "edge-aligned: the top start sits directly above the bottom finish"
             );
         }
-        // Portcullis demo forces a portcullis door, present on the bottom level.
+        // Portcullis demo forces a portcullis door. The bottom carries TWO gates and
+        // the top is a smaller (tapered) edge stack, so one gate sits under the upper
+        // floor (a cell above → hides when raised) and one under the bottom's exposed
+        // edge (no cell above → stays visibly raised).
         let pc = MultilevelDemo::Portcullis;
         assert_eq!(pc.door_style_override(), Some(DoorStyle::Portcullis));
-        let pc_bottom = MazeGame::from_json(&pc.levels()[0]).expect("parses");
-        assert!(pc_bottom.grid().iter().flatten().any(|&c| c == 'D'), "bottom level has a door");
+        let pc_levels = pc.levels();
+        let pc_bottom = MazeGame::from_json(&pc_levels[0]).expect("bottom parses");
+        let pc_top = MazeGame::from_json(&pc_levels[1]).expect("top parses");
+        let doors: Vec<(usize, usize)> = pc_bottom
+            .grid()
+            .iter()
+            .enumerate()
+            .flat_map(|(r, row)| {
+                row.iter().enumerate().filter(|(_, &c)| c == 'D').map(move |(c, _)| (r, c))
+            })
+            .collect();
+        assert_eq!(doors.len(), 2, "two portcullis gates on the bottom level");
+        let (top_rows, top_cols) = (pc_top.grid().len(), pc_top.grid()[0].len());
+        let (bottom_rows, bottom_cols) = (pc_bottom.grid().len(), pc_bottom.grid()[0].len());
+        assert!(
+            top_rows < bottom_rows && top_cols < bottom_cols,
+            "the top is a smaller (tapered) footprint so the bottom's outer edge is exposed",
+        );
+        // Edge-aligned: a bottom cell has a cell above iff it's inside the top's
+        // corner footprint. Exactly one gate is covered, exactly one is exposed.
+        let covered = |&(r, c): &(usize, usize)| r < top_rows && c < top_cols;
+        assert_eq!(doors.iter().filter(|d| covered(d)).count(), 1, "one gate under the upper floor");
+        assert_eq!(doors.iter().filter(|d| !covered(d)).count(), 1, "one gate under open sky");
         // Pool-hatch demo: no door override; the top level carries a lava pool cell
         // (a 'W' cell with a lava override) so it'll be lifted, exercising the seal.
         let ph = MultilevelDemo::PoolHatch;
