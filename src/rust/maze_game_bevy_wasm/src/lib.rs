@@ -140,6 +140,8 @@ struct LevelsStartConfig {
     #[serde(default = "default_alignment")]
     alignment: String,
     #[serde(default)]
+    taper: bool,
+    #[serde(default)]
     hide_completed_enemies: bool,
     #[serde(default)]
     perimeter_random: bool,
@@ -166,6 +168,7 @@ impl Default for LevelsStartConfig {
             difficulty_change: default_difficulty_change(),
             reset_bag: default_reset_bag(),
             alignment: default_alignment(),
+            taper: false,
             hide_completed_enemies: false,
             perimeter_random: false,
             top: None,
@@ -345,6 +348,8 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
                     cfg.treasure_count,
                     cfg.levels.count,
                     LevelDifficultyChange::from_wire_str(&cfg.levels.difficulty_change),
+                    cfg.levels.taper,
+                    LayeredAlignment::from_wire_str(&cfg.levels.alignment),
                 )
                 .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
             );
@@ -530,6 +535,7 @@ mod tests {
         assert_eq!(cfg.levels.difficulty_change, "easier");
         assert!(cfg.levels.reset_bag);
         assert_eq!(cfg.levels.alignment, "edge");
+        assert!(!cfg.levels.taper, "taper defaults off");
         assert!(!cfg.levels.hide_completed_enemies);
         assert!(!cfg.levels.perimeter_random);
         assert!(cfg.levels.top.is_none());
@@ -549,6 +555,7 @@ mod tests {
                 "difficultyChange": "harder",
                 "resetBag": false,
                 "alignment": "centre",
+                "taper": true,
                 "perimeterRandom": true,
                 "hideCompletedEnemies": true,
                 "top": { "skyType": "day", "perimeterWalls": false }
@@ -560,6 +567,7 @@ mod tests {
         assert_eq!(cfg.levels.difficulty_change, "harder");
         assert!(!cfg.levels.reset_bag);
         assert_eq!(cfg.levels.alignment, "centre");
+        assert!(cfg.levels.taper);
         assert!(cfg.levels.hide_completed_enemies);
         assert!(cfg.levels.perimeter_random);
         let top = cfg.levels.top.as_ref().expect("top override parsed");

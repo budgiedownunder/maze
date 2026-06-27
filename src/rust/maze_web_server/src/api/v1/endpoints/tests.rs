@@ -6250,6 +6250,7 @@ mod test_definitions {
             difficulty_change: DifficultyChangeConfig::Harder,
             reset_bag: false,
             alignment: LayeredAlignmentConfig::Centre,
+            taper: true,
             perimeter_random: true,
             hide_completed_enemies: true,
             top: Some(TopLevelConfig {
@@ -6268,6 +6269,7 @@ mod test_definitions {
         assert_eq!(body.levels.difficulty_change, "harder");
         assert!(!body.levels.reset_bag);
         assert_eq!(body.levels.alignment, "centre");
+        assert!(body.levels.taper);
         assert!(body.levels.perimeter_random);
         assert!(body.levels.hide_completed_enemies);
         let top = body.levels.top.expect("top override is surfaced");

@@ -538,6 +538,10 @@ pub struct LevelsResponse {
     /// How a reduced upper level is positioned over the level below: `edge`,
     /// `centre`, or `random`. Safely degrades to `edge` if unrecognised.
     pub alignment: String,
+    /// When `true`, upper levels get progressively smaller footprints so the
+    /// stack opens up (centred/edged per `alignment`); `false` keeps every level
+    /// full-size. Operator-chosen, independent of `skyType`.
+    pub taper: bool,
     /// When `true`, each level's perimeter walls are randomised independently;
     /// when `false`, every level uses the difficulty's `perimeterWalls`.
     pub perimeter_random: bool,
@@ -646,6 +650,7 @@ pub async fn get_play3d_config(
             difficulty_change: preset.levels.difficulty_change.as_wire_str().to_string(),
             reset_bag: preset.levels.reset_bag,
             alignment: preset.levels.alignment.as_wire_str().to_string(),
+            taper: preset.levels.taper,
             perimeter_random: preset.levels.perimeter_random,
             hide_completed_enemies: preset.levels.hide_completed_enemies,
             top: preset.levels.top.as_ref().map(|t| TopLevelResponse {

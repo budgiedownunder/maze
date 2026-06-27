@@ -223,9 +223,15 @@ difficulty_change = "easier"
 # Whether the bag (keys etc.) resets at each level. true (default) = every level
 # is self-contained; false carries the whole bag forward.
 reset_bag = true
-# How a smaller upper level sits over the level below (open-sky stacks only) —
+# When true, upper levels get progressively smaller footprints (positioned per
+# `alignment` below) so the stack opens up and a climb eases as it rises. An
+# operator choice — independent of sky_type. Default false. Only meaningful when
+# count > 1.
+taper = false
+#taper = true
+# How a smaller upper (tapered) level sits over the level below —
 # "edge" (corner-aligned) | "centre" | "random" (the generator picks per level).
-# Default "edge".
+# Default "edge". Inert when taper is off.
 alignment = "edge"
 # When true, each level randomises its perimeter walls on/off independently; when
 # false (default) every level uses the perimeter_walls setting above.

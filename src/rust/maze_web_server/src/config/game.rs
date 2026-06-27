@@ -591,9 +591,16 @@ pub struct LevelsConfig {
     #[serde(default = "default_reset_bag")]
     pub reset_bag: bool,
     /// How a reduced upper level is positioned over the level below. Default
-    /// `edge` (corner-aligned). Only meaningful under an open sky.
+    /// `edge` (corner-aligned). Only meaningful when `taper` is on.
     #[serde(default = "default_alignment")]
     pub alignment: LayeredAlignmentConfig,
+    /// When `true`, upper levels get progressively smaller footprints (centred /
+    /// edged over the level below per `alignment`), so a stack opens up and a
+    /// climb eases as it rises. `false` (default) keeps every level the full
+    /// footprint. Operator-chosen — independent of `sky_type`. Only meaningful
+    /// when `count > 1`.
+    #[serde(default)]
+    pub taper: bool,
     /// When `true`, each level's perimeter walls are randomised on / off
     /// independently; when `false` (default) every level uses the difficulty's
     /// `perimeter_walls` setting.
@@ -620,6 +627,7 @@ impl Default for LevelsConfig {
             difficulty_change: default_difficulty_change(),
             reset_bag: default_reset_bag(),
             alignment: default_alignment(),
+            taper: false,
             perimeter_random: default_perimeter_random(),
             hide_completed_enemies: false,
             top: None,
@@ -1801,6 +1809,7 @@ mod tests {
             difficulty_change = "harder"
             reset_bag = false
             alignment = "centre"
+            taper = true
             perimeter_random = true
             hide_completed_enemies = true
 
@@ -1830,6 +1839,7 @@ mod tests {
         assert_eq!(easy.difficulty_change, DifficultyChangeConfig::Harder);
         assert!(!easy.reset_bag);
         assert_eq!(easy.alignment, LayeredAlignmentConfig::Centre);
+        assert!(easy.taper);
         assert!(easy.perimeter_random);
         assert!(easy.hide_completed_enemies);
         assert!(easy.top.is_none());
@@ -1840,6 +1850,7 @@ mod tests {
         assert_eq!(tricky.difficulty_change, DifficultyChangeConfig::Easier);
         assert!(tricky.reset_bag);
         assert_eq!(tricky.alignment, LayeredAlignmentConfig::Edge);
+        assert!(!tricky.taper, "taper defaults off (opt-in)");
         assert!(!tricky.perimeter_random);
         assert!(!tricky.hide_completed_enemies);
         // Hard sets only count; the rest fall back to defaults.
