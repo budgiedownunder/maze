@@ -617,6 +617,13 @@ fn spawn_level(
                 }
                 walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
                 walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_rocks);
+                // On a lifted (floating) level, a pool cell's basin side below the
+                // rim would otherwise show through to the level below — and, under
+                // taper, to its exposed surrounding ring. Seal its exposed edges so
+                // it reads as the level's solid floor edge.
+                if gap > 0.0 && matches!(wall_type, WallType::Water | WallType::Lava) {
+                    floor::spawn_pool_edge_seal(commands, assets.floor, r, c, grid.len(), grid[r].len(), placement, gap);
+                }
                 if matches!(wall_type, WallType::IronFence) {
                     floor::tile::spawn_tile(commands, assets.floor, r, c, placement);
                 }
@@ -947,6 +954,55 @@ fn multilevel_pool_hatch_demo_levels() -> Vec<String> {
         .collect()
 }
 
+/// Hand-built 2-level stack for `MAZE_DEMO=multilevel_lava_island` — a centred,
+/// open-perimeter stack whose smaller upper level carries a lava ring on its outer
+/// cells. The upper (`5×5` over a `9×9` bottom → a 2-cell exposed ring all round)
+/// is pool-bearing, so it's lifted and floats over the larger bottom level. Stand
+/// on the bottom level's open ring and look up all the way around: the floating
+/// island's lava edges should read as its solid floor edge (the pool floor-edge
+/// seal), not glowing liquid showing through from the side.
+fn multilevel_lava_island_demo_levels() -> Vec<String> {
+    use serde_json::{json, Value};
+    let lava = || json!([{ "type": "W", "wallType": "lava" }]);
+    let ch = |c: char| Value::String(c.to_string());
+    // Bottom 9×9 (live), fully open: walk the ring and look up at the floating
+    // island. S / F sit on the outer ring, clear of the island's footprint.
+    let bottom: Vec<Vec<Value>> = (0..9)
+        .map(|r| {
+            (0..9)
+                .map(|c| match (r, c) {
+                    (8, 4) => ch('S'),
+                    (0, 4) => ch('F'),
+                    _ => ch(' '),
+                })
+                .collect()
+        })
+        .collect();
+    // Upper 5×5, centred (a 2-cell exposed ring all round). Lava on the whole
+    // perimeter ring; the interior 3×3 holds the start + orb.
+    let upper: Vec<Vec<Value>> = (0..5)
+        .map(|r| {
+            (0..5)
+                .map(|c| {
+                    if r == 0 || r == 4 || c == 0 || c == 4 {
+                        lava()
+                    } else if (r, c) == (1, 1) {
+                        ch('S')
+                    } else if (r, c) == (3, 3) {
+                        ch('F')
+                    } else {
+                        ch(' ')
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    [bottom, upper]
+        .iter()
+        .map(|grid| json!({ "grid": grid }).to_string())
+        .collect()
+}
+
 /// Which native multi-level demo `MAZE_DEMO` selected, if any.
 #[derive(Clone, Copy)]
 enum MultilevelDemo {
@@ -972,6 +1028,12 @@ enum MultilevelDemo {
     /// the (lifted) top level, for eyeballing whether the underside seal blocks the
     /// hatch hole over the ladder.
     PoolHatch,
+    /// `multilevel_lava_island`: a 2-level centred stack whose smaller upper level
+    /// (lifted, floating) carries a lava ring on its outer cells, for eyeballing the
+    /// pool floor-edge seal — stand on the larger bottom level's open ring and look
+    /// up all the way around: the floating upper level's edges should read as solid
+    /// floor edge, not glowing lava.
+    LavaIsland,
 }
 
 impl MultilevelDemo {
@@ -981,7 +1043,7 @@ impl MultilevelDemo {
     fn alignment(self) -> LayeredAlignment {
         match self {
             MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => alignment,
-            MultilevelDemo::HideEnemies { .. } => LayeredAlignment::Centre,
+            MultilevelDemo::HideEnemies { .. } | MultilevelDemo::LavaIsland => LayeredAlignment::Centre,
             MultilevelDemo::Portcullis | MultilevelDemo::PoolHatch => LayeredAlignment::Edge,
         }
     }
@@ -994,6 +1056,7 @@ impl MultilevelDemo {
             MultilevelDemo::HideEnemies { .. } => multilevel_hide_demo_levels(),
             MultilevelDemo::Portcullis => multilevel_portcullis_demo_levels(),
             MultilevelDemo::PoolHatch => multilevel_pool_hatch_demo_levels(),
+            MultilevelDemo::LavaIsland => multilevel_lava_island_demo_levels(),
         }
     }
     /// Whether to wall the perimeter. Off for the open see-through demos; on for the
@@ -1146,6 +1209,7 @@ pub(crate) fn spawn_world(
             Ok("multilevel_edge_roofed") => Some(MultilevelDemo::Roofed { alignment: LayeredAlignment::Edge }),
             Ok("multilevel_portcullis") => Some(MultilevelDemo::Portcullis),
             Ok("multilevel_pool_hatch") => Some(MultilevelDemo::PoolHatch),
+            Ok("multilevel_lava_island") => Some(MultilevelDemo::LavaIsland),
             _ => None,
         }
     };
@@ -2078,6 +2142,33 @@ mod multi_level_tests {
         assert!(ph_levels[1].contains("lava"), "top level carries a lava pool");
         let ph_top = MazeGame::from_json(&ph_levels[1]).expect("parses");
         assert_eq!(ph_top.grid()[2][2], 'W', "the lava pool is a wall-type cell at (2,2)");
+    }
+
+    #[test]
+    fn the_lava_island_demo_is_a_centred_taper_with_a_lava_ringed_upper() {
+        use super::MultilevelDemo;
+        use crate::state::LayeredAlignment;
+        let demo = MultilevelDemo::LavaIsland;
+        // Centred so the bottom level's open ring surrounds the floating upper on all
+        // sides — you can look up at its sealed edges all the way around.
+        assert_eq!(demo.alignment(), LayeredAlignment::Centre);
+        assert!(!demo.perimeter_walls(), "open perimeter so the floating edges are visible");
+        let levels = demo.levels();
+        assert_eq!(levels.len(), 2, "a 2-level stack");
+        let bottom = MazeGame::from_json(&levels[0]).expect("bottom parses");
+        let top = MazeGame::from_json(&levels[1]).expect("top parses");
+        let (br, bc) = (bottom.grid().len(), bottom.grid()[0].len());
+        let (tr, tc) = (top.grid().len(), top.grid()[0].len());
+        assert!(tr < br && tc < bc, "the upper is a smaller (tapered) footprint");
+        assert!(levels[1].contains("lava"), "the upper level carries lava pools");
+        // The upper's whole perimeter ring is pool ('W') cells, so its outer edges
+        // float over the bottom's exposed ring — what the floor-edge seal occludes.
+        let g = top.grid();
+        assert!(
+            (0..tc).all(|c| g[0][c] == 'W' && g[tr - 1][c] == 'W')
+                && (0..tr).all(|r| g[r][0] == 'W' && g[r][tc - 1] == 'W'),
+            "every upper perimeter cell is a pool cell",
+        );
     }
 
     #[test]

@@ -273,6 +273,52 @@ pub(crate) fn pool_type_at(
     matches!(wt, WallType::Water | WallType::Lava).then_some(wt)
 }
 
+/// How far a pool surface's *free* edges are pulled in from the cell boundary.
+/// The surface sheet is full-cell so joined pools meet seamlessly, but a free edge
+/// sitting exactly on the boundary is coplanar with the rim / floor-edge seal
+/// there, so its animated (waving) edge z-fights and shows a thin moving sliver —
+/// glaring on a floating tapered level seen from below. Pulling the free edge just
+/// inside the rim's inner face hides it. A little over the rim thickness gives
+/// margin without visibly shrinking the pool.
+const SURFACE_EDGE_INSET: f32 = 2.0 * WALL_THICKNESS;
+
+/// The transform for a pool cell's surface sheet, with its **free** edges inset so
+/// they tuck behind the rim instead of reaching the cell boundary (see
+/// [`SURFACE_EDGE_INSET`]). A free edge is one where a rim is drawn — the grid
+/// boundary or a neighbour that isn't the *same* pool type; an edge shared with a
+/// same-type pool stays full (zero inset), so the joined surfaces still abut
+/// exactly and the wave flows unbroken across the basin. The inset is applied as a
+/// per-axis scale plus a recentring shift that leaves each non-free edge on its
+/// original boundary.
+pub(crate) fn pool_surface_transform(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    wall_type: WallType,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+) -> Transform {
+    let rows = grid.len();
+    let cols = grid[r].len();
+    let free = |nr: usize, nc: usize| pool_type_at(grid, cell_entities, config, nr, nc) != Some(wall_type);
+    let i = SURFACE_EDGE_INSET;
+    let inset_n = if r == 0 || free(r - 1, c) { i } else { 0.0 };
+    let inset_s = if r + 1 >= rows || free(r + 1, c) { i } else { 0.0 };
+    let inset_w = if c == 0 || free(r, c - 1) { i } else { 0.0 };
+    let inset_e = if c + 1 >= cols || free(r, c + 1) { i } else { 0.0 };
+    // Recentre so each non-inset edge stays on its original boundary (a shared
+    // same-type edge keeps inset 0, so adjacent surfaces still meet exactly).
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0) + (inset_w - inset_e) / 2.0;
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0) + (inset_n - inset_s) / 2.0;
+    let y = placement.world_y(-rim::RECESS_DEPTH);
+    Transform::from_xyz(x, y, z).with_scale(Vec3::new(
+        (CELL_SIZE - inset_w - inset_e) / CELL_SIZE,
+        1.0,
+        (CELL_SIZE - inset_n - inset_s) / CELL_SIZE,
+    ))
+}
+
 /// Builds a tileable greyscale ripple texture from a set of integer-frequency
 /// plane waves (`(freq_u, freq_v)` cycles across the texture) interfered together.
 /// Integer frequencies keep it seamless across cells. Values sit near the top of
@@ -383,11 +429,13 @@ pub(crate) fn spawn_non_occluding_for_cell(
         // Water / lava render a recessed surface plus rim skirts filling the band
         // up to floor level on every edge facing a non-pool cell.
         WallType::Water => {
-            water::spawn_water(commands, &assets.water, r, c, placement);
+            let surface = pool_surface_transform(grid, cell_entities, config, wall_type, r, c, placement);
+            water::spawn_water(commands, &assets.water, placement, surface);
             rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
         }
         WallType::Lava => {
-            lava::spawn_lava(commands, &assets.lava, r, c, placement, lava_rocks);
+            let surface = pool_surface_transform(grid, cell_entities, config, wall_type, r, c, placement);
+            lava::spawn_lava(commands, &assets.lava, r, c, placement, surface, lava_rocks);
             rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
         }
         // The fence needs the grid + overrides to bar only the edges facing a
@@ -423,6 +471,31 @@ mod tests {
         assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "W" }"#))), None);
         assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "E", "enemyType": "ghost" }"#))), None);
         assert_eq!(wall_override_kind(None), None);
+    }
+
+    #[test]
+    fn pool_surface_transform_insets_only_free_edges() {
+        use crate::state::LayeredAlignment;
+        // Two horizontally-adjacent lava cells: the shared east/west edge stays full
+        // (so the joined surfaces meet and the wave flows), the three free edges
+        // (grid boundary) are pulled in.
+        let grid = vec![vec!['W', 'W']];
+        let cfg = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let cells = HashMap::new();
+        let placement = LevelPlacement::for_level(0, 1, 2, 1, 2, LayeredAlignment::Edge, 0.0);
+        let t = pool_surface_transform(&grid, &cells, &cfg, WallType::Lava, 0, 0, placement);
+        let inset = 2.0 * WALL_THICKNESS;
+        // X has one free edge (west), Z has two (north + south).
+        assert!((t.scale.x - (CELL_SIZE - inset) / CELL_SIZE).abs() < 1e-6);
+        assert!((t.scale.z - (CELL_SIZE - 2.0 * inset) / CELL_SIZE).abs() < 1e-6);
+        // The shared east edge is left exactly on the original cell boundary, so the
+        // two surfaces still abut seamlessly.
+        let east_face = t.translation.x + t.scale.x * (CELL_SIZE / 2.0);
+        let orig_east = placement.world_x(1.0) + CELL_SIZE / 2.0;
+        assert!((east_face - orig_east).abs() < 1e-6, "shared edge stays put");
+        // The opposite (free) west edge is pulled inward by the inset.
+        let west_face = t.translation.x - t.scale.x * (CELL_SIZE / 2.0);
+        assert!((west_face - (placement.world_x(1.0) - CELL_SIZE / 2.0 + inset)).abs() < 1e-6);
     }
 
     #[test]

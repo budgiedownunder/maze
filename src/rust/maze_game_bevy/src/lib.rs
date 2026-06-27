@@ -2217,6 +2217,27 @@ mod tests {
     }
 
     #[test]
+    fn a_floating_pool_cells_exposed_edge_gets_a_floor_stone_seal() {
+        use crate::world::floor::PoolEdgeSeal;
+        let count = |app: &mut App| {
+            app.world_mut().query::<&PoolEdgeSeal>().iter(app.world()).count()
+        };
+
+        // A lava cell on the grid edge of an UPPER level: that level is pool-bearing
+        // → lifted → floating, so its exposed basin side is sealed with floor stone.
+        let l0 = r#"{"grid":[["S"," ","F"],[" "," "," "],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[[{"type":"W","wallType":"lava"}]," "," "],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        assert!(count(&mut app) > 0, "the floating pool cell's exposed edge is sealed");
+
+        // The same lava edge cell on a SINGLE-level maze sits on the ground (no lift,
+        // open sky above the low rim by design), so it gets no edge seal.
+        let single = r#"{"grid":[["S"," ","F"],[[{"type":"W","wallType":"lava"}]," "," "],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with(single);
+        assert_eq!(count(&mut app), 0, "a ground-level pool keeps its open rim (no seal)");
+    }
+
+    #[test]
     fn the_underside_seal_skips_a_hatch_start_cell_so_the_hole_stays_open() {
         use crate::world::UndersideSeal;
         // Level 1's start sits directly above level 0's ladder finish (edge-aligned),

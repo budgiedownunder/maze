@@ -368,6 +368,8 @@ mod tests {
     fn dummy_assets() -> FloorAssets {
         FloorAssets {
             floor_mesh: None,
+            pool_edge_ns_mesh: None,
+            pool_edge_ew_mesh: None,
             tile_mat: None,
             start_mat: Some(Handle::default()),
             finish_mat: None,

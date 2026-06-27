@@ -263,34 +263,35 @@ pub(crate) fn build_lava_assets(
     }
 }
 
-/// Spawns the recessed lava pool surface filling cell `(r, c)` on run level
-/// `level`, plus `rocks` bobbing rocks (`0..=ROCK_COUNT`, the global budget — see
-/// [`run_lava_rocks`]). The caller spawns the rim ([`super::rim`]); the cell has no
-/// floor tile.
+/// Spawns the recessed lava pool surface for cell `(r, c)` at the caller-built
+/// `surface` transform (its free edges inset off the cell boundary — see
+/// [`super::pool_surface_transform`]), plus `rocks` bobbing rocks (`0..=ROCK_COUNT`,
+/// the global budget — see [`run_lava_rocks`]). The caller spawns the rim
+/// ([`super::rim`]); the cell has no floor tile.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_lava(
     commands: &mut Commands,
     assets: &LavaAssets,
     r: usize,
     c: usize,
     placement: LevelPlacement,
+    surface: Transform,
     rocks: usize,
 ) {
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    // Rocks sit at cell-centre positions on the unscaled surface level; only the
+    // surface sheet itself carries the edge inset (baked into `surface`).
     let surface_y = placement.world_y(SURFACE_Y);
-    // The animations re-derive Y from the stored floor base; X/Z (offset above) are fixed.
+    // The animations re-derive Y from the stored floor base; X/Z + the surface's
+    // edge-inset scale are fixed (the animation rewrites only Y + tilt).
     let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((
-                LavaSurface { base_y },
-                Transform::from_xyz(x, surface_y, z),
-                Mesh3d(mesh),
-                MeshMaterial3d(mat),
-            ));
+            commands.spawn((LavaSurface { base_y }, surface, Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((LavaSurface { base_y }, Transform::from_xyz(x, surface_y, z)));
+            commands.spawn((LavaSurface { base_y }, surface));
         }
     }
     for (i, &(dx, dz)) in ROCK_OFFSETS.iter().take(rocks).enumerate() {

@@ -101,33 +101,27 @@ pub(crate) fn build_water_assets(
     WaterAssets { mesh, material }
 }
 
-/// Spawns the recessed water pool surface filling cell `(r, c)` on run level
-/// `level`. The caller spawns the rim ([`super::rim`]); the cell has no separate
-/// floor tile.
+/// Spawns the recessed water pool surface for a cell at the caller-built `surface`
+/// transform (its free edges inset off the cell boundary — see
+/// [`super::pool_surface_transform`]). The caller spawns the rim
+/// ([`super::rim`]); the cell has no separate floor tile.
 pub(crate) fn spawn_water(
     commands: &mut Commands,
     assets: &WaterAssets,
-    r: usize,
-    c: usize,
     placement: LevelPlacement,
+    surface: Transform,
 ) {
-    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
-    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
-    let y = placement.world_y(SURFACE_Y);
     // Only the level's floor base is stored: the animation re-derives the resting
-    // Y from it, and the surface's X/Z (offset above) are fixed for its lifetime.
+    // Y from it; the surface's X/Z and edge-inset scale (baked into `surface`) are
+    // fixed for its lifetime — the animation rewrites only Y + tilt, leaving the
+    // scale intact.
     let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((
-                WaterSurface { base_y },
-                Transform::from_xyz(x, y, z),
-                Mesh3d(mesh),
-                MeshMaterial3d(mat),
-            ));
+            commands.spawn((WaterSurface { base_y }, surface, Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((WaterSurface { base_y }, Transform::from_xyz(x, y, z)));
+            commands.spawn((WaterSurface { base_y }, surface));
         }
     }
 }
