@@ -49,6 +49,26 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
+        /// Assembles the relative <c>scores</c> request path for resetting a
+        /// leaderboard to empty (DELETE). Exactly one of <paramref name="mazeId"/> /
+        /// <paramref name="challenge"/> must be set.
+        /// </summary>
+        /// <param name="mazeId">Stored-maze subject, or <c>null</c></param>
+        /// <param name="challenge">Curated-challenge subject, or <c>null</c></param>
+        /// <returns>The relative request path</returns>
+        /// <exception cref="ArgumentException">Neither or both subjects are set</exception>
+        public static string BuildResetPath(string? mazeId, string? challenge)
+        {
+            if ((mazeId is null) == (challenge is null))
+                throw new ArgumentException("A leaderboard reset requires exactly one of mazeId / challenge");
+
+            string query = mazeId is not null
+                ? $"maze_id={Uri.EscapeDataString(mazeId)}"
+                : $"challenge={Uri.EscapeDataString(challenge!)}";
+            return $"scores?{query}";
+        }
+
+        /// <summary>
         /// Assembles the relative <c>scores/me</c> request path for a history page;
         /// paging values are omitted from the query string when <c>null</c>.
         /// </summary>

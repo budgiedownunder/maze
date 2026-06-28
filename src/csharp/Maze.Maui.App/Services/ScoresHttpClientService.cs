@@ -49,5 +49,15 @@ namespace Maze.Maui.App.Services
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadFromJsonAsync<ScoreboardResponse>() ?? new ScoreboardResponse();
         }
+
+        /// <inheritdoc/>
+        public async Task<long> ClearLeaderboardAsync(ScoreSubject subject)
+        {
+            string path = ScoreRequestPaths.BuildResetPath(subject.MazeId, subject.Challenge);
+            var response = await _httpClient.DeleteAsync(path);
+            response.EnsureSuccessStatusCode();
+            ResetScoresResponse? result = await response.Content.ReadFromJsonAsync<ResetScoresResponse>();
+            return result?.Deleted ?? 0;
+        }
     }
 }

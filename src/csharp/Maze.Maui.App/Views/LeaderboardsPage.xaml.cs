@@ -32,6 +32,7 @@ public partial class LeaderboardsPage : ContentPage
         BindingContext = this.viewModel = viewModel;
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         SizeChanged += OnPageSizeChanged;
+        UpdateResetToolbarItem();
     }
 
     private void OnPageSizeChanged(object? sender, EventArgs e)
@@ -63,5 +64,18 @@ public partial class LeaderboardsPage : ContentPage
         // Show a wait cursor while a board (re)loads, mirroring the rest of the app.
         if (e.PropertyName == nameof(LeaderboardsViewModel.IsBusy))
             Pointer.SetCursor(this, viewModel.IsBusy ? Icon.Wait : Icon.Arrow);
+        else if (e.PropertyName == nameof(LeaderboardsViewModel.ShowReset))
+            UpdateResetToolbarItem();
+    }
+
+    // Reflects ShowReset by adding (left of Refresh) or removing the Reset toolbar
+    // item — ToolbarItem can't bind IsVisible, so visibility is membership.
+    private void UpdateResetToolbarItem()
+    {
+        bool present = ToolbarItems.Contains(ResetToolbarItem);
+        if (viewModel.ShowReset && !present)
+            ToolbarItems.Insert(0, ResetToolbarItem);
+        else if (!viewModel.ShowReset && present)
+            ToolbarItems.Remove(ResetToolbarItem);
     }
 }

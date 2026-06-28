@@ -38,5 +38,15 @@ namespace Maze.Maui.App.Services
         /// <param name="offset">Page offset, or <c>null</c> for the start</param>
         /// <returns>A page of the player's history</returns>
         Task<ScoreboardResponse> GetScoreHistoryAsync(int? limit = null, int? offset = null);
+
+        /// <summary>
+        /// Resets a leaderboard to empty, deleting every score for one subject (a
+        /// stored maze or a curated challenge). The server enforces access — a
+        /// stored maze's board is the maze owner's to clear; a curated challenge's
+        /// board is admin-only — and rejects the request otherwise.
+        /// </summary>
+        /// <param name="subject">The board's subject (maze or challenge)</param>
+        /// <returns>The number of score rows removed</returns>
+        Task<long> ClearLeaderboardAsync(ScoreSubject subject);
     }
 }

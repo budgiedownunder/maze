@@ -16,8 +16,18 @@ namespace Maze.Maui.App.Tests.ViewModels
     /// </summary>
     public class LeaderboardsViewModelTests
     {
-        private static (LeaderboardsViewModel vm, Mock<IScoresService> scores, Mock<IGameConfigService> config, Mock<IMazeService> mazes, Mock<IAuthService> auth, Mock<INavigationService> nav)
-            BuildVm()
+        // All injected mocks, so a test can reach any of them (incl. avatar/dialog)
+        // without re-stating the constructor wiring.
+        private sealed record Mocks(
+            Mock<IScoresService> Scores,
+            Mock<IGameConfigService> Config,
+            Mock<IMazeService> Mazes,
+            Mock<IAuthService> Auth,
+            Mock<INavigationService> Nav,
+            Mock<IAvatarService> Avatar,
+            Mock<IDialogService> Dialog);
+
+        private static Mocks CreateMocks()
         {
             var scores = new Mock<IScoresService>();
             var config = new Mock<IGameConfigService>();
@@ -25,6 +35,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             var nav = new Mock<INavigationService>();
             var avatar = new Mock<IAvatarService>();
+            var dialog = new Mock<IDialogService>();
 
             auth.Setup(a => a.GetMyProfileAsync()).ReturnsAsync(new UserProfile { Id = "me", Username = "Me" });
             mazes.Setup(m => m.GetMazeItems(false)).ReturnsAsync(new List<MazeItem>());
@@ -35,8 +46,17 @@ namespace Maze.Maui.App.Tests.ViewModels
                 It.IsAny<ScoreSubject>(), It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(),
                 It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>())).ReturnsAsync(EmptyBoard());
 
-            var vm = new LeaderboardsViewModel(scores.Object, config.Object, mazes.Object, auth.Object, nav.Object, avatar.Object);
-            return (vm, scores, config, mazes, auth, nav);
+            return new Mocks(scores, config, mazes, auth, nav, avatar, dialog);
+        }
+
+        private static LeaderboardsViewModel NewVm(Mocks m) =>
+            new(m.Scores.Object, m.Config.Object, m.Mazes.Object, m.Auth.Object, m.Nav.Object, m.Avatar.Object, m.Dialog.Object);
+
+        private static (LeaderboardsViewModel vm, Mock<IScoresService> scores, Mock<IGameConfigService> config, Mock<IMazeService> mazes, Mock<IAuthService> auth, Mock<INavigationService> nav)
+            BuildVm()
+        {
+            Mocks m = CreateMocks();
+            return (NewVm(m), m.Scores, m.Config, m.Mazes, m.Auth, m.Nav);
         }
 
         private static ScoreboardResponse EmptyBoard() =>
@@ -66,34 +86,24 @@ namespace Maze.Maui.App.Tests.ViewModels
         [Fact]
         public async Task LoadBoard_Play3d_ResolvesRowAvatarBytesPerPlayer()
         {
-            var scores = new Mock<IScoresService>();
-            var config = new Mock<IGameConfigService>();
-            var mazes = new Mock<IMazeService>();
-            var auth = new Mock<IAuthService>();
-            var nav = new Mock<INavigationService>();
-            var avatar = new Mock<IAvatarService>();
-
-            auth.Setup(a => a.GetMyProfileAsync()).ReturnsAsync(new UserProfile { Id = "me", Username = "Me" });
-            mazes.Setup(m => m.GetMazeItems(false)).ReturnsAsync(new List<MazeItem>());
-            config.Setup(c => c.GetPlay3dConfigAsync(It.IsAny<Difficulty>()))
-                  .ReturnsAsync(new Play3dConfig { Difficulty = "easy", Seed = 42 });
+            Mocks m = CreateMocks();
             // Most-recent run is a curated challenge → defaults to a Play-3D board
             // (Player column shown), so player avatars are resolved.
-            scores.Setup(s => s.GetScoreHistoryAsync(It.IsAny<int?>(), It.IsAny<int?>()))
+            m.Scores.Setup(s => s.GetScoreHistoryAsync(It.IsAny<int?>(), It.IsAny<int?>()))
                   .ReturnsAsync(Board(new[] { ChallengeRow("easy:42") }, false));
 
             var withAvatar = ChallengeRow("easy:42", userId: "alice", username: "alice");
             withAvatar.AvatarUpdatedAt = "2026-06-16T12:00:00Z";
             var withoutAvatar = ChallengeRow("easy:42", userId: "bob", username: "bob");
-            scores.Setup(s => s.GetLeaderboardAsync(
+            m.Scores.Setup(s => s.GetLeaderboardAsync(
                 It.IsAny<ScoreSubject>(), It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(),
                 It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()))
                   .ReturnsAsync(Board(new[] { withAvatar, withoutAvatar }, false));
 
             byte[] aliceBytes = { 9, 8, 7 };
-            avatar.Setup(s => s.TryLoadAvatarBytesAsync("alice", "2026-06-16T12:00:00Z")).ReturnsAsync(aliceBytes);
+            m.Avatar.Setup(s => s.TryLoadAvatarBytesAsync("alice", "2026-06-16T12:00:00Z")).ReturnsAsync(aliceBytes);
 
-            var vm = new LeaderboardsViewModel(scores.Object, config.Object, mazes.Object, auth.Object, nav.Object, avatar.Object);
+            var vm = NewVm(m);
             await vm.InitializeCommand.ExecuteAsync(null);
 
             LeaderboardRow aliceRow = vm.Rows.First(r => r.UserId == "alice");
@@ -101,7 +111,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             Assert.Same(aliceBytes, aliceRow.AvatarBytes);
             // No marker for bob → no fetch, placeholder shown (null bytes).
             Assert.Null(bobRow.AvatarBytes);
-            avatar.Verify(s => s.TryLoadAvatarBytesAsync("bob", It.IsAny<string?>()), Times.Never);
+            m.Avatar.Verify(s => s.TryLoadAvatarBytesAsync("bob", It.IsAny<string?>()), Times.Never);
         }
 
         [Fact]
@@ -414,6 +424,113 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.False(vm.HasPlayed);
             Assert.Equal("▶ Play", vm.PlayLabel);
+        }
+
+        // ---- Reset leaderboard ----------------------------------------------
+
+        [Fact]
+        public async Task Reset_MyMazesBoardWithRows_OfferedToOwnerEvenWhenNotAdmin()
+        {
+            Mocks m = CreateMocks();   // default profile is non-admin
+            m.Scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            m.Mazes.Setup(x => x.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "One") });
+            m.Scores.Setup(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.MazeId == "m1"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()))
+                  .ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            var vm = NewVm(m);
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.True(vm.ShowReset);
+            Assert.True(vm.ResetBoardCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task Reset_EmptyBoard_NotOffered()
+        {
+            Mocks m = CreateMocks();
+            m.Scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            m.Mazes.Setup(x => x.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "One") });
+            // leaderboard returns empty (default EmptyBoard)
+            var vm = NewVm(m);
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.Empty(vm.Rows);
+            Assert.False(vm.ShowReset);
+            Assert.False(vm.ResetBoardCommand.CanExecute(null));
+        }
+
+        [Fact]
+        public async Task Reset_Play3dBoard_OnlyOfferedToAdmin()
+        {
+            // Non-admin caller → no Reset on a curated board.
+            Mocks m = CreateMocks();
+            m.Scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { ChallengeRow("easy:42") }, false));
+            m.Scores.Setup(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.Challenge != null),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()))
+                  .ReturnsAsync(Board(new[] { ChallengeRow("easy:42", userId: "other", username: "Rival") }, false));
+            var vm = NewVm(m);
+            await vm.InitializeCommand.ExecuteAsync(null);
+            Assert.True(vm.ShowPlayerColumn);
+            Assert.False(vm.ShowReset);
+
+            // Admin caller → Reset offered on the same board.
+            Mocks ma = CreateMocks();
+            ma.Auth.Setup(a => a.GetMyProfileAsync()).ReturnsAsync(new UserProfile { Id = "me", Username = "Me", IsAdmin = true });
+            ma.Scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { ChallengeRow("easy:42") }, false));
+            ma.Scores.Setup(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.Challenge != null),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()))
+                  .ReturnsAsync(Board(new[] { ChallengeRow("easy:42", userId: "other", username: "Rival") }, false));
+            var vmAdmin = NewVm(ma);
+            await vmAdmin.InitializeCommand.ExecuteAsync(null);
+            Assert.True(vmAdmin.ShowReset);
+        }
+
+        [Fact]
+        public async Task Reset_Confirmed_ClearsSubjectAndReloadsEmpty()
+        {
+            Mocks m = CreateMocks();
+            m.Scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            m.Mazes.Setup(x => x.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "One") });
+            // First load returns a row; the post-reset reload returns empty.
+            m.Scores.SetupSequence(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.MazeId == "m1"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()))
+                  .ReturnsAsync(Board(new[] { MazeRow("m1") }, false))
+                  .ReturnsAsync(EmptyBoard());
+            m.Dialog.Setup(d => d.ShowConfirmation(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                  .ReturnsAsync(true);
+            m.Scores.Setup(s => s.ClearLeaderboardAsync(It.Is<ScoreSubject>(x => x.MazeId == "m1"))).ReturnsAsync(1L);
+            var vm = NewVm(m);
+            await vm.InitializeCommand.ExecuteAsync(null);
+            Assert.True(vm.ShowReset);
+
+            await vm.ResetBoardCommand.ExecuteAsync(null);
+
+            m.Dialog.Verify(d => d.ShowConfirmation(It.IsAny<string>(), It.IsAny<string>(), "Reset", "Cancel", true), Times.Once);
+            m.Scores.Verify(s => s.ClearLeaderboardAsync(It.Is<ScoreSubject>(x => x.MazeId == "m1")), Times.Once);
+            Assert.Empty(vm.Rows);
+            Assert.False(vm.ShowReset);   // hides once the board is empty
+        }
+
+        [Fact]
+        public async Task Reset_Cancelled_DoesNotClear()
+        {
+            Mocks m = CreateMocks();
+            m.Scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            m.Mazes.Setup(x => x.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "One") });
+            m.Scores.Setup(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.MazeId == "m1"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()))
+                  .ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            m.Dialog.Setup(d => d.ShowConfirmation(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                  .ReturnsAsync(false);
+            var vm = NewVm(m);
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            await vm.ResetBoardCommand.ExecuteAsync(null);
+
+            m.Scores.Verify(s => s.ClearLeaderboardAsync(It.IsAny<ScoreSubject>()), Times.Never);
+            Assert.Single(vm.Rows);
         }
     }
 }

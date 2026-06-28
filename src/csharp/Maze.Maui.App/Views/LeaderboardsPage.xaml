@@ -13,7 +13,15 @@
         <converters:BoolToGridLengthConverter x:Key="BoolToGridLength" />
     </ContentPage.Resources>
 
+    <!-- The Reset item is added/removed by the code-behind based on ShowReset
+         (ToolbarItem has no IsVisible to bind); it sits left of Refresh when
+         shown. It clears the board only when the caller may (owner for a maze,
+         admin for a Play-3D board); the server enforces access independently. -->
     <ContentPage.ToolbarItems>
+        <ToolbarItem x:Name="ResetToolbarItem"
+                     Text="Reset"
+                     Command="{Binding ResetBoardCommand}"
+                     IconImageSource="{OnPlatform 'icon_delete.png', iOS='icon_delete_ios.png', MacCatalyst='icon_delete_ios.png'}" />
         <ToolbarItem Text="Refresh"
                      Command="{Binding RefreshCommand}"
                      IconImageSource="{AppThemeBinding Light=refresh.png, Dark=refresh_dark.png}" />

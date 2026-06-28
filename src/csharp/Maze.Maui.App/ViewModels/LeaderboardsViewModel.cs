@@ -26,6 +26,11 @@ namespace Maze.Maui.App.ViewModels
         private readonly IAuthService _authService;
         private readonly INavigationService _navigationService;
         private readonly IAvatarService _avatarService;
+        private readonly IDialogService _dialogService;
+
+        // Whether the caller is an administrator (resolved with their profile) —
+        // gates resetting a curated Play-3D board.
+        private bool _isAdmin;
 
         // Resolved avatar per player (user_id → PNG bytes or null when none),
         // so a player appearing on multiple rows/pages is fetched once.
@@ -102,6 +107,14 @@ namespace Maze.Maui.App.ViewModels
         [NotifyPropertyChangedFor(nameof(PlayLabel))]
         private bool hasPlayed;
 
+        /// <summary>Whether the Reset control is offered for the loaded board — true
+        /// only when the board has rows AND the caller may clear it (a curated
+        /// Play-3D board is admin-only; a stored maze's board is the owner's, and
+        /// this page lists only the caller's own mazes).</summary>
+        [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(ResetBoardCommand))]
+        private bool showReset;
+
         /// <summary>Play-button label: "▶ Play" for a subject the caller hasn't
         /// run, "↻ Play Again" once they have a row on the loaded board.</summary>
         public string PlayLabel => HasPlayed ? "↻ Play Again" : "▶ Play";
@@ -109,6 +122,9 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Whether the Play button can launch — true when a game subject
         /// is selected (false e.g. for the Mazes type when the player has none).</summary>
         public bool CanPlay => SelectedGame is not null;
+
+        /// <summary>Whether the Reset command can run — mirrors <see cref="ShowReset"/>.</summary>
+        public bool CanReset => ShowReset;
 
         /// <summary>
         /// Constructor
@@ -119,13 +135,15 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="authService">Injected auth service (caller identity)</param>
         /// <param name="navigationService">Injected navigation service (Play → 3D game)</param>
         /// <param name="avatarService">Injected avatar service (player avatars)</param>
+        /// <param name="dialogService">Injected dialog service (reset confirmation + errors)</param>
         public LeaderboardsViewModel(
             IScoresService scoresService,
             IGameConfigService gameConfigService,
             IMazeService mazeService,
             IAuthService authService,
             INavigationService navigationService,
-            IAvatarService avatarService)
+            IAvatarService avatarService,
+            IDialogService dialogService)
         {
             Title = "Leaderboards";
             _scoresService = scoresService;
@@ -134,6 +152,7 @@ namespace Maze.Maui.App.ViewModels
             _authService = authService;
             _navigationService = navigationService;
             _avatarService = avatarService;
+            _dialogService = dialogService;
         }
 
         // Repopulating the Game list is synchronous; the board reload is driven by
@@ -260,6 +279,44 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// Resets the loaded board to empty after a destructive-confirm prompt, then
+        /// reloads it (now empty, so the Reset control hides). The server enforces
+        /// access independently of this UI gating.
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommand(CanExecute = nameof(CanReset))]
+        private async Task ResetBoardAsync()
+        {
+            if (IsBusy || _currentSubject is not ScoreSubject subject || !SubjectAllowsReset() || Rows.Count == 0)
+                return;
+
+            bool confirmed = await _dialogService.ShowConfirmation(
+                "Reset Leaderboard",
+                "This permanently deletes every score on this leaderboard. This cannot be undone.",
+                "Reset",
+                "Cancel",
+                isDestructive: true);
+            if (!confirmed)
+                return;
+
+            IsBusy = true;
+            ShowStatusMessage = false;
+            try
+            {
+                await _scoresService.ClearLeaderboardAsync(subject);
+                await LoadBoardCoreAsync(force: true);
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert("Error", $"Failed to reset leaderboard\n\n{ex.Message}", "OK");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
         private async Task SetMetricAsync(ScoreMetric metric)
         {
             if (_metric == metric)
@@ -305,6 +362,7 @@ namespace Maze.Maui.App.ViewModels
             Rows.Clear();
             HasMore = false;
             HasPlayed = false;
+            ShowReset = false;
 
             if (subject is null)
             {
@@ -316,8 +374,18 @@ namespace Maze.Maui.App.ViewModels
                 subject.Value, _metric, null, BoardPageSize, 0, ShowPlayerColumn);
             List<LeaderboardRow> added = AppendRows(resp);
             SetStatusForRows();
+            UpdateShowReset();
             await LoadAvatarsForRowsAsync(added);
         }
+
+        // The Reset control shows only when the board has rows and the caller may
+        // clear it: a curated (Play-3D) board is admin-only; a stored maze's board
+        // is the owner's (this page lists only the caller's own mazes).
+        private bool SubjectAllowsReset() =>
+            _currentSubject is ScoreSubject subject
+            && (subject.Challenge is not null ? _isAdmin : subject.MazeId is not null);
+
+        private void UpdateShowReset() => ShowReset = Rows.Count > 0 && SubjectAllowsReset();
 
         private async Task<ScoreSubject?> ResolveSubjectAsync()
         {
@@ -472,10 +540,12 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 UserProfile profile = await _authService.GetMyProfileAsync();
+                _isAdmin = profile?.IsAdmin ?? false;
                 return string.IsNullOrEmpty(profile?.Id) ? null : profile!.Id;
             }
             catch
             {
+                _isAdmin = false;
                 return null;
             }
         }
