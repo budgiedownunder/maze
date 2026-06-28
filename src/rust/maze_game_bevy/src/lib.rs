@@ -2120,6 +2120,53 @@ mod tests {
     }
 
     #[test]
+    fn the_clock_freezes_while_a_door_is_opening() {
+        use crate::hud::clock::tick_clock_system;
+        use crate::state::{DoorStyle, GameClock};
+        use bevy::ecs::system::RunSystemOnce;
+        use maze::{Direction, DoorState};
+        use std::time::Duration;
+        // `S K D F`: collect the key, then hold into the door so it begins opening.
+        let maze = r#"{"grid":[["S","K","D","F"]]}"#;
+        let cfg = GameConfig { door_style: DoorStyle::Portcullis, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(maze, cfg);
+        {
+            let mut state = app.world_mut().resource_mut::<GameState>();
+            state.game.move_player(Direction::Right); // collect the key
+            state.game.move_player(Direction::Right); // hold into the door → starts opening
+        }
+        let opening = |app: &mut App| {
+            app.world_mut()
+                .resource::<GameState>()
+                .game
+                .doors()
+                .iter()
+                .any(|(_, p)| matches!(p, DoorState::Opening { .. }))
+        };
+        assert!(opening(&mut app), "the door is opening after holding into it with a key");
+
+        // A clock tick while the door opens must NOT advance the timer.
+        let before = app.world().resource::<GameClock>().remaining_secs;
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs_f32(0.5));
+        app.world_mut().run_system_once(tick_clock_system).expect("clock system runs");
+        assert_eq!(
+            app.world().resource::<GameClock>().remaining_secs,
+            before,
+            "the clock is frozen while the door is opening",
+        );
+
+        // Once the door finishes opening, the clock resumes.
+        app.world_mut().resource_mut::<GameState>().game.tick(10_000.0);
+        assert!(!opening(&mut app), "the door has finished opening");
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs_f32(0.5));
+        app.world_mut().run_system_once(tick_clock_system).expect("clock system runs");
+        assert!(
+            app.world().resource::<GameClock>().remaining_secs < before,
+            "the clock resumes once the door is open",
+        );
+    }
+
+    #[test]
     fn a_portcullis_under_a_taper_gap_stays_visible_but_one_under_a_covered_cell_hides() {
         use crate::state::{DoorStyle, LayeredAlignment};
         use maze::Direction;

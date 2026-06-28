@@ -2,6 +2,7 @@ use crate::overlays::lose;
 use crate::palette::{CLOCK_GOLD, CLOCK_RED};
 use crate::state::{dispatch_game_result, GameClock, GameConfig, GameOutcome, GameResult, GameState};
 use bevy::prelude::*;
+use maze::DoorState;
 
 const COLOR_CLOCK_FLASH: Color = Color::srgba(1.0, 0.85, 0.0, 0.6);
 
@@ -56,6 +57,15 @@ pub(crate) fn tick_clock_system(
     // level transition (the climb / portal step) — the timer resumes only once
     // the player is back in play on the next level.
     if state.won || state.lost || state.paused || state.transition.is_some() {
+        return;
+    }
+    // Also freeze while a door is opening: holding forward into a locked door
+    // consumes a key and the player then waits out the ~1 s open countdown unable
+    // to act, so — like a level transition — the timer shouldn't tick against them.
+    // A door only enters `Opening` when the player triggers it and auto-completes
+    // in ~1 s, so this freeze is bounded and can't be stalled (and only the live
+    // level's doors are in `state.game`).
+    if state.game.doors().iter().any(|(_, phase)| matches!(phase, DoorState::Opening { .. })) {
         return;
     }
     let dt = time.delta_secs();
