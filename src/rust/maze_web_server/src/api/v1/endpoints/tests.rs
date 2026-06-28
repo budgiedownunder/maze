@@ -9,7 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ScoreboardResponse, ScoreResponse};
+    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -7317,6 +7317,118 @@ mod test_definitions {
             login_id,
         );
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // -----------------------------------------------------------------------
+    // DELETE /api/v1/scores  (reset a leaderboard)
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn reset_maze_leaderboard_by_owner_clears_it() {
+        // The caller owns "maze_a.json" (MazeContent::OneMaze).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::OneMaze));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze_a.json").await;
+        assert_eq!(
+            read_board(&app, "/api/v1/scores?maze_id=maze_a.json", api_key, login_id).await.scores.len(),
+            3
+        );
+
+        let req = create_test_delete_request("/api/v1/scores?maze_id=maze_a.json", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: ResetScoresResponse =
+            serde_json::from_slice(&test::read_body(resp).await).expect("ResetScoresResponse");
+        assert_eq!(body.deleted, 3);
+
+        // The board is now empty.
+        assert!(read_board(&app, "/api/v1/scores?maze_id=maze_a.json", api_key, login_id)
+            .await
+            .scores
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn reset_maze_leaderboard_by_non_owner_is_forbidden() {
+        // The caller has no mazes, so it does not own "maze_a.json".
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        // Recording a score doesn't check ownership, so a board can exist.
+        seed_maze_scores(&app, api_key, login_id, "maze_a.json").await;
+
+        let req = create_test_delete_request("/api/v1/scores?maze_id=maze_a.json", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+        // The board is untouched.
+        assert_eq!(
+            read_board(&app, "/api/v1/scores?maze_id=maze_a.json", api_key, login_id).await.scores.len(),
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn reset_challenge_leaderboard_by_admin_clears_it() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), true).await;
+        for (score, elapsed_ms) in SCORE_SEED {
+            let body = RecordScoreRequest {
+                maze_id: None,
+                challenge: Some("hard:12345".to_string()),
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+        }
+
+        let req = create_test_delete_request("/api/v1/scores?challenge=hard:12345", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: ResetScoresResponse =
+            serde_json::from_slice(&test::read_body(resp).await).expect("ResetScoresResponse");
+        assert_eq!(body.deleted, 3);
+        assert!(read_board(&app, "/api/v1/scores?challenge=hard:12345", api_key, login_id)
+            .await
+            .scores
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn reset_challenge_leaderboard_by_non_admin_is_forbidden() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_delete_request("/api/v1/scores?challenge=hard:12345", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn reset_leaderboard_requires_exactly_one_subject() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), true).await;
+        // Neither subject.
+        let req = create_test_delete_request("/api/v1/scores", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+        // Both subjects.
+        let req = create_test_delete_request(
+            "/api/v1/scores?maze_id=maze_a.json&challenge=hard:1",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn reset_leaderboard_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_delete_request("/api/v1/scores?challenge=hard:1", None, None);
+        test::call_service(&app, req).await;
     }
 
     #[tokio::test]

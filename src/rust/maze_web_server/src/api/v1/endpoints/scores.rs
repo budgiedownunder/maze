@@ -17,8 +17,8 @@
 //! authenticated client submits.
 
 use actix_web::{
-    get, post, web, HttpMessage, HttpRequest, HttpResponse, Error,
-    error::{ErrorBadRequest, ErrorInternalServerError, ErrorUnauthorized},
+    delete, get, post, web, HttpMessage, HttpRequest, HttpResponse, Error,
+    error::{ErrorBadRequest, ErrorForbidden, ErrorInternalServerError, ErrorUnauthorized},
 };
 use chrono::{DateTime, Utc};
 use data_model::User;
@@ -414,6 +414,91 @@ pub async fn get_my_history(
         Err(err) => {
             log::warn!("user_history store error: {err}");
             Err(ErrorInternalServerError("Failed to read run history"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/v1/scores  (reset a leaderboard)
+// ---------------------------------------------------------------------------
+
+/// Query parameters for `DELETE /api/v1/scores`. Exactly one of `maze_id` /
+/// `challenge` selects the board to reset.
+#[derive(Deserialize, Debug)]
+pub struct ResetScoresQuery {
+    pub maze_id: Option<String>,
+    pub challenge: Option<String>,
+}
+
+/// Response body for a leaderboard reset — the number of score rows removed.
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
+pub struct ResetScoresResponse {
+    /// Number of score rows deleted (0 if the board was already empty).
+    pub deleted: u64,
+}
+
+#[utoipa::path(
+    summary = "Reset a leaderboard to empty",
+    description = "Deletes every score for one subject (exactly one of maze_id / challenge), \
+                   resetting that leaderboard to empty. Authorization depends on the subject: a \
+                   curated challenge board is global and requires an admin; a stored maze board \
+                   requires the requesting user to own that maze. Returns the number of rows \
+                   removed (0 if the board was already empty).",
+    delete,
+    path = "/api/v1/scores",
+    params(
+        ("maze_id" = Option<String>, Query, description = "Reset this stored maze's board — owner only (mutually exclusive with challenge)"),
+        ("challenge" = Option<String>, Query, description = "Reset this curated challenge's board — admin only")
+    ),
+    responses(
+        (status = 200, description = "Leaderboard reset", body = ResetScoresResponse),
+        (status = 400, description = "Invalid request (must set exactly one of maze_id / challenge)"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 403, description = "Not allowed to reset this leaderboard")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[delete("/scores")]
+pub async fn reset_leaderboard(
+    query: web::Query<ResetScoresQuery>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req)?;
+    let q = query.into_inner();
+
+    let mut store_lock = store.write().await;
+    let deleted = match (q.maze_id.as_deref(), q.challenge.as_deref()) {
+        // A stored maze board: only the maze's owner may reset it. `get_maze`
+        // enforces ownership (it errors for a maze the user doesn't own), so a
+        // failure here is a 403 — without leaking whether the maze exists.
+        (Some(maze_id), None) => {
+            if store_lock.get_maze(&user, maze_id).await.is_err() {
+                return Err(ErrorForbidden("Not allowed to reset this leaderboard"));
+            }
+            store_lock.clear_maze_scores(maze_id).await
+        }
+        // A curated challenge board is global — admin only.
+        (None, Some(challenge)) => {
+            if !user.is_admin {
+                return Err(ErrorForbidden("Not allowed to reset this leaderboard"));
+            }
+            store_lock.clear_challenge_scores(challenge).await
+        }
+        _ => {
+            return Err(ErrorBadRequest("must set exactly one of maze_id / challenge"));
+        }
+    };
+
+    match deleted {
+        Ok(deleted) => Ok(HttpResponse::Ok().json(ResetScoresResponse { deleted })),
+        Err(err) => {
+            log::warn!("reset_leaderboard store error: {err}");
+            Err(ErrorInternalServerError("Failed to reset leaderboard"))
         }
     }
 }
