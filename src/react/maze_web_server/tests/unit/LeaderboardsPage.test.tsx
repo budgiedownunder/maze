@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -7,11 +7,18 @@ import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { LeaderboardsPage } from '../../src/pages/LeaderboardsPage'
 import { server } from '../../src/mocks/server'
 import { launchPlay3dWithSettings, launchPlay3dCurated } from '../../src/utils/play3dLaunch'
+import { solveMaze } from '../../src/wasm/mazeWasm'
 import type { ScoreEntry } from '../../src/types/api'
 
 vi.mock('../../src/utils/play3dLaunch', () => ({
   launchPlay3dWithSettings: vi.fn(),
   launchPlay3dCurated: vi.fn(),
+}))
+
+// The Play button gates a personal maze through `solveMaze` (the shared
+// solvability check) before launching, so stub the WASM solver.
+vi.mock('../../src/wasm/mazeWasm', () => ({
+  solveMaze: vi.fn(),
 }))
 
 vi.mock('react-router-dom', async () => {
@@ -61,6 +68,8 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   authState.profile = { id: 'me', username: 'bob' }
+  // Default: mazes solve (are playable); a test overrides this to reject.
+  ;(solveMaze as Mock).mockResolvedValue([{ row: 0, col: 0 }])
 })
 
 describe('LeaderboardsPage', () => {
@@ -158,8 +167,32 @@ describe('LeaderboardsPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '↻ Play Again' }))
 
-    expect(launchPlay3dWithSettings).toHaveBeenCalledWith('m1.json', expect.any(Object))
+    // The launch is gated behind the async solvability check, so wait for it.
+    await waitFor(() => expect(launchPlay3dWithSettings).toHaveBeenCalledWith('m1.json', expect.any(Object)))
     expect(launchPlay3dCurated).not.toHaveBeenCalled()
+  })
+
+  it('rejects an unplayable (empty/cleared) maze with a Cannot Play Maze alert', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [row({ id: 's1', maze_id: 'm1.json', user_id: 'me', elapsed_ms: 42137 })], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    // A maze with no start/finish fails the solvability check.
+    ;(solveMaze as Mock).mockRejectedValue(new Error('No solution found'))
+    renderPage()
+    await waitFor(() => expect(screen.getByRole('button', { name: '↻ Play Again' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: '↻ Play Again' }))
+
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+    expect(launchPlay3dWithSettings).not.toHaveBeenCalled()
   })
 
   it('Play launches the selected difficulty for a Play 3D subject', async () => {

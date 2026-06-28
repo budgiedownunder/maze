@@ -3,7 +3,9 @@ import { AppHeader } from '../components/AppHeader'
 import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { AlertModal } from '../components/AlertModal'
 import { useBusyCursor } from '../hooks/useBusyCursor'
+import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getPlay3dConfig, resetLeaderboard } from '../api/client'
 import { buildChallenge } from '../utils/scores'
@@ -69,9 +71,14 @@ export function LeaderboardsPage() {
   const [isConfirmingReset, setIsConfirmingReset] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [resetError, setResetError] = useState<string | null>(null)
+  // Play a personal maze through the shared solvability check
+  const { play: playMaze, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
+    usePlayMaze({
+      onLaunch3d: maze => launchPlay3dWithSettings(maze.id, normalizeMazeGameSettings(maze.game_settings ?? {})),
+    })
   // Busy cursor while any of the page's loads are in flight; cleared on
   // completion or failure.
-  useBusyCursor(isLoadingSubjects || isResolving || isBoardLoading)
+  useBusyCursor(isLoadingSubjects || isResolving || isBoardLoading || isCheckingPlay)
   // difficulty → fixed seed; the seeds don't change, so resolve each once.
   const seedCache = useRef<Map<string, number>>(new Map())
 
@@ -144,7 +151,10 @@ export function LeaderboardsPage() {
       return
     }
     const maze = allMazes.find(m => m.id === selection.mazeId)
-    launchPlay3dWithSettings(selection.mazeId, normalizeMazeGameSettings(maze?.game_settings ?? {}))
+    if (!maze) return
+    // `playMaze` runs the solvability check (rejecting an empty / cleared maze)
+    // and, on success, fires `onLaunch3d` above to launch with the saved settings.
+    void playMaze(maze, GameType.ThreeD)
   }
 
   // The Reset button shows only when the board has rows AND the caller may clear
@@ -247,6 +257,9 @@ export function LeaderboardsPage() {
           onConfirm={handleConfirmReset}
           onCancel={() => setIsConfirmingReset(false)}
         />
+      )}
+      {playCheckError && (
+        <AlertModal title="Cannot Play Maze" message={playCheckError} onClose={clearPlayCheckError} />
       )}
     </div>
   )
