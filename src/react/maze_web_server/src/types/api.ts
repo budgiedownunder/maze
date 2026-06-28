@@ -124,6 +124,12 @@ export interface ScoreboardResponse {
   has_more: boolean
 }
 
+// Result of resetting a leaderboard (DELETE /scores): the number of score rows
+// removed.
+export interface ResetScoresResponse {
+  deleted: number
+}
+
 // The subset of the server's Play3dConfigResponse the client consumes: the
 // curated difficulty's fixed maze seed, used to key its leaderboard
 // (`challenge = "<difficulty>:<seed>"`).

@@ -22,6 +22,9 @@ interface LeaderboardProps {
   // Reports whether the caller has a run on the currently loaded board, so a
   // host can label its Play button "Play Again".
   onHasPlayedChange?: (hasPlayed: boolean) => void
+  // Reports the number of rows on the loaded board, so a host can show controls
+  // (e.g. a Reset button) only when the board is non-empty.
+  onRowCountChange?: (count: number) => void
 }
 
 const METRIC_TABS: { metric: ScoreMetric; label: string }[] = [
@@ -35,7 +38,7 @@ function subjectKey(subject: BoardSubject): string {
 
 // Reusable board view: ranking-metric tabs over a single subject's paged
 // leaderboard. Switching the metric (or the subject) reloads from the top.
-export function Leaderboard({ token, subject, currentUserId, showPlayer, reloadNonce, onLoadingChange, onHasPlayedChange }: LeaderboardProps) {
+export function Leaderboard({ token, subject, currentUserId, showPlayer, reloadNonce, onLoadingChange, onHasPlayedChange, onRowCountChange }: LeaderboardProps) {
   const [metric, setMetric] = useState<ScoreMetric>('time')
   const key = `${metric}|${subjectKey(subject)}|${reloadNonce ?? 0}`
 
@@ -58,6 +61,11 @@ export function Leaderboard({ token, subject, currentUserId, showPlayer, reloadN
   const hasPlayed = currentUserId != null && board.rows.some(r => r.user_id === currentUserId)
   useEffect(() => { onHasPlayedChange?.(hasPlayed) }, [hasPlayed, onHasPlayedChange])
   useEffect(() => () => onHasPlayedChange?.(false), [onHasPlayedChange])
+
+  // Report the loaded row count (drives the host's Reset button visibility).
+  const rowCount = board.rows.length
+  useEffect(() => { onRowCountChange?.(rowCount) }, [rowCount, onRowCountChange])
+  useEffect(() => () => onRowCountChange?.(0), [onRowCountChange])
 
   return (
     <div className="leaderboard-board-view">

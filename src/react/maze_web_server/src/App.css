@@ -167,7 +167,9 @@
 :root[data-theme="dark"] .btn-icon img,
 :root:not([data-theme="light"]) .btn-icon img,
 :root[data-theme="dark"] .maze-item-action img,
-:root:not([data-theme="light"]) .maze-item-action img {
+:root:not([data-theme="light"]) .maze-item-action img,
+:root[data-theme="dark"] .leaderboard-reset img,
+:root:not([data-theme="light"]) .leaderboard-reset img {
   filter: invert(1);
 }
 

@@ -19,6 +19,13 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => vi.fn() }
 })
 
+// Mutable auth profile so a test can flip the caller to an admin (the Reset
+// button on a global Play-3D board is admin-gated). Reset to a non-admin default
+// in beforeEach.
+const { authState } = vi.hoisted(() => ({
+  authState: { profile: { id: 'me', username: 'bob' } as { id: string; username: string; is_admin?: boolean } },
+}))
+
 vi.mock('../../src/context/AuthContext', async () => {
   const actual = await vi.importActual('../../src/context/AuthContext')
   return {
@@ -27,7 +34,7 @@ vi.mock('../../src/context/AuthContext', async () => {
     useAuth: () => ({
       isLoading: false,
       isAuthenticated: true,
-      profile: { id: 'me', username: 'bob' },
+      profile: authState.profile,
       login: vi.fn(),
       logout: vi.fn(),
     }),
@@ -53,6 +60,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  authState.profile = { id: 'me', username: 'bob' }
 })
 
 describe('LeaderboardsPage', () => {
@@ -211,5 +219,97 @@ describe('LeaderboardsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
 
     await waitFor(() => expect(scoresHits).toBeGreaterThan(before))
+  })
+
+  it('shows Reset for a non-empty maze board and clears it after confirming', async () => {
+    let cleared = false
+    let deleteHits = 0
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json(
+          cleared
+            ? { scores: [], limit: 20, offset: 0, has_more: false }
+            : { scores: [row({ id: 's1', maze_id: 'm1.json', user_id: 'me', elapsed_ms: 42137 })], limit: 20, offset: 0, has_more: false },
+        ),
+      ),
+      http.delete('/api/v1/scores', () => {
+        deleteHits++
+        cleared = true
+        return HttpResponse.json({ deleted: 1 })
+      }),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
+
+    // A non-empty maze board the caller owns → Reset is offered (no admin needed).
+    // `findByRole` waits for the row count to lift from the board into the page.
+    await userEvent.click(await screen.findByRole('button', { name: 'Reset leaderboard' }))
+
+    // Confirm in the modal — the destructive clear only fires on confirm.
+    const dialog = await screen.findByRole('dialog', { name: 'Reset leaderboard' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reset' }))
+
+    await waitFor(() => expect(deleteHits).toBe(1))
+    // The board re-fetches empty → the score row and the Reset button both vanish.
+    await waitFor(() => expect(screen.queryByText('0:42.137')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Reset leaderboard' })).not.toBeInTheDocument())
+  })
+
+  it('hides Reset when the maze board is empty', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByLabelText('Game Type')).toBeInTheDocument())
+    await waitFor(() => expect(document.body.classList.contains('is-busy')).toBe(false))
+    expect(screen.queryByRole('button', { name: 'Reset leaderboard' })).not.toBeInTheDocument()
+  })
+
+  it('hides Reset on a Play 3D board for a non-admin', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', challenge: 'easy:42', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () => HttpResponse.json([])),
+      http.get('/api/v1/game/play3d-config', () => HttpResponse.json({ difficulty: 'easy', seed: 42 })),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [row({ id: 'a', challenge: 'easy:42', user_id: 'other', username: 'alice', elapsed_ms: 31204 })], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('0:31.204')).toBeInTheDocument())
+    // A global board with rows, but the caller isn't an admin → no Reset.
+    expect(screen.queryByRole('button', { name: 'Reset leaderboard' })).not.toBeInTheDocument()
+  })
+
+  it('shows Reset on a Play 3D board for an admin', async () => {
+    authState.profile = { id: 'me', username: 'bob', is_admin: true }
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', challenge: 'easy:42', user_id: 'me' })], limit: 1, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () => HttpResponse.json([])),
+      http.get('/api/v1/game/play3d-config', () => HttpResponse.json({ difficulty: 'easy', seed: 42 })),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [row({ id: 'a', challenge: 'easy:42', user_id: 'other', username: 'alice', elapsed_ms: 31204 })], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('0:31.204')).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: 'Reset leaderboard' })).toBeInTheDocument()
   })
 })

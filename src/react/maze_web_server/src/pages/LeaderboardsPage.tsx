@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { useToken, useAuth } from '../context/AuthContext'
-import { getScoreHistory, getMazes, getPlay3dConfig } from '../api/client'
+import { getScoreHistory, getMazes, getPlay3dConfig, resetLeaderboard } from '../api/client'
 import { buildChallenge } from '../utils/scores'
 import { launchPlay3dWithSettings, launchPlay3dCurated } from '../utils/play3dLaunch'
 import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
@@ -60,8 +61,14 @@ export function LeaderboardsPage() {
   const [isBoardLoading, setIsBoardLoading] = useState(false)
   // Whether the caller has a run on the current board → Play vs "Play Again".
   const [hasPlayed, setHasPlayed] = useState(false)
-  // Bumped by the Refresh button to force the current board to re-fetch.
+  // Bumped by the Refresh button (and after a reset) to force the board to re-fetch.
   const [refreshNonce, setRefreshNonce] = useState(0)
+  // Number of rows on the loaded board — the Reset button shows only when > 0.
+  const [boardRowCount, setBoardRowCount] = useState(0)
+  // Reset flow: a confirm modal gates the destructive clear.
+  const [isConfirmingReset, setIsConfirmingReset] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
   // Busy cursor while any of the page's loads are in flight; cleared on
   // completion or failure.
   useBusyCursor(isLoadingSubjects || isResolving || isBoardLoading)
@@ -140,6 +147,30 @@ export function LeaderboardsPage() {
     launchPlay3dWithSettings(selection.mazeId, normalizeMazeGameSettings(maze?.game_settings ?? {}))
   }
 
+  // The Reset button shows only when the board has rows AND the caller may clear
+  // it: a Play-3D (challenge) board is global → admins only; a personal maze board
+  // → its owner (the page lists only the caller's own mazes). The server enforces
+  // this regardless; the gate just hides a button the caller can't use.
+  const canReset =
+    boardSubject != null &&
+    boardRowCount > 0 &&
+    ('challenge' in boardSubject ? !!profile?.is_admin : true)
+
+  async function handleConfirmReset() {
+    if (boardSubject == null || token == null) return
+    setIsResetting(true)
+    setResetError(null)
+    try {
+      await resetLeaderboard(token, boardSubject)
+      setIsConfirmingReset(false)
+      setRefreshNonce(n => n + 1) // re-fetch the now-empty board
+    } catch (err) {
+      setResetError((err as Error).message || 'Failed to reset leaderboard')
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
   const showPlayer = selection?.gameType === 'play3d'
   // Nothing to launch when the Mazes type is selected but the player has none
   // (the maze id is empty); a Play-3D difficulty is always playable.
@@ -148,6 +179,17 @@ export function LeaderboardsPage() {
   return (
     <div className="leaderboards-page">
       <AppHeader title="Leaderboards" titleIcon={leaderboardsIcon}>
+        {canReset && (
+          <button
+            type="button"
+            className="theme-toggle leaderboard-reset"
+            onClick={() => { setResetError(null); setIsConfirmingReset(true) }}
+            aria-label="Reset leaderboard"
+            title="Reset leaderboard"
+          >
+            <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" width={18} height={18} />
+          </button>
+        )}
         <button
           className="theme-toggle"
           onClick={() => setRefreshNonce(n => n + 1)}
@@ -185,6 +227,7 @@ export function LeaderboardsPage() {
                 reloadNonce={refreshNonce}
                 onLoadingChange={setIsBoardLoading}
                 onHasPlayedChange={setHasPlayed}
+                onRowCountChange={setBoardRowCount}
               />
             )}
             {!resolveError && !isResolving && !boardSubject && (
@@ -193,6 +236,18 @@ export function LeaderboardsPage() {
           </>
         )}
       </main>
+      {isConfirmingReset && (
+        <ConfirmModal
+          title="Reset leaderboard"
+          message="This permanently deletes every score on this leaderboard. This cannot be undone."
+          confirmLabel="Reset"
+          isDangerous
+          isLoading={isResetting}
+          error={resetError}
+          onConfirm={handleConfirmReset}
+          onCancel={() => setIsConfirmingReset(false)}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { getLeaderboard, getScoreHistory } from '../../src/api/client'
+import { getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
 import type { ScoreboardResponse } from '../../src/types/api'
 
 const TOKEN = 'test-token'
@@ -125,6 +125,46 @@ describe('getLeaderboard', () => {
 
   it('throws when both subjects are set', () => {
     expect(() => getLeaderboard(TOKEN, { mazeId: 'm', challenge: 'c' })).toThrow(/exactly one/)
+  })
+})
+
+describe('resetLeaderboard', () => {
+  it('sends a DELETE with the maze_id subject + bearer token and returns the count', async () => {
+    let captured: Request | null = null
+    server.use(
+      http.delete('/api/v1/scores', ({ request }) => {
+        captured = request
+        return HttpResponse.json({ deleted: 3 })
+      }),
+    )
+    const res = await resetLeaderboard(TOKEN, { mazeId: 'My Maze.json' })
+    expect(res.deleted).toBe(3)
+    const req = captured as unknown as Request
+    const url = new URL(req.url)
+    expect(req.method).toBe('DELETE')
+    expect(url.pathname).toBe('/api/v1/scores')
+    expect(url.searchParams.get('maze_id')).toBe('My Maze.json')
+    expect(url.searchParams.get('challenge')).toBeNull()
+    expect(req.headers.get('Authorization')).toBe(`Bearer ${TOKEN}`)
+  })
+
+  it('sends the challenge subject', async () => {
+    let captured: Request | null = null
+    server.use(
+      http.delete('/api/v1/scores', ({ request }) => {
+        captured = request
+        return HttpResponse.json({ deleted: 0 })
+      }),
+    )
+    await resetLeaderboard(TOKEN, { challenge: 'hard:1' })
+    const url = new URL((captured as unknown as Request).url)
+    expect(url.searchParams.get('challenge')).toBe('hard:1')
+    expect(url.searchParams.get('maze_id')).toBeNull()
+  })
+
+  it('throws when neither / both subjects are set (fail-fast before any request)', () => {
+    expect(() => resetLeaderboard(TOKEN, {})).toThrow(/exactly one/)
+    expect(() => resetLeaderboard(TOKEN, { mazeId: 'm', challenge: 'c' })).toThrow(/exactly one/)
   })
 })
 

@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -292,6 +292,22 @@ export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<
   if (query.offset != null) params.set('offset', String(query.offset))
   if (query.includeUsernames != null) params.set('include_usernames', String(query.includeUsernames))
   return request<ScoreboardResponse>(`/scores?${params.toString()}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// Resets a leaderboard to empty (DELETE). Exactly one subject — a stored `mazeId`
+// (maze owner only) or a curated `challenge` (admin only); the server enforces
+// access and rejects otherwise. Returns the number of score rows removed.
+export function resetLeaderboard(token: string, query: { mazeId?: string; challenge?: string }): Promise<ResetScoresResponse> {
+  if ((query.mazeId == null) === (query.challenge == null)) {
+    throw new Error('resetLeaderboard requires exactly one of mazeId / challenge')
+  }
+  const params = new URLSearchParams()
+  if (query.mazeId != null) params.set('maze_id', query.mazeId)
+  if (query.challenge != null) params.set('challenge', query.challenge)
+  return request<ResetScoresResponse>(`/scores?${params.toString()}`, {
+    method: 'DELETE',
     headers: authHeaders(token),
   })
 }
