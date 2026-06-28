@@ -2303,6 +2303,39 @@ mod tests {
     }
 
     #[test]
+    fn a_support_pole_under_an_overhanging_corner_reaches_the_level_below_it() {
+        use crate::state::LayeredAlignment;
+        use crate::world::support_pole::SupportPole;
+        use crate::world::LEVEL_HEIGHT;
+        // RandomBase with a seed that centres level 1 but corner-stacks level 2, so
+        // level 2's origin corner overhangs level 1 and sits only over the base
+        // (overhang is a RandomBase-only case — RandomLevel always nests). Open
+        // everywhere (no solid walls / perimeter) so every upper corner is braced.
+        // The pole under that overhanging corner must drop PAST level 1, all the way
+        // to the base it visually sits over (two level-heights), not stop in mid-air.
+        let l0 = r#"{"grid":[["S"," "," "," ","F"],[" "," "," "," "," "],[" "," "," "," "," "],[" "," "," "," "," "],[" "," "," "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[" "," "," "],[" "," "," "]]}"#;
+        let l2 = r#"{"grid":[["S"," ","F"],[" "," "," "],[" "," "," "]]}"#;
+        let cfg = GameConfig {
+            layered_alignment: LayeredAlignment::RandomBase,
+            seed: 30,
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[l0, l1, l2], cfg);
+        let tallest = app
+            .world_mut()
+            .query::<(&SupportPole, &Transform)>()
+            .iter(app.world())
+            .map(|(_, t)| t.scale.y)
+            .fold(0.0_f32, f32::max);
+        assert!(
+            (tallest - 2.0 * LEVEL_HEIGHT).abs() < 0.05,
+            "an overhanging corner's pole spans two levels down to the base (got {tallest})",
+        );
+    }
+
+    #[test]
     fn pool_rim_skirts_every_non_pool_edge() {
         // A lone water cell ringed by four passable cells gets a rim skirt on each
         // of its four edges (the recess wall up to floor level).

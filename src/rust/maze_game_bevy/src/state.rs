@@ -286,10 +286,11 @@ pub(crate) struct MultiLevelRun {
     /// When `true` (the default) each level starts with an empty bag; when
     /// `false` the player's whole bag carries from one level into the next.
     pub(crate) reset_bag_between_levels: bool,
-    /// `(rows, cols)` of the bottom level's grid — the reference footprint the
-    /// upper levels' `Centre` X/Z offsets are measured against. Used on a level
-    /// transition to compute the new level's camera placement.
-    pub(crate) base_dims: (usize, usize),
+    /// Each level's `(rows, cols)` grid footprint, bottom (index 0) first. Read on a
+    /// level transition to compute the new level's X/Z placement — `RandomLevel`
+    /// alignment needs the whole footprint chain (each level is offset within the one
+    /// below), not just the base. Intrinsic to the grids, so set once in [`Self::new`].
+    pub(crate) level_dims: Vec<(usize, usize)>,
     /// Each level's world-space floor Y (the `base_level_y` table). Set by
     /// `spawn_world` to the pool-gap-aware bases; defaults to the gapless
     /// `level * LEVEL_HEIGHT` so a run built outside `spawn_world` (tests) still
@@ -304,14 +305,20 @@ impl MultiLevelRun {
     /// empty and the bag resets by default.
     pub(crate) fn new(levels: Vec<String>) -> Self {
         // The bottom level's footprint anchors the upper levels' `Centre` offsets.
-        let base_dims = levels
-            .first()
-            .and_then(|json| MazeGame::from_json(json).ok())
-            .map(|game| {
-                let grid = game.grid();
-                (grid.len(), grid.first().map_or(0, |row| row.len()))
+        // Each level's footprint (intrinsic to its grid); the bottom level's anchors
+        // the upper levels' offsets.
+        let level_dims: Vec<(usize, usize)> = levels
+            .iter()
+            .map(|json| {
+                MazeGame::from_json(json)
+                    .ok()
+                    .map(|game| {
+                        let grid = game.grid();
+                        (grid.len(), grid.first().map_or(0, |row| row.len()))
+                    })
+                    .unwrap_or((0, 0))
             })
-            .unwrap_or((0, 0));
+            .collect();
         let level_bases = (0..levels.len())
             .map(|level| crate::world::world_y(level, 0.0))
             .collect();
@@ -321,7 +328,7 @@ impl MultiLevelRun {
             banked_score: 0,
             carried_treasure: Vec::new(),
             reset_bag_between_levels: true,
-            base_dims,
+            level_dims,
             level_bases,
         }
     }
@@ -856,12 +863,24 @@ impl TreasureStyle {
 /// open-sky stack — a roofed stack seals each level so alignment is invisible).
 /// `Edge` stacks every layer to a common origin corner (zero X/Z offset — the
 /// historical behaviour); `Centre` centres each smaller layer over the bottom
-/// layer. Default `Edge` so single-level games and uniform stacks are unchanged.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// layer. `Random` resolves to `Edge` or `Centre` independently **per level** from
+/// the run seed (see [`Self::resolve`]) so the stack mixes both looks. The two
+/// random modes differ only in what each level's offset is measured against:
+/// `RandomBase` positions every level from the base origin (so a corner-stacked
+/// level can overhang a centred one below it — cantilevered tiers), while
+/// `RandomLevel` positions each level within the level directly below it (so a
+/// smaller level always nests inside its parent — no overhang). The renderer and
+/// the generator both resolve + position the same way, so a ladder still lands.
+/// Default `Edge` so single-level games and uniform stacks are unchanged.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum LayeredAlignment {
     #[default]
     Edge,
     Centre,
+    /// Per-level random edge/centre, each measured from the base — may overhang.
+    RandomBase,
+    /// Per-level random edge/centre, each measured within the level below — nests.
+    RandomLevel,
 }
 
 impl LayeredAlignment {
@@ -870,6 +889,8 @@ impl LayeredAlignment {
         match self {
             Self::Edge => "edge",
             Self::Centre => "centre",
+            Self::RandomBase => "random_base",
+            Self::RandomLevel => "random_level",
         }
     }
 
@@ -879,10 +900,37 @@ impl LayeredAlignment {
     pub fn from_wire_str(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "centre" | "center" => Self::Centre,
+            "random_base" => Self::RandomBase,
+            "random_level" => Self::RandomLevel,
             _ => Self::Edge,
         }
     }
+
+    /// The per-level edge/centre **choice** for `level` of a run seeded with `seed`:
+    /// `Edge` / `Centre` are fixed; both random modes flip the same seeded
+    /// per-`(seed, level)` coin to `Edge` or `Centre`. This is only the *choice* —
+    /// where that choice is anchored (base vs the level below) is decided by the mode
+    /// in [`crate::world::level_offset_cells`]. Both the renderer and the generator
+    /// call this with the same seed + level index, so their layouts agree and a
+    /// ladder finish lands on real floor.
+    pub fn resolve(self, seed: u64, level: usize) -> Self {
+        match self {
+            Self::RandomBase | Self::RandomLevel => {
+                if seeded_index(seed, level as u64, 0, ALIGNMENT_SALT, 2) == 0 {
+                    Self::Edge
+                } else {
+                    Self::Centre
+                }
+            }
+            concrete => concrete,
+        }
+    }
 }
+
+/// Salt mixed into [`LayeredAlignment::resolve`]'s seeded coin so its per-level
+/// stream is independent of the other `(seed, level)` rolls (e.g.
+/// [`WallType::random_for_level`]).
+const ALIGNMENT_SALT: u64 = 0x4C61_7965_7241_6C6E; // "LayerAln"
 
 /// What an **interim** level's finish renders as — the rig the player uses to
 /// transition up to the next level. The **final** level's finish always keeps the
@@ -1199,6 +1247,46 @@ mod tests {
             }
         }
         assert_eq!(keys.len(), 3);
+    }
+
+    #[test]
+    fn layered_alignment_random_resolves_per_level_and_concretes_pass_through() {
+        use LayeredAlignment::{Centre, Edge, RandomBase, RandomLevel};
+        // Concrete alignments ignore the seed/level and resolve to themselves.
+        for level in 0..8 {
+            assert_eq!(Edge.resolve(123, level), Edge);
+            assert_eq!(Centre.resolve(123, level), Centre);
+        }
+        // Both random modes flip the SAME coin (they differ only in anchoring, not in
+        // the edge/centre choice), always resolve to a concrete, and are stable.
+        for level in 0..8 {
+            let r = RandomBase.resolve(42, level);
+            assert!(r == Edge || r == Centre);
+            assert_eq!(r, RandomBase.resolve(42, level), "deterministic per (seed, level)");
+            assert_eq!(r, RandomLevel.resolve(42, level), "both modes share the coin");
+        }
+        // The coin actually varies across levels for some seed (not constant per seed).
+        assert!(
+            (0..32u64).any(|s| RandomBase.resolve(s, 0) != RandomBase.resolve(s, 1)),
+            "random alignment must differ across levels for some seed",
+        );
+        // ...and reaches both Edge and Centre across seeds.
+        let seen: std::collections::HashSet<_> =
+            (0..64u64).map(|s| RandomBase.resolve(s, 3)).collect();
+        assert_eq!(seen.len(), 2, "both Edge and Centre are reachable");
+    }
+
+    #[test]
+    fn layered_alignment_wire_round_trips_every_mode() {
+        use LayeredAlignment::{Centre, Edge, RandomBase, RandomLevel};
+        for a in [Edge, Centre, RandomBase, RandomLevel] {
+            assert_eq!(LayeredAlignment::from_wire_str(a.as_wire_str()), a);
+        }
+        assert_eq!(LayeredAlignment::from_wire_str("random_base"), RandomBase);
+        assert_eq!(LayeredAlignment::from_wire_str("random_level"), RandomLevel);
+        // The old "random" is gone (hard rename) and unknowns fall back to Edge.
+        assert_eq!(LayeredAlignment::from_wire_str("random"), Edge);
+        assert_eq!(LayeredAlignment::from_wire_str("nonsense"), Edge);
     }
 
     #[test]

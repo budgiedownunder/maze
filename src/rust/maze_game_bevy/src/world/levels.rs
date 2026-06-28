@@ -174,6 +174,14 @@ pub fn generate_level_maze_jsons(
     let base_min = base_rows.min(base_cols).max(1);
     let mut jsons = Vec::with_capacity(n);
 
+    // Every level's footprint up front, so each level's X/Z offset from the base can
+    // be computed with the SAME `crate::world::level_offset_cells` the renderer uses
+    // (it needs the whole chain for `RandomLevel`, where a level is offset within the
+    // one below). Same dims + alignment + seed on both sides ⇒ the layouts agree and
+    // a ladder lands.
+    let all_dims: Vec<(usize, usize)> =
+        (0..n).map(|i| level_dims(base_rows, base_cols, n, i, taper)).collect();
+
     // The next level's start: the previous level's finish, mapped down to the cell
     // directly *below* it in world space (the smaller upper grid is centred/edged
     // over the lower one). `None` until the bottom level fixes its own start.
@@ -186,9 +194,14 @@ pub fn generate_level_maze_jsons(
         // This level's footprint and the next level's (smaller) footprint. With
         // `taper` off both stay at the base size, so every helper below reduces to
         // the uniform behaviour.
-        let dims = level_dims(base_rows, base_cols, n, level_index, taper);
-        let dims_next = (level_index + 1 < n)
-            .then(|| level_dims(base_rows, base_cols, n, level_index + 1, taper));
+        let dims = all_dims[level_index];
+        let dims_next = all_dims.get(level_index + 1).copied();
+
+        // Each level's X/Z offset from the base (in cells). The landing chaining
+        // shifts a finish by the difference of the two levels' offsets — which, under
+        // a per-level `Random` alignment, can differ between them.
+        let off_cur = crate::world::level_offset_cells(level_index, &all_dims, alignment, base_seed);
+        let off_next = crate::world::level_offset_cells(level_index + 1, &all_dims, alignment, base_seed);
 
         // Shrink the required spine with the footprint so a small upper maze stays
         // generatable (a large `min_solution_length` won't fit a 3×3).
@@ -217,7 +230,8 @@ pub fn generate_level_maze_jsons(
             treasure_count as usize,
             &start,
             dims_next,
-            alignment,
+            off_cur,
+            off_next,
         )?;
         jsons.push(json);
 
@@ -247,27 +261,24 @@ fn level_dims(base_rows: usize, base_cols: usize, n: usize, i: usize, taper: boo
 }
 
 /// The cell in the next (smaller, offset) level that sits directly **below** a
-/// finish at `finish` in this level — the inverse of the renderer's
-/// [`crate::world::LevelPlacement`] X/Z offset. `Centre` insets the finish by half
-/// the per-axis size difference; `Edge` leaves it unchanged. `None` when the
-/// inset pushes the landing outside the smaller grid (no cell above → not a valid
+/// `finish` in this level — i.e. shares its world XZ, the inverse of the renderer's
+/// [`crate::world::LevelPlacement`] offset. `off_cur` / `off_next` are the two
+/// levels' grid offsets from the base (in cells, `(row, col)`, from
+/// [`crate::world::level_offset_cells`]); the landing is `finish` shifted by their
+/// difference. They can differ (e.g. one corner-stacked, one centred under a random
+/// alignment), or compound down the stack under `RandomLevel`. `None` when the shift
+/// pushes the landing outside the smaller upper grid (no cell above → not a valid
 /// ladder landing).
 fn aligned_landing(
-    alignment: LayeredAlignment,
+    off_cur: (isize, isize),
+    off_next: (isize, isize),
     finish: &MazePoint,
-    dims: (usize, usize),
     dims_next: (usize, usize),
 ) -> Option<MazePoint> {
-    let (row_inset, col_inset) = match alignment {
-        LayeredAlignment::Edge => (0, 0),
-        LayeredAlignment::Centre => (
-            (dims.0 - dims_next.0) / 2,
-            (dims.1 - dims_next.1) / 2,
-        ),
-    };
-    let row = finish.row.checked_sub(row_inset)?;
-    let col = finish.col.checked_sub(col_inset)?;
-    (row < dims_next.0 && col < dims_next.1).then_some(MazePoint { row, col })
+    let row = finish.row as isize + off_cur.0 - off_next.0;
+    let col = finish.col as isize + off_cur.1 - off_next.1;
+    (row >= 0 && col >= 0 && (row as usize) < dims_next.0 && (col as usize) < dims_next.1)
+        .then_some(MazePoint { row: row as usize, col: col as usize })
 }
 
 /// Generates one level with a fixed start and an alignment-biased far finish,
@@ -291,14 +302,16 @@ fn generate_one_level(
     treasure_count: usize,
     start: &MazePoint,
     dims_next: Option<(usize, usize)>,
-    alignment: LayeredAlignment,
+    off_cur: (isize, isize),
+    off_next: (isize, isize),
 ) -> Result<(String, Option<MazePoint>), String> {
     let mut last_err = String::from("no finish attempt was made");
 
     for attempt in 0..MAX_FINISH_ATTEMPTS {
         let mut finish_state = mix_seed(level_seed, FINISH_SALT.wrapping_add(attempt as u64));
-        let (finish, landing) =
-            pick_biased_finish(rows, cols, dims_next, alignment, start, &mut finish_state);
+        let (finish, landing) = pick_biased_finish(
+            rows, cols, dims_next, off_cur, off_next, start, &mut finish_state,
+        );
         let carve_seed = mix_seed(level_seed, attempt as u64);
 
         let options = GeneratorOptions {
@@ -362,11 +375,13 @@ fn level_enemy_count(
 /// With no taper (`dims_next == Some(this level's size)`) every candidate aligns
 /// (zero inset, landing == candidate), so this reduces to "the farthest finish,
 /// landing at the same cell".
+#[allow(clippy::too_many_arguments)]
 fn pick_biased_finish(
     rows: usize,
     cols: usize,
     dims_next: Option<(usize, usize)>,
-    alignment: LayeredAlignment,
+    off_cur: (isize, isize),
+    off_next: (isize, isize),
     start: &MazePoint,
     state: &mut u64,
 ) -> (MazePoint, Option<MazePoint>) {
@@ -382,7 +397,7 @@ fn pick_biased_finish(
             best_any = Some((cand.clone(), distance));
         }
         if let Some(dn) = dims_next {
-            if let Some(landing) = aligned_landing(alignment, &cand, (rows, cols), dn) {
+            if let Some(landing) = aligned_landing(off_cur, off_next, &cand, dn) {
                 if best_aligned.as_ref().is_none_or(|(_, _, d)| distance > *d) {
                     best_aligned = Some((cand, landing, distance));
                 }
@@ -598,10 +613,13 @@ mod tests {
 
     #[test]
     fn aligned_landing_inverts_the_centre_offset_and_rejects_out_of_range() {
-        let dims = (7, 7);
-        let next = (5, 5);
+        use crate::world::level_offset_cells;
+        // A 7×7 base under a 5×5 upper, uniform alignment.
+        let dims = [(7, 7), (5, 5)];
         let landing = |a, r, c| {
-            aligned_landing(a, &MazePoint { row: r, col: c }, dims, next).map(|p| (p.row, p.col))
+            let off_cur = level_offset_cells(0, &dims, a, 0);
+            let off_next = level_offset_cells(1, &dims, a, 0);
+            aligned_landing(off_cur, off_next, &MazePoint { row: r, col: c }, dims[1]).map(|p| (p.row, p.col))
         };
         // Centre insets by half the size difference (1 here).
         assert_eq!(landing(LayeredAlignment::Centre, 4, 4), Some((3, 3)));
@@ -613,23 +631,77 @@ mod tests {
         assert_eq!(landing(LayeredAlignment::Edge, 5, 5), None);
     }
 
-    #[test]
-    fn aligned_landing_sits_directly_under_the_finish_in_world_space() {
-        use crate::world::{LevelPlacement, CELL_SIZE};
-        // The landing must map to the SAME world XZ the renderer puts the finish at
-        // — that's what makes the ladder climb straight up.
-        let (base, dims, next) = ((9, 9), (7, 7), (5, 5));
-        let finish = MazePoint { row: 4, col: 4 };
-        let landing = aligned_landing(LayeredAlignment::Centre, &finish, dims, next)
-            .expect("a centred finish has a landing");
-        let pi =
-            LevelPlacement::for_level(1, dims.0, dims.1, base.0, base.1, LayeredAlignment::Centre, 0.0);
-        let pn =
-            LevelPlacement::for_level(2, next.0, next.1, base.0, base.1, LayeredAlignment::Centre, 0.0);
+    /// Asserts the generator's landing for level `l`'s `finish` maps to the SAME
+    /// world XZ the renderer's `LevelPlacement` puts that finish at — the invariant
+    /// that makes a ladder climb straight up — for the given chain / alignment / seed.
+    fn assert_landing_matches_renderer(
+        chain: &[(usize, usize)],
+        align: LayeredAlignment,
+        seed: u64,
+        l: usize,
+        finish: MazePoint,
+    ) {
+        use crate::world::{level_offset_cells, LevelPlacement, CELL_SIZE};
+        let off_cur = level_offset_cells(l, chain, align, seed);
+        let off_next = level_offset_cells(l + 1, chain, align, seed);
+        let landing = aligned_landing(off_cur, off_next, &finish, chain[l + 1])
+            .expect("the finish lands under the upper level");
+        let pf = LevelPlacement::for_level(l, chain, align, 0.0, seed);
+        let pn = LevelPlacement::for_level(l + 1, chain, align, 0.0, seed);
         let xz = |p: &LevelPlacement, r: usize, c: usize| {
             (p.world_x(c as f32 * CELL_SIZE + 1.0), p.world_z(r as f32 * CELL_SIZE + 1.0))
         };
-        assert_eq!(xz(&pi, finish.row, finish.col), xz(&pn, landing.row, landing.col));
+        assert_eq!(xz(&pf, finish.row, finish.col), xz(&pn, landing.row, landing.col));
+    }
+
+    #[test]
+    fn aligned_landing_matches_the_renderer_across_alignments() {
+        let chain = [(9, 9), (7, 7), (5, 5)];
+        let p = |r, c| MazePoint { row: r, col: c };
+        // Uniform centre.
+        assert_landing_matches_renderer(&chain, LayeredAlignment::Centre, 0, 1, p(4, 4));
+        // RandomBase seed 19 → level 1 edge, level 2 centre (mixed, base-anchored).
+        assert_landing_matches_renderer(&chain, LayeredAlignment::RandomBase, 19, 1, p(3, 3));
+        // RandomLevel seed 19 → each offset within its parent (cumulative).
+        assert_landing_matches_renderer(&chain, LayeredAlignment::RandomLevel, 19, 1, p(3, 3));
+    }
+
+    #[test]
+    fn random_level_nests_while_random_base_can_overhang() {
+        use crate::world::level_offset_cells;
+        // Seed 30 resolves level 1 → centre, level 2 → edge.
+        let chain = [(9, 9), (7, 7), (5, 5)];
+        let seed = 30;
+        // RandomBase: level 2 (edge → base corner, col 0) sits left of level 1 (centre
+        // → starts col 1), i.e. it overhangs.
+        let b1 = level_offset_cells(1, &chain, LayeredAlignment::RandomBase, seed);
+        let b2 = level_offset_cells(2, &chain, LayeredAlignment::RandomBase, seed);
+        assert!(b2.1 < b1.1, "random_base lets the upper corner overhang the level below");
+        // RandomLevel: level 2 is offset WITHIN level 1, so its near corner never sits
+        // before its parent's and its far corner stays inside it — full nesting.
+        let l1 = level_offset_cells(1, &chain, LayeredAlignment::RandomLevel, seed);
+        let l2 = level_offset_cells(2, &chain, LayeredAlignment::RandomLevel, seed);
+        assert!(l2.0 >= l1.0 && l2.1 >= l1.1, "random_level near corner is inside the parent");
+        assert!(
+            l2.0 + 5 <= l1.0 + 7 && l2.1 + 5 <= l1.1 + 7,
+            "random_level far corner is inside the parent",
+        );
+    }
+
+    #[test]
+    fn random_alignment_run_generates_deterministically() {
+        // Both random-aligned tapered modes generate a full chain reproducibly for a
+        // given base seed (the per-level alignment is seeded, not ad-hoc).
+        for align in [LayeredAlignment::RandomBase, LayeredAlignment::RandomLevel] {
+            let run = |seed| {
+                generate_level_maze_jsons(
+                    9, 9, seed, 0, 0, 0, 0, 0, 0, 0, 4, LevelDifficultyChange::Same, true, align,
+                )
+            };
+            let a = run(7).expect("generates");
+            assert_eq!(a.len(), 4);
+            assert_eq!(a, run(7).expect("generates"), "same seed → identical levels");
+        }
     }
 
     #[test]

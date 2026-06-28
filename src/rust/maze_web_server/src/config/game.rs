@@ -401,19 +401,26 @@ impl<'de> Deserialize<'de> for DifficultyChangeConfig {
 }
 
 /// How a reduced upper level is positioned over the level below in a multi-level
-/// run. Wire form (TOML / JSON) is lowercase (`"edge" | "centre" | "random"`):
+/// run. Wire form (TOML / JSON) is lowercase
+/// (`"edge" | "centre" | "random_base" | "random_level"`):
 /// `edge` corner-aligns every layer (zero X/Z offset); `centre` centres each
-/// smaller layer over the ground layer; `random` lets the client pick per level.
-/// Only meaningful under an open sky (enclosed stacks stay uniform). Unknown
-/// values deserialise as `Edge` — same forgiving policy as [`SkyTypeConfig`].
-/// Inert when `levels.count == 1`.
+/// smaller layer over the ground layer. The two random modes pick edge/centre per
+/// level from the run seed: `random_base` measures each level from the ground layer
+/// (so a corner-stacked level can overhang a centred one below it), `random_level`
+/// measures each within the level directly below it (so every level nests). Only
+/// meaningful under an open sky (enclosed stacks stay uniform). Unknown values
+/// deserialise as `Edge` — same forgiving policy as [`SkyTypeConfig`]. Inert when
+/// `levels.count == 1`.
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LayeredAlignmentConfig {
     #[default]
     Edge,
     Centre,
-    Random,
+    #[serde(rename = "random_base")]
+    RandomBase,
+    #[serde(rename = "random_level")]
+    RandomLevel,
 }
 
 impl LayeredAlignmentConfig {
@@ -422,7 +429,8 @@ impl LayeredAlignmentConfig {
         match self {
             Self::Edge => "edge",
             Self::Centre => "centre",
-            Self::Random => "random",
+            Self::RandomBase => "random_base",
+            Self::RandomLevel => "random_level",
         }
     }
 }
@@ -432,7 +440,8 @@ impl<'de> Deserialize<'de> for LayeredAlignmentConfig {
         let s = String::deserialize(d)?;
         Ok(match s.to_ascii_lowercase().as_str() {
             "centre" | "center" => Self::Centre,
-            "random" => Self::Random,
+            "random_base" => Self::RandomBase,
+            "random_level" => Self::RandomLevel,
             _ => Self::Edge,
         })
     }
@@ -1960,7 +1969,8 @@ mod tests {
         assert_eq!(DifficultyChangeConfig::Harder.as_wire_str(), "harder");
         assert_eq!(LayeredAlignmentConfig::Edge.as_wire_str(), "edge");
         assert_eq!(LayeredAlignmentConfig::Centre.as_wire_str(), "centre");
-        assert_eq!(LayeredAlignmentConfig::Random.as_wire_str(), "random");
+        assert_eq!(LayeredAlignmentConfig::RandomBase.as_wire_str(), "random_base");
+        assert_eq!(LayeredAlignmentConfig::RandomLevel.as_wire_str(), "random_level");
     }
 
     #[test]

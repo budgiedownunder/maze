@@ -399,7 +399,7 @@ mod tests {
         // not floating a `gap` above them.
         let gap = 0.7_f32;
         let base_y = 3.7_f32; // a single upper level whose floor is lifted by the gap
-        let placement = LevelPlacement::for_level(1, 1, 1, 1, 1, LayeredAlignment::Edge, base_y);
+        let placement = LevelPlacement::for_level(1, &[(1, 1), (1, 1)], LayeredAlignment::Edge, base_y, 0);
         let assets = dummy_assets();
         let mut app = App::new();
         app.add_systems(Update, move |mut commands: Commands| {
@@ -421,7 +421,7 @@ mod tests {
         // On a roofed (dungeon/chamber) stack the level below caps the opening with
         // its own holed roof tile, so the hatch must NOT also spawn an underside —
         // otherwise the two overlap. `below_roofed = true` ⇒ no `HatchUnderside`.
-        let placement = LevelPlacement::for_level(1, 1, 1, 1, 1, LayeredAlignment::Edge, 3.0);
+        let placement = LevelPlacement::for_level(1, &[(1, 1), (1, 1)], LayeredAlignment::Edge, 3.0, 0);
         let assets = dummy_assets();
         let mut app = App::new();
         app.add_systems(Update, move |mut commands: Commands| {

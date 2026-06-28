@@ -482,7 +482,7 @@ mod tests {
         let grid = vec![vec!['W', 'W']];
         let cfg = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
         let cells = HashMap::new();
-        let placement = LevelPlacement::for_level(0, 1, 2, 1, 2, LayeredAlignment::Edge, 0.0);
+        let placement = LevelPlacement::for_level(0, &[(1, 2)], LayeredAlignment::Edge, 0.0, 0);
         let t = pool_surface_transform(&grid, &cells, &cfg, WallType::Lava, 0, 0, placement);
         let inset = 2.0 * WALL_THICKNESS;
         // X has one free edge (west), Z has two (north + south).

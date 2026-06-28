@@ -230,9 +230,15 @@ reset_bag = true
 taper = false
 #taper = true
 # How a smaller upper (tapered) level sits over the level below —
-# "edge" (corner-aligned) | "centre" | "random" (the generator picks per level).
+# "edge" (corner-aligned) | "centre" | "random_base" | "random_level". The random
+# modes pick edge/centre per level from the seed: "random_base" measures each level
+# from the ground layer (a corner-stacked level may overhang a centred one below
+# it), "random_level" measures each within the level below (every level nests).
 # Default "edge". Inert when taper is off.
 alignment = "edge"
+#alignment = "centre"
+#alignment = "random_base"
+#alignment = "random_level"
 # When true, each level randomises its perimeter walls on/off independently; when
 # false (default) every level uses the perimeter_walls setting above.
 perimeter_random = false

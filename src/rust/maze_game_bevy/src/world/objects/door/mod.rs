@@ -36,7 +36,7 @@ pub(crate) mod portcullis;
 pub(crate) mod slide;
 pub(crate) mod swing;
 
-use crate::state::{DoorStyle, GameConfig, GameState, LayeredAlignment};
+use crate::state::{DoorStyle, GameConfig, GameState};
 use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
@@ -349,8 +349,9 @@ pub(crate) fn spawn_door_for_cell(
     config: &GameConfig,
     cell_entity: Option<&CellEntity>,
     placement: LevelPlacement,
-    // The level-above's `(rows, cols)` footprint, or `None` for the top level.
-    // Decides whether a raised portcullis here has a cell to intrude on above.
+    // The level-above's placement + `(rows, cols)` footprint, or `None` for the top
+    // level. Decides whether a raised portcullis here has a cell to intrude on above.
+    placement_above: Option<LevelPlacement>,
     dims_above: Option<(usize, usize)>,
 ) {
     if cell != 'D' {
@@ -363,7 +364,7 @@ pub(crate) fn spawn_door_for_cell(
     // A raised portcullis travels into the level above; it must hide when open
     // only when a cell actually sits there. Captured per cell (same for every
     // leaf), used in `door_animation_system`.
-    let cell_above = has_cell_above(config.layered_alignment, r, c, (rows, cols), dims_above);
+    let cell_above = has_cell_above(placement, placement_above, r, c, dims_above);
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     // The leaf-anchor Y for this level; every edge centre / pivot below derives
@@ -456,35 +457,31 @@ pub(crate) fn spawn_door_for_cell(
     }
 }
 
-/// Whether a cell sits directly above `(r, c)` on this `dims`-sized level, on the
-/// next level up (`dims_above`), under `alignment`. The inverse of
-/// [`LevelPlacement`]'s X/Z offset — the same mapping as
-/// `crate::world::levels::aligned_landing`: `Centre` insets by half the per-axis
-/// size difference, `Edge` keeps the cell. `None` `dims_above` (the top level) has
-/// nothing above. Under a uniform stack the dims are equal, so the inset is zero
-/// and every cell has one (matching the old `level + 1 < level_count`); under
-/// taper a smaller upper grid may leave a lower cell uncovered.
+/// Whether a cell sits directly above this door's `(r, c)` on the next level up.
+/// Maps the door's grid index to the level-above cell sharing its world XZ by the
+/// difference of the two levels' base offsets (read straight off their placements,
+/// so it's correct under any alignment — `Edge`, `Centre`, or a per-level `Random`
+/// mix — the same down-mapping the support poles use). `None` `placement_above` /
+/// `dims_above` (the top level) has nothing above. Under a uniform stack the offset
+/// difference is zero and every cell has one (the old `level + 1 < level_count`);
+/// under taper a smaller upper grid may leave a lower cell uncovered.
 fn has_cell_above(
-    alignment: LayeredAlignment,
+    placement: LevelPlacement,
+    placement_above: Option<LevelPlacement>,
     r: usize,
     c: usize,
-    dims: (usize, usize),
     dims_above: Option<(usize, usize)>,
 ) -> bool {
-    let Some((rows_above, cols_above)) = dims_above else {
+    let (Some(above), Some((rows_above, cols_above))) = (placement_above, dims_above) else {
         return false;
     };
-    let (row_inset, col_inset) = match alignment {
-        LayeredAlignment::Edge => (0, 0),
-        LayeredAlignment::Centre => (
-            (dims.0 - rows_above) / 2,
-            (dims.1 - cols_above) / 2,
-        ),
-    };
-    let (Some(ur), Some(uc)) = (r.checked_sub(row_inset), c.checked_sub(col_inset)) else {
-        return false;
-    };
-    ur < rows_above && uc < cols_above
+    // Centring offsets are whole multiples of `CELL_SIZE`, so the shift is an
+    // integer cell count (0 under edge alignment).
+    let drow = ((placement.world_z(0.0) - above.world_z(0.0)) / CELL_SIZE).round() as isize;
+    let dcol = ((placement.world_x(0.0) - above.world_x(0.0)) / CELL_SIZE).round() as isize;
+    let ur = r as isize + drow;
+    let uc = c as isize + dcol;
+    ur >= 0 && uc >= 0 && (ur as usize) < rows_above && (uc as usize) < cols_above
 }
 
 /// Smoothstep easing — the same `t·t·(3 − 2t)` curve [`crate::state::Animation`]
@@ -606,21 +603,33 @@ mod tests {
         m
     }
 
+    use crate::state::LayeredAlignment;
+
+    /// A placement for `level` of a square `dims`-cell grid over a square `base`-cell
+    /// bottom under `align` (floor at y = 0, fixed seed — concrete alignments ignore
+    /// it). A two-level chain `[base, dims]` is enough for the `(level, level+1)`
+    /// pairs these tests build.
+    fn place(level: usize, dims: usize, base: usize, align: LayeredAlignment) -> LevelPlacement {
+        let chain = [(base, base), (dims, dims)];
+        LevelPlacement::for_level(level, &chain, align, 0.0, 0)
+    }
+
     #[test]
     fn has_cell_above_top_level_has_nothing_above() {
-        // `None` dims_above = the top level: a raised portcullis there rises into
-        // open sky, so it never has a cell above.
-        assert!(!has_cell_above(LayeredAlignment::Edge, 2, 2, (5, 5), None));
-        assert!(!has_cell_above(LayeredAlignment::Centre, 2, 2, (5, 5), None));
+        // `None` placement/dims above = the top level: a raised portcullis there
+        // rises into open sky, so it never has a cell above.
+        let l = place(0, 5, 5, LayeredAlignment::Edge);
+        assert!(!has_cell_above(l, None, 2, 2, None));
     }
 
     #[test]
     fn has_cell_above_uniform_stack_every_cell_is_covered() {
-        // Equal footprints (no taper): zero inset, so every cell has one above —
-        // the old `level + 1 < level_count` behaviour.
+        // Equal footprints (no taper): zero offset difference, so every cell has one
+        // above — the old `level + 1 < level_count` behaviour.
+        let l = place(0, 5, 5, LayeredAlignment::Edge);
+        let above = place(1, 5, 5, LayeredAlignment::Edge);
         for (r, c) in [(0, 0), (2, 2), (4, 4)] {
-            assert!(has_cell_above(LayeredAlignment::Edge, r, c, (5, 5), Some((5, 5))));
-            assert!(has_cell_above(LayeredAlignment::Centre, r, c, (5, 5), Some((5, 5))));
+            assert!(has_cell_above(l, Some(above), r, c, Some((5, 5))));
         }
     }
 
@@ -628,7 +637,9 @@ mod tests {
     fn has_cell_above_edge_taper_leaves_the_far_cells_uncovered() {
         // Edge alignment corner-stacks the smaller upper grid at (0, 0), so only
         // the low-row/low-col cells are covered.
-        let here = |r, c| has_cell_above(LayeredAlignment::Edge, r, c, (7, 7), Some((5, 5)));
+        let l = place(0, 7, 7, LayeredAlignment::Edge);
+        let above = place(1, 5, 7, LayeredAlignment::Edge);
+        let here = |r, c| has_cell_above(l, Some(above), r, c, Some((5, 5)));
         assert!(here(0, 0), "the shared corner is covered");
         assert!(here(4, 4), "the last covered cell");
         assert!(!here(5, 5), "past the smaller grid → a gap above");
@@ -639,11 +650,29 @@ mod tests {
     fn has_cell_above_centre_taper_matches_the_inset() {
         // Centre insets the upper grid by half the size difference (1 here), so the
         // covered band is cells [1, 5] on each axis (mirrors `aligned_landing`).
-        let here = |r, c| has_cell_above(LayeredAlignment::Centre, r, c, (7, 7), Some((5, 5)));
+        let l = place(0, 7, 7, LayeredAlignment::Centre);
+        let above = place(1, 5, 7, LayeredAlignment::Centre);
+        let here = |r, c| has_cell_above(l, Some(above), r, c, Some((5, 5)));
         assert!(!here(0, 0), "the outer ring sits over a gap");
         assert!(here(1, 1), "first covered cell after the inset");
         assert!(here(5, 5), "last covered cell");
         assert!(!here(6, 6), "the far outer ring sits over a gap");
+    }
+
+    #[test]
+    fn has_cell_above_handles_a_mixed_random_alignment_pair() {
+        // Under `Random` consecutive levels can differ: an Edge level (offset 0)
+        // below a Centre level (offset +1 cell) shifts the cell-above mapping. The
+        // door reads it straight off the two placements, so it stays correct.
+        let l = place(0, 7, 7, LayeredAlignment::Edge); // corner-stacked
+        let above = place(1, 5, 7, LayeredAlignment::Centre); // centred (inset 1)
+        let here = |r, c| has_cell_above(l, Some(above), r, c, Some((5, 5)));
+        // The 5×5 upper sits over bottom cells [1, 5]; a door at (1,1) is covered,
+        // one at (0,0) is under the gap.
+        assert!(here(1, 1));
+        assert!(here(5, 5));
+        assert!(!here(0, 0));
+        assert!(!here(6, 6));
     }
 
     #[test]

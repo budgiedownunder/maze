@@ -41,6 +41,8 @@ const MULTILEVEL_DEMOS: &[&str] = &[
     "multilevel_portcullis",
     "multilevel_pool_hatch",
     "multilevel_lava_island",
+    "multilevel_random_base",
+    "multilevel_random_level",
 ];
 
 /// The requested gallery focus from `MAZE_DEMO`, or `None` when it is unset or

@@ -123,7 +123,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.levels.difficulty_change` | Text (`same` / `easier` / `harder`) | `easier` | (config-file only — how difficulty changes as the player climbs; `easier` = hardest at the bottom, easing upward (enemy count is the lever, footprint uniform); `harder` = the reverse; `same` = every level equally hard; unknown values fall back to `easier`; inert when `count == 1`)
 |                | `game.play3d.<difficulty>.levels.reset_bag` | Boolean | `true` | (config-file only — whether the player's bag (keys etc.) resets at each level; `true` = every level self-contained; `false` carries the whole bag forward; inert when `count == 1`)
 |                | `game.play3d.<difficulty>.levels.taper` | Boolean | `false` | (config-file only — when `true`, upper levels get progressively smaller footprints (positioned per `alignment`) so the stack opens up and a climb eases as it rises; `false` keeps every level the full footprint. Operator choice, independent of `sky_type`; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.alignment` | Text (`edge` / `centre` / `random`) | `edge` | (config-file only — how a smaller upper (tapered) level sits over the level below; `edge` corner-aligns all layers, `centre` centres each, `random` lets the generator pick per level; unknown values fall back to `edge`; inert when `count == 1` or `taper` is off)
+|                | `game.play3d.<difficulty>.levels.alignment` | Text (`edge` / `centre` / `random_base` / `random_level`) | `edge` | (config-file only — how a smaller upper (tapered) level sits over the level below; `edge` corner-aligns all layers, `centre` centres each; the random modes pick edge/centre per level from the seed — `random_base` measures each from the ground layer (a corner-stacked level may overhang a centred one below it), `random_level` measures each within the level below (every level nests); unknown values fall back to `edge`; inert when `count == 1` or `taper` is off)
 |                | `game.play3d.<difficulty>.levels.perimeter_random` | Boolean | `false` | (config-file only — when `true`, each level randomises its perimeter walls on/off independently; when `false`, every level uses the difficulty's `perimeter_walls`; inert when `count == 1`)
 |                | `game.play3d.<difficulty>.levels.hide_completed_enemies` | Boolean | `false` | (config-file only — when `true`, a completed lower level's enemies are despawned once the player climbs past it; when `false`, they idle in place; inert when `count == 1`)
 |                | `game.play3d.<difficulty>.levels.top.sky_type` / `.perimeter_walls` | Text / Boolean | inherit base | (config-file only — optional `[…levels.top]` scene override for the final (top) level; each field falls back to the base difficulty's value when unset; only meaningful when `count > 1`)
@@ -246,7 +246,7 @@ wall_material_variation = true
 [game.play3d.easy.levels]
 # Multi-level run settings. count = 1 is a single-level game (the default).
 # finish_type: ladder | portal | random. difficulty_change: same | easier |
-# harder. alignment: edge | centre | random. perimeter_random randomises each
+# harder. alignment: edge | centre | random_base | random_level. perimeter_random randomises each
 # level's perimeter walls when true. hide_completed_enemies despawns a lower
 # level's enemies once you climb past it. The optional [levels.top] table
 # overrides the top level's sky_type / perimeter_walls when count > 1.

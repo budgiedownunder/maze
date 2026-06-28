@@ -44,7 +44,7 @@ pub(crate) fn start_level_transition(
 ) {
     let current = run.current_level;
     let (fr, fc) = (state.game.player_row(), state.game.player_col());
-    let cur_placement = level_placement(run, config, current, &state.grid);
+    let cur_placement = level_placement(run, config, current);
     let finish_xz = cell_world_xz(fr, fc, cur_placement);
 
     // Parse the next level for its start cell + pose.
@@ -53,7 +53,7 @@ pub(crate) fn start_level_transition(
         .expect("multi-level run holds maze JSON produced by the generator");
     let next_grid = next_game.grid().to_vec();
     let (sr, sc) = (next_game.player_row(), next_game.player_col());
-    let next_placement = level_placement(run, config, next_index, &next_grid);
+    let next_placement = level_placement(run, config, next_index);
     let start_xz = cell_world_xz(sr, sc, next_placement);
     // Arrive facing the start cell's default direction (as at game start) — the
     // same pose `advance_to_next_level` will settle on.
@@ -101,24 +101,17 @@ pub(crate) fn start_level_transition(
     });
 }
 
-/// `LevelPlacement` for `level`, sized from `grid` against the run's base footprint.
-fn level_placement(
-    run: &MultiLevelRun,
-    config: &GameConfig,
-    level: usize,
-    grid: &[Vec<char>],
-) -> LevelPlacement {
+/// `LevelPlacement` for `level`, from the run's per-level footprints + alignment.
+fn level_placement(run: &MultiLevelRun, config: &GameConfig, level: usize) -> LevelPlacement {
     LevelPlacement::for_level(
         level,
-        grid.len(),
-        grid.first().map_or(0, |row| row.len()),
-        run.base_dims.0,
-        run.base_dims.1,
+        &run.level_dims,
         config.layered_alignment,
         run.level_bases
             .get(level)
             .copied()
             .unwrap_or(level as f32 * crate::world::LEVEL_HEIGHT),
+        config.seed,
     )
 }
 

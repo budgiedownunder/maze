@@ -80,34 +80,78 @@ pub(crate) struct LevelPlacement {
     offset_z: f32,
 }
 
+/// The X/Z offset (in **cells**, `(row_offset, col_offset)`) of `level`'s grid
+/// from the base origin, given every level's `(rows, cols)` footprint (`dims`,
+/// bottom level at index 0) under `alignment` for a run seeded with `seed`. This is
+/// the single source the renderer ([`LevelPlacement::for_level`]) and the generator
+/// ([`crate::world::levels::aligned_landing`]) both read, so the layout they each
+/// compute agrees and a ladder lands.
+///
+/// `Edge` → corner (zero); `Centre` → centred on the base. The two random modes
+/// flip a per-level edge/centre coin ([`LayeredAlignment::resolve`]) and differ
+/// only in the anchor:
+/// * `RandomBase` measures each level from the **base**, so a corner-stacked level
+///   can stick out past a centred one below it.
+/// * `RandomLevel` measures each level **within the level below** (a prefix sum
+///   down the stack), so a smaller level always nests inside its parent.
+pub(crate) fn level_offset_cells(
+    level: usize,
+    dims: &[(usize, usize)],
+    alignment: LayeredAlignment,
+    seed: u64,
+) -> (isize, isize) {
+    let base = dims.first().copied().unwrap_or((0, 0));
+    // Inset of a `(r, c)` grid placed within an enclosing `(er, ec)` one, per the
+    // edge/centre choice (centre = half the size difference; edge = flush corner).
+    let inset = |enclosing: (usize, usize), inner: (usize, usize), centre: bool| -> (isize, isize) {
+        if centre {
+            (
+                (enclosing.0 as isize - inner.0 as isize) / 2,
+                (enclosing.1 as isize - inner.1 as isize) / 2,
+            )
+        } else {
+            (0, 0)
+        }
+    };
+    let is_centre = |l: usize| alignment.resolve(seed, l) == LayeredAlignment::Centre;
+    match alignment {
+        // Each level offset within the level directly below it — accumulate down.
+        LayeredAlignment::RandomLevel => {
+            let mut off = (0isize, 0isize);
+            for l in 1..=level.min(dims.len().saturating_sub(1)) {
+                let (dr, dc) = inset(dims[l - 1], dims[l], is_centre(l));
+                off.0 += dr;
+                off.1 += dc;
+            }
+            off
+        }
+        // Edge / Centre / RandomBase: each level offset from the base directly.
+        _ => {
+            let cur = dims.get(level).copied().unwrap_or(base);
+            inset(base, cur, is_centre(level))
+        }
+    }
+}
+
 impl LevelPlacement {
-    /// The placement for `level`, whose grid is `rows × cols`, stacked over a
-    /// bottom level of `base_rows × base_cols` under `alignment`, with its floor at
-    /// `base_y` (the precomputed [`level_bases`] entry). `Edge` keeps the X/Z
-    /// offset at zero (corner-aligned); `Centre` shifts a smaller grid in by half
-    /// the size difference so it sits centred over the bottom. (`x` maps to
-    /// columns, `z` to rows.)
+    /// The placement for `level` given every level's footprint (`dims`, bottom level
+    /// at index 0) under `alignment` for a run seeded with `seed`, with its floor at
+    /// `base_y` (the precomputed [`level_bases`] entry). The X/Z offset comes from
+    /// [`level_offset_cells`] — the same source the generator uses — so the layouts
+    /// agree. (`x` maps to columns, `z` to rows.)
     pub(crate) fn for_level(
         level: usize,
-        rows: usize,
-        cols: usize,
-        base_rows: usize,
-        base_cols: usize,
+        dims: &[(usize, usize)],
         alignment: LayeredAlignment,
         base_y: f32,
+        seed: u64,
     ) -> Self {
-        let (offset_x, offset_z) = match alignment {
-            LayeredAlignment::Edge => (0.0, 0.0),
-            LayeredAlignment::Centre => (
-                base_cols.saturating_sub(cols) as f32 / 2.0 * CELL_SIZE,
-                base_rows.saturating_sub(rows) as f32 / 2.0 * CELL_SIZE,
-            ),
-        };
+        let (row_off, col_off) = level_offset_cells(level, dims, alignment, seed);
         Self {
             level,
             base_y,
-            offset_x,
-            offset_z,
+            offset_x: col_off as f32 * CELL_SIZE,
+            offset_z: row_off as f32 * CELL_SIZE,
         }
     }
 
@@ -346,12 +390,10 @@ pub(crate) fn advance_to_next_level(
     // animation is a later refinement — this is the placement snap.
     let placement = LevelPlacement::for_level(
         next_index,
-        state.grid.len(),
-        state.grid.first().map_or(0, |row| row.len()),
-        run.base_dims.0,
-        run.base_dims.1,
+        &run.level_dims,
         config.layered_alignment,
         run.level_bases.get(next_index).copied().unwrap_or(next_index as f32 * LEVEL_HEIGHT),
+        config.seed,
     );
     state.camera_offset = placement.camera_offset();
     run.current_level = next_index;
@@ -572,9 +614,10 @@ fn spawn_level(
     // Rocks each lava cell on this level gets — likewise a global across-levels
     // budget computed once in `spawn_world`. See `lava::run_lava_rocks`.
     lava_rocks: usize,
-    // The level-above's `(rows, cols)` footprint, or `None` for the top level —
-    // forwarded to the door spawn so a raised portcullis under a taper gap (no cell
-    // above its world XZ) stays visible instead of hiding.
+    // The level-above's placement + `(rows, cols)` footprint, or `None` for the top
+    // level — forwarded to the door spawn so a raised portcullis under a taper gap
+    // (no cell above its world XZ) stays visible instead of hiding.
+    placement_above: Option<LevelPlacement>,
     dims_above: Option<(usize, usize)>,
 ) {
     // Row-major scan order matches `MazeGame`'s enemy-id assignment, so bumping
@@ -645,7 +688,7 @@ fn spawn_level(
             // Doors are spawned here (not inside `spawn_objects_for_cell`)
             // because the panel borrows the cell's wall material from
             // `wall_assets`.
-            objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, placement, dims_above);
+            objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, placement, placement_above, dims_above);
             // The ladder finish's roof tile carries the climb's opening (holed) so
             // the ladder isn't sealed under a solid ceiling on a roofed level.
             let holed = cell == 'F' && finish_is_ladder_here;
@@ -730,13 +773,23 @@ fn spawn_underside_seal(
 /// across levels so the live game's collection events never disturb an upper level's
 /// matching marker.
 fn multilevel_demo_levels(alignment: LayeredAlignment) -> Vec<String> {
+    multilevel_demo_grids(alignment).iter().map(|g| grid_to_json(g)).collect()
+}
+
+/// The three char grids (bottom → top) of the walk demo for `alignment` — exposed
+/// separately so a caller can post-process them (e.g. the random demo strips the
+/// enemies) before serialising.
+fn multilevel_demo_grids(alignment: LayeredAlignment) -> [Vec<Vec<char>>; 3] {
     let build = |rows: &[&str]| -> Vec<Vec<char>> {
         rows.iter().map(|row| row.chars().collect()).collect()
     };
     let (bottom, middle, top) = match alignment {
         // Corner-aligned: cell (r,c) maps to the same world XZ on every level, so a
         // ladder needs the next start at the *same* grid (r,c) as the finish.
-        LayeredAlignment::Edge => (
+        // The random modes reuse these grids — their per-level alignment is resolved
+        // from the seed at render time, and the renderer auto-detects ladder vs portal
+        // per level, so the hand-placed S/F lineup needn't match any one alignment.
+        LayeredAlignment::Edge | LayeredAlignment::RandomBase | LayeredAlignment::RandomLevel => (
             // Bottom 9×9 (live). Ladder at F(2,2) — the middle's S(2,2) is directly
             // above. Objects sit OUTSIDE the 5×5/3×3 upper footprints (rows ≥ 6) so
             // they never share an upper level's marker cell.
@@ -804,9 +857,6 @@ fn multilevel_demo_levels(alignment: LayeredAlignment) -> Vec<String> {
         ),
     };
     [bottom, middle, top]
-        .iter()
-        .map(|grid| grid_to_json(grid))
-        .collect()
 }
 
 /// Hand-built stack for the `MAZE_DEMO=multilevel_centre_hide_enemies` /
@@ -1034,6 +1084,15 @@ enum MultilevelDemo {
     /// up all the way around: the floating upper level's edges should read as solid
     /// floor edge, not glowing lava.
     LavaIsland,
+    /// `multilevel_random_base`: the tapered walk stack under `RandomBase`, so each
+    /// level resolves to `Edge` or `Centre` independently from the seed, **measured
+    /// from the base** — for eyeballing a mixed stack where a corner-stacked level can
+    /// cantilever past a centred one below it. Fixed seed chosen to mix the levels.
+    RandomBase,
+    /// `multilevel_random_level`: the SAME walk stack + seed under `RandomLevel`, so
+    /// each level is offset **within the level below** — the A/B counterpart to
+    /// `RandomBase`: same edge/centre choices, but every level nests (no overhang).
+    RandomLevel,
 }
 
 impl MultilevelDemo {
@@ -1045,6 +1104,8 @@ impl MultilevelDemo {
             MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => alignment,
             MultilevelDemo::HideEnemies { .. } | MultilevelDemo::LavaIsland => LayeredAlignment::Centre,
             MultilevelDemo::Portcullis | MultilevelDemo::PoolHatch => LayeredAlignment::Edge,
+            MultilevelDemo::RandomBase => LayeredAlignment::RandomBase,
+            MultilevelDemo::RandomLevel => LayeredAlignment::RandomLevel,
         }
     }
     /// The hand-built level stack for this demo.
@@ -1057,6 +1118,21 @@ impl MultilevelDemo {
             MultilevelDemo::Portcullis => multilevel_portcullis_demo_levels(),
             MultilevelDemo::PoolHatch => multilevel_pool_hatch_demo_levels(),
             MultilevelDemo::LavaIsland => multilevel_lava_island_demo_levels(),
+            // The walk grids with the enemies stripped (these demos are for eyeballing
+            // the mixed alignment, not combat); the per-level random alignment is
+            // applied at render time, so both random modes reuse the same grids.
+            MultilevelDemo::RandomBase | MultilevelDemo::RandomLevel => {
+                multilevel_demo_grids(self.alignment())
+                    .iter()
+                    .map(|grid| {
+                        let no_enemies: Vec<Vec<char>> = grid
+                            .iter()
+                            .map(|row| row.iter().map(|&c| if c == 'E' { ' ' } else { c }).collect())
+                            .collect();
+                        grid_to_json(&no_enemies)
+                    })
+                    .collect()
+            }
         }
     }
     /// Whether to wall the perimeter. Off for the open see-through demos; on for the
@@ -1090,7 +1166,26 @@ impl MultilevelDemo {
             _ => None,
         }
     }
+    /// Seed this demo forces, if any. The random-alignment demo pins a seed that
+    /// resolves its three levels to a *mix* of edge / centre (so the demo actually
+    /// shows both, not an all-edge stack); see `RANDOM_DEMO_SEED`. `None` leaves the
+    /// configured seed untouched.
+    fn seed_override(self) -> Option<u64> {
+        match self {
+            MultilevelDemo::RandomBase | MultilevelDemo::RandomLevel => Some(RANDOM_DEMO_SEED),
+            _ => None,
+        }
+    }
 }
+
+/// Seed shared by the `multilevel_random_base` / `multilevel_random_level` demos,
+/// chosen so `LayeredAlignment::resolve` gives a visible mix across the stack's
+/// levels (level 1 and level 2 differ). Using the SAME seed for both makes them a
+/// clean A/B — identical edge/centre choices, differing only in base-anchored (can
+/// overhang) vs parent-anchored (nests). Asserted by a test so a future hash change
+/// that collapses the mix is caught. With this seed the levels resolve bottom→top as
+/// edge, edge, centre, centre.
+const RANDOM_DEMO_SEED: u64 = 19;
 
 /// A deterministic per-level perimeter coin-flip for `perimeter_random`. Hashed
 /// from the level's grid + index (FNV-1a) so the same maze always randomises the
@@ -1210,6 +1305,8 @@ pub(crate) fn spawn_world(
             Ok("multilevel_portcullis") => Some(MultilevelDemo::Portcullis),
             Ok("multilevel_pool_hatch") => Some(MultilevelDemo::PoolHatch),
             Ok("multilevel_lava_island") => Some(MultilevelDemo::LavaIsland),
+            Ok("multilevel_random_base") => Some(MultilevelDemo::RandomBase),
+            Ok("multilevel_random_level") => Some(MultilevelDemo::RandomLevel),
             _ => None,
         }
     };
@@ -1243,6 +1340,7 @@ pub(crate) fn spawn_world(
             hide_completed_enemies: demo.hide_completed_enemies(),
             sky_type: demo.sky_type_override().unwrap_or(config.sky_type),
             door_style: demo.door_style_override().unwrap_or(config.door_style),
+            seed: demo.seed_override().unwrap_or(config.seed),
             ..(*config).clone()
         }
     } else {
@@ -1427,6 +1525,15 @@ pub(crate) fn spawn_world(
         .collect();
     let level_has_pool: Vec<bool> = level_meta.iter().map(|(p, _, _)| *p).collect();
     let bases = level_bases(&level_has_pool);
+    // Each level's placement, so a level can read the one directly above it (the
+    // door spawn maps a cell up to the level above to decide a portcullis hide).
+    // Resolves any per-level `Random` alignment from `config.seed` — the same
+    // resolution the generator used, so the geometry agrees.
+    let level_placements: Vec<LevelPlacement> = (0..level_dims.len())
+        .map(|level| {
+            LevelPlacement::for_level(level, &level_dims, config.layered_alignment, bases[level], config.seed)
+        })
+        .collect();
     // The additive sparkle-ray overdraw is the mobile-GPU pain point, and EVERY
     // level's treasure renders at once, so the ray budget is global to the whole
     // stack: bound it by the total treasure across all levels, not per level. A
@@ -1468,15 +1575,7 @@ pub(crate) fn spawn_world(
                     .grid()
                     .to_vec()
             };
-            let placement = LevelPlacement::for_level(
-                level,
-                lgrid.len(),
-                lgrid.first().map_or(0, |row| row.len()),
-                base_dims.0,
-                base_dims.1,
-                config.layered_alignment,
-                bases[level],
-            );
+            let placement = level_placements[level];
             (
                 cell_world_xz(&lgrid, 'S', placement),
                 cell_world_xz(&lgrid, 'F', placement),
@@ -1548,17 +1647,9 @@ pub(crate) fn spawn_world(
         let below_roofed = level >= 1 && config.sky_type.is_enclosed();
         if level == 0 {
             // The live level reuses the already-parsed grid + per-cell overrides.
-            let placement = LevelPlacement::for_level(
-                0,
-                base_dims.0,
-                base_dims.1,
-                base_dims.0,
-                base_dims.1,
-                config.layered_alignment,
-                bases[0],
-            );
+            let placement = level_placements[0];
             let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_dims.get(level + 1).copied());
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1566,17 +1657,9 @@ pub(crate) fn spawn_world(
                 .expect("multi-level maze JSON is host-validated or a hardcoded demo");
             let level_grid = level_game.grid().to_vec();
             let level_cells = level_game.cell_entities().clone();
-            let placement = LevelPlacement::for_level(
-                level,
-                level_grid.len(),
-                level_grid.first().map_or(0, |row| row.len()),
-                base_dims.0,
-                base_dims.1,
-                config.layered_alignment,
-                bases[level],
-            );
+            let placement = level_placements[level];
             let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_dims.get(level + 1).copied());
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
         }
     }
 
@@ -1600,21 +1683,33 @@ pub(crate) fn spawn_world(
                         .expect("multi-level maze JSON is host-validated or a hardcoded demo");
                     (lg.grid().to_vec(), lg.cell_entities().clone())
                 };
-                let placement = LevelPlacement::for_level(
-                    level,
-                    g.len(),
-                    g.first().map_or(0, |r| r.len()),
-                    base_dims.0,
-                    base_dims.1,
-                    config.layered_alignment,
-                    bases[level],
-                );
-                (g, cells, placement)
+                (g, cells, level_placements[level])
             })
             .collect::<Vec<_>>();
         // A perimeter wall carries the upper floor's edges only when it's solid (a
         // water/lava perimeter is a non-occluding pool ring and can't).
         let perimeter_solid = config.perimeter_walls && !config.wall_type.is_non_occluding();
+        // The world-Y a pole hanging under upper level `upper` must reach at (x, z):
+        // the floor of the highest level below it whose footprint actually sits under
+        // that point. A tapered / mixed-aligned (edge↔centre) upper corner can
+        // overhang the level immediately below, so the pole has to keep going past it
+        // to the level that visually carries that spot rather than stopping in mid-air
+        // at the nearer level's floor height. The base level always sits under it.
+        let floor_below = |x: f32, z: f32, upper: usize| -> f32 {
+            for l in (0..upper).rev() {
+                let (gl, _, pl) = &level_info[l];
+                let rows_l = gl.len();
+                let cols_l = gl.first().map_or(0, |r| r.len());
+                let within = x >= pl.world_x(0.0)
+                    && x <= pl.world_x(cols_l as f32 * CELL_SIZE)
+                    && z >= pl.world_z(0.0)
+                    && z <= pl.world_z(rows_l as f32 * CELL_SIZE);
+                if within {
+                    return bases[l];
+                }
+            }
+            bases[0]
+        };
         for i in 0..level_count - 1 {
             let (gi, ci, pi) = &level_info[i];
             let (gj, _, pj) = &level_info[i + 1];
@@ -1652,7 +1747,7 @@ pub(crate) fn spawn_world(
                 } else {
                     pj.world_z(cr as f32 * CELL_SIZE + CELL_SIZE) - inset
                 };
-                support_pole::spawn_support_pole(&mut commands, &pole_assets, x, z, bases[i], bases[i + 1]);
+                support_pole::spawn_support_pole(&mut commands, &pole_assets, x, z, floor_below(x, z, i + 1), bases[i + 1]);
             }
         }
     }
@@ -1662,15 +1757,7 @@ pub(crate) fn spawn_world(
     // here — non-functional showpieces (their dead-end landmark is suppressed via
     // `dead_end_skip`, so the rig stands alone in its alcove).
     if let Some(focus) = gallery_focus.as_deref() {
-        let placement = LevelPlacement::for_level(
-            0,
-            base_dims.0,
-            base_dims.1,
-            base_dims.0,
-            base_dims.1,
-            config.layered_alignment,
-            bases[0],
-        );
+        let placement = level_placements[0];
         for (rig, r, c) in gallery::finish_rig_cells(focus) {
             match rig {
                 FinishType::Portal => objects::finish::portal::spawn_portal(
@@ -2003,21 +2090,24 @@ mod multi_level_tests {
         use crate::world::{LevelPlacement, CELL_SIZE, LEVEL_HEIGHT};
         use bevy::prelude::Vec3;
 
+        // A 9→7→5 taper chain (offsets are base-relative for Edge/Centre, so the
+        // intermediate level's size doesn't affect the queried level).
+        let chain = [(9, 9), (7, 7), (5, 5)];
         // Edge: never any X/Z offset, just the Y lift.
-        let edge = LevelPlacement::for_level(2, 5, 5, 9, 9, LayeredAlignment::Edge, 2.0 * LEVEL_HEIGHT);
+        let edge = LevelPlacement::for_level(2, &chain, LayeredAlignment::Edge, 2.0 * LEVEL_HEIGHT, 0);
         assert_eq!(edge.world_x(1.0), 1.0);
         assert_eq!(edge.world_z(1.0), 1.0);
         assert_eq!(edge.camera_offset(), Vec3::new(0.0, 2.0 * LEVEL_HEIGHT, 0.0));
 
         // Centre: a 5×5 grid centred in a 9×9 base shifts in by (9-5)/2 = 2 cells.
-        let centre = LevelPlacement::for_level(1, 5, 5, 9, 9, LayeredAlignment::Centre, LEVEL_HEIGHT);
+        let centre = LevelPlacement::for_level(2, &chain, LayeredAlignment::Centre, LEVEL_HEIGHT, 0);
         let shift = 2.0 * CELL_SIZE;
         assert_eq!(centre.world_x(1.0), 1.0 + shift);
         assert_eq!(centre.world_z(1.0), 1.0 + shift);
         assert_eq!(centre.camera_offset(), Vec3::new(shift, LEVEL_HEIGHT, shift));
 
         // The base level (same dims) has zero X/Z offset under either mode.
-        let base = LevelPlacement::for_level(0, 9, 9, 9, 9, LayeredAlignment::Centre, 0.0);
+        let base = LevelPlacement::for_level(0, &chain, LayeredAlignment::Centre, 0.0, 0);
         assert_eq!(base.camera_offset(), Vec3::ZERO);
     }
 
@@ -2168,6 +2258,31 @@ mod multi_level_tests {
             (0..tc).all(|c| g[0][c] == 'W' && g[tr - 1][c] == 'W')
                 && (0..tr).all(|r| g[r][0] == 'W' && g[r][tc - 1] == 'W'),
             "every upper perimeter cell is a pool cell",
+        );
+    }
+
+    #[test]
+    fn the_random_demos_are_random_aligned_enemy_free_and_their_seed_mixes_the_levels() {
+        use super::{MultilevelDemo, RANDOM_DEMO_SEED};
+        use crate::state::LayeredAlignment;
+        let base = MultilevelDemo::RandomBase;
+        let level = MultilevelDemo::RandomLevel;
+        assert_eq!(base.alignment(), LayeredAlignment::RandomBase);
+        assert_eq!(level.alignment(), LayeredAlignment::RandomLevel);
+        // Both demos share the walk grids, three levels, enemies stripped (they're for
+        // eyeballing alignment, not combat).
+        for demo in [base, level] {
+            let levels = demo.levels();
+            assert_eq!(levels.len(), 3, "the walk stack is three levels");
+            assert!(levels.iter().all(|json| !json.contains("\"E\"")), "no enemies");
+        }
+        // The shared pinned seed resolves the upper two levels to DIFFERENT alignments,
+        // so each demo shows a mix rather than collapsing to an all-edge stack — and,
+        // since both modes share the coin, the A/B differs only in anchoring.
+        assert_ne!(
+            LayeredAlignment::RandomBase.resolve(RANDOM_DEMO_SEED, 1),
+            LayeredAlignment::RandomBase.resolve(RANDOM_DEMO_SEED, 2),
+            "the demo seed must mix edge + centre across levels 1 and 2",
         );
     }
 
