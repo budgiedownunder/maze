@@ -2264,6 +2264,43 @@ pub async fn score_delete_user_cascades_boards_of_owned_mazes(store: &mut Box<dy
     assert!(store.user_history(bob.id, 10, 0).await.unwrap().is_empty());
 }
 
+/// Clearing a leaderboard removes only the targeted subject's rows, returns the
+/// number removed, and is a no-op (0) on an already-empty board.
+pub async fn score_clear_resets_only_the_targeted_board(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_a = fixture_maze(store, &alice, "maze-a").await;
+    let maze_b = fixture_maze(store, &alice, "maze-b").await;
+    // Two runs on maze A, one on maze B, one on a curated challenge.
+    for s in [5u64, 3] {
+        store
+            .record_score(&score_entry(alice.id, Some(&maze_a), None, s, 1_000))
+            .await
+            .expect("record maze-a run");
+    }
+    store
+        .record_score(&score_entry(alice.id, Some(&maze_b), None, 9, 1_000))
+        .await
+        .expect("record maze-b run");
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 7, 1_000))
+        .await
+        .expect("record challenge run");
+
+    // Clearing maze A removes exactly its two rows; B and the challenge survive.
+    assert_eq!(store.clear_maze_scores(&maze_a).await.expect("clear maze a"), 2);
+    assert!(store.maze_leaderboard(&maze_a, HIGHEST, 10, 0, false).await.unwrap().is_empty());
+    assert_eq!(store.maze_leaderboard(&maze_b, HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+    assert_eq!(store.challenge_leaderboard("c:1", HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+
+    // Clearing an already-empty board is a no-op returning 0.
+    assert_eq!(store.clear_maze_scores(&maze_a).await.expect("clear empty board"), 0);
+
+    // Clearing the challenge removes its row; maze B still stands.
+    assert_eq!(store.clear_challenge_scores("c:1").await.expect("clear challenge"), 1);
+    assert!(store.challenge_leaderboard("c:1", HIGHEST, 10, 0, false).await.unwrap().is_empty());
+    assert_eq!(store.maze_leaderboard(&maze_b, HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+}
+
 /// `include_usernames` resolves each player's name on a board; omitting it
 /// leaves `username` unset — regardless of backend (SqlStore joins `users`,
 /// FileStore reads the player files).

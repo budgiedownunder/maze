@@ -398,6 +398,16 @@ pub trait ScoreStore {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ScoreEntry>, Error>;
+    /// Deletes every score recorded against a user maze, resetting its
+    /// leaderboard to empty. Returns the number of rows removed (0 if the board
+    /// was already empty). Authorization (maze ownership) is the caller's
+    /// responsibility — this clears unconditionally by subject.
+    async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, Error>;
+    /// Deletes every score recorded against a curated/shared challenge, resetting
+    /// its leaderboard to empty. Returns the number of rows removed. Authorization
+    /// (admin) is the caller's responsibility — this clears unconditionally by
+    /// subject.
+    async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error>;
 }
 
 /// Enforces the dual-keyed subject invariant for a [`ScoreEntry`]: exactly one

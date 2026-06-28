@@ -833,6 +833,16 @@ mod test_definitions {
             matched.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at).then(b.id.cmp(&a.id)));
             Ok(matched.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
+        async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, StoreError> {
+            let before = self.scores.len();
+            self.scores.retain(|e| e.maze_id.as_deref() != Some(maze_id));
+            Ok((before - self.scores.len()) as u64)
+        }
+        async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, StoreError> {
+            let before = self.scores.len();
+            self.scores.retain(|e| e.challenge.as_deref() != Some(challenge));
+            Ok((before - self.scores.len()) as u64)
+        }
     }
 
     /// Orders two score entries by `ordering`, mirroring the FileStore /

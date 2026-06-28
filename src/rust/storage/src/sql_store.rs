@@ -4426,6 +4426,24 @@ impl ScoreStore for SqlStore {
         .map_err(map_sqlx_err)?;
         rows.iter().map(score_entry_from_row).collect()
     }
+
+    async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, Error> {
+        let result = sqlx::query(&q(self.kind, "DELETE FROM score_history WHERE maze_id = ?"))
+            .bind(maze_id)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
+    }
+
+    async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error> {
+        let result = sqlx::query(&q(self.kind, "DELETE FROM score_history WHERE challenge = ?"))
+            .bind(challenge)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
+    }
 }
 
 impl Store for SqlStore {}

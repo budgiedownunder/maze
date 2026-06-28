@@ -879,6 +879,12 @@ async fn score_delete_maze_cascades_its_board_not_challenge_rows() {
 }
 
 #[tokio::test]
+async fn score_clear_resets_only_the_targeted_board() {
+    let mut s = fresh_store().await;
+    contract::score_clear_resets_only_the_targeted_board(&mut s).await;
+}
+
+#[tokio::test]
 async fn score_delete_user_cascades_boards_of_owned_mazes() {
     let mut s = fresh_store().await;
     contract::score_delete_user_cascades_boards_of_owned_mazes(&mut s).await;

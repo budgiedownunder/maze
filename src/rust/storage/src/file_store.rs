@@ -393,6 +393,23 @@ impl FileStore {
         Ok(entries)
     }
 
+    // Deletes every score-history file whose entry matches `pred`, returning the
+    // number removed. Shared by the per-subject leaderboard clears (and reused by
+    // the user-deletion cascade where a subject test isn't enough).
+    fn delete_scores_matching(&self, pred: impl Fn(&ScoreEntry) -> bool) -> Result<u64, Error> {
+        let mut removed = 0u64;
+        for entry in self.read_all_score_entries()? {
+            if pred(&entry) {
+                let path = self.score_entry_file_path(entry.id);
+                if file_exists(&path) {
+                    fs::remove_file(&path)?;
+                    removed += 1;
+                }
+            }
+        }
+        Ok(removed)
+    }
+
     // The maze ids owned by `user_id`. A FileStore maze id is its full file
     // name (`"<name>.json"`, per `make_maze_id`), so this uses `file_name`, not
     // `file_stem`. Used to cascade-delete those mazes' score boards when the
@@ -3506,6 +3523,14 @@ impl ScoreStore for FileStore {
             .skip(offset as usize)
             .take(limit as usize)
             .collect())
+    }
+
+    async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, Error> {
+        self.delete_scores_matching(|e| e.maze_id.as_deref() == Some(maze_id))
+    }
+
+    async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error> {
+        self.delete_scores_matching(|e| e.challenge.as_deref() == Some(challenge))
     }
 }
 
