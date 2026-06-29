@@ -33,6 +33,9 @@ build_all.bat
 
 This will generate the documentation under the `_site` sub-directory.
 
+### Known build warnings
+`build_all.bat` emits a few benign `ExtractMetadata` warnings of the form `Could not resolve base documentation for '<Type>'` for the `Maze.Maui.App` types that derive from `CommunityToolkit.Mvvm` (`ObservableObject` / `IRecipient<T>`). The MVVM source generator injects a type-level `<inheritdoc/>` that DocFX — running in assembly mode — can't resolve against the external package. They're harmless (the build completes and the docs render correctly) and can't be fixed from source.
+
 ## Viewing
 To view `HTML` documentation after building, run the following from the `docfx` directory:
 
