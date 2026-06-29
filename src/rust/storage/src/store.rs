@@ -380,7 +380,7 @@ pub trait ScoreStore {
         include_usernames: bool,
     ) -> Result<Vec<ScoreboardEntry>, Error>;
     /// A page of the leaderboard for a curated/shared challenge, ranked by
-    /// `ordering`. `include_usernames` behaves as for [`maze_leaderboard`].
+    /// `ordering`. `include_usernames` behaves as for [`Self::maze_leaderboard`].
     async fn challenge_leaderboard(
         &self,
         challenge: &str,
