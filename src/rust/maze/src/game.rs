@@ -1,5 +1,8 @@
 use crate::MAX_TOTAL_FEATURES;
-use data_model::MazeDefinition;
+use data_model::{
+    CellEntity, EnemyOverride, EnemyType, HealthOverride, MazeDefinition, TreasureOverride,
+    TreasureStyle,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -224,6 +227,18 @@ pub enum GameEvent {
         /// Stable id of the collected key.
         id: u32,
     },
+    /// The player walked onto a treasure cell and it was auto-collected. `cell`
+    /// is the `(row, col)` of the treasure that was consumed so renderers can
+    /// despawn the matching visual entity directly from the event; `style` is
+    /// its visual rig and `value` the score the collection added.
+    TreasureCollected {
+        /// The treasure cell that was consumed.
+        cell: (usize, usize),
+        /// Visual style of the collected treasure.
+        style: TreasureStyle,
+        /// Score value added by collecting it.
+        value: u32,
+    },
 }
 
 /// Why a health pickup didn't apply.
@@ -318,6 +333,11 @@ pub struct Enemy {
     pub accum_ms: f32,
     /// HP inflicted on the player per same-cell collision.
     pub damage: u32,
+    /// Per-cell visual rig override for this enemy, taken from the cell's
+    /// entity override at construction. `None` means the cell carried no rig
+    /// override — the renderer falls back to its per-game default. Renderer-only:
+    /// the chase AI is identical for every rig and never reads this.
+    pub enemy_type: Option<EnemyType>,
 }
 
 impl Enemy {
@@ -444,6 +464,13 @@ pub struct MazeGameOptions {
 #[derive(Debug)]
 pub struct MazeGame {
     grid: Vec<Vec<char>>,
+    /// Per-cell entity overrides carried over from the `MazeDefinition`. The
+    /// engine reads the numeric fields it applies at runtime (a health cell's
+    /// `heal_amount`); enemy numeric/visual overrides are baked into each
+    /// `Enemy` at construction. The static visual overrides
+    /// (`health_style`/`key_holder`/`door_style`) are not consumed here — the
+    /// renderers read those straight from the definition by cell position.
+    cell_entities: HashMap<(usize, usize), Vec<CellEntity>>,
     player_row: usize,
     player_col: usize,
     direction: Direction,
@@ -491,6 +518,19 @@ pub struct MazeGame {
     /// Per-game maximum HP — also the starting HP. Heals are clamped to this
     /// value; the player can never gain HP beyond it.
     max_hp: u32,
+    /// Monotonic count of keys auto-collected over the run, feeding
+    /// [`MazeGame::score`]. Distinct from [`Self::bag`], which doors *consume* —
+    /// this only ever grows, so the score is a true progress measure. `u64` for
+    /// headroom as future reward sources fold into the score.
+    keys_collected: u64,
+    /// Monotonic running sum of collected treasure `value`s — the other half of
+    /// [`MazeGame::score`] alongside `keys_collected`. Only ever grows.
+    treasure_value_collected: u64,
+    /// Per-style tally of treasure collected over the run, kept as a small
+    /// linear list (at most one entry per [`TreasureStyle`]). Feeds the bag
+    /// display's grouped per-style chips; the summed reward half of the score
+    /// lives in `treasure_value_collected`. Only ever grows.
+    treasure_counts: Vec<(TreasureStyle, u32)>,
     /// Events produced synchronously by [`MazeGame::move_player`]
     /// (`PlayerHealed` from an auto-pickup, `PlayerDamaged` from stepping into
     /// an enemy-occupied cell) that surface on the next [`MazeGame::tick`]
@@ -507,12 +547,89 @@ const DEFAULT_ENEMY_MOVE_PERIOD_MS: f32 = 1500.0;
 /// [`MazeGameOptions`].
 const DEFAULT_ENEMY_DAMAGE: u32 = 1;
 
+/// HP restored by consuming a health pickup (`'H'`) when its cell carries no
+/// per-cell `heal_amount` override.
+const DEFAULT_HEAL_AMOUNT: u32 = 1;
+
 /// Default player maximum HP when no override is supplied via
 /// [`MazeGameOptions`].
 const DEFAULT_MAX_HP: u32 = 3;
 
 /// Real-time duration a door takes to open once unlocking begins, in milliseconds.
 const DOOR_OPEN_MS: f32 = 1000.0;
+
+/// Returns the enemy override on a cell, if its (single, for now) entity is an
+/// enemy. Cells without an entry, or whose entity is a different kind, yield
+/// `None`.
+fn enemy_override_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> Option<&EnemyOverride> {
+    match cell_entities.get(&cell).and_then(|entities| entities.first()) {
+        Some(CellEntity::Enemy(over)) => Some(over),
+        _ => None,
+    }
+}
+
+/// Returns the health override on a cell, if its (single, for now) entity is a
+/// health pickup. Cells without an entry, or whose entity is a different kind,
+/// yield `None`.
+fn health_override_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> Option<&HealthOverride> {
+    match cell_entities.get(&cell).and_then(|entities| entities.first()) {
+        Some(CellEntity::Health(over)) => Some(over),
+        _ => None,
+    }
+}
+
+/// Default reward value for a treasure cell of each type, awarded when the cell
+/// carries no explicit `value` override. Rarer types are worth more.
+const TREASURE_VALUE_SILVER: u32 = 50;
+const TREASURE_VALUE_GOLD: u32 = 100;
+const TREASURE_VALUE_JEWELS: u32 = 200;
+const TREASURE_VALUE_DIAMONDS: u32 = 400;
+
+/// The default reward value awarded for a treasure of the given type, used when
+/// the cell carries no explicit `value` override.
+fn default_treasure_value(style: TreasureStyle) -> u32 {
+    match style {
+        TreasureStyle::Silver => TREASURE_VALUE_SILVER,
+        TreasureStyle::Gold => TREASURE_VALUE_GOLD,
+        TreasureStyle::Jewels => TREASURE_VALUE_JEWELS,
+        TreasureStyle::Diamonds => TREASURE_VALUE_DIAMONDS,
+    }
+}
+
+/// Returns the treasure override on a cell, if its (single, for now) entity is
+/// a treasure. Cells without an entry, or whose entity is a different kind,
+/// yield `None`.
+fn treasure_override_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> Option<&TreasureOverride> {
+    match cell_entities.get(&cell).and_then(|entities| entities.first()) {
+        Some(CellEntity::Treasure(over)) => Some(over),
+        _ => None,
+    }
+}
+
+/// Resolves a treasure cell's effective type and reward value from its
+/// (optional) override. Style defaults to `Silver`; the value is the explicit
+/// `value` override if set, otherwise the style-derived default
+/// ([`default_treasure_value`]).
+fn treasure_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> (TreasureStyle, u32) {
+    let over = treasure_override_at(cell_entities, cell);
+    let style = over.and_then(|o| o.style).unwrap_or_default();
+    let value = over
+        .and_then(|o| o.value)
+        .unwrap_or_else(|| default_treasure_value(style));
+    (style, value)
+}
 
 impl MazeGame {
     /// Creates a game session from a `MazeDefinition` JSON string, placing the
@@ -622,15 +739,22 @@ impl MazeGame {
                     cols,
                 )
                 .unwrap_or((r, c));
+                // Resolve this enemy's tunables: per-cell override first, then
+                // the per-game default. The visual rig is carried straight from
+                // the override (the renderer falls back when it is `None`).
+                let over = enemy_override_at(&definition.cell_entities, (r, c));
                 Enemy {
                     id: idx as u32,
                     row: r,
                     col: c,
                     target_row,
                     target_col,
-                    move_period_ms: default_enemy_move_period_ms,
+                    move_period_ms: over
+                        .and_then(|o| o.move_period_ms)
+                        .unwrap_or(default_enemy_move_period_ms),
                     accum_ms: 0.0,
-                    damage: default_enemy_damage,
+                    damage: over.and_then(|o| o.damage).unwrap_or(default_enemy_damage),
+                    enemy_type: over.and_then(|o| o.enemy_type),
                 }
             })
             .collect();
@@ -645,6 +769,7 @@ impl MazeGame {
 
         Ok(MazeGame {
             grid: definition.grid,
+            cell_entities: definition.cell_entities,
             player_row: start.row,
             player_col: start.col,
             direction: Direction::None,
@@ -663,6 +788,9 @@ impl MazeGame {
             default_enemy_damage,
             hp: starting_hp,
             max_hp,
+            keys_collected: 0,
+            treasure_value_collected: 0,
+            treasure_counts: Vec::new(),
             pending_events: Vec::new(),
         })
     }
@@ -797,7 +925,11 @@ impl MazeGame {
                 // health" feedback if it wants.
                 if self.hp < self.max_hp {
                     self.grid[new_row][new_col] = ' ';
-                    let hp_after = (self.hp + 1).min(self.max_hp);
+                    // Per-cell `heal_amount` override first, else the built-in.
+                    let heal_amount = health_override_at(&self.cell_entities, (new_row, new_col))
+                        .and_then(|o| o.heal_amount)
+                        .unwrap_or(DEFAULT_HEAL_AMOUNT);
+                    let hp_after = self.hp.saturating_add(heal_amount).min(self.max_hp);
                     self.hp = hp_after;
                     self.pending_events.push(GameEvent::PlayerHealed {
                         hp_after,
@@ -822,11 +954,35 @@ impl MazeGame {
                 // the bag, and queue an event so renderers can react. The door
                 // a held key opens is unlocked later by walking onto the `'D'`.
                 if let Some(BagItem::Key { id }) = self.pickup() {
+                    self.keys_collected += 1;
                     self.pending_events.push(GameEvent::KeyCollected {
                         cell: (new_row, new_col),
                         id,
                     });
                 }
+                self.apply_collision_at_player_cell()
+                    .unwrap_or(MoveResult::Moved)
+            }
+            'T' => {
+                self.player_row = new_row;
+                self.player_col = new_col;
+                self.visited.push((new_row, new_col));
+                // Treasure is auto-collected on walk-over: clear the cell, fold
+                // its value into the running treasure total, and queue an event
+                // so renderers can despawn the rig and surface the reward.
+                let (style, value) = treasure_at(&self.cell_entities, (new_row, new_col));
+                self.grid[new_row][new_col] = ' ';
+                self.treasure_value_collected =
+                    self.treasure_value_collected.saturating_add(value as u64);
+                match self.treasure_counts.iter_mut().find(|(s, _)| *s == style) {
+                    Some(entry) => entry.1 = entry.1.saturating_add(1),
+                    None => self.treasure_counts.push((style, 1)),
+                }
+                self.pending_events.push(GameEvent::TreasureCollected {
+                    cell: (new_row, new_col),
+                    style,
+                    value,
+                });
                 self.apply_collision_at_player_cell()
                     .unwrap_or(MoveResult::Moved)
             }
@@ -976,6 +1132,23 @@ impl MazeGame {
     /// ```
     pub fn grid(&self) -> &[Vec<char>] {
         &self.grid
+    }
+
+    /// Returns the per-cell overrides retained from the loaded definition, keyed by
+    /// `(row, col)`. Renderers read the static visual rigs (e.g. a health pickup's
+    /// `healthStyle`) from here — the live `Enemy` carries its own `enemy_type`, since
+    /// it moves away from its spawn cell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// assert!(game.cell_entities().contains_key(&(0, 1)));
+    /// ```
+    pub fn cell_entities(&self) -> &HashMap<(usize, usize), Vec<CellEntity>> {
+        &self.cell_entities
     }
 
     /// Advances time-based game state by `dt_ms` milliseconds, returning the
@@ -1181,10 +1354,13 @@ impl MazeGame {
 
     /// Returns the active enemies, ordered by stable id.
     ///
-    /// Each [`Enemy`] carries its current position, its per-game
-    /// `move_period_ms`, the `accum_ms` accumulator drained by
-    /// [`MazeGame::tick`], and the `damage` it inflicts per same-cell
-    /// collision. Enemies are seeded one per `'E'` cell at construction.
+    /// Each [`Enemy`] carries its current position, its `move_period_ms`, the
+    /// `accum_ms` accumulator drained by [`MazeGame::tick`], the `damage` it
+    /// inflicts per same-cell collision, and its `enemy_type` visual rig.
+    /// Enemies are seeded one per `'E'` cell at construction; `move_period_ms`
+    /// and `damage` come from the cell's per-cell override when present (else
+    /// the per-game default), and `enemy_type` carries the cell's rig override
+    /// (`None` when the cell set none).
     ///
     /// # Examples
     ///
@@ -1230,6 +1406,69 @@ impl MazeGame {
         keys
     }
 
+    /// Returns the cells still holding uncollected treasure (`'T'`), each with
+    /// its resolved type and reward value (the per-cell override else the
+    /// type's default value), in row-major order. A consumed treasure clears to
+    /// `' '` and drops out of the result.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, TreasureStyle};
+    /// let json = r#"{"grid":[["S","T","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// // A bare 'T' is the default Silver treasure, value 50.
+    /// assert_eq!(game.treasures(), vec![((0, 1), TreasureStyle::Silver, 50)]);
+    /// ```
+    pub fn treasures(&self) -> Vec<((usize, usize), TreasureStyle, u32)> {
+        let mut out = Vec::new();
+        for (r, row) in self.grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'T' {
+                    let (style, value) = treasure_at(&self.cell_entities, (r, c));
+                    out.push(((r, c), style, value));
+                }
+            }
+        }
+        out
+    }
+
+    /// Returns the count of treasure collected over the run, grouped by
+    /// [`TreasureStyle`], ordered by ascending default value (Silver, Gold,
+    /// Jewels, Diamonds). Styles never collected are omitted, so every returned
+    /// count is at least `1`. Feeds the bag display's grouped per-style chips;
+    /// the score contribution is the summed reward, not the count.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction, TreasureStyle};
+    /// let json = r#"{"grid":[["S","T","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert!(game.collected_treasure().is_empty());
+    /// game.move_player(Direction::Right); // step onto the treasure — auto-collected
+    /// assert_eq!(game.collected_treasure(), vec![(TreasureStyle::Silver, 1)]);
+    /// ```
+    pub fn collected_treasure(&self) -> Vec<(TreasureStyle, u32)> {
+        // Ordered by ascending default reward value (Silver 50 < Gold 100 <
+        // Jewels 200 < Diamonds 400) so the bag chips read cheapest-to-richest.
+        const ORDER: [TreasureStyle; 4] = [
+            TreasureStyle::Silver,
+            TreasureStyle::Gold,
+            TreasureStyle::Jewels,
+            TreasureStyle::Diamonds,
+        ];
+        ORDER
+            .iter()
+            .filter_map(|&style| {
+                self.treasure_counts
+                    .iter()
+                    .find(|(s, _)| *s == style)
+                    .map(|&(_, count)| (style, count))
+            })
+            .collect()
+    }
+
     /// Returns the items currently in the player's bag, in pickup order.
     ///
     /// # Examples
@@ -1243,6 +1482,32 @@ impl MazeGame {
     /// ```
     pub fn bag(&self) -> &[BagItem] {
         &self.bag
+    }
+
+    /// Seeds the player's bag with items carried in from a previous level.
+    ///
+    /// Used by the multi-level 3D game to carry the player's bag forward when a
+    /// run is configured not to reset it between levels. The items are appended
+    /// to the (freshly constructed, empty) bag. This deliberately does **not**
+    /// touch `keys_collected`, so carried keys are not re-counted toward the
+    /// score — their value was already tallied on the level where they were
+    /// collected, and the run's cumulative score is banked per level by the
+    /// caller.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{BagItem, MazeGame};
+    /// let json = r#"{"grid":[["S","D","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// // Hand the next level a key carried from the previous one.
+    /// game.seed_carried_bag(vec![BagItem::Key { id: 0 }]);
+    /// assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
+    /// // Carrying does not inflate the score (the key was scored already).
+    /// assert_eq!(game.score(), 0);
+    /// ```
+    pub fn seed_carried_bag(&mut self, items: Vec<BagItem>) {
+        self.bag.extend(items);
     }
 
     /// Collects the key at the player's current cell, adding it to the bag and
@@ -1545,6 +1810,30 @@ impl MazeGame {
     /// ```
     pub fn max_hp(&self) -> u32 {
         self.max_hp
+    }
+
+    /// The run's current score — the single source of truth for both the live
+    /// readout and the value recorded on completion.
+    ///
+    /// The exact determination is internal to the engine and provisional, but
+    /// today it is the number of keys collected this run **plus** the total
+    /// value of treasure collected (each treasure's per-cell `value` override,
+    /// else its type's default value). Callers should read this getter rather
+    /// than recomputing a score, so every surface stays in agreement when the
+    /// formula changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction};
+    /// let json = r#"{"grid":[["S","K","D","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.score(), 0); // nothing collected yet
+    /// game.move_player(Direction::Right); // walk onto the key — auto-collected
+    /// assert_eq!(game.score(), 1);
+    /// ```
+    pub fn score(&self) -> u64 {
+        self.keys_collected + self.treasure_value_collected
     }
 }
 
@@ -1986,6 +2275,131 @@ mod tests {
             MoveResult::BlockedByLockedDoor
         );
         assert!(game.bag().is_empty());
+    }
+
+    // ── score ────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn score_starts_at_zero() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.score(), 0);
+    }
+
+    #[test]
+    fn score_climbs_when_a_key_is_collected() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.score(), 0);
+        game.move_player(Direction::Right); // onto the key — auto-collected
+        assert_eq!(game.score(), 1);
+    }
+
+    #[test]
+    fn score_does_not_include_hp() {
+        // Score is keys-collected only: a full-HP fresh game scores 0, and taking
+        // enemy damage (HP drops) leaves the score unchanged.
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.hp(), 3);
+        assert_eq!(game.score(), 0);
+        // The enemy at (0,1) steps onto the player at (0,0) on its move tick.
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert!(game.hp() < 3); // took damage
+        assert_eq!(game.score(), 0); // score is unaffected by HP
+    }
+
+    #[test]
+    fn score_survives_door_consumption_of_a_key() {
+        // keys_collected is monotonic: opening a door consumes the key from the
+        // bag, but the score (a progress measure) must not drop.
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // collect the key
+        assert_eq!(game.score(), 1);
+        assert_eq!(game.bag().len(), 1);
+        game.move_player(Direction::Right); // onto the door — key consumed
+        assert!(game.bag().is_empty());
+        assert_eq!(game.score(), 1); // score holds despite the empty bag
+    }
+
+    // ── treasure ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn score_climbs_by_treasure_value() {
+        // A bare `T` is the default Silver treasure, worth 50.
+        let json = r#"{"grid":[["S","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.score(), 0);
+        game.move_player(Direction::Right); // onto the treasure — auto-collected
+        assert_eq!(game.score(), 50);
+        assert_eq!(game.grid()[0][1], ' '); // cell cleared
+    }
+
+    #[test]
+    fn treasure_value_override_scores_the_explicit_value() {
+        // An explicit per-cell `value` wins over the style-derived default.
+        let json = r#"{"grid":[["S",[{"type":"T","value":250}],"F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        assert_eq!(game.score(), 250);
+    }
+
+    #[test]
+    fn treasure_value_defaults_from_style() {
+        // No explicit value → the type's default value (Gold = 100).
+        let json = r#"{"grid":[["S",[{"type":"T","style":"gold"}],"F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        assert_eq!(game.score(), 100);
+    }
+
+    #[test]
+    fn score_adds_keys_and_treasure() {
+        // Additive: a collected key (+1) plus a default Silver treasure (+50) = 51.
+        let json = r#"{"grid":[["S","K","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // key → +1
+        assert_eq!(game.score(), 1);
+        game.move_player(Direction::Right); // treasure → +50
+        assert_eq!(game.score(), 51);
+    }
+
+    #[test]
+    fn walking_onto_treasure_queues_treasure_collected_event() {
+        let json = r#"{"grid":[["S","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // step onto the treasure — auto-collected
+        assert_eq!(
+            game.tick(0.0),
+            vec![GameEvent::TreasureCollected {
+                cell: (0, 1),
+                style: TreasureStyle::Silver,
+                value: 50
+            }]
+        );
+    }
+
+    #[test]
+    fn collected_treasure_groups_per_style_in_ascending_value_order() {
+        // Collect Diamonds then Jewels then two Silver; the result is ordered by
+        // ascending default value (Silver < Jewels < Diamonds) regardless of
+        // pickup order, with per-style counts and no zero entries.
+        let json = r#"{"grid":[["S",[{"type":"T","style":"diamonds"}],[{"type":"T","style":"jewels"}],"T","T","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert!(game.collected_treasure().is_empty());
+        game.move_player(Direction::Right); // Diamonds
+        game.move_player(Direction::Right); // Jewels
+        game.move_player(Direction::Right); // Silver
+        game.move_player(Direction::Right); // Silver
+        assert_eq!(
+            game.collected_treasure(),
+            vec![
+                (TreasureStyle::Silver, 2),
+                (TreasureStyle::Jewels, 1),
+                (TreasureStyle::Diamonds, 1),
+            ]
+        );
     }
 
     // ── doors — tick / opening ───────────────────────────────────────────────────
@@ -2762,6 +3176,81 @@ mod tests {
     }
 
     #[test]
+    fn per_cell_enemy_override_beats_per_game_default() {
+        // The cell sets damage=4 and movePeriodMs=300; the per-game options set
+        // different values. Resolution order: per-cell wins.
+        let json = r#"{"grid":[["S",[{"type":"E","damage":4,"movePeriodMs":300.0}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_move_period_ms: Some(9000.0),
+            enemy_damage: Some(9),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 1);
+        assert_eq!(enemies[0].damage, 4);
+        assert_eq!(enemies[0].move_period_ms, 300.0);
+    }
+
+    #[test]
+    fn per_cell_enemy_override_falls_back_per_field_to_per_game_default() {
+        // The cell overrides only damage; movePeriodMs falls back to the
+        // per-game default. enemy_type is unset → None.
+        let json = r#"{"grid":[["S",[{"type":"E","damage":4}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_move_period_ms: Some(800.0),
+            enemy_damage: Some(9),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies[0].damage, 4);
+        assert_eq!(enemies[0].move_period_ms, 800.0);
+        assert_eq!(enemies[0].enemy_type, None);
+    }
+
+    #[test]
+    fn enemy_without_override_uses_per_game_default_and_none_rig() {
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_damage: Some(7),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies[0].damage, 7);
+        assert_eq!(enemies[0].move_period_ms, DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(enemies[0].enemy_type, None);
+    }
+
+    #[test]
+    fn per_cell_enemy_type_surfaces_on_enemy() {
+        let json = r#"{"grid":[["S",[{"type":"E","enemyType":"ghost"}],"F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies[0].enemy_type, Some(EnemyType::Ghost));
+        // The visual rig override leaves the numeric fields at their defaults.
+        assert_eq!(enemies[0].damage, DEFAULT_ENEMY_DAMAGE);
+        assert_eq!(enemies[0].move_period_ms, DEFAULT_ENEMY_MOVE_PERIOD_MS);
+    }
+
+    #[test]
+    fn per_cell_enemy_damage_override_applies_on_collision() {
+        // Walking onto the enemy's cell deals the overridden damage (3), not
+        // the default 1 — proving the override drives real gameplay, not just
+        // the reported field.
+        let json = r#"{"grid":[["S",[{"type":"E","damage":3}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 5);
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert_eq!(game.hp(), 2);
+    }
+
+    #[test]
     fn enemies_collection_sorted_by_id_in_row_major_scan_order() {
         // Three 'E' cells laid out across two rows; ids must be assigned in
         // row-major scan order: (0,1)=0, (0,3)=1, (1,2)=2.
@@ -3240,6 +3729,48 @@ mod tests {
         assert_eq!(game.hp(), 2);
         game.move_player(Direction::Right); // pickup → 3/3 (capped)
         assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn per_cell_heal_amount_override_heals_that_much() {
+        // Pickup overrides healAmount=3; starting 1/5 → 4/5 in one step.
+        let json = r#"{"grid":[["S",[{"type":"H","healAmount":3}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 1);
+        game.move_player(Direction::Right); // pickup → heal by 3 → 4/5
+        assert_eq!(game.hp(), 4);
+    }
+
+    #[test]
+    fn per_cell_heal_amount_override_is_capped_at_max_hp() {
+        let json = r#"{"grid":[["S",[{"type":"H","healAmount":9}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(3),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        game.move_player(Direction::Right); // heal by 9 but clamp to max 3
+        assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn health_pickup_without_override_heals_default_one() {
+        // A plain 'H' (no override) still heals the built-in +1.
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        game.move_player(Direction::Right);
+        assert_eq!(game.hp(), 1 + DEFAULT_HEAL_AMOUNT);
     }
 
     #[test]

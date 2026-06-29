@@ -131,6 +131,13 @@ namespace Maze.Interop
         /// </summary>
         public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
         /// <summary>
+        /// Sets a range of cells in a maze to treasure, or throws an
+        /// exception if the cells cannot be set. Mirrors
+        /// <see cref="MazeSetWallCells(UIntPtr,uint,uint,uint,uint)"/> for the
+        /// `'T'` cell character.
+        /// </summary>
+        public void MazeSetTreasureCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception
         /// if the cells cannot be cleared
         /// </summary>
@@ -186,6 +193,31 @@ namespace Maze.Interop
         /// <param name="mazePtr">Pointer to maze</param>
         /// <returns>JSON string</returns>
         public string MazeToJson(UIntPtr mazePtr);
+        /// <summary>
+        /// Returns the per-cell entity override at the given location as its wire JSON
+        /// (e.g. <c>{"type":"E","enemyType":"ghost","damage":2}</c>), or <c>null</c> when the cell carries none.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <returns>The entity wire JSON, or <c>null</c> when the cell has no override</returns>
+        public string? MazeGetCellEntity(UIntPtr mazePtr, uint row, uint col);
+        /// <summary>
+        /// Sets the per-cell entity override at the given location from its wire JSON, replacing any existing one.
+        /// The entity <c>type</c> must match the cell's current character. Throws on a parse error, out-of-range cell, or type mismatch.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <param name="json">The entity override wire JSON</param>
+        public void MazeSetCellEntity(UIntPtr mazePtr, uint row, uint col, string json);
+        /// <summary>
+        /// Clears any per-cell entity override at the given location. A cell with no override is unaffected.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        public void MazeClearCellEntity(UIntPtr mazePtr, uint row, uint col);
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails.
         ///
@@ -282,6 +314,10 @@ namespace Maze.Interop
         /// <param name="optionsPtr">Pointer to the generator options</param>
         /// <param name="value">Number of health pickups to place</param>
         public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value);
+        /// <summary>Sets the number of treasure cells to auto-place (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of treasure cells to place</param>
+        public void GeneratorOptionsSetTreasureCount(UIntPtr optionsPtr, UInt32 value);
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
@@ -450,6 +486,26 @@ namespace Maze.Interop
         /// <param name="pickup">Receives the pickup cell on success</param>
         /// <returns>True if the index was valid; false if out of range</returns>
         public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeHealthPickup pickup);
+        /// <summary>Returns the number of uncollected treasure cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected treasure count</returns>
+        public int MazeGameTreasureCount(UIntPtr gamePtr);
+        /// <summary>Retrieves a single uncollected treasure cell by index, with its style + reward value</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the treasure list</param>
+        /// <param name="treasure">Receives the treasure cell + style + value on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTreasure(UIntPtr gamePtr, int index, out MazeTreasure treasure);
+        /// <summary>Returns the number of distinct treasure styles the player has collected (the per-style tally length)</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Collected-treasure style count</returns>
+        public int MazeGameCollectedTreasureCount(UIntPtr gamePtr);
+        /// <summary>Retrieves one entry of the grouped per-style collected-treasure tally by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the collected-treasure tally</param>
+        /// <param name="collected">Receives the style + count on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetCollectedTreasure(UIntPtr gamePtr, int index, out MazeCollectedTreasure collected);
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
         /// </summary>

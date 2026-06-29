@@ -1035,6 +1035,7 @@ test('shortcut hint bar contains expected shortcuts', async ({ page }) => {
   await expect(hint).toContainText('[D]')
   await expect(hint).toContainText('[E]')
   await expect(hint).toContainText('[H]')
+  await expect(hint).toContainText('[T]')
   await expect(hint).toContainText('[DEL]')
   await expect(hint).toContainText('[Shift] Range')
 })
@@ -1078,8 +1079,7 @@ test('after Walk Solution completes the full solution is displayed', async ({ pa
   await login(page)
   await openFirstMaze(page)
   await page.getByRole('button', { name: 'Walk Solution' }).click()
-  // Wait for walk to finish: walker disappears and solution footsteps appear
-  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 10000 })
+  await expect(page.locator('img[alt="Walker"]')).toHaveAttribute('src', /walker_celebrate/, { timeout: 10000 })
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeDisabled()
@@ -1118,7 +1118,10 @@ test('Clear Solution after Walk Solution resets to normal editing state', async 
   await login(page)
   await openFirstMaze(page)
   await page.getByRole('button', { name: 'Walk Solution' }).click()
-  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 10000 })
+  // The walk is timer-driven and normally finishes in ~2s; under parallel-worker
+  // CPU contention the timers lag, so allow generous headroom for the walker to
+  // finish and disappear rather than flaking on a starved animation.
+  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 30000 })
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await page.getByRole('button', { name: 'Clear Solution' }).click()
   await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
@@ -1127,4 +1130,198 @@ test('Clear Solution after Walk Solution resets to normal editing state', async 
   // Generate and Solve don't require a cell selection — confirm editing is re-enabled
   await expect(page.getByRole('button', { name: 'Generate' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Solve' })).toBeEnabled()
+})
+
+// ──────────────────────────────────────────────────────────────
+// Per-cell override authoring
+// ──────────────────────────────────────────────────────────────
+
+test('authoring a ghost enemy override shows the ghost sprite plus a badge and saves', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Stamp an enemy on the empty cell (0,1), which opens the override panel.
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toBeVisible()
+
+  const typeSelect = page.getByRole('combobox', { name: 'Type' })
+  await expect(typeSelect).toBeVisible()
+  await typeSelect.selectOption('ghost')
+  await page.getByRole('spinbutton', { name: 'Damage' }).fill('2')
+
+  // The grid cell now shows the ghost variant sprite and an override badge.
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toHaveAttribute('src', /ghost\.svg/)
+  await expect(page.getByLabel('Cell 1,2').getByLabel('Has override')).toBeVisible()
+
+  // Saving runs the real build-definition codec; the button disables on success and
+  // no save error appears.
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('a maze saved with a per-cell override loads and renders it', async ({ page }) => {
+  await login(page)
+  // Deep-link to a maze whose stored definition already carries the ghost override.
+  await page.goto('/mazes/maze-override')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+
+  // The persisted override round-trips through load -> split and renders.
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toHaveAttribute('src', /ghost\.svg/)
+  await expect(page.getByLabel('Cell 1,2').getByLabel('Has override')).toBeVisible()
+
+  // Selecting the cell re-seeds the panel from the loaded override.
+  await page.getByLabel('Cell 1,2').click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).toHaveValue('ghost')
+  await expect(page.getByRole('spinbutton', { name: 'Damage' })).toHaveValue('2')
+})
+
+test('the override panel is hidden when a non-feature cell is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).toBeVisible()
+
+  // Cell (0,0) is the start — not overridable — so selecting it hides the panel.
+  // (Walls are overridable now, so a wall cell would keep the panel open.)
+  await page.getByLabel('Cell 1,1').click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).not.toBeVisible()
+})
+
+test('authoring a lava wall override shows the lava sprite plus a badge and saves', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Stamp a wall on the empty cell (0,1), which opens the two-tier wall panel.
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Wall')).toBeVisible()
+
+  // Choosing the special "Lava" type swaps the sprite and adds an override badge.
+  const typeSelect = page.getByRole('combobox', { name: 'Type' })
+  await expect(typeSelect).toBeVisible()
+  await typeSelect.selectOption('lava')
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Wall')).toHaveAttribute('src', /lava\.svg/)
+  await expect(page.getByLabel('Cell 1,2').getByLabel('Has override')).toBeVisible()
+
+  // Saving runs the real build-definition codec; the button disables on success and
+  // no save error appears.
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('editing game settings marks the maze dirty and the maze save succeeds', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page) // Alpha — a clean maze
+
+  // The toolbar Save starts disabled (nothing to save on a freshly-loaded maze).
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+  // Open the per-maze game settings editor from the toolbar gear.
+  await page.getByRole('button', { name: 'Game settings' }).click()
+  const dialog = page.getByRole('dialog', { name: /game settings/i })
+  await expect(dialog).toBeVisible()
+
+  // Change a value and apply the settings — the modal closes.
+  await dialog.getByLabel(/sky/i).selectOption('day')
+  await dialog.getByRole('button', { name: 'Apply' }).click()
+  await expect(dialog).toBeHidden()
+
+  // The settings edit marked the maze dirty → the toolbar Save is now enabled,
+  // and saving the maze succeeds (button disables, no error).
+  const saveBtn = page.getByRole('button', { name: 'Save' })
+  await expect(saveBtn).toBeEnabled()
+  await saveBtn.click()
+  await expect(saveBtn).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('a maze with persisted game settings seeds the settings editor', async ({ page }) => {
+  await login(page)
+  // Deep-link to a maze whose stored definition carries game settings.
+  await page.goto('/mazes/maze-settings')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Game settings' }).click()
+  const dialog = page.getByRole('dialog', { name: /game settings/i })
+  await expect(dialog).toBeVisible()
+
+  // The modal is seeded from the maze's saved settings, not the localStorage defaults.
+  await expect(dialog.getByLabel(/sky/i)).toHaveValue('day')
+  await expect(dialog.getByRole('combobox', { name: 'Wall Texture (Default)', exact: true })).toHaveValue('wood')
+  await expect(dialog.getByLabel(/time limit/i)).toHaveValue('222')
+})
+
+test('Play 3D opens the launch chooser; Custom Run opens settings and Cancel returns to the chooser', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page) // Alpha — solvable
+
+  // Play 3D opens the Run / Custom Run / Cancel chooser (after the solve check).
+  await page.getByRole('button', { name: 'Play in 3D' }).click()
+  const chooser = page.getByRole('dialog', { name: /Play 3D —/i })
+  await expect(chooser).toBeVisible()
+  await expect(chooser.getByRole('button', { name: 'Run', exact: true })).toBeVisible()
+
+  // Custom Run opens the settings modal (one-off).
+  await chooser.getByRole('button', { name: /custom run/i }).click()
+  const settings = page.getByRole('dialog', { name: /customise launch/i })
+  await expect(settings).toBeVisible()
+
+  // Cancel from the settings modal returns to the chooser (not the editor).
+  await settings.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('dialog', { name: /Play 3D —/i }).getByRole('button', { name: 'Run', exact: true })).toBeVisible()
+
+  // Cancel from the chooser dismisses to the editor.
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('Apply to all stamps a block of wall cells with one override', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page) // Alpha — a 3x3 grid
+
+  // Select a 2x2 block and fill it with walls (Set Wall fills the whole selection),
+  // leaving a uniform 'W' block still selected.
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Cell 2,3').click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+
+  // The two-tier wall panel shows for the block; choosing Lava live-applies to the
+  // top-left cell only.
+  const typeSelect = page.getByRole('combobox', { name: 'Type' })
+  await expect(typeSelect).toBeVisible()
+  await typeSelect.selectOption('lava')
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Wall')).toHaveAttribute('src', /lava\.svg/)
+  await expect(page.getByLabel('Cell 2,3').getByLabel('Has override')).toHaveCount(0)
+
+  // Apply-to-all propagates the lava override across the whole 4-cell block.
+  await page.getByRole('button', { name: 'Apply to all 4 cells' }).click()
+  for (const label of ['Cell 1,2', 'Cell 1,3', 'Cell 2,2', 'Cell 2,3']) {
+    await expect(page.getByLabel(label).getByAltText('Wall')).toHaveAttribute('src', /lava\.svg/)
+    await expect(page.getByLabel(label).getByLabel('Has override')).toBeVisible()
+  }
+
+  // Saving runs the real codec; success disables the button with no error.
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('the override panel is hidden for a mixed-type selection', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // A single wall cell opens the two-tier panel...
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).toBeVisible()
+
+  // ...but extending the selection to include the start cell (0,0) makes the block
+  // mixed (S + W), so the panel hides.
+  await page.getByLabel('Cell 1,1').click({ modifiers: ['Shift'] })
+  await expect(page.getByRole('combobox', { name: 'Type' })).not.toBeVisible()
 })

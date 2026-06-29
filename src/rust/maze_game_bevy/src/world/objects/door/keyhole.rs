@@ -1,5 +1,5 @@
 //! The door keyhole — a brass lock plate with a dark cone-plus-disc cutout,
-//! built like the chest's keyhole ([`crate::world::objects::dead_end::chest`])
+//! built like the chest's keyhole ([`crate::world::objects::common::chest`])
 //! so the panel obviously reads as a (locked) door even though it borrows the
 //! surrounding wall's material. Spawned on both faces so it's visible from
 //! either approach.

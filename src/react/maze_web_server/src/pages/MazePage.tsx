@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useParams, useNavigate, useBlocker } from 'react-router-dom'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { MazeGrid } from '../components/MazeGrid'
+import { CellOverridePanel } from '../components/CellOverridePanel'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
-import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
+import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
+import { Play3dLaunchChooser } from '../components/Play3dLaunchChooser'
 import { AlertModal } from '../components/AlertModal'
-import { generateMaze, solveMaze } from '../wasm/mazeWasm'
-import type { GenerateOptions } from '../types/api'
+import { generateMaze, solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
+import type { GenerateOptions, SaveMazeRequest } from '../types/api'
+import type { FeatureChar } from '../types/cellEntities'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { useToken } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
-import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
 import { useWalkAnimation } from '../hooks/useWalkAnimation'
 import { useWalkSpeed } from '../hooks/useWalkSpeed'
@@ -21,16 +22,20 @@ import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
+import { normalizeMazeGameSettings, type MazeGameSettings } from '../utils/mazeGameSettings'
 import { countKeysAndDoors, exceedsKeyDoorCap, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
+
+// Narrows a grid cell char to a feature type that can carry a per-cell override.
+function isFeatureChar(ch: string | undefined): ch is FeatureChar {
+  return ch === 'E' || ch === 'H' || ch === 'K' || ch === 'D' || ch === 'W' || ch === 'T'
+}
 
 export function MazePage() {
   const { id } = useParams<{ id?: string }>()
   const token = useToken()
   const navigate = useNavigate()
-  const { theme, toggleTheme } = useTheme()
-  const menuVariant = useMenuVariant()
   const gridRef = useRef<HTMLDivElement>(null)
 
   const isNew = id === undefined
@@ -50,10 +55,11 @@ export function MazePage() {
     selectAll, activateCell, activateRow, activateCol,
     moveActive, moveActiveHome, moveActiveEnd,
     enableRangeMode, disableRangeMode,
-    setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, clearCell,
+    setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, setTreasure, clearCell,
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
     canInsertRows, canInsertColumns,
     applyGenerated, applySolution, clearSolution,
+    overrides, getOverride, setOverride, clearOverride, getOverridesList,
   } = useMazeEditor()
   const { max_maze_cells } = useAppFeatures()
 
@@ -85,11 +91,23 @@ export function MazePage() {
   const [solveError, setSolveError] = useState<string | null>(null)
 
   // Play state
+  // The Play-3D launch chooser (Run / Custom Run / Cancel). Opened after the
+  // solvability check; `maze3dCustom` is the one-off Custom-Run settings modal,
+  // reached from the chooser and returning to it on Cancel.
   const [maze3dLaunch, setMaze3dLaunch] = useState<{ id: string; name: string } | null>(null)
+  const [maze3dCustom, setMaze3dCustom] = useState<{ id: string; name: string } | null>(null)
   const { play: playMaze, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
     usePlayMaze({ onLaunch3d: m => setMaze3dLaunch({ id: m.id, name: m.name }) })
   const [showPlayDirtyConfirm, setShowPlayDirtyConfirm] = useState(false)
   const [pendingPlayGameType, setPendingPlayGameType] = useState<GameType>(GameType.TwoD)
+
+  // Per-maze 3D game settings (the launch environment), edited via the Settings
+  // toolbar button and persisted with the maze on Save. `undefined` until the
+  // maze loads or the user opens the editor; `gameSettingsDirty` feeds the
+  // unsaved-changes guard so a settings edit enables Save like any grid edit.
+  const [gameSettings, setGameSettings] = useState<MazeGameSettings | undefined>(undefined)
+  const [gameSettingsDirty, setGameSettingsDirty] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
 
   // Walk speed (persisted to localStorage)
   const { speedRef, speedIndex, setSpeedIndex } = useWalkSpeed()
@@ -99,9 +117,65 @@ export function MazePage() {
   const isWalkInProgress = walkState !== null && !walkState.isComplete
 
   const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalkInProgress || isCheckingPlay
-  const hasUnsavedWork = isDirty || (isNew && mazeId === null)
+  const hasUnsavedWork = isDirty || gameSettingsDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
+
+  // What the override panel targets: a single feature cell (E/H/K/D/W), or the
+  // top-left of a rectangular selection whose cells are ALL the same overridable
+  // type (a block of the same feature — e.g. a region of 'W' to make a lava pool).
+  // The panel live-applies to the top-left cell; a multi-cell selection also gets an
+  // "Apply to all" link (see below). Hidden when a solution is shown, the editor is
+  // busy, or the selection is mixed / non-feature.
+  const overridePanelTarget = useMemo(() => {
+    if (!activeCell) return null
+    if (selectionStatus.hasSolution || isBusy) return null
+    const minRow = anchorCell ? Math.min(activeCell.row, anchorCell.row) : activeCell.row
+    const maxRow = anchorCell ? Math.max(activeCell.row, anchorCell.row) : activeCell.row
+    const minCol = anchorCell ? Math.min(activeCell.col, anchorCell.col) : activeCell.col
+    const maxCol = anchorCell ? Math.max(activeCell.col, anchorCell.col) : activeCell.col
+    const topLeftChar = grid[minRow]?.[minCol]
+    if (!isFeatureChar(topLeftChar)) return null
+    // Every cell in the selection must share that one overridable type.
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (grid[r]?.[c] !== topLeftChar) return null
+      }
+    }
+    const count = (maxRow - minRow + 1) * (maxCol - minCol + 1)
+    return { row: minRow, col: minCol, cellType: topLeftChar, minRow, maxRow, minCol, maxCol, count }
+  }, [activeCell, anchorCell, selectionStatus.hasSolution, isBusy, grid])
+
+  // Stamp the top-left cell's current override across every cell in the selection
+  // (or clear them all when the top-left has reverted to default), honouring the same
+  // clear-on-default rule as a single cell. The stored entity is shared by reference —
+  // overrides are replaced, never mutated in place, so the cells stay independent.
+  const applyOverrideToSelection = useCallback(
+    (t: NonNullable<typeof overridePanelTarget>) => {
+      const ov = getOverride(t.row, t.col)
+      for (let r = t.minRow; r <= t.maxRow; r++) {
+        for (let c = t.minCol; c <= t.maxCol; c++) {
+          if (r === t.row && c === t.col) continue
+          if (ov) setOverride(r, c, ov)
+          else clearOverride(r, c)
+        }
+      }
+    },
+    [getOverride, setOverride, clearOverride],
+  )
+
+  // Clears the override on every cell in the selection — the Reset button's action for
+  // a block (a single cell just clears itself).
+  const clearOverridesInSelection = useCallback(
+    (t: NonNullable<typeof overridePanelTarget>) => {
+      for (let r = t.minRow; r <= t.maxRow; r++) {
+        for (let c = t.minCol; c <= t.maxCol; c++) {
+          clearOverride(r, c)
+        }
+      }
+    },
+    [clearOverride],
+  )
 
   useEffect(() => {
     if (isBusy) document.body.classList.add('is-busy')
@@ -115,6 +189,8 @@ export function MazePage() {
   useEffect(() => {
     if (isNew) {
       initFromDefinition(null, '', { grid: BLANK_GRID })
+      setGameSettings(undefined)
+      setGameSettingsDirty(false)
       return
     }
     if (!token) return
@@ -122,8 +198,13 @@ export function MazePage() {
     setError(null)
     setNotFound(false)
     getMaze(token, id!)
-      .then(maze => {
-        initFromDefinition(maze.id, maze.name, maze.definition)
+      .then(async maze => {
+        // Split the canonical definition (char-or-array grid) into a pure-char grid
+        // plus per-cell overrides via the WASM codec — JS never parses the wire form.
+        const { grid, overrides } = await splitDefinition(JSON.stringify(maze))
+        initFromDefinition(maze.id, maze.name, { grid }, overrides)
+        setGameSettings(maze.game_settings)
+        setGameSettingsDirty(false)
       })
       .catch(err => {
         const status = (err as { status?: number }).status
@@ -145,6 +226,20 @@ export function MazePage() {
     )
   }
 
+  // Builds the canonical definition (pure-char grid merged with per-cell overrides)
+  // for persistence. The char-or-array wire form is produced by the WASM codec, not
+  // assembled in JS. Used by every save path so overrides always round-trip.
+  function buildDefinition() {
+    return buildDefinitionWithOverrides(grid, getOverridesList())
+  }
+
+  // The full save payload: the canonical definition plus the per-maze game
+  // settings (omitted when the maze has none). Used by every save path so
+  // settings round-trip alongside the grid + overrides.
+  async function buildSaveRequest(name: string): Promise<SaveMazeRequest> {
+    return { name, definition: await buildDefinition(), game_settings: gameSettings }
+  }
+
   async function handleSaveNew(name: string) {
     if (!token) return
     if (exceedsKeyDoorCap(grid)) {
@@ -154,10 +249,11 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createMaze(token, { name, definition: { grid } })
+      const saved = await createMaze(token, await buildSaveRequest(name))
       flushSync(() => {
         setShowSaveNameModal(false)
         markSaved(saved.id, saved.name)
+        setGameSettingsDirty(false)
       })
       navigate(`/mazes/${encodeURIComponent(saved.id)}`, { replace: true })
     } catch (ex: unknown) {
@@ -176,8 +272,9 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      await updateMaze(token, mazeId, await buildSaveRequest(mazeName))
       markSaved(mazeId, mazeName)
+      setGameSettingsDirty(false)
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
     } finally {
@@ -208,8 +305,9 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      await updateMaze(token, mazeId, await buildSaveRequest(mazeName))
       markSaved(mazeId, mazeName)
+      setGameSettingsDirty(false)
       blocker.proceed?.()
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
@@ -223,10 +321,11 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createMaze(token, { name, definition: { grid } })
+      const saved = await createMaze(token, await buildSaveRequest(name))
       flushSync(() => {
         setShowBlockerSaveModal(false)
         markSaved(saved.id, saved.name)
+        setGameSettingsDirty(false)
       })
       blocker.proceed?.()
     } catch (ex: unknown) {
@@ -241,10 +340,10 @@ export function MazePage() {
     setGenerateError(null)
     try {
       await new Promise<void>(r => requestAnimationFrame(() => r()))
-      const definition = await generateMaze(options)
+      const { grid, overrides } = await generateMaze(options)
       setLastMinSpineLength(options.minSpineLength)
       setShowGenerateModal(false)
-      applyGenerated(definition)
+      applyGenerated(grid, overrides)
     } catch (ex: unknown) {
       setGenerateError((ex as { message?: string }).message ?? 'Generation failed.')
     } finally {
@@ -288,9 +387,10 @@ export function MazePage() {
   }
 
   function handlePlayClick(gameType: GameType) {
-    if (mazeId && !isDirty) {
+    const hasUnsavedEdits = isDirty || gameSettingsDirty
+    if (mazeId && !hasUnsavedEdits) {
       void playMaze({ id: mazeId, name: mazeName, definition: { grid } }, gameType)
-    } else if (mazeId && isDirty) {
+    } else if (mazeId && hasUnsavedEdits) {
       setPendingPlayGameType(gameType)
       setShowPlayDirtyConfirm(true)
     } else {
@@ -306,9 +406,9 @@ export function MazePage() {
     setSaveError(null)
     let savedId: string | null = null
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      await updateMaze(token, mazeId, await buildSaveRequest(mazeName))
       const id = mazeId
-      flushSync(() => { markSaved(id, mazeName) })
+      flushSync(() => { markSaved(id, mazeName); setGameSettingsDirty(false) })
       savedId = id
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
@@ -326,7 +426,10 @@ export function MazePage() {
     setRefreshError(null)
     try {
       const maze = await getMaze(token, mazeId)
-      initFromDefinition(maze.id, maze.name, maze.definition)
+      const { grid: refreshedGrid, overrides } = await splitDefinition(JSON.stringify(maze))
+      initFromDefinition(maze.id, maze.name, { grid: refreshedGrid }, overrides)
+      setGameSettings(maze.game_settings)
+      setGameSettingsDirty(false)
     } catch (ex: unknown) {
       setRefreshError((ex as { message?: string }).message ?? 'Failed to refresh.')
     } finally {
@@ -399,12 +502,16 @@ export function MazePage() {
       case 'H':
         if (!isBusy && !selectionStatus.hasSolution) setHealth()
         break
+      case 't':
+      case 'T':
+        if (!isBusy && !selectionStatus.hasSolution) setTreasure()
+        break
       case 'Delete':
       case 'Backspace':
         if (!isBusy && !selectionStatus.isEmpty && !selectionStatus.hasSolution) clearCell()
         break
     }
-  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, clearCell, selectionStatus])
+  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, setKey, setDoor, setEnemy, setHealth, setTreasure, clearCell, selectionStatus])
 
   const headerTitle = isNew
     ? '(unsaved)'
@@ -497,49 +604,62 @@ export function MazePage() {
         />
       )}
       {maze3dLaunch && (
-        <Play3dCustomLaunchModal
+        <Play3dLaunchChooser
           mazeName={maze3dLaunch.name}
+          onRun={() => {
+            const id = maze3dLaunch.id
+            setMaze3dLaunch(null)
+            launchPlay3dWithSettings(id, normalizeMazeGameSettings(gameSettings ?? {}))
+          }}
+          onCustomRun={() => { setMaze3dCustom(maze3dLaunch); setMaze3dLaunch(null) }}
           onCancel={() => setMaze3dLaunch(null)}
-          onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
+        />
+      )}
+      {maze3dCustom && (
+        <MazeGameSettingsModal
+          mazeName={maze3dCustom.name}
+          initialSettings={normalizeMazeGameSettings(gameSettings ?? {})}
+          onCancel={() => { setMaze3dLaunch(maze3dCustom); setMaze3dCustom(null) }}
+          onSubmit={settings => {
+            const id = maze3dCustom.id
+            setMaze3dCustom(null)
+            launchPlay3dWithSettings(id, settings)
+          }}
+        />
+      )}
+      {showSettingsModal && (
+        <MazeGameSettingsModal
+          mazeName={mazeName}
+          title={mazeName ? `Game settings — ${mazeName}` : 'Game settings'}
+          submitLabel="Apply"
+          initialSettings={normalizeMazeGameSettings(gameSettings ?? {})}
+          onCancel={() => setShowSettingsModal(false)}
+          onSubmit={s => { setGameSettings(s); setGameSettingsDirty(true); setShowSettingsModal(false) }}
         />
       )}
 
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">{headerTitle}</span>
-        <div className="header-actions">
-          {!isNew && (
-            <button
-              className="btn-icon"
-              aria-label="Refresh"
-              title="Refresh"
-              disabled={!canRefresh || isBusy}
-              onClick={() => setShowRefreshConfirm(true)}
-            >
-              <img src="/images/maze/refresh.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
-            </button>
-          )}
+      <AppHeader title={headerTitle}>
+        {!isNew && (
           <button
             className="btn-icon"
-            aria-label="Save"
-            title="Save"
-            disabled={!canSave || isBusy}
-            onClick={handleSaveClick}
+            aria-label="Refresh"
+            title="Refresh"
+            disabled={!canRefresh || isBusy}
+            onClick={() => setShowRefreshConfirm(true)}
           >
-            <img src="/images/icons/icon_save.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
+            <img src="/images/maze/refresh.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
           </button>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+        )}
+        <button
+          className="btn-icon"
+          aria-label="Save"
+          title="Save"
+          disabled={!canSave || isBusy}
+          onClick={handleSaveClick}
+        >
+          <img src="/images/icons/icon_save.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
+        </button>
+      </AppHeader>
 
       <main className="maze-page-content">
         {isLoading && <p aria-label="Loading">Loading…</p>}
@@ -618,6 +738,15 @@ export function MazePage() {
               onClick={() => { setHealth(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/health_button.svg" alt="Set Health" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Set Treasure [T]"
+              aria-label="Set Treasure"
+              disabled={activeCell === null || selectionStatus.hasSolution || isWalking}
+              onClick={() => { setTreasure(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/treasure_button.svg" alt="Set Treasure" />
             </button>
             <button
               className="maze-toolbar-btn"
@@ -736,6 +865,16 @@ export function MazePage() {
             >
               <img src="/images/maze/play_3d_button.png" alt="Play in 3D" />
             </button>
+            <button
+              type="button"
+              className="maze-toolbar-btn"
+              title="Game settings"
+              aria-label="Game settings"
+              disabled={isBusy}
+              onClick={() => setShowSettingsModal(true)}
+            >
+              <img src="/images/maze/settings_button.svg" alt="Game settings" />
+            </button>
             {!isRangeMode && anchorCell === null && (
               <button
                 className="maze-toolbar-btn maze-range-mode-btn"
@@ -761,21 +900,48 @@ export function MazePage() {
         )}
 
         {!isLoading && !notFound && !error && grid.length > 0 && (
-          <MazeGrid
-            ref={gridRef}
-            grid={grid}
-            solution={solution}
-            walkState={walkState}
-            activeCell={activeCell}
-            anchorCell={anchorCell}
-            isRangeMode={isRangeMode}
-            onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
-            onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
-            onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
-            onColHeaderClick={isBusy ? undefined : (col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
-            onCornerClick={isBusy ? undefined : () => selectAll()}
-            onKeyDown={handleKeyDown}
-          />
+          <div className="maze-editor-body">
+            <MazeGrid
+              ref={gridRef}
+              grid={grid}
+              solution={solution}
+              walkState={walkState}
+              activeCell={activeCell}
+              anchorCell={anchorCell}
+              isRangeMode={isRangeMode}
+              cellOverrides={overrides}
+              gameSettings={gameSettings}
+              onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
+              onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
+              onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
+              onColHeaderClick={isBusy ? undefined : (col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
+              onCornerClick={isBusy ? undefined : () => selectAll()}
+              onKeyDown={handleKeyDown}
+            />
+            {overridePanelTarget && (
+              <CellOverridePanel
+                key={`${overridePanelTarget.row},${overridePanelTarget.col}`}
+                cellType={overridePanelTarget.cellType}
+                row={overridePanelTarget.row}
+                col={overridePanelTarget.col}
+                override={getOverride(overridePanelTarget.row, overridePanelTarget.col)}
+                gameSettings={gameSettings}
+                onApply={entity => setOverride(overridePanelTarget.row, overridePanelTarget.col, entity)}
+                onClear={() => clearOverride(overridePanelTarget.row, overridePanelTarget.col)}
+                onResetAll={
+                  overridePanelTarget.count > 1
+                    ? () => clearOverridesInSelection(overridePanelTarget)
+                    : undefined
+                }
+                selectionCount={overridePanelTarget.count > 1 ? overridePanelTarget.count : undefined}
+                onApplyToAll={
+                  overridePanelTarget.count > 1
+                    ? () => applyOverrideToSelection(overridePanelTarget)
+                    : undefined
+                }
+              />
+            )}
+          </div>
         )}
 
         {activeCell !== null && (
@@ -787,6 +953,7 @@ export function MazePage() {
             [D]&nbsp;Door&nbsp;&nbsp;&nbsp;
             [E]&nbsp;Enemy&nbsp;&nbsp;&nbsp;
             [H]&nbsp;Health&nbsp;&nbsp;&nbsp;
+            [T]&nbsp;Treasure&nbsp;&nbsp;&nbsp;
             [DEL]&nbsp;Clear&nbsp;&nbsp;&nbsp;
             [&#x2190;&#x2191;&#x2192;&#x2193;]&nbsp;Move&nbsp;&nbsp;&nbsp;
             [Shift]&nbsp;Range

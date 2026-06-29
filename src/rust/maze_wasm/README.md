@@ -98,8 +98,10 @@ const item    = game.pickup();          // → null (key already collected on wa
 const keys    = game.keys();            // → [{ row, col, id }]  (uncollected keys)
 const doors   = game.doors();           // → [{ row, col, state: 'locked' | 'opening' | 'open' }]
 const bag     = game.bag();             // → [{ type: 'key', id }]  (collected items)
-const enemies = game.enemies();         // → [{ row, col, id }]  (live enemies, stable enemy-id order)
+const enemies = game.enemies();         // → [{ row, col, id, damage, movePeriodMs, enemyType? }]  (live enemies; enemyType present only when the spawn cell overrode the rig)
 const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected 'H' cells, row-major order)
+const treasure = game.treasures();      // → [{ row, col, style, value }]  (uncollected 'T' cells; style is the rig, value the resolved reward)
+const collected = game.collected_treasure(); // → [{ style, count }]  (treasure collected so far, grouped per style, zero-count omitted)
 
 // Advance time-based state (opening doors, enemy AI, queued damage / heal events).
 // Returns the events that occurred during the tick (or queued by prior move_player calls):
@@ -109,6 +111,7 @@ const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected '
 //   { type: 'playerHealed',   hpAfter, row, col }
 //   { type: 'playerNotHealed', row, col, reason, message }
 //   { type: 'keyCollected',   id, row, col }
+//   { type: 'treasureCollected', style, value, row, col }
 const events = game.tick(16);
 
 // Time in ms until the next tick will produce an event — for setTimeout-driven
@@ -153,9 +156,9 @@ i32           maze_game_wasm_get_tick_event(MazeGameWasm* maze_game_wasm, i32 in
                                             u32* kind_out, u32* row_out, u32* col_out);
                                                                               // kind: 0=DoorOpened, 1=EnemyMoved,
                                                                               // 2=PlayerDamaged, 3=PlayerHealed, 4=PlayerNotHealed,
-                                                                              // 5=KeyCollected
+                                                                              // 5=KeyCollected, 6=TreasureCollected
 i32           maze_game_wasm_get_tick_event_payload(MazeGameWasm* maze_game_wasm, i32 index,
-                                                    u32* payload_out);        // enemy id / hp_after / reason / key id; 0=ok, -1=error
+                                                    u32* payload_out);        // enemy id / hp_after / reason / key id / treasure value; 0=ok, -1=error
 i32           maze_game_wasm_get_tick_event_string_payload(MazeGameWasm* maze_game_wasm, i32 index,
                                                            u8* buf_out, u32* len_out);
                                                                               // PlayerNotHealed message; two-call protocol
@@ -171,12 +174,27 @@ i32           maze_game_wasm_hp(MazeGameWasm* maze_game_wasm);                //
 i32           maze_game_wasm_max_hp(MazeGameWasm* maze_game_wasm);            // -1 on null
 i32           maze_game_wasm_enemy_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_enemy(MazeGameWasm* maze_game_wasm, i32 index,
-                                       u32* row_out, u32* col_out, u32* id_out);
+                                       u32* row_out, u32* col_out, u32* id_out,
+                                       u32* damage_out, f32* move_period_ms_out, i32* enemy_type_out);
                                                                               // 0=ok, -1=error
+                                                                              // damage_out / move_period_ms_out: resolved per-enemy values
+                                                                              // enemy_type_out: -1=no rig override, 0=goblin, 1=ghost
 i32           maze_game_wasm_health_pickup_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_health_pickup(MazeGameWasm* maze_game_wasm, i32 index,
                                                u32* row_out, u32* col_out, u32* id_out);
                                                                               // 0=ok, -1=error; id is always 0
+i32           maze_game_wasm_treasure_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_treasure(MazeGameWasm* maze_game_wasm, i32 index,
+                                          u32* row_out, u32* col_out,
+                                          i32* style_out, u32* value_out);
+                                                                              // 0=ok, -1=error
+                                                                              // style_out: 0=silver, 1=gold, 2=diamonds, 3=jewels
+                                                                              // value_out: resolved reward (override else rarity default)
+i32           maze_game_wasm_collected_treasure_count(MazeGameWasm* maze_game_wasm); // distinct styles collected
+i32           maze_game_wasm_get_collected_treasure(MazeGameWasm* maze_game_wasm, i32 index,
+                                                    i32* style_out, u32* count_out);
+                                                                              // 0=ok, -1=error; per-style tally, zero-count omitted
+                                                                              // style_out: 0=silver, 1=gold, 2=diamonds, 3=jewels
 ```
 
 The `json_string_ptr` argument must point to a length-prefixed string (4-byte little-endian length followed by UTF-8 bytes), allocated via `allocate_sized_memory`.

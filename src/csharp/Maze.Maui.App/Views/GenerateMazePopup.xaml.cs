@@ -65,13 +65,14 @@ namespace Maze.Maui.App.Views
         /// <param name="spareKeys">Default number of spare keys to plant (0 = none)</param>
         /// <param name="enemyCount">Default number of enemies to auto-place (0 = none)</param>
         /// <param name="healthCount">Default number of health pickups to auto-place (0 = none)</param>
+        /// <param name="treasureCount">Default number of treasure cells to auto-place (0 = none)</param>
         /// <param name="maxMazeCells">Server-reported cell-count cap (<c>AppFeatures.MaxMazeCells</c>); <c>null</c> means no cap</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
             uint minSolutionLength,
             uint doorCount = 0, uint spareDoors = 0, uint spareKeys = 0,
-            uint enemyCount = 0, uint healthCount = 0,
+            uint enemyCount = 0, uint healthCount = 0, uint treasureCount = 0,
             int? maxMazeCells = null, string? generationError = null)
         {
             InitializeComponent();
@@ -97,6 +98,7 @@ namespace Maze.Maui.App.Views
 
             EnemyCountEntry.Text = enemyCount.ToString();
             HealthCountEntry.Text = healthCount.ToString();
+            TreasureCountEntry.Text = treasureCount.ToString();
 
             if (generationError is not null)
             {
@@ -124,7 +126,7 @@ namespace Maze.Maui.App.Views
             // a tall window the cap is well above the natural content
             // height, so the Border stays content-sized — popup doesn't
             // inflate. Re-applied on window resize; unsubscribed when
-            // the popup closes. Same approach as Play3dCustomLaunchPopup.
+            // the popup closes. Same approach as MazeGameSettingsPopup.
             Loaded += OnPopupLoaded;
             Closed += OnPopupClosed;
 
@@ -347,6 +349,7 @@ namespace Maze.Maui.App.Views
                 spareKeysText: SpareKeysEntry.Text,
                 enemyCountText: EnemyCountEntry.Text,
                 healthCountText: HealthCountEntry.Text,
+                treasureCountText: TreasureCountEntry.Text,
                 maxMazeCells: _maxMazeCells,
                 out var parsed,
                 out error))
@@ -369,6 +372,7 @@ namespace Maze.Maui.App.Views
                 SpareKeys = parsed.SpareKeys,
                 EnemyCount = parsed.EnemyCount,
                 HealthCount = parsed.HealthCount,
+                TreasureCount = parsed.TreasureCount,
             };
             return true;
         }

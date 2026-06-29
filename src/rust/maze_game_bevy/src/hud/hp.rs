@@ -14,7 +14,7 @@
 
 use crate::hud::bag::BagHud;
 use crate::images::make_image;
-use crate::state::GameState;
+use crate::state::{GameState, MultiLevelRun};
 use bevy::prelude::*;
 
 const HEART_SIZE: f32 = 24.0;
@@ -23,8 +23,12 @@ const HEART_GAP: f32 = 6.0;
 /// matching the bag row's `LABEL_W` for visual consistency.
 const LABEL_W: f32 = 52.0;
 const LABEL_GAP: f32 = 10.0;
-/// Distance of the row's centre line above the bottom screen edge — sits
-/// above the bag row (which uses `BAG_MARGIN_BOTTOM = 26`).
+/// Gap between the bag HUD's top edge and the heart row's bottom edge — the
+/// heart row floats above the bag (see [`crate::hud::bag::top_edge_y`]) so the
+/// two never collide, even when a narrow window wraps the bag onto extra rows.
+const HP_GAP_ABOVE_BAG: f32 = 10.0;
+/// Initial spawn-time row centre above the bottom edge, used only for the first
+/// frame before `hp_hud_system` re-anchors the row above the live bag.
 const HP_MARGIN_BOTTOM: f32 = 64.0;
 
 /// Heart colour when the slot is currently filled (player has at least
@@ -154,6 +158,7 @@ fn row_left_for(max_hp: u32) -> f32 {
 pub(crate) fn hp_hud_system(
     window: Query<&Window>,
     state: Res<GameState>,
+    run: Res<MultiLevelRun>,
     mut label: Query<
         (&mut HpHud, &mut Transform),
         (Without<HpHeartIcon>, Without<BagHud>),
@@ -170,7 +175,10 @@ pub(crate) fn hp_hud_system(
     let hp = state.game.hp();
     let max_hp = state.game.max_hp();
     let row_left = row_left_for(max_hp);
-    let y = -win.height() / 2.0 + HP_MARGIN_BOTTOM;
+    let treasure = run.cumulative_treasure(&state.game.collected_treasure());
+    let y = crate::hud::bag::top_edge_y(&state.game, &treasure, win.width(), win.height())
+        + HP_GAP_ABOVE_BAG
+        + HEART_SIZE / 2.0;
 
     // Reposition the label each frame so window resizes track the bottom
     // edge (mirrors the bag HUD's behaviour).

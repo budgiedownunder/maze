@@ -29,19 +29,19 @@ pub(crate) fn spawn_night(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     images: &mut Option<ResMut<Assets<Image>>>,
 ) {
-    commands.spawn(AmbientLight {
-        brightness: AMBIENT_BRIGHTNESS,
-        ..default()
-    });
-
-    commands.spawn((
+    super::spawn_sky_lights(
+        commands,
+        AmbientLight {
+            brightness: AMBIENT_BRIGHTNESS,
+            ..default()
+        },
         DirectionalLight {
             illuminance: DIRECTIONAL_ILLUMINANCE,
             shadows_enabled: false,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -PI / 4.0, PI / 4.0, 0.0)),
-    ));
+    );
 
     let sky_tex = images.as_mut().map(|imgs| {
         make_sky_texture(

@@ -3,7 +3,7 @@ import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
 import {
   exceedsGenerateFeatureCap, exceedsMazeCellCap,
-  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TOTAL_FEATURES,
+  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT, MAX_TOTAL_FEATURES,
 } from '../utils/validation'
 
 // Tab identifiers grouping the generate fields so the dialog reads as a few
@@ -46,6 +46,7 @@ function defaultsFromGrid(grid: string[][]) {
   const doors = grid.reduce((n, row) => n + row.filter(c => c === 'D').length, 0)
   const enemies = grid.reduce((n, row) => n + row.filter(c => c === 'E').length, 0)
   const healths = grid.reduce((n, row) => n + row.filter(c => c === 'H').length, 0)
+  const treasures = grid.reduce((n, row) => n + row.filter(c => c === 'T').length, 0)
   return {
     rows: String(rows),
     cols: String(cols),
@@ -59,6 +60,7 @@ function defaultsFromGrid(grid: string[][]) {
     spareKeys: '0',
     enemyCount: String(enemies),
     healthCount: String(healths),
+    treasureCount: String(treasures),
   }
 }
 
@@ -80,6 +82,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
   const [spareKeys, setSpareKeys] = useState(defaults.spareKeys)
   const [enemyCount, setEnemyCount] = useState(defaults.enemyCount)
   const [healthCount, setHealthCount] = useState(defaults.healthCount)
+  const [treasureCount, setTreasureCount] = useState(defaults.treasureCount)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   // Whether a 1-based coordinate string sits within 1..max (inclusive).
@@ -149,6 +152,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     const skeys = parseInt(spareKeys, 10)
     const enemies = parseInt(enemyCount, 10)
     const healths = parseInt(healthCount, 10)
+    const treasures = parseInt(treasureCount, 10)
 
     if (!Number.isInteger(r) || r < 3) {
       setValidationError('Rows must be a whole number of 3 or more.')
@@ -206,6 +210,10 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       setValidationError(`Health must be a whole number between 0 and ${MAX_HEALTH_COUNT}.`)
       return
     }
+    if (!Number.isInteger(treasures) || treasures < 0 || treasures > MAX_TREASURE_COUNT) {
+      setValidationError(`Treasure must be a whole number between 0 and ${MAX_TREASURE_COUNT}.`)
+      return
+    }
     // Cross-field budget: each real door contributes one 'K' and one 'D' to
     // the generated grid, so the formula counts doors twice. The cap mirrors
     // the key-aware solver's MAX_TOTAL_FEATURES so a generated maze always
@@ -233,6 +241,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       spareKeys: skeys,
       enemyCount: enemies,
       healthCount: healths,
+      treasureCount: treasures,
     })
   }
 
@@ -349,6 +358,11 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
                 Health
                 <input type="number" className="input" value={healthCount} min={0} max={MAX_HEALTH_COUNT}
                   onChange={e => { setHealthCount(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Treasure
+                <input type="number" className="input" value={treasureCount} min={0} max={MAX_TREASURE_COUNT}
+                  onChange={e => { setTreasureCount(e.target.value); setValidationError(null) }} />
               </label>
             </div>
           </div>

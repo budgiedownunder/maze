@@ -1142,6 +1142,31 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetTreasureCount"/>
+        /// produces a grid containing the requested `'T'` cell count.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithTreasure_PlacesItInTheProducedGrid()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 321);
+            try
+            {
+                interop.GeneratorOptionsSetTreasureCount(optionsPtr, 4);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                string json = interop.MazeToJson(mazePtr);
+                int tCount = json.Split('T').Length - 1;
+                Assert.Equal(4, tCount);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
         /// Confirms that the generator's key + door cap (mirrored at the
         /// <c>Maze.MaxTotalFeatures</c> layer) surfaces as a thrown exception
         /// when the request would exceed it.
@@ -1554,6 +1579,10 @@ namespace Maze.Interop.Tests
                 Assert.Equal(1, interop.MazeGameEnemyCount(gamePtr));
                 Assert.True(interop.MazeGameGetEnemy(gamePtr, 0, out MazeEnemy enemy));
                 Assert.Equal((0u, 1u, 0u), (enemy.Row, enemy.Column, enemy.Id));
+                // No per-cell override → default damage 1 / move period 1500ms / no rig (-1).
+                Assert.Equal(1u, enemy.Damage);
+                Assert.Equal(1500.0f, enemy.MovePeriodMs);
+                Assert.Equal(-1, enemy.EnemyType);
 
                 Assert.Equal(1, interop.MazeGameHealthPickupCount(gamePtr));
                 Assert.True(interop.MazeGameGetHealthPickup(gamePtr, 0, out MazeHealthPickup pickup));
@@ -1562,6 +1591,117 @@ namespace Maze.Interop.Tests
             finally
             {
                 FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms uncollected treasure (style + value) surfaces through <c>MazeGameGetTreasure</c>,
+        /// and that walking onto treasure grows the grouped per-style collected tally read via
+        /// <c>MazeGameGetCollectedTreasure</c> through the interop layer.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Treasure_SurfacesAndCollectsThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            // ['S','T','F']: a bare Silver treasure (style ordinal 0, default value 50).
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","T","F"]]}""");
+            try
+            {
+                Assert.Equal(1, interop.MazeGameTreasureCount(gamePtr));
+                Assert.True(interop.MazeGameGetTreasure(gamePtr, 0, out MazeTreasure treasure));
+                Assert.Equal((0u, 1u), (treasure.Row, treasure.Column));
+                Assert.Equal(0, treasure.Style); // 0 = silver
+                Assert.Equal(50u, treasure.Value);
+                Assert.Equal(0, interop.MazeGameCollectedTreasureCount(gamePtr));
+
+                interop.MazeGameMovePlayer(gamePtr, 4); // Right → onto T, auto-collected
+                interop.MazeGameTick(gamePtr, 0f);      // flush the TreasureCollected event
+
+                Assert.Equal(0, interop.MazeGameTreasureCount(gamePtr));
+                Assert.Equal(1, interop.MazeGameCollectedTreasureCount(gamePtr));
+                Assert.True(interop.MazeGameGetCollectedTreasure(gamePtr, 0, out MazeCollectedTreasure collected));
+                Assert.Equal(0, collected.Style); // silver
+                Assert.Equal(1u, collected.Count);
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms a per-cell enemy override surfaces its resolved damage / move period and
+        /// rig ordinal through <c>MazeGameGetEnemy</c>.
+        /// </summary>
+        [Fact]
+        public void MazeGame_GetEnemy_SurfacesPerCellOverrideThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(
+                """{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":3,"movePeriodMs":600.0}],"F"]]}""");
+            try
+            {
+                Assert.True(interop.MazeGameGetEnemy(gamePtr, 0, out MazeEnemy enemy));
+                Assert.Equal(3u, enemy.Damage);
+                Assert.Equal(600.0f, enemy.MovePeriodMs);
+                Assert.Equal(1, enemy.EnemyType); // ghost
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms <c>MazeGetCellEntity</c> / <c>MazeSetCellEntity</c> / <c>MazeClearCellEntity</c>
+        /// round-trip a per-cell override (wire JSON) through the interop layer.
+        /// </summary>
+        [Fact]
+        public void Maze_CellEntity_GetSetClear_RoundTripsThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 3);
+            try
+            {
+                interop.MazeSetEnemyCells(mazePtr, 0, 1, 0, 1);
+                Assert.Null(interop.MazeGetCellEntity(mazePtr, 0, 1)); // no override yet
+
+                interop.MazeSetCellEntity(mazePtr, 0, 1, """{"type":"E","damage":2}""");
+                string? json = interop.MazeGetCellEntity(mazePtr, 0, 1);
+                Assert.NotNull(json);
+                Assert.Contains("\"type\":\"E\"", json);
+                Assert.Contains("\"damage\":2", json);
+
+                interop.MazeClearCellEntity(mazePtr, 0, 1);
+                Assert.Null(interop.MazeGetCellEntity(mazePtr, 0, 1));
+            }
+            finally
+            {
+                FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms a wall (<c>'W'</c>) cell's <c>wallType</c> override round-trips through the
+        /// interop layer — walls are overridable, and the type-vs-char check accepts it.
+        /// </summary>
+        [Fact]
+        public void Maze_WallCellEntity_RoundTripsThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 3);
+            try
+            {
+                interop.MazeSetWallCells(mazePtr, 0, 1, 0, 1);
+                interop.MazeSetCellEntity(mazePtr, 0, 1, """{"type":"W","wallType":"lava"}""");
+                string? json = interop.MazeGetCellEntity(mazePtr, 0, 1);
+                Assert.NotNull(json);
+                Assert.Contains("\"type\":\"W\"", json);
+                Assert.Contains("\"wallType\":\"lava\"", json);
+            }
+            finally
+            {
+                FreeMaze(mazePtr);
             }
         }
 

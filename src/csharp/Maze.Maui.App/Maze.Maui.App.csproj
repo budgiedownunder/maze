@@ -32,6 +32,14 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<!-- A handful of bindings deliberately set an explicit Source to reach the page or
+		     its view-model from inside an item template (x:Reference to the page /
+		     RelativeSource AncestorType={viewmodel:MazesViewModel}). Compiled source-binding
+		     (MauiEnableXamlCBindingWithSourceCompilation) resolves the path against the
+		     local x:DataType (e.g. MazeItem) rather than the referenced type, which breaks
+		     them (XC0045), so they intentionally stay reflection-based. Suppress the XC0025
+		     "binding not compiled" advisory for them. -->
+		<NoWarn>$(NoWarn);XC0025</NoWarn>
 		<!-- iOS builds resolve project-reference assemblies (Maze.Interop, Maze.Maui.Controls,
 		     Maze.Maui.Services) under an arch-specific RID (e.g. iossimulator-arm64) but those
 		     dependencies build as AnyCPU, triggering CS8012. Mirrors the property already set
@@ -83,10 +91,10 @@
 
 	<ItemGroup>
 		<!-- App Icon -->
-		<MauiIcon Include="Resources\AppIcon\appicon.png" Color="#512BD4" />
+		<MauiIcon Include="Resources\AppIcon\appicon.png" Color="#FFFFFF" />
 
 		<!-- Splash Screen -->
-		<MauiSplashScreen Include="Resources\Splash\splash.png" Color="" BaseSize="300,300" />
+		<MauiSplashScreen Include="Resources\Splash\splash.png" Color="#FFFFFF" BaseSize="300,300" />
 
 		<!-- Images -->
 		<MauiImage Include="Resources\Images\*" />

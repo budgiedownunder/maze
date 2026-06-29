@@ -15,25 +15,49 @@
 
 use crate::overlays::{lose, win};
 use crate::state::{
-    dispatch_game_result, GameClock, GameConfig, GameOutcome, GameResult, GameState,
+    dispatch_game_result, is_fastest_time, is_high_score, time_bonus, GameClock, GameConfig,
+    GameOutcome, GameResult, GameState, MultiLevelRun,
 };
 use bevy::prelude::*;
 
 pub(crate) fn outcome_watcher_system(
     mut commands: Commands,
     mut state: ResMut<GameState>,
+    run: ResMut<MultiLevelRun>,
     clock: Res<GameClock>,
     config: Res<GameConfig>,
 ) {
-    if state.anim.is_some() {
+    // Wait for any in-flight move to settle, and don't re-fire while a level
+    // transition is already playing (the completed level stays `is_complete`
+    // until the transition swaps it out).
+    if state.anim.is_some() || state.transition.is_some() {
         return;
     }
     if !state.won && state.game.is_complete() {
+        if !run.is_final() {
+            // Begin the climb / portal step; the swap happens when it completes.
+            crate::transition::start_level_transition(state.as_mut(), &run, &config);
+            return;
+        }
         state.won = true;
-        win::spawn_win_overlay(&mut commands);
+        let elapsed_ms = (clock.elapsed_secs * 1000.0) as u64;
+        let bonus = time_bonus(clock.elapsed_secs, clock.elapsed_secs + clock.remaining_secs);
+        let score = run.cumulative_score(state.game.score()) + bonus;
+        let high_score = is_high_score(score, config.leaderboard_tracked, config.high_score_to_beat);
+        let fastest_time =
+            is_fastest_time(elapsed_ms, config.leaderboard_tracked, config.fastest_time_to_beat);
+        win::spawn_win_overlay(
+            &mut commands,
+            score,
+            bonus,
+            elapsed_ms,
+            high_score,
+            fastest_time,
+        );
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Win,
-            elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+            elapsed_ms,
+            score,
             difficulty: config.difficulty.clone(),
             rows: state.grid.len() as u32,
             cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
@@ -52,6 +76,7 @@ pub(crate) fn outcome_watcher_system(
         dispatch_game_result(&GameResult {
             outcome: GameOutcome::Lose,
             elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+            score: run.cumulative_score(state.game.score()),
             difficulty: config.difficulty.clone(),
             rows: state.grid.len() as u32,
             cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
              x:DataType="viewmodel:AccountViewModel"
              x:Name="AccountPageRoot"
              x:Class="Maze.Maui.App.Views.AccountPage"
@@ -17,10 +18,9 @@
           HorizontalOptions="Fill">
 
         <ScrollView VerticalOptions="Fill">
-            <VerticalStackLayout Padding="30"
+            <VerticalStackLayout Padding="16"
                                  Spacing="16"
-                                 MaximumWidthRequest="400"
-                                 HorizontalOptions="Center">
+                                 HorizontalOptions="Fill">
 
                 <!-- Welcome banner shown only when the page was auto-navigated
                      to after a brand-new OAuth sign-up. Cleared on page
@@ -45,6 +45,42 @@
                         Margin="0,0,0,8"
                         IsVisible="{Binding IsNotBusy}">
                     <VerticalStackLayout Spacing="12">
+
+                        <!-- Avatar: tap the image or "Change" to pick + upload;
+                             "Remove" shows only when one is set. -->
+                        <VerticalStackLayout Spacing="8">
+                            <!-- AlignItems/AlignContent="Start" (top-aligned) rather than
+                                 Center: Android's FlexLayout mismeasures a centred cross-axis
+                                 and clips the top of the avatar; top alignment avoids that. -->
+                            <FlexLayout Wrap="Wrap" AlignItems="Start" AlignContent="Start" JustifyContent="Start">
+                                <controls:AvatarView Bytes="{Binding AvatarBytes}"
+                                                     Size="96"
+                                                     Margin="0,0,16,8">
+                                    <controls:AvatarView.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding ChangeAvatarCommand}" />
+                                    </controls:AvatarView.GestureRecognizers>
+                                </controls:AvatarView>
+                                <VerticalStackLayout Spacing="8">
+                                    <Button Text="Change"
+                                            Command="{Binding ChangeAvatarCommand}"
+                                            IsEnabled="{Binding AvatarBusy, Converter={StaticResource InvertBoolConverter}}"
+                                            Padding="14,6"
+                                            HorizontalOptions="Start" />
+                                    <Button Text="Remove"
+                                            Command="{Binding RemoveAvatarCommand}"
+                                            IsVisible="{Binding HasAvatar}"
+                                            IsEnabled="{Binding AvatarBusy, Converter={StaticResource InvertBoolConverter}}"
+                                            Padding="14,6"
+                                            HorizontalOptions="Start"
+                                            BackgroundColor="Transparent"
+                                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                </VerticalStackLayout>
+                            </FlexLayout>
+                            <Label Text="{Binding AvatarError}"
+                                   TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
+                                   IsVisible="{Binding AvatarError, Converter={StaticResource StringNotEmptyConverter}}"
+                                   HorizontalOptions="Start" />
+                        </VerticalStackLayout>
 
                         <Grid ColumnDefinitions="Auto,*"
                               RowDefinitions="Auto,Auto"

@@ -52,6 +52,7 @@ pub enum MazeCellTypeWasm {
     Door,
     Enemy,
     Health,
+    Treasure,
 }
 
 /// Identifies the type of a maze cell.
@@ -68,6 +69,7 @@ pub enum MazeCellTypeWasm {
     Door,
     Enemy,
     Health,
+    Treasure,
 }
 
 /// Identifies the maze generation algorithm to use.
@@ -150,6 +152,16 @@ pub enum MoveResultWasm {
 }
 
 /// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].
+///
+/// # Examples
+///
+/// ```
+/// use maze_wasm::wasm_common::{to_generation_algorithm, GenerationAlgorithmWasm};
+/// use maze::GenerationAlgorithm;
+///
+/// let alg = to_generation_algorithm(GenerationAlgorithmWasm::RecursiveBacktracking);
+/// assert!(matches!(alg, GenerationAlgorithm::RecursiveBacktracking));
+/// ```
 #[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
 pub fn to_generation_algorithm(alg: GenerationAlgorithmWasm) -> GenerationAlgorithm {
     match alg {
@@ -163,6 +175,15 @@ pub fn to_generation_algorithm(alg: GenerationAlgorithmWasm) -> GenerationAlgori
 ///
 /// `MazeCellTypeWasm`
 ///
+/// # Examples
+///
+/// ```
+/// use maze_wasm::wasm_common::{to_cell_type_enum, MazeCellTypeWasm};
+///
+/// assert!(matches!(to_cell_type_enum('W'), MazeCellTypeWasm::Wall));
+/// assert!(matches!(to_cell_type_enum('T'), MazeCellTypeWasm::Treasure));
+/// assert!(matches!(to_cell_type_enum(' '), MazeCellTypeWasm::Empty));
+/// ```
 pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
     match cell_type {
         'S' => MazeCellTypeWasm::Start,
@@ -172,6 +193,7 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
         'D' => MazeCellTypeWasm::Door,
         'E' => MazeCellTypeWasm::Enemy,
         'H' => MazeCellTypeWasm::Health,
+        'T' => MazeCellTypeWasm::Treasure,
         _ => MazeCellTypeWasm::Empty,
     }
 }
@@ -181,6 +203,14 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
 ///
 /// `Maze`
 ///
+/// # Examples
+///
+/// ```
+/// use maze_wasm::wasm_common::new_maze;
+///
+/// let maze = new_maze();
+/// assert_eq!(maze.definition.row_count(), 0);
+/// ```
 pub fn new_maze() -> Maze {
     let def = MazeDefinition::new(0, 0);
     Maze::new(def)
@@ -192,10 +222,57 @@ pub fn new_maze() -> Maze {
 ///
 /// `Ok(MazeGameWasm)` on success, or `Err(String)` if the JSON is invalid or has no start cell.
 ///
+/// # Examples
+///
+/// ```
+/// use maze_wasm::wasm_common::new_maze_game;
+///
+/// let wrapper = new_maze_game(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// assert_eq!(wrapper.game.player_row(), 0);
+/// assert!(new_maze_game("not json").is_err());
+/// ```
 pub fn new_maze_game(json: &str) -> Result<MazeGameWasm, String> {
     MazeGame::from_json(json).map(|game| MazeGameWasm {
         game,
         tick_events: Vec::new(),
     })
+}
+
+// `maze_wasm` is a `cdylib`, so the `# Examples` doc blocks above are not
+// executed as doc tests (and the wasm-bindgen JS examples are validated
+// separately by `tests/js/help_examples_tests.mjs`). These unit tests mirror
+// the doc examples so their logic is still machine-verified by `cargo test`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_cell_type_enum_maps_known_chars_and_defaults_to_empty() {
+        assert!(matches!(to_cell_type_enum('W'), MazeCellTypeWasm::Wall));
+        assert!(matches!(to_cell_type_enum('S'), MazeCellTypeWasm::Start));
+        assert!(matches!(to_cell_type_enum('T'), MazeCellTypeWasm::Treasure));
+        assert!(matches!(to_cell_type_enum(' '), MazeCellTypeWasm::Empty));
+    }
+
+    #[test]
+    fn new_maze_is_empty() {
+        assert_eq!(new_maze().definition.row_count(), 0);
+    }
+
+    #[test]
+    fn new_maze_game_succeeds_on_valid_json_and_errors_otherwise() {
+        let wrapper = new_maze_game(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+        assert_eq!(wrapper.game.player_row(), 0);
+        assert!(new_maze_game("not json").is_err());
+    }
+
+    #[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
+    #[test]
+    fn to_generation_algorithm_maps_the_variant() {
+        assert!(matches!(
+            to_generation_algorithm(GenerationAlgorithmWasm::RecursiveBacktracking),
+            GenerationAlgorithm::RecursiveBacktracking
+        ));
+    }
 }
 

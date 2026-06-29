@@ -1,4 +1,4 @@
-use data_model::{Maze, MazeDefinition, MazePoint};
+use data_model::{CellEntity, Maze, MazeDefinition, MazePoint};
 use maze::{Generator, GenerationAlgorithm, GeneratorOptions, MazeSolution, MazeSolver};
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
@@ -76,6 +76,7 @@ pub struct MazeCGeneratorOptions {
     pub spare_keys: u32,
     pub enemy_count: u32,
     pub health_count: u32,
+    pub treasure_count: u32,
 }
 
 /// Opaque game session handle, exposed to C# via P/Invoke.
@@ -462,6 +463,7 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
         'D' => 5,
         'E' => 6,
         'H' => 7,
+        'T' => 8,
         _ => 0,
     };
     if !out_cell_type.is_null() {
@@ -884,6 +886,40 @@ pub extern "C" fn maze_c_maze_set_health_cells(
     set_cell_range(ptr, start_row, start_col, end_row, end_col, 'H')
 }
 
+/// Sets a rectangular range of cells to treasure (`'T'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 2) as treasure, and assert its
+/// cell type is Treasure (8).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_treasure_cells(ptr, 1, 2, 1, 2);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 2, &mut ct) };
+/// assert_eq!(ct, 8, "expected Treasure at (1, 2)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_treasure_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'T')
+}
+
 /// Clears (empties) a rectangular range of cells. Returns `1` on success, `0` on error.
 ///
 /// # Examples
@@ -1267,6 +1303,150 @@ pub extern "C" fn maze_c_maze_to_json(ptr: *mut MazeC) -> *mut c_char {
     }
 }
 
+/// Returns the per-cell entity override at `(row, col)` as its wire JSON
+/// (e.g. `{"type":"E","enemyType":"ghost","damage":2}`), or `null` when the
+/// cell carries no override (or is out of range). The caller must free a
+/// non-null result with [`maze_c_free_string`].
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 1, 3);
+/// assert!(maze_c_maze_get_cell_entity(ptr, 0, 1).is_null()); // no override yet
+/// maze_c_free_maze(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_get_cell_entity(ptr: *mut MazeC, row: u32, col: u32) -> *mut c_char {
+    clear_last_error();
+    let mw = unsafe { &*ptr };
+    let entity = mw
+        .maze
+        .definition
+        .cell_entities
+        .get(&(row as usize, col as usize))
+        .and_then(|entities| entities.first());
+    match entity {
+        Some(entity) => match serde_json::to_string(entity) {
+            Ok(s) => match CString::new(s) {
+                Ok(cs) => cs.into_raw(),
+                Err(e) => {
+                    set_last_error(&e.to_string());
+                    ptr::null_mut()
+                }
+            },
+            Err(e) => {
+                set_last_error(&e.to_string());
+                ptr::null_mut()
+            }
+        },
+        None => ptr::null_mut(),
+    }
+}
+
+/// Sets the per-cell entity override at `(row, col)` from its wire JSON,
+/// replacing any existing one. The entity `type` must match the cell's current
+/// character (set the cell to the matching kind first). Returns `1` on success,
+/// `0` on a null/invalid JSON pointer, a parse error, an out-of-range cell, or
+/// a `type`/cell-character mismatch (see [`maze_c_get_last_error`]).
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze`]; `json`
+/// must be a valid null-terminated UTF-8 string or null.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 1, 3);
+/// maze_c_maze_set_enemy_cells(ptr, 0, 1, 0, 1); // cell (0,1) becomes 'E'
+/// let entity = CString::new(r#"{"type":"E","enemyType":"ghost"}"#).unwrap();
+/// let rc = unsafe { maze_c_maze_set_cell_entity(ptr, 0, 1, entity.as_ptr()) };
+/// assert_eq!(rc, 1);
+/// maze_c_free_maze(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_set_cell_entity(
+    ptr: *mut MazeC,
+    row: u32,
+    col: u32,
+    json: *const c_char,
+) -> u8 {
+    clear_last_error();
+    if json.is_null() {
+        set_last_error("json pointer is null");
+        return 0;
+    }
+    let json_str = match unsafe { CStr::from_ptr(json) }.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e.to_string());
+            return 0;
+        }
+    };
+    let entity: CellEntity = match serde_json::from_str(json_str) {
+        Ok(entity) => entity,
+        Err(e) => {
+            set_last_error(&e.to_string());
+            return 0;
+        }
+    };
+    let mw = unsafe { &mut *ptr };
+    let (r, c) = (row as usize, col as usize);
+    if r >= mw.maze.definition.row_count() || c >= mw.maze.definition.col_count() {
+        set_last_error("cell out of range");
+        return 0;
+    }
+    let cell_char = mw.maze.definition.grid[r][c];
+    if entity.cell_char() != cell_char {
+        set_last_error(&format!(
+            "cell entity type '{}' does not match cell character '{}'",
+            entity.cell_char(),
+            cell_char
+        ));
+        return 0;
+    }
+    mw.maze.definition.cell_entities.insert((r, c), vec![entity]);
+    1
+}
+
+/// Clears any per-cell entity override at `(row, col)`. Returns `1` (a cell
+/// with no override is unaffected).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 1, 3);
+/// maze_c_maze_set_enemy_cells(ptr, 0, 1, 0, 1);
+/// let entity = CString::new(r#"{"type":"E","damage":2}"#).unwrap();
+/// unsafe { maze_c_maze_set_cell_entity(ptr, 0, 1, entity.as_ptr()) };
+/// assert_eq!(maze_c_maze_clear_cell_entity(ptr, 0, 1), 1);
+/// assert!(maze_c_maze_get_cell_entity(ptr, 0, 1).is_null()); // cleared
+/// maze_c_free_maze(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_clear_cell_entity(ptr: *mut MazeC, row: u32, col: u32) -> u8 {
+    let mw = unsafe { &mut *ptr };
+    mw.maze
+        .definition
+        .cell_entities
+        .remove(&(row as usize, col as usize));
+    1
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // MazeSolution — solve / path points / free
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1514,6 +1694,7 @@ pub extern "C" fn maze_c_new_generator_options(
         spare_keys: 0,
         enemy_count: 0,
         health_count: 0,
+        treasure_count: 0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -1819,6 +2000,34 @@ pub extern "C" fn maze_c_generator_options_set_health_count(
     opts.health_count = value;
 }
 
+/// Sets the number of treasure cells to auto-place.
+///
+/// `0` (the default) places none. The generator places treasure dead-end-first
+/// (corridor ends before other walkable cells), type-weighted, clamping the
+/// request to `maze::MAX_TREASURE_COUNT` and to the eligible-cell count.
+///
+/// # Examples
+///
+/// Create generator options and set the treasure count to 3.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_treasure_count(opts, 3);
+/// assert_eq!(unsafe { (*opts).treasure_count }, 3);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_treasure_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.treasure_count = value;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Maze generation
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1908,6 +2117,7 @@ pub extern "C" fn maze_c_maze_generate(
         spare_keys: Some(opts.spare_keys as usize),
         enemy_count: Some(opts.enemy_count as usize),
         health_count: Some(opts.health_count as usize),
+        treasure_count: Some(opts.treasure_count as usize),
     };
 
     let generator = Generator {
@@ -2596,6 +2806,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
         maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
         maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
         maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
+        maze::GameEvent::TreasureCollected { cell: (r, c), .. } => (6u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
@@ -2666,6 +2877,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
             maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
         },
         maze::GameEvent::KeyCollected { id, .. } => *id,
+        maze::GameEvent::TreasureCollected { value, .. } => *value,
     };
     unsafe {
         if !out_payload.is_null() {
@@ -2830,6 +3042,18 @@ pub unsafe extern "C" fn maze_c_maze_game_get_key(
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Returns the player's current HP.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_hp(ptr), 3); // default starting HP
+/// maze_c_free_maze_game(ptr);
+/// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_hp(ptr: *mut MazeGameC) -> u32 {
@@ -2838,6 +3062,18 @@ pub extern "C" fn maze_c_maze_game_hp(ptr: *mut MazeGameC) -> u32 {
 }
 
 /// Returns the player's maximum HP.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_max_hp(ptr), 3); // default max HP
+/// maze_c_free_maze_game(ptr);
+/// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_max_hp(ptr: *mut MazeGameC) -> u32 {
@@ -2846,6 +3082,18 @@ pub extern "C" fn maze_c_maze_game_max_hp(ptr: *mut MazeGameC) -> u32 {
 }
 
 /// Returns the number of active enemies.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_enemy_count(ptr), 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
@@ -2853,7 +3101,12 @@ pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
     game.enemies().len() as i32
 }
 
-/// Retrieves a single enemy's current cell + stable id by index.
+/// Retrieves a single enemy's current cell, stable id, and resolved per-enemy
+/// tunables by index. `out_damage` / `out_move_period_ms` carry the resolved
+/// values (per-cell override else the per-game default). `out_enemy_type`
+/// carries the visual-rig override: `-1` when the spawn cell set none (the
+/// renderer falls back to its default), else the [`maze::EnemyType`] ordinal
+/// (`0` = goblin, `1` = ghost).
 ///
 /// Returns `1` on success, `0` if `index` is out of range.
 ///
@@ -2862,6 +3115,30 @@ pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
 /// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
 /// Out parameters may be null; non-null pointers must be valid writable
 /// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row = 0u32;
+/// let mut col = 0u32;
+/// let mut id = 0u32;
+/// let mut damage = 0u32;
+/// let mut move_period_ms = 0f32;
+/// let mut enemy_type = -2i32;
+/// let ok = unsafe {
+///     maze_c_maze_game_get_enemy(
+///         ptr, 0, &mut row, &mut col, &mut id, &mut damage, &mut move_period_ms, &mut enemy_type,
+///     )
+/// };
+/// assert_eq!(ok, 1);
+/// assert_eq!((row, col), (0, 1));
+/// maze_c_free_maze_game(ptr);
+/// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
@@ -2870,6 +3147,9 @@ pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
     out_row: *mut u32,
     out_col: *mut u32,
     out_id: *mut u32,
+    out_damage: *mut u32,
+    out_move_period_ms: *mut f32,
+    out_enemy_type: *mut i32,
 ) -> u8 {
     let game = unsafe { &(*ptr).game };
     let enemies = game.enemies();
@@ -2887,11 +3167,225 @@ pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
         if !out_id.is_null() {
             *out_id = enemy.id;
         }
+        if !out_damage.is_null() {
+            *out_damage = enemy.damage;
+        }
+        if !out_move_period_ms.is_null() {
+            *out_move_period_ms = enemy.move_period_ms;
+        }
+        if !out_enemy_type.is_null() {
+            *out_enemy_type = enemy_type_to_ffi(enemy.enemy_type);
+        }
+    }
+    1
+}
+
+/// Encodes an optional enemy rig override for the FFI boundary: `-1` for
+/// "no per-cell override", else the [`maze::EnemyType`] ordinal (`0` = goblin,
+/// `1` = ghost). C# maps the ordinal back to its `EnemyType`.
+fn enemy_type_to_ffi(enemy_type: Option<maze::EnemyType>) -> i32 {
+    match enemy_type {
+        None => -1,
+        Some(maze::EnemyType::Goblin) => 0,
+        Some(maze::EnemyType::Ghost) => 1,
+    }
+}
+
+/// Returns the number of uncollected treasure cells (live `'T'`).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_treasure_count(ptr), 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_treasure_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.treasures().len() as i32
+}
+
+/// Retrieves a single uncollected treasure cell by index: its cell, visual
+/// style, and resolved reward value. `out_style` carries the
+/// [`maze::TreasureStyle`] ordinal (`0` = silver, `1` = gold, `2` = diamonds,
+/// `3` = jewels); `out_value` carries the score the treasure awards (per-cell
+/// override else the type's default value).
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row = 0u32;
+/// let mut col = 0u32;
+/// let mut style = -1i32;
+/// let mut value = 0u32;
+/// let ok = unsafe {
+///     maze_c_maze_game_get_treasure(ptr, 0, &mut row, &mut col, &mut style, &mut value)
+/// };
+/// assert_eq!(ok, 1);
+/// assert_eq!((row, col), (0, 1));
+/// assert_eq!(style, 0); // silver (a bare 'T' default)
+/// assert_eq!(value, 50); // Silver default value
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_treasure(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_style: *mut i32,
+    out_value: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let treasures = game.treasures();
+    if index < 0 || index as usize >= treasures.len() {
+        return 0;
+    }
+    let ((row, col), style, value) = treasures[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = col as u32;
+        }
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_value.is_null() {
+            *out_value = value;
+        }
+    }
+    1
+}
+
+/// Encodes a treasure's visual style for the FFI boundary: the
+/// [`maze::TreasureStyle`] ordinal (`0` = silver, `1` = gold, `2` = diamonds,
+/// `3` = jewels). A treasure always has a style (a bare `'T'` defaults to
+/// silver), so unlike the enemy rig there is no `-1` "none" case. C# maps the
+/// ordinal back to its `TreasureStyle`.
+fn treasure_style_to_ffi(style: maze::TreasureStyle) -> i32 {
+    match style {
+        maze::TreasureStyle::Silver => 0,
+        maze::TreasureStyle::Gold => 1,
+        maze::TreasureStyle::Diamonds => 2,
+        maze::TreasureStyle::Jewels => 3,
+    }
+}
+
+/// Returns the number of distinct treasure styles the player has collected so
+/// far (the length of the grouped per-style tally). Zero until any treasure is
+/// collected; at most one entry per [`maze::TreasureStyle`].
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_collected_treasure_count(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_collected_treasure_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.collected_treasure().len() as i32
+}
+
+/// Retrieves one entry of the grouped per-style collected-treasure tally by
+/// index: `out_style` carries the [`maze::TreasureStyle`] ordinal (`0` = silver,
+/// `1` = gold, `2` = diamonds, `3` = jewels) and `out_count` the number of that
+/// style collected. Entries are ordered by ascending default value; styles
+/// never collected are omitted, so every `out_count` is at least `1`.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right — onto the treasure, auto-collected
+/// let mut style = -1i32;
+/// let mut count = 0u32;
+/// let ok = unsafe {
+///     maze_c_maze_game_get_collected_treasure(ptr, 0, &mut style, &mut count)
+/// };
+/// assert_eq!(ok, 1);
+/// assert_eq!(style, 0); // silver
+/// assert_eq!(count, 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_collected_treasure(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_style: *mut i32,
+    out_count: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let collected = game.collected_treasure();
+    if index < 0 || index as usize >= collected.len() {
+        return 0;
+    }
+    let (style, count) = collected[index as usize];
+    unsafe {
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_count.is_null() {
+            *out_count = count;
+        }
     }
     1
 }
 
 /// Returns the number of uncollected health-pickup cells (live `'H'`).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_health_pickup_count(ptr), 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_health_pickup_count(ptr: *mut MazeGameC) -> i32 {
@@ -2913,6 +3407,23 @@ pub extern "C" fn maze_c_maze_game_health_pickup_count(ptr: *mut MazeGameC) -> i
 /// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
 /// Out parameters may be null; non-null pointers must be valid writable
 /// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row = 0u32;
+/// let mut col = 0u32;
+/// let mut id = 99u32;
+/// let ok = unsafe { maze_c_maze_game_get_health_pickup(ptr, 0, &mut row, &mut col, &mut id) };
+/// assert_eq!(ok, 1);
+/// assert_eq!((row, col), (0, 1));
+/// maze_c_free_maze_game(ptr);
+/// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub unsafe extern "C" fn maze_c_maze_game_get_health_pickup(
@@ -3371,6 +3882,28 @@ mod tests {
                     if inside { 7 } else { 0 },
                     "expected {} at ({r},{c})",
                     if inside { "Health" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_treasure_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_treasure_cells(ptr, 0, 4, 2, 4);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (0..=2).contains(&r) && c == 4;
+                assert_eq!(
+                    ct,
+                    if inside { 8 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Treasure" } else { "Empty" },
                 );
             }
         }
@@ -3851,6 +4384,27 @@ mod tests {
     }
 
     #[test]
+    fn generate_maze_places_treasure() {
+        let ptr = new_maze();
+        let opts = maze_c_new_generator_options(15, 15, 0, 123);
+        maze_c_generator_options_set_treasure_count(opts, 4);
+        let ok = maze_c_maze_generate(ptr, opts);
+        assert_eq!(ok, 1, "generate failed: {:?}", last_error_str());
+        let mw = unsafe { &*ptr };
+        let treasure = mw
+            .maze
+            .definition
+            .grid
+            .iter()
+            .flatten()
+            .filter(|&&ch| ch == 'T')
+            .count();
+        assert_eq!(treasure, 4, "expected 4 treasure cells");
+        maze_c_free_generator_options(opts);
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
     fn generate_maze_error_too_small() {
         let ptr = new_maze();
         let opts = maze_c_new_generator_options(1, 1, 0, 0);
@@ -4230,11 +4784,205 @@ mod tests {
         let mut row: u32 = 99;
         let mut col: u32 = 99;
         let mut id: u32 = 99;
-        let ok = unsafe { maze_c_maze_game_get_enemy(ptr, 0, &mut row, &mut col, &mut id) };
+        let mut damage: u32 = 99;
+        let mut move_period_ms: f32 = -1.0;
+        let mut enemy_type: i32 = 99;
+        let ok = unsafe {
+            maze_c_maze_game_get_enemy(
+                ptr,
+                0,
+                &mut row,
+                &mut col,
+                &mut id,
+                &mut damage,
+                &mut move_period_ms,
+                &mut enemy_type,
+            )
+        };
         assert_eq!(ok, 1);
         assert_eq!((row, col), (0, 1));
         assert_eq!(id, 0);
+        // Defaults for an enemy with no per-cell override.
+        assert_eq!(damage, 1);
+        assert_eq!(move_period_ms, 1500.0);
+        assert_eq!(enemy_type, -1); // no rig override
         maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_enemy_surfaces_per_cell_override() {
+        let json = CString::new(
+            r#"{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":3,"movePeriodMs":600.0}],"F"]]}"#,
+        )
+        .unwrap();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let mut damage: u32 = 99;
+        let mut move_period_ms: f32 = -1.0;
+        let mut enemy_type: i32 = 99;
+        let ok = unsafe {
+            maze_c_maze_game_get_enemy(
+                ptr,
+                0,
+                &mut row,
+                &mut col,
+                &mut id,
+                &mut damage,
+                &mut move_period_ms,
+                &mut enemy_type,
+            )
+        };
+        assert_eq!(ok, 1);
+        assert_eq!(damage, 3);
+        assert_eq!(move_period_ms, 600.0);
+        assert_eq!(enemy_type, 1); // ghost
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_treasure_count_and_get_surfaces_style_and_value() {
+        // A gold treasure with an explicit value override.
+        let json =
+            CString::new(r#"{"grid":[["S",[{"type":"T","style":"gold","value":250}],"F"]]}"#)
+                .unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_treasure_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut style: i32 = 99;
+        let mut value: u32 = 99;
+        let ok = unsafe {
+            maze_c_maze_game_get_treasure(ptr, 0, &mut row, &mut col, &mut style, &mut value)
+        };
+        assert_eq!(ok, 1);
+        assert_eq!((row, col), (0, 1));
+        assert_eq!(style, 1); // gold
+        assert_eq!(value, 250);
+        // Out-of-range index returns 0.
+        let oob = unsafe {
+            maze_c_maze_game_get_treasure(ptr, 9, &mut row, &mut col, &mut style, &mut value)
+        };
+        assert_eq!(oob, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_treasure_defaults_a_bare_cell_to_silver_and_fifty() {
+        let json = CString::new(r#"{"grid":[["S","T","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut style: i32 = 99;
+        let mut value: u32 = 99;
+        let ok = unsafe {
+            maze_c_maze_game_get_treasure(ptr, 0, &mut row, &mut col, &mut style, &mut value)
+        };
+        assert_eq!(ok, 1);
+        assert_eq!(style, 0); // silver (default)
+        assert_eq!(value, 50); // Silver default value
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_collected_treasure_count_and_get_group_per_style() {
+        // Two silver + one gold; collected counts group per style in canonical
+        // order with no zero entries.
+        let json =
+            CString::new(r#"{"grid":[["S","T",[{"type":"T","style":"gold"}],"T","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_collected_treasure_count(ptr), 0);
+        maze_c_maze_game_move_player(ptr, 4); // silver
+        maze_c_maze_game_move_player(ptr, 4); // gold
+        maze_c_maze_game_move_player(ptr, 4); // silver
+        assert_eq!(maze_c_maze_game_collected_treasure_count(ptr), 2);
+
+        let mut style: i32 = 99;
+        let mut count: u32 = 99;
+        let ok =
+            unsafe { maze_c_maze_game_get_collected_treasure(ptr, 0, &mut style, &mut count) };
+        assert_eq!(ok, 1);
+        assert_eq!((style, count), (0, 2)); // silver × 2
+        let ok =
+            unsafe { maze_c_maze_game_get_collected_treasure(ptr, 1, &mut style, &mut count) };
+        assert_eq!(ok, 1);
+        assert_eq!((style, count), (1, 1)); // gold × 1
+        // Out-of-range index returns 0.
+        let oob =
+            unsafe { maze_c_maze_game_get_collected_treasure(ptr, 9, &mut style, &mut count) };
+        assert_eq!(oob, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn maze_with_enemy_override_round_trips_through_json() {
+        // The char-or-array cell form survives a from_json -> to_json round-trip
+        // at the FFI boundary (serde in data_model does the work).
+        let src = r#"{"id":"m","name":"n","definition":{"grid":[["S",[{"type":"E","damage":2}],"F"]]}}"#;
+        let json = CString::new(src).unwrap();
+        let maze_ptr = maze_c_new_maze();
+        let rc = unsafe { maze_c_maze_from_json(maze_ptr, json.as_ptr()) };
+        assert_eq!(rc, 1); // 1 = success
+        let out = maze_c_maze_to_json(maze_ptr);
+        let round_tripped = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        assert!(
+            round_tripped.contains(r#"[{"type":"E","damage":2}]"#),
+            "override array form missing from round-trip: {round_tripped}"
+        );
+        unsafe { maze_c_free_string(out) };
+        maze_c_free_maze(maze_ptr);
+    }
+
+    #[test]
+    fn maze_get_set_clear_cell_entity_round_trip() {
+        let maze_ptr = maze_c_new_maze();
+        maze_c_maze_resize(maze_ptr, 1, 3);
+        maze_c_maze_set_enemy_cells(maze_ptr, 0, 1, 0, 1);
+        // No override yet → null.
+        assert!(maze_c_maze_get_cell_entity(maze_ptr, 0, 1).is_null());
+
+        let entity = CString::new(r#"{"type":"E","enemyType":"ghost","damage":2}"#).unwrap();
+        let rc = unsafe { maze_c_maze_set_cell_entity(maze_ptr, 0, 1, entity.as_ptr()) };
+        assert_eq!(rc, 1);
+
+        let got = maze_c_maze_get_cell_entity(maze_ptr, 0, 1);
+        assert!(!got.is_null());
+        let got_str = unsafe { CStr::from_ptr(got) }.to_str().unwrap().to_string();
+        assert!(got_str.contains(r#""type":"E""#), "got: {got_str}");
+        assert!(got_str.contains(r#""enemyType":"ghost""#), "got: {got_str}");
+        assert!(got_str.contains(r#""damage":2"#), "got: {got_str}");
+        unsafe { maze_c_free_string(got) };
+
+        // Type mismatch (cell is 'E', entity claims 'H') is rejected.
+        let mismatch = CString::new(r#"{"type":"H","healAmount":2}"#).unwrap();
+        let rc2 = unsafe { maze_c_maze_set_cell_entity(maze_ptr, 0, 1, mismatch.as_ptr()) };
+        assert_eq!(rc2, 0);
+
+        assert_eq!(maze_c_maze_clear_cell_entity(maze_ptr, 0, 1), 1);
+        assert!(maze_c_maze_get_cell_entity(maze_ptr, 0, 1).is_null());
+        maze_c_free_maze(maze_ptr);
+    }
+
+    #[test]
+    fn maze_set_get_wall_cell_entity_round_trip() {
+        // Wall cells are overridable too (the `wall_type` per-cell override),
+        // and the type-vs-char check accepts a `W` entity on a `W` cell.
+        let maze_ptr = maze_c_new_maze();
+        maze_c_maze_resize(maze_ptr, 1, 3);
+        unsafe { maze_c_maze_set_wall_cells(maze_ptr, 0, 1, 0, 1) };
+
+        let entity = CString::new(r#"{"type":"W","wallType":"lava"}"#).unwrap();
+        let rc = unsafe { maze_c_maze_set_cell_entity(maze_ptr, 0, 1, entity.as_ptr()) };
+        assert_eq!(rc, 1);
+
+        let got = maze_c_maze_get_cell_entity(maze_ptr, 0, 1);
+        assert!(!got.is_null());
+        let got_str = unsafe { CStr::from_ptr(got) }.to_str().unwrap().to_string();
+        assert!(got_str.contains(r#""type":"W""#), "got: {got_str}");
+        assert!(got_str.contains(r#""wallType":"lava""#), "got: {got_str}");
+        unsafe { maze_c_free_string(got) };
+        maze_c_free_maze(maze_ptr);
     }
 
     #[test]

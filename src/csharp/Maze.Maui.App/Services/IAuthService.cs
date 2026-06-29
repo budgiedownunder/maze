@@ -54,6 +54,13 @@ namespace Maze.Maui.App.Services
         /// never exposed.</summary>
         [JsonPropertyName("has_password")]
         public bool HasPassword { get; set; }
+
+        /// <summary>Cache-buster + "has an avatar" marker (RFC 3339 string), or
+        /// <c>null</c> when the user has no avatar. When set, clients fetch the
+        /// avatar at <c>/users/{id}/avatar?v=&lt;ts&gt;</c>; otherwise they show
+        /// the generic placeholder.</summary>
+        [JsonPropertyName("avatar_updated_at")]
+        public string? AvatarUpdatedAt { get; set; }
     }
 
     /// <summary>

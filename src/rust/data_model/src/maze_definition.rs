@@ -1,12 +1,15 @@
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::de::{IgnoredAny, SeqAccess, Unexpected, Visitor};
+use serde::ser::{SerializeSeq, SerializeStruct};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
+use std::fmt;
 use utoipa::ToSchema;
 
 use crate::Error;
 use crate::MazeCellState;
 use crate::MazePoint;
 
-#[derive(Serialize, Clone, Debug, ToSchema)]
+#[derive(Clone, Debug, ToSchema)]
 /// Represents a maze definition
 pub struct MazeDefinition {
     // 2-d grid (rows x columns) of characters describing the maze layout, where
@@ -18,7 +21,713 @@ pub struct MazeDefinition {
     // - `'D'`:  Represents a door (multiple allowed).
     // - `'E'`:  Represents an enemy spawn cell (multiple allowed).
     // - `'H'`:  Represents a health-pickup cell (multiple allowed).
+    // - `'T'`:  Represents a treasure cell (multiple allowed).
+    //
+    // On the wire each cell is normally a bare single-character string. A cell
+    // may instead carry an *override* (non-default characteristics for the
+    // entity standing on it), in which case it is encoded as an array holding
+    // one entity object `[ { "type": <char>, …fields } ]`. Overrides are parsed
+    // out into `cell_entities`; this grid always holds the plain cell
+    // character so the generator, solver and renderers keep working on clean
+    // characters plus an override lookup.
     pub grid: Vec<Vec<char>>,
+    /// Sparse per-cell entities keyed by `(row, col)`. Only cells whose entity
+    /// carries a non-default characteristic appear here, so an all-default maze
+    /// has an empty map and serialises byte-for-byte as a plain character grid.
+    ///
+    /// The value is a list so it mirrors the always-array wire form one-to-one;
+    /// today every list holds exactly one entity (the length is capped at 1),
+    /// so callers read it with `.first()`. Modelling it as a list now means a
+    /// future cell holding several co-located entities is a cap relaxation
+    /// rather than a change to this type.
+    ///
+    /// Excluded from the OpenAPI schema: the documented contract is the
+    /// character grid; the array-of-one entity form is an optional,
+    /// sparsely-used extension layered on individual cells.
+    #[schema(ignore, value_type = Object)]
+    pub cell_entities: HashMap<(usize, usize), Vec<CellEntity>>,
+}
+
+/// Visual rig used to render an enemy (`'E'`) cell.
+///
+/// This is a *characteristic* layered on an enemy cell, not a new cell type:
+/// the chase AI is identical for every variant and only the renderers read it.
+/// The wire form is the lowercase string `"goblin"` or `"ghost"`; an
+/// unrecognised value falls back to `Goblin` so a maze authored by a newer
+/// build still loads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum EnemyType {
+    /// The default enemy rig.
+    #[default]
+    Goblin,
+    /// An alternative enemy rig.
+    Ghost,
+}
+
+impl EnemyType {
+    /// Returns the lowercase wire string for this enemy rig.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::EnemyType;
+    /// assert_eq!(EnemyType::Goblin.as_wire_str(), "goblin");
+    /// assert_eq!(EnemyType::Ghost.as_wire_str(), "ghost");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Goblin => "goblin",
+            Self::Ghost => "ghost",
+        }
+    }
+}
+
+impl Serialize for EnemyType {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for EnemyType {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "ghost" => Self::Ghost,
+            _ => Self::Goblin,
+        })
+    }
+}
+
+/// Visual rig used to render a health-pickup (`'H'`) cell.
+///
+/// Like [`EnemyType`] this is a per-cell *characteristic*, not a new cell type;
+/// only the renderers read it. The wire form is the lowercase string `"heart"`
+/// or `"potion"`; an unrecognised value falls back to `Heart`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum HealthStyle {
+    /// The default health-pickup rig.
+    #[default]
+    Heart,
+    /// An alternative health-pickup rig.
+    Potion,
+}
+
+impl HealthStyle {
+    /// Returns the lowercase wire string for this health-pickup rig.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::HealthStyle;
+    /// assert_eq!(HealthStyle::Heart.as_wire_str(), "heart");
+    /// assert_eq!(HealthStyle::Potion.as_wire_str(), "potion");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Heart => "heart",
+            Self::Potion => "potion",
+        }
+    }
+}
+
+impl Serialize for HealthStyle {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for HealthStyle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "potion" => Self::Potion,
+            _ => Self::Heart,
+        })
+    }
+}
+
+/// Visual rig used to render a key-holder (`'K'`) cell.
+///
+/// Like [`EnemyType`] this is a per-cell *characteristic*, not a new cell type;
+/// only the renderers read it. The wire form is the `snake_case` string
+/// `"pedestal"`, `"chest"` or `"floating_key"`; an unrecognised value falls
+/// back to `Pedestal`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum KeyHolderStyle {
+    /// The default key-holder rig.
+    #[default]
+    Pedestal,
+    /// A chest the key sits inside.
+    Chest,
+    /// A free-floating key with no holder.
+    FloatingKey,
+}
+
+impl KeyHolderStyle {
+    /// Returns the `snake_case` wire string for this key-holder rig.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::KeyHolderStyle;
+    /// assert_eq!(KeyHolderStyle::Pedestal.as_wire_str(), "pedestal");
+    /// assert_eq!(KeyHolderStyle::FloatingKey.as_wire_str(), "floating_key");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Pedestal => "pedestal",
+            Self::Chest => "chest",
+            Self::FloatingKey => "floating_key",
+        }
+    }
+}
+
+impl Serialize for KeyHolderStyle {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyHolderStyle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "chest" => Self::Chest,
+            "floating_key" => Self::FloatingKey,
+            _ => Self::Pedestal,
+        })
+    }
+}
+
+/// Open-animation style used to render a door (`'D'`) cell.
+///
+/// Like [`EnemyType`] this is a per-cell *characteristic*, not a new cell type;
+/// only the renderers read it. The wire form is the lowercase string
+/// `"swing"`, `"slide"`, `"portcullis"` or `"dissolve"`; an unrecognised value
+/// falls back to `Swing`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum DoorStyle {
+    /// The default door rig (hinged swing).
+    #[default]
+    Swing,
+    /// A door that slides aside.
+    Slide,
+    /// A portcullis that lifts.
+    Portcullis,
+    /// A door that dissolves away.
+    Dissolve,
+}
+
+impl DoorStyle {
+    /// Returns the lowercase wire string for this door rig.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::DoorStyle;
+    /// assert_eq!(DoorStyle::Swing.as_wire_str(), "swing");
+    /// assert_eq!(DoorStyle::Portcullis.as_wire_str(), "portcullis");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Swing => "swing",
+            Self::Slide => "slide",
+            Self::Portcullis => "portcullis",
+            Self::Dissolve => "dissolve",
+        }
+    }
+}
+
+impl Serialize for DoorStyle {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for DoorStyle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "slide" => Self::Slide,
+            "portcullis" => Self::Portcullis,
+            "dissolve" => Self::Dissolve,
+            _ => Self::Swing,
+        })
+    }
+}
+
+/// Visual type used to render a wall (`'W'`) cell.
+///
+/// Like [`EnemyType`] this is a per-cell *characteristic*, not a new cell type;
+/// the cell stays impassable and only the renderers read it. It shares its wire
+/// vocabulary with the per-maze `wall_type` launch setting: the solid-wall
+/// textures (`brick` / `dressed_stone` / `wood` / `cobblestone`) force a
+/// specific texture in place of the default per-cell variation, and `water` /
+/// `lava` / `iron_fence` are non-occluding skins (a floor-level pool, or
+/// see-through bars). The wire form is the `snake_case` string; an unrecognised
+/// value falls back to `Brick`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WallType {
+    /// A brick wall texture.
+    #[default]
+    Brick,
+    /// A dressed-stone wall texture.
+    DressedStone,
+    /// A wood-plank wall texture.
+    Wood,
+    /// A cobblestone wall texture.
+    Cobblestone,
+    /// A floor-level pool of water (non-occluding).
+    Water,
+    /// A floor-level pool of lava (non-occluding).
+    Lava,
+    /// A wall of see-through vertical iron bars (non-occluding).
+    IronFence,
+}
+
+impl WallType {
+    /// Returns the `snake_case` wire string for this wall type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::WallType;
+    /// assert_eq!(WallType::Brick.as_wire_str(), "brick");
+    /// assert_eq!(WallType::IronFence.as_wire_str(), "iron_fence");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Brick => "brick",
+            Self::DressedStone => "dressed_stone",
+            Self::Wood => "wood",
+            Self::Cobblestone => "cobblestone",
+            Self::Water => "water",
+            Self::Lava => "lava",
+            Self::IronFence => "iron_fence",
+        }
+    }
+}
+
+impl Serialize for WallType {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for WallType {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "dressed_stone" => Self::DressedStone,
+            "wood" => Self::Wood,
+            "cobblestone" => Self::Cobblestone,
+            "water" => Self::Water,
+            "lava" => Self::Lava,
+            "iron_fence" => Self::IronFence,
+            _ => Self::Brick,
+        })
+    }
+}
+
+/// Treasure (`'T'`) type — the rig the renderers draw, and the attribute the
+/// generator rolls for each placed treasure. The type also sets the default
+/// reward value (engine-side; see [`TreasureOverride::value`] for the per-cell
+/// override). The wire form is the lowercase string `"silver"`, `"gold"`,
+/// `"diamonds"` or `"jewels"`; an unrecognised value falls back to `Silver`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TreasureStyle {
+    /// Silver - the default treasure rig.
+    #[default]
+    Silver,
+    /// Gold.
+    Gold,
+    /// Diamonds.
+    Diamonds,
+    /// Jewels.
+    Jewels,
+}
+
+impl TreasureStyle {
+    /// Returns the lowercase wire string for this treasure style.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::TreasureStyle;
+    /// assert_eq!(TreasureStyle::Silver.as_wire_str(), "silver");
+    /// assert_eq!(TreasureStyle::Diamonds.as_wire_str(), "diamonds");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Silver => "silver",
+            Self::Gold => "gold",
+            Self::Diamonds => "diamonds",
+            Self::Jewels => "jewels",
+        }
+    }
+}
+
+impl Serialize for TreasureStyle {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for TreasureStyle {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "gold" => Self::Gold,
+            "diamonds" => Self::Diamonds,
+            "jewels" => Self::Jewels,
+            _ => Self::Silver,
+        })
+    }
+}
+
+/// Non-default characteristics for an enemy (`'E'`) cell. Every field is
+/// optional: a `None` field means "inherit the per-game / built-in default".
+/// `enemy_type` is read by the renderers; `damage` and `move_period_ms` are
+/// applied by the engine.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnemyOverride {
+    /// Visual rig for this enemy. Renderer-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enemy_type: Option<EnemyType>,
+    /// Damage dealt on contact, overriding the per-game default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub damage: Option<u32>,
+    /// How often this enemy advances one cell, in milliseconds, overriding the
+    /// per-game default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub move_period_ms: Option<f32>,
+}
+
+impl EnemyOverride {
+    fn is_empty(&self) -> bool {
+        self.enemy_type.is_none() && self.damage.is_none() && self.move_period_ms.is_none()
+    }
+}
+
+/// Non-default characteristics for a health-pickup (`'H'`) cell. Every field is
+/// optional: a `None` field means "inherit the per-game / built-in default".
+/// `health_style` is read by the renderers; `heal_amount` is applied by the
+/// engine.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthOverride {
+    /// Visual rig for this pickup. Renderer-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health_style: Option<HealthStyle>,
+    /// Hit points restored when consumed, overriding the built-in default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heal_amount: Option<u32>,
+}
+
+impl HealthOverride {
+    fn is_empty(&self) -> bool {
+        self.health_style.is_none() && self.heal_amount.is_none()
+    }
+}
+
+/// Non-default characteristics for a key-holder (`'K'`) cell. `key_holder` is
+/// read by the renderers; a `None` field means "inherit the per-game / built-in
+/// default". (The key&harr;door pairing is a separate concern and is not modelled
+/// here.)
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyOverride {
+    /// Visual rig for this key holder. Renderer-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_holder: Option<KeyHolderStyle>,
+}
+
+impl KeyOverride {
+    fn is_empty(&self) -> bool {
+        self.key_holder.is_none()
+    }
+}
+
+/// Non-default characteristics for a door (`'D'`) cell. `door_style` is read by
+/// the renderers; a `None` field means "inherit the per-game / built-in
+/// default". (The key&harr;door pairing is a separate concern and is not
+/// modelled here.)
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DoorOverride {
+    /// Visual open-animation rig for this door. Renderer-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub door_style: Option<DoorStyle>,
+}
+
+impl DoorOverride {
+    fn is_empty(&self) -> bool {
+        self.door_style.is_none()
+    }
+}
+
+/// Non-default characteristics for a wall (`'W'`) cell. `wall_type` is read by
+/// the renderers; a `None` field means "inherit the per-maze / default per-cell
+/// wall appearance". The wall stays impassable regardless of type.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WallOverride {
+    /// Visual type for this wall. Renderer-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wall_type: Option<WallType>,
+}
+
+impl WallOverride {
+    fn is_empty(&self) -> bool {
+        self.wall_type.is_none()
+    }
+}
+
+/// Non-default characteristics for a treasure (`'T'`) cell. Every field is
+/// optional; a `None` field means "inherit the default". `style` is the
+/// treasure type (which also sets the default reward value); `value` overrides
+/// that style-derived default score reward.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TreasureOverride {
+    /// Treasure type. Determines the rig and the default reward value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<TreasureStyle>,
+    /// Score reward, overriding the style-derived default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<u32>,
+}
+
+impl TreasureOverride {
+    fn is_empty(&self) -> bool {
+        self.style.is_none() && self.value.is_none()
+    }
+}
+
+/// One entity occupying a cell, together with its (optional) override
+/// characteristics. A cell holds a list of these (see
+/// [`MazeDefinition::cell_entities`]); today that list is capped at one
+/// element, but the wire form is an array so it can grow to hold several
+/// co-located entities later with no format change.
+///
+/// This is also the on-the-wire entity type: it serialises as a flat object
+/// tagged by `"type"` (`{ "type": "E", "enemyType": "ghost", "damage": 2 }`)
+/// with only the set override fields present. Adding a new entity kind later is
+/// a single new variant — the (de)serialiser, the type→field mapping, and the
+/// per-variant validation all follow from the variant's own payload struct.
+/// Unrecognised fields inside an entity are ignored (forward tolerance); an
+/// unrecognised `"type"` is rejected.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum CellEntity {
+    /// Override for an enemy (`'E'`) cell.
+    #[serde(rename = "E")]
+    Enemy(EnemyOverride),
+    /// Override for a health-pickup (`'H'`) cell.
+    #[serde(rename = "H")]
+    Health(HealthOverride),
+    /// Override for a key-holder (`'K'`) cell.
+    #[serde(rename = "K")]
+    Key(KeyOverride),
+    /// Override for a door (`'D'`) cell.
+    #[serde(rename = "D")]
+    Door(DoorOverride),
+    /// Override for a wall (`'W'`) cell.
+    #[serde(rename = "W")]
+    Wall(WallOverride),
+    /// Override for a treasure (`'T'`) cell.
+    #[serde(rename = "T")]
+    Treasure(TreasureOverride),
+}
+
+impl CellEntity {
+    /// The grid character this entity belongs on. An entity override is only
+    /// meaningful on (and only serialised onto) a cell holding this character;
+    /// a stale override left on a non-matching cell — e.g. after an in-place
+    /// edit turned an `'E'` into a `'W'` — is dropped on serialisation rather
+    /// than emitted as a malformed entity. Callers threading overrides through
+    /// other layers use this to check an entity against the cell it sits on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{CellEntity, EnemyOverride};
+    /// let entity = CellEntity::Enemy(EnemyOverride::default());
+    /// assert_eq!(entity.cell_char(), 'E');
+    /// ```
+    pub fn cell_char(&self) -> char {
+        match self {
+            CellEntity::Enemy(_) => 'E',
+            CellEntity::Health(_) => 'H',
+            CellEntity::Key(_) => 'K',
+            CellEntity::Door(_) => 'D',
+            CellEntity::Wall(_) => 'W',
+            CellEntity::Treasure(_) => 'T',
+        }
+    }
+
+    /// Whether the override sets no field at all. A field-less override carries
+    /// no information and is normalised away on both read and write — it parses
+    /// out of the map on deserialise and serialises back to a bare character.
+    fn is_empty(&self) -> bool {
+        match self {
+            CellEntity::Enemy(e) => e.is_empty(),
+            CellEntity::Health(h) => h.is_empty(),
+            CellEntity::Key(k) => k.is_empty(),
+            CellEntity::Door(d) => d.is_empty(),
+            CellEntity::Wall(w) => w.is_empty(),
+            CellEntity::Treasure(t) => t.is_empty(),
+        }
+    }
+
+    /// Per-variant sanity check applied after deserialisation. Type-system
+    /// guarantees (`u32` counts can't be negative) cover most fields; this
+    /// catches the few that need a runtime range check.
+    fn validate(&self) -> Result<(), &'static str> {
+        if let CellEntity::Enemy(e) = self {
+            if let Some(period) = e.move_period_ms {
+                if !period.is_finite() || period < 0.0 {
+                    return Err("enemy 'movePeriodMs' must be a non-negative finite number");
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A single grid cell as deserialised from the wire: its character plus an
+/// optional parsed override.
+struct WireCell {
+    ch: char,
+    over: Option<CellEntity>,
+}
+
+impl<'de> Deserialize<'de> for WireCell {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CellVisitor;
+
+        impl<'de> Visitor<'de> for CellVisitor {
+            type Value = WireCell;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a single-character string or an array containing one entity object")
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<WireCell, E> {
+                let mut chars = value.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => Ok(WireCell { ch: c, over: None }),
+                    _ => Err(E::invalid_value(Unexpected::Str(value), &"a character")),
+                }
+            }
+
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<WireCell, A::Error> {
+                let first: Option<CellEntity> = seq.next_element()?;
+                let over = match first {
+                    Some(over) => over,
+                    None => {
+                        return Err(de::Error::custom(
+                            "a cell entity array must contain exactly one entity (found 0)",
+                        ))
+                    }
+                };
+                // Length cap = 1. Drain any extra entities so the count in the
+                // error reflects how many were actually supplied.
+                if seq.next_element::<IgnoredAny>()?.is_some() {
+                    let mut count = 2;
+                    while seq.next_element::<IgnoredAny>()?.is_some() {
+                        count += 1;
+                    }
+                    return Err(de::Error::custom(format!(
+                        "multiple entities per cell not yet supported (found {count})"
+                    )));
+                }
+                over.validate().map_err(de::Error::custom)?;
+                let ch = over.cell_char();
+                // A field-less override carries no information; normalise it away
+                // so it round-trips as a bare character (read tolerant, write
+                // canonical).
+                let over = (!over.is_empty()).then_some(over);
+                Ok(WireCell { ch, over })
+            }
+        }
+
+        deserializer.deserialize_any(CellVisitor)
+    }
+}
+
+/// A single grid cell as it should be serialised: either the bare character or
+/// an array of entity objects (one per override that belongs on the cell). Each
+/// override serialises itself (via the `#[serde(tag = "type")]` derive on
+/// [`CellEntity`]) as the flat tagged object form.
+enum SerCell<'a> {
+    Bare(char),
+    Entities(Vec<&'a CellEntity>),
+}
+
+impl Serialize for SerCell<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            SerCell::Bare(ch) => serializer.serialize_char(*ch),
+            SerCell::Entities(overrides) => {
+                let mut seq = serializer.serialize_seq(Some(overrides.len()))?;
+                for over in overrides {
+                    seq.serialize_element(over)?;
+                }
+                seq.end()
+            }
+        }
+    }
+}
+
+impl Serialize for MazeDefinition {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Build the canonical wire grid: a cell emits its bare character unless
+        // it carries one or more overrides whose type matches the cell, in
+        // which case it emits the array form. Overrides whose type no longer
+        // matches the cell character (e.g. left stale by an in-place edit) are
+        // dropped, as are field-less overrides (which carry no information and
+        // would only bloat the cell to an array), so the output is always the
+        // canonical bare-char-unless-overridden form.
+        let rows: Vec<Vec<SerCell>> = self
+            .grid
+            .iter()
+            .enumerate()
+            .map(|(row_idx, row)| {
+                row.iter()
+                    .enumerate()
+                    .map(|(col_idx, &ch)| {
+                        let matching: Vec<&CellEntity> = self
+                            .cell_entities
+                            .get(&(row_idx, col_idx))
+                            .map(|overrides| {
+                                overrides
+                                    .iter()
+                                    .filter(|over| over.cell_char() == ch && !over.is_empty())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        if matching.is_empty() {
+                            SerCell::Bare(ch)
+                        } else {
+                            SerCell::Entities(matching)
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let mut state = serializer.serialize_struct("MazeDefinition", 1)?;
+        state.serialize_field("grid", &rows)?;
+        state.end()
+    }
 }
 
 impl<'de> Deserialize<'de> for MazeDefinition {
@@ -26,7 +735,7 @@ impl<'de> Deserialize<'de> for MazeDefinition {
     where
         D: Deserializer<'de>,
     {
-        let map: HashMap<String, Vec<Vec<char>>> = Deserialize::deserialize(deserializer)?;
+        let map: HashMap<String, Vec<Vec<WireCell>>> = Deserialize::deserialize(deserializer)?;
 
         for key in map.keys() {
             if key != "grid" {
@@ -34,19 +743,37 @@ impl<'de> Deserialize<'de> for MazeDefinition {
             }
         }
 
-        let grid = match map.get("grid") {
-            Some(inner_vecs) => inner_vecs.clone(),
+        let wire_grid = match map.into_iter().find(|(key, _)| key == "grid") {
+            Some((_, rows)) => rows,
             None => {
                 return Err(serde::de::Error::missing_field("grid"));
             }
         };
+
+        // Split the wire grid into a plain character grid plus a sparse override
+        // map so downstream code keeps working on clean characters.
+        let mut grid: Vec<Vec<char>> = Vec::with_capacity(wire_grid.len());
+        let mut cell_entities: HashMap<(usize, usize), Vec<CellEntity>> = HashMap::new();
+        for (row_idx, row) in wire_grid.into_iter().enumerate() {
+            let mut char_row: Vec<char> = Vec::with_capacity(row.len());
+            for (col_idx, cell) in row.into_iter().enumerate() {
+                char_row.push(cell.ch);
+                if let Some(over) = cell.over {
+                    // The wire cap of one entity per cell means each overridden
+                    // cell yields a single-element list; the list type leaves
+                    // room for co-located entities without a format change.
+                    cell_entities.insert((row_idx, col_idx), vec![over]);
+                }
+            }
+            grid.push(char_row);
+        }
 
         for row in &grid {
             for ch in row {
                 if !Self::is_valid_char(*ch) {
                     return Err(serde::de::Error::invalid_value(
                         serde::de::Unexpected::Char(*ch),
-                        &"valid characters are 'S', 'F', 'W', 'K', 'D', 'E', 'H' or ' '",
+                        &"valid characters are 'S', 'F', 'W', 'K', 'D', 'E', 'H', 'T' or ' '",
                     ));
                 }
             }
@@ -56,7 +783,10 @@ impl<'de> Deserialize<'de> for MazeDefinition {
             return Err(de::Error::custom(error.to_string()));
         }
 
-        Ok(MazeDefinition { grid })
+        Ok(MazeDefinition {
+            grid,
+            cell_entities,
+        })
     }
 }
 
@@ -85,6 +815,7 @@ impl MazeDefinition {
     pub fn new(row_count: usize, col_count: usize) -> Self {
         MazeDefinition {
             grid: Self::alloc_empty_rows(row_count, col_count),
+            cell_entities: HashMap::new(),
         }
     }
     /// Resets a maze definition instance to empty
@@ -106,6 +837,7 @@ impl MazeDefinition {
     /// ```
     pub fn reset(&mut self) -> &mut Self {
         self.grid = vec![];
+        self.cell_entities.clear();
         self
     }
     /// Resizes a maze definition instance
@@ -137,6 +869,9 @@ impl MazeDefinition {
             row.resize(new_col_count, ' ');
         }
         self.grid.resize(new_row_count, vec![' '; new_col_count]);
+        // Drop overrides on cells the shrink removed; survivors keep their coords.
+        self.cell_entities
+            .retain(|&(row, col), _| row < new_row_count && col < new_col_count);
         self
     }
     /// Returns the number of rows associated with the definition instance
@@ -204,7 +939,7 @@ impl MazeDefinition {
     /// println!("Character 'S' is valid => {}", s_is_valid);
     /// ```
     pub fn is_valid_char(ch: char) -> bool {
-        matches!(ch, 'S' | 'F' | 'W' | 'K' | 'D' | 'E' | 'H' | ' ')
+        matches!(ch, 'S' | 'F' | 'W' | 'K' | 'D' | 'E' | 'H' | 'T' | ' ')
     }
     /// Verifies whether the definition instance is empty, returning an error if it is
     ///
@@ -239,6 +974,7 @@ impl MazeDefinition {
     /// - `'D'`:  Represents a door (multiple allowed).
     /// - `'E'`:  Represents an enemy spawn cell (multiple allowed).
     /// - `'H'`:  Represents a health-pickup cell (multiple allowed).
+    /// - `'T'`:  Represents a treasure cell (multiple allowed).
     ///
     /// # Arguments
     ///
@@ -266,7 +1002,10 @@ impl MazeDefinition {
         if let Some(error) = Self::validate_grid(&grid) {
             panic!("{}", error.to_string());
         }
-        MazeDefinition { grid }
+        MazeDefinition {
+            grid,
+            cell_entities: HashMap::new(),
+        }
     }
     /// Converts the definition instance to a vector of row cell states
     ///
@@ -294,12 +1033,12 @@ impl MazeDefinition {
                     .iter()
                     .map(|value| match value {
                         'W' => MazeCellState::Wall,
-                        // `K` (key), `D` (door), `E` (enemy spawn) and `H` (health
-                        // pickup) are passable terrain at the cell-state level;
-                        // their gameplay semantics live in the `maze` crate. The
-                        // solver therefore treats doors as openable and is enemy-
-                        // blind.
-                        'S' | 'F' | ' ' | 'K' | 'D' | 'E' | 'H' => MazeCellState::Empty,
+                        // `K` (key), `D` (door), `E` (enemy spawn), `H` (health
+                        // pickup) and `T` (treasure) are passable terrain at the
+                        // cell-state level; their gameplay semantics live in the
+                        // `maze` crate. The solver therefore treats doors as
+                        // openable and is enemy-blind.
+                        'S' | 'F' | ' ' | 'K' | 'D' | 'E' | 'H' | 'T' => MazeCellState::Empty,
                         _ => panic!(
                             "internal error - grid contains unsupported cell character: {value}"
                         ),
@@ -364,6 +1103,7 @@ impl MazeDefinition {
                         'D' => 'D',
                         'E' => 'E',
                         'H' => 'H',
+                        'T' => 'T',
                         ' ' => '\u{2591}',
                         _ => '-',
                     })
@@ -414,6 +1154,16 @@ impl MazeDefinition {
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
         }
+        // Drop overrides in the deleted columns; shift those to the right back by `count`.
+        self.remap_cell_entities(|row, col| {
+            if col >= start_col && col < start_col + count {
+                None
+            } else if col >= start_col + count {
+                Some((row, col - count))
+            } else {
+                Some((row, col))
+            }
+        });
         Ok(())
     }
     /// Inserts one or more empty columns into the definition instance
@@ -453,6 +1203,12 @@ impl MazeDefinition {
         }
         for row in &mut self.grid {
             row.splice(start_col..start_col, vec![' '; count]);
+        }
+        // Shift overrides at/after the insert point right by `count`.
+        if count > 0 {
+            self.remap_cell_entities(|row, col| {
+                Some((row, if col >= start_col { col + count } else { col }))
+            });
         }
         Ok(())
     }
@@ -499,6 +1255,16 @@ impl MazeDefinition {
             )));
         }
         self.grid.drain(start_row..(start_row + count));
+        // Drop overrides in the deleted rows; shift those below back by `count`.
+        self.remap_cell_entities(|row, col| {
+            if row >= start_row && row < start_row + count {
+                None
+            } else if row >= start_row + count {
+                Some((row - count, col))
+            } else {
+                Some((row, col))
+            }
+        });
         Ok(())
     }
     /// Inserts one or more empty rows into the definition instance
@@ -539,6 +1305,10 @@ impl MazeDefinition {
         if count > 0 {
             let empty_rows = Self::alloc_empty_rows(count, self.col_count());
             self.grid.splice(start_row..start_row, empty_rows);
+            // Shift overrides at/after the insert point down by `count`.
+            self.remap_cell_entities(|row, col| {
+                Some((if row >= start_row { row + count } else { row }, col))
+            });
         }
         Ok(())
     }
@@ -656,7 +1426,7 @@ impl MazeDefinition {
     /// * `from` - Starting point of cell region to modify
     /// * `to` - Ending point of cell region to modify
     /// * `value` - Value to set. Must be one of `'W'` (wall), `'K'` (key),
-    ///   `'D'` (door), `'E'` (enemy spawn), `'H'` (health pickup), or `' '` (empty).
+    ///   `'D'` (door), `'E'` (enemy spawn), `'H'` (health pickup), `'T'` (treasure), or `' '` (empty).
     ///
     /// # Returns
     ///
@@ -687,7 +1457,7 @@ impl MazeDefinition {
             return Err(Error::MazeValidation(format!("invalid 'to' point {to}")));
         }
         match value {
-            'W' | 'K' | 'D' | 'E' | 'H' | ' ' => {
+            'W' | 'K' | 'D' | 'E' | 'H' | 'T' | ' ' => {
                 let top_row = from.row.min(to.row);
                 let bottom_row = from.row.max(to.row);
                 let left_col = from.col.min(to.col);
@@ -697,6 +1467,11 @@ impl MazeDefinition {
                         self.grid[row_idx][col_idx] = value;
                     }
                 }
+                // A rewritten cell loses any override it carried (the new character
+                // may not even accept the old entity, e.g. an 'E' override on a 'W').
+                self.cell_entities.retain(|&(row, col), _| {
+                    !(row >= top_row && row <= bottom_row && col >= left_col && col <= right_col)
+                });
             }
             _ => return Err(Error::MazeValidation(format!("invalid 'value' ('{value}')"))),
         }
@@ -752,6 +1527,24 @@ impl MazeDefinition {
         vec![vec![' '; col_count]; row_count]
     }
 
+    /// Rebuilds [`Self::cell_entities`], mapping each `(row, col)` key through
+    /// `remap`; a `None` result drops that entry. Used by the structural editors
+    /// (`insert_*` / `delete_*`) to keep per-cell overrides aligned with the grid
+    /// after rows/columns shift. A no-op when there are no overrides.
+    fn remap_cell_entities<F>(&mut self, remap: F)
+    where
+        F: Fn(usize, usize) -> Option<(usize, usize)>,
+    {
+        if self.cell_entities.is_empty() {
+            return;
+        }
+        self.cell_entities = self
+            .cell_entities
+            .drain()
+            .filter_map(|((row, col), entities)| remap(row, col).map(|key| (key, entities)))
+            .collect();
+    }
+
     fn find_first_char(&self, target: char) -> Option<MazePoint> {
         for (i, row) in self.grid.iter().enumerate() {
             for (j, &ch) in row.iter().enumerate() {
@@ -780,6 +1573,7 @@ impl MazeDefinition {
                 self.grid[current_pt.row][current_pt.col] = ' ';
             }
             self.grid[new_pt.row][new_pt.col] = ch;
+            self.cell_entities.remove(&(new_pt.row, new_pt.col));
         } else if let Some(current_pt) = self.get_start() {
             self.grid[current_pt.row][current_pt.col] = ' ';
         }
@@ -841,6 +1635,7 @@ mod tests {
         assert!(MazeDefinition::is_valid_char('D'));
         assert!(MazeDefinition::is_valid_char('E'));
         assert!(MazeDefinition::is_valid_char('H'));
+        assert!(MazeDefinition::is_valid_char('T'));
     }
 
     #[test]
@@ -1169,7 +1964,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W', 'K', 'D', 'E', 'H' or ' '"
+        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W', 'K', 'D', 'E', 'H', 'T' or ' '"
     )]
     fn cannot_deserialize_bad_json_invalid_char_1() {
         let s = r#"{"grid":[["S","X"," "],["F"," ","W"]]}"#;
@@ -1606,6 +2401,353 @@ mod tests {
             .expect("set_value() failed");
     }
 
+    // Per-cell override (de)serialisation tests
+
+    /// Returns the single override on a cell, asserting the per-cell list holds
+    /// exactly one element (the current cap).
+    fn single_override(d: &MazeDefinition, row: usize, col: usize) -> &CellEntity {
+        let overrides = d
+            .cell_entities
+            .get(&(row, col))
+            .unwrap_or_else(|| panic!("expected an override at ({row}, {col})"));
+        assert_eq!(
+            overrides.len(),
+            1,
+            "every per-cell override list holds exactly one element for now"
+        );
+        &overrides[0]
+    }
+
+    #[test]
+    fn default_maze_round_trips_byte_identical() {
+        // An all-default maze (no overrides) must serialise byte-for-byte as a
+        // plain character grid — no array-of-one cells anywhere.
+        let s = r#"{"grid":[["S","E","H"," "],["E","H"," ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn enemy_override_round_trips() {
+        let s = r#"{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":2,"movePeriodMs":900.0}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'E');
+        match single_override(&d, 0, 1) {
+            CellEntity::Enemy(e) => {
+                assert_eq!(e.enemy_type, Some(EnemyType::Ghost));
+                assert_eq!(e.damage, Some(2));
+                assert_eq!(e.move_period_ms, Some(900.0));
+            }
+            other => panic!("expected an enemy override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn health_override_round_trips() {
+        let s =
+            r#"{"grid":[["S",[{"type":"H","healthStyle":"potion","healAmount":3}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'H');
+        match single_override(&d, 0, 1) {
+            CellEntity::Health(h) => {
+                assert_eq!(h.health_style, Some(HealthStyle::Potion));
+                assert_eq!(h.heal_amount, Some(3));
+            }
+            other => panic!("expected a health override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn key_override_round_trips() {
+        let s = r#"{"grid":[["S",[{"type":"K","keyHolder":"chest"}]],["D","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'K');
+        match single_override(&d, 0, 1) {
+            CellEntity::Key(k) => assert_eq!(k.key_holder, Some(KeyHolderStyle::Chest)),
+            other => panic!("expected a key override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn door_override_round_trips() {
+        let s = r#"{"grid":[["S",[{"type":"D","doorStyle":"portcullis"}]],["K","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'D');
+        match single_override(&d, 0, 1) {
+            CellEntity::Door(door) => assert_eq!(door.door_style, Some(DoorStyle::Portcullis)),
+            other => panic!("expected a door override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn wall_type_override_round_trips() {
+        // A special (non-occluding) wall skin on a `W` cell — overrides are now
+        // allowed on walls, not just feature cells.
+        let s = r#"{"grid":[["S",[{"type":"W","wallType":"lava"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'W');
+        match single_override(&d, 0, 1) {
+            CellEntity::Wall(w) => assert_eq!(w.wall_type, Some(WallType::Lava)),
+            other => panic!("expected a wall override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn wall_texture_override_round_trips() {
+        // A solid-texture wall override forces a specific texture in place of the
+        // default per-cell variation.
+        let s = r#"{"grid":[["S",[{"type":"W","wallType":"brick"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'W');
+        match single_override(&d, 0, 1) {
+            CellEntity::Wall(w) => assert_eq!(w.wall_type, Some(WallType::Brick)),
+            other => panic!("expected a wall override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn field_less_wall_array_normalises_to_bare_char() {
+        // A wall array entity that sets no type carries no override and
+        // normalises back to a bare character on write.
+        let s = r#"{"grid":[["S",[{"type":"W"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'W');
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","W"],[" ","F"]]}"#);
+    }
+
+    #[test]
+    fn unknown_wall_type_falls_back_to_brick() {
+        // Forward tolerance: a wallType from a newer build still loads, falling
+        // back to the default texture rather than erroring.
+        let s = r#"{"grid":[["S",[{"type":"W","wallType":"obsidian"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        match single_override(&d, 0, 1) {
+            CellEntity::Wall(w) => assert_eq!(w.wall_type, Some(WallType::Brick)),
+            other => panic!("expected a wall override, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn treasure_style_override_round_trips() {
+        // A gold treasure on a `T` cell carries its style through a round-trip.
+        let s = r#"{"grid":[["S",[{"type":"T","style":"gold"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'T');
+        match single_override(&d, 0, 1) {
+            CellEntity::Treasure(t) => assert_eq!(t.style, Some(TreasureStyle::Gold)),
+            other => panic!("expected a treasure override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn bare_treasure_char_round_trips() {
+        // A bare `T` is a valid (default-tier) treasure cell carrying no override.
+        let s = r#"{"grid":[["S","T"],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'T');
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn field_less_treasure_array_normalises_to_bare_char() {
+        // A treasure array entity that sets no style carries no override (the
+        // engine applies the default tier) and normalises back to a bare `T`.
+        let s = r#"{"grid":[["S",[{"type":"T"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'T');
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","T"],[" ","F"]]}"#);
+    }
+
+    #[test]
+    fn unknown_treasure_style_falls_back_to_silver() {
+        // Forward tolerance: a style from a newer build still loads, falling back
+        // to the default style rather than erroring.
+        let s = r#"{"grid":[["S",[{"type":"T","style":"ruby"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        match single_override(&d, 0, 1) {
+            CellEntity::Treasure(t) => assert_eq!(t.style, Some(TreasureStyle::Silver)),
+            other => panic!("expected a treasure override, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn treasure_value_override_round_trips() {
+        // The reward value is independent of the visual style and round-trips on
+        // its own (overriding the style-derived default).
+        let s = r#"{"grid":[["S",[{"type":"T","value":250}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'T');
+        match single_override(&d, 0, 1) {
+            CellEntity::Treasure(t) => {
+                assert_eq!(t.value, Some(250));
+                assert!(t.style.is_none());
+            }
+            other => panic!("expected a treasure override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn override_less_array_entity_normalises_to_bare_char() {
+        // An array entity that sets no field is accepted on read but written
+        // back as a bare character (read is tolerant, write is canonical).
+        let s = r#"{"grid":[["S",[{"type":"E"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'E');
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","E"],[" ","F"]]}"#);
+    }
+
+    #[test]
+    fn field_less_key_and_door_array_forms_normalise_to_bare_chars() {
+        // A key or door array entity that sets no field carries no override and
+        // normalises back to a bare character on write.
+        let s = r#"{"grid":[["S",[{"type":"K"}]],[[{"type":"D"}],"F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'K');
+        assert_eq!(d.grid[1][0], 'D');
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","K"],["D","F"]]}"#);
+    }
+
+    #[test]
+    fn unknown_override_fields_are_ignored() {
+        let s = r#"{"grid":[["S",[{"type":"E","damage":2,"speedBoost":true,"foo":"bar"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        match single_override(&d, 0, 1) {
+            CellEntity::Enemy(e) => {
+                assert_eq!(e.damage, Some(2));
+                assert!(e.enemy_type.is_none());
+                assert!(e.move_period_ms.is_none());
+            }
+            other => panic!("expected an enemy override, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_enemy_type_falls_back_to_goblin() {
+        let s = r#"{"grid":[["S",[{"type":"E","enemyType":"dragon"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        match single_override(&d, 0, 1) {
+            CellEntity::Enemy(e) => assert_eq!(e.enemy_type, Some(EnemyType::Goblin)),
+            other => panic!("expected an enemy override, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn override_enum_wire_strings_match() {
+        assert_eq!(EnemyType::Goblin.as_wire_str(), "goblin");
+        assert_eq!(EnemyType::Ghost.as_wire_str(), "ghost");
+        assert_eq!(HealthStyle::Heart.as_wire_str(), "heart");
+        assert_eq!(HealthStyle::Potion.as_wire_str(), "potion");
+        assert_eq!(KeyHolderStyle::Pedestal.as_wire_str(), "pedestal");
+        assert_eq!(KeyHolderStyle::Chest.as_wire_str(), "chest");
+        assert_eq!(KeyHolderStyle::FloatingKey.as_wire_str(), "floating_key");
+        assert_eq!(DoorStyle::Swing.as_wire_str(), "swing");
+        assert_eq!(DoorStyle::Slide.as_wire_str(), "slide");
+        assert_eq!(DoorStyle::Portcullis.as_wire_str(), "portcullis");
+        assert_eq!(DoorStyle::Dissolve.as_wire_str(), "dissolve");
+        assert_eq!(WallType::Brick.as_wire_str(), "brick");
+        assert_eq!(WallType::DressedStone.as_wire_str(), "dressed_stone");
+        assert_eq!(WallType::Wood.as_wire_str(), "wood");
+        assert_eq!(WallType::Cobblestone.as_wire_str(), "cobblestone");
+        assert_eq!(WallType::Water.as_wire_str(), "water");
+        assert_eq!(WallType::Lava.as_wire_str(), "lava");
+        assert_eq!(WallType::IronFence.as_wire_str(), "iron_fence");
+        assert_eq!(TreasureStyle::Silver.as_wire_str(), "silver");
+        assert_eq!(TreasureStyle::Gold.as_wire_str(), "gold");
+        assert_eq!(TreasureStyle::Diamonds.as_wire_str(), "diamonds");
+        assert_eq!(TreasureStyle::Jewels.as_wire_str(), "jewels");
+    }
+
+    #[test]
+    fn stale_override_on_non_matching_char_is_dropped_on_serialise() {
+        // A wall cell carrying a leftover enemy override (e.g. after an
+        // in-place edit) must serialise as a bare character, never a malformed
+        // wall-with-enemy-fields entity.
+        let mut d = MazeDefinition::from_vec(vec![vec!['S', 'W'], vec![' ', 'F']]);
+        d.cell_entities.insert(
+            (0, 1),
+            vec![CellEntity::Enemy(EnemyOverride {
+                enemy_type: None,
+                damage: Some(9),
+                move_period_ms: None,
+            })],
+        );
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","W"],[" ","F"]]}"#);
+    }
+
+    #[test]
+    fn field_less_override_in_map_is_dropped_on_serialise() {
+        // A field-less override reaches the map only via a set call (the tolerant
+        // deserialiser drops it on read). Write is canonical regardless of how the
+        // map was populated, so such an override must serialise as a bare
+        // character — never bloat the cell to an empty array form.
+        let mut d = MazeDefinition::from_vec(vec![vec!['S', 'E'], vec!['K', 'F']]);
+        d.cell_entities
+            .insert((0, 1), vec![CellEntity::Enemy(EnemyOverride::default())]);
+        d.cell_entities
+            .insert((1, 0), vec![CellEntity::Key(KeyOverride::default())]);
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","E"],["K","F"]]}"#);
+    }
+
+    #[test]
+    #[should_panic(expected = "multiple entities per cell not yet supported (found 2)")]
+    fn cannot_deserialize_cell_with_two_entities() {
+        let s = r#"{"grid":[["S",[{"type":"E"},{"type":"E"}]],[" ","F"]]}"#;
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "a cell entity array must contain exactly one entity (found 0)")]
+    fn cannot_deserialize_empty_cell_entity_array() {
+        let s = r#"{"grid":[["S",[]],[" ","F"]]}"#;
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown variant `F`")]
+    fn cannot_override_with_unknown_entity_type() {
+        // A `type` outside the override variants (E/H/K/D/W) is rejected by the
+        // tagged-enum deserialiser — start/finish/empty cells aren't overridable.
+        let s = r#"{"grid":[["S",[{"type":"F"}]],[" ","F"]]}"#;
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "enemy 'movePeriodMs' must be a non-negative finite number")]
+    fn cannot_deserialize_negative_move_period() {
+        let s = r#"{"grid":[["S",[{"type":"E","movePeriodMs":-5.0}]],[" ","F"]]}"#;
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+    }
+
     // Private test helper functions
     fn assert_empty_cols(d: &MazeDefinition, start_col: usize, end_col: usize) {
         let row_count = d.row_count();
@@ -1640,5 +2782,105 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ── Per-cell overrides stay aligned with structural edits ──
+
+    /// An enemy override carrying `damage` as a unique marker, so a test can
+    /// track which override lands where after rows/columns shift.
+    fn marked(damage: u32) -> Vec<CellEntity> {
+        vec![CellEntity::Enemy(EnemyOverride {
+            enemy_type: None,
+            damage: Some(damage),
+            move_period_ms: None,
+        })]
+    }
+
+    /// The `damage` marker on the override at `(row, col)`, or `None` if absent.
+    fn marker_at(d: &MazeDefinition, row: usize, col: usize) -> Option<u32> {
+        match d.cell_entities.get(&(row, col)).and_then(|v| v.first()) {
+            Some(CellEntity::Enemy(e)) => e.damage,
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn insert_rows_shifts_overrides_below_the_insert_point() {
+        let mut d = MazeDefinition::new(4, 2);
+        d.cell_entities.insert((0, 0), marked(1)); // above the insert point
+        d.cell_entities.insert((2, 1), marked(2)); // at/below it
+        d.insert_rows(1, 2).expect("insert_rows() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1), "override above the point stays put");
+        assert_eq!(marker_at(&d, 4, 1), Some(2), "override at/below shifts down by count");
+        assert_eq!(d.cell_entities.len(), 2);
+    }
+
+    #[test]
+    fn delete_rows_drops_the_band_and_shifts_the_rest_up() {
+        let mut d = MazeDefinition::new(5, 2);
+        d.cell_entities.insert((0, 0), marked(1)); // above the band
+        d.cell_entities.insert((1, 0), marked(2)); // in deleted band [1, 3)
+        d.cell_entities.insert((2, 1), marked(3)); // in deleted band
+        d.cell_entities.insert((4, 1), marked(4)); // below the band
+        d.delete_rows(1, 2).expect("delete_rows() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(marker_at(&d, 2, 1), Some(4), "below the band shifts up by count");
+        assert_eq!(d.cell_entities.len(), 2, "the two in the deleted band are dropped");
+    }
+
+    #[test]
+    fn insert_cols_shifts_overrides_right_of_the_insert_point() {
+        let mut d = MazeDefinition::new(2, 4);
+        d.cell_entities.insert((0, 0), marked(1)); // left of the insert point
+        d.cell_entities.insert((1, 2), marked(2)); // at/right of it
+        d.insert_cols(1, 2).expect("insert_cols() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(marker_at(&d, 1, 4), Some(2), "override at/right shifts by count");
+        assert_eq!(d.cell_entities.len(), 2);
+    }
+
+    #[test]
+    fn delete_cols_drops_the_band_and_shifts_the_rest_left() {
+        let mut d = MazeDefinition::new(2, 5);
+        d.cell_entities.insert((0, 0), marked(1)); // left of the band
+        d.cell_entities.insert((0, 1), marked(2)); // in deleted band [1, 3)
+        d.cell_entities.insert((1, 2), marked(3)); // in deleted band
+        d.cell_entities.insert((1, 4), marked(4)); // right of the band
+        d.delete_cols(1, 2).expect("delete_cols() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(marker_at(&d, 1, 2), Some(4), "right of the band shifts left by count");
+        assert_eq!(d.cell_entities.len(), 2);
+    }
+
+    #[test]
+    fn resize_drops_overrides_outside_the_new_bounds() {
+        let mut d = MazeDefinition::new(4, 4);
+        d.cell_entities.insert((0, 0), marked(1)); // inside the shrunk bounds
+        d.cell_entities.insert((3, 1), marked(2)); // row falls outside after shrink
+        d.cell_entities.insert((1, 3), marked(3)); // col falls outside after shrink
+        d.resize(2, 2);
+        assert_eq!(marker_at(&d, 0, 0), Some(1));
+        assert_eq!(d.cell_entities.len(), 1, "out-of-bounds overrides are dropped");
+    }
+
+    #[test]
+    fn set_value_drops_overrides_on_rewritten_cells_only() {
+        let mut d = MazeDefinition::new(4, 4);
+        d.cell_entities.insert((1, 1), marked(1)); // inside the rewritten rect
+        d.cell_entities.insert((0, 0), marked(2)); // outside it
+        d.set_value(MazePoint { row: 1, col: 1 }, MazePoint { row: 2, col: 2 }, 'W')
+            .expect("set_value() failed");
+        assert_eq!(marker_at(&d, 0, 0), Some(2), "override outside the rect survives");
+        assert_eq!(d.cell_entities.len(), 1, "the rewritten cell's override is dropped");
+    }
+
+    #[test]
+    fn set_start_drops_any_override_on_the_new_start_cell() {
+        let mut d = MazeDefinition::new(3, 3);
+        d.cell_entities.insert((1, 1), marked(1));
+        d.set_start(Some(MazePoint { row: 1, col: 1 }))
+            .expect("set_start() failed");
+        assert_eq!(d.grid[1][1], 'S');
+        assert!(d.cell_entities.is_empty(), "S is not overridable, so its override is dropped");
     }
 }

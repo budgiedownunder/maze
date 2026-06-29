@@ -772,6 +772,83 @@ function registerMazeTests() {
             expect(maze.get_col_count()).to.equal(5);
         });
 
+        // MazeWasm::get_cell_entity() / set_cell_entity() / clear_cell_entity()
+        // The per-cell entity override read/write surface. One data-driven block
+        // covers all four entity types: set the matching cell character, write an
+        // override, read it back, round-trip via to_json()/from_json(), and clear.
+        [
+            { setCells: 'set_enemy_cells', char: 'E', entity: { type: 'E', enemyType: 'ghost', damage: 2, movePeriodMs: 800 } },
+            { setCells: 'set_health_cells', char: 'H', entity: { type: 'H', healthStyle: 'potion', healAmount: 3 } },
+            { setCells: 'set_key_cells', char: 'K', entity: { type: 'K', keyHolder: 'chest' } },
+            { setCells: 'set_door_cells', char: 'D', entity: { type: 'D', doorStyle: 'portcullis' } },
+            { setCells: 'set_wall_cells', char: 'W', entity: { type: 'W', wallType: 'lava' } },
+        ].forEach(function (t) {
+            it(`should expect get_cell_entity() to return null for a ${t.char} cell with no override`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                expect(maze.get_cell_entity(0, 1)).to.equal(null);
+            });
+
+            it(`should expect set_cell_entity() + get_cell_entity() to round-trip a ${t.char} override`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                maze.set_cell_entity(0, 1, t.entity);
+                expect(maze.get_cell_entity(0, 1)).to.deep.equal(t.entity);
+            });
+
+            it(`should expect a ${t.char} override to survive a to_json()/from_json() round-trip`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                maze.set_cell_entity(0, 1, t.entity);
+                let reloaded = track(new MazeWasm());
+                reloaded.from_json(maze.to_json());
+                expect(reloaded.get_cell_entity(0, 1)).to.deep.equal(t.entity);
+            });
+
+            it(`should expect clear_cell_entity() to remove a ${t.char} override`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                maze.set_cell_entity(0, 1, t.entity);
+                maze.clear_cell_entity(0, 1);
+                expect(maze.get_cell_entity(0, 1)).to.equal(null);
+            });
+
+            it(`should expect set_cell_entity() to fail when the ${t.char} entity type does not match the cell character`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                // Cell (0,1) is left empty, so the typed entity must be rejected.
+                expect(() => maze.set_cell_entity(0, 1, t.entity)).to.throw();
+            });
+        });
+
+        it('should expect to_json() to emit an overridden cell in the array-of-one form', function () {
+            let maze = track(new MazeWasm());
+            maze.resize(1, 3);
+            maze.set_enemy_cells(0, 1, 0, 1);
+            maze.set_cell_entity(0, 1, { type: 'E', damage: 2 });
+            let parsed = JSON.parse(maze.to_json());
+            expect(parsed.definition.grid[0][1]).to.deep.equal([{ type: 'E', damage: 2 }]);
+        });
+
+        it('should expect an override-less cell to stay a bare character in to_json()', function () {
+            let maze = track(new MazeWasm());
+            maze.resize(1, 3);
+            maze.set_enemy_cells(0, 1, 0, 1);
+            let parsed = JSON.parse(maze.to_json());
+            expect(parsed.definition.grid[0][1]).to.equal('E');
+        });
+
+        it('should expect get_cell_entity() to fail when out of bounds', function () {
+            let maze = track(new MazeWasm());
+            maze.resize(1, 3);
+            expect(() => maze.get_cell_entity(5, 0)).to.throw('row out of bounds');
+            expect(() => maze.get_cell_entity(0, 5)).to.throw('column out of bounds');
+        });
+
     });
 }
 
@@ -1034,19 +1111,32 @@ function registerMazeGameTests() {
             expect(game.enemies()).to.deep.equal([]);
         });
 
-        // MazeGame::enemies() — one entry per 'E' cell with id 0
+        // MazeGame::enemies() — one entry per 'E' cell with id 0, carrying the
+        // resolved damage / movePeriodMs (defaults here; no rig override → no
+        // enemyType field).
         it('should expect enemies() to return one entry with id 0 per E cell', function () {
             let game = makeGame('{"grid":[["S","E","F"]]}');
-            expect(game.enemies()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+            expect(game.enemies()).to.deep.equal([
+                { row: 0, col: 1, id: 0, damage: 1, movePeriodMs: 1500 },
+            ]);
         });
 
         // MazeGame::enemies() — ids assigned in row-major scan order
         it('should expect enemies() ids to follow row-major scan order across rows', function () {
             let game = makeGame('{"grid":[["S"," ","E"],[" ","E"," "],["E"," ","F"]]}');
             expect(game.enemies()).to.deep.equal([
-                { row: 0, col: 2, id: 0 },
-                { row: 1, col: 1, id: 1 },
-                { row: 2, col: 0, id: 2 },
+                { row: 0, col: 2, id: 0, damage: 1, movePeriodMs: 1500 },
+                { row: 1, col: 1, id: 1, damage: 1, movePeriodMs: 1500 },
+                { row: 2, col: 0, id: 2, damage: 1, movePeriodMs: 1500 },
+            ]);
+        });
+
+        // MazeGame::enemies() — a per-cell enemy override surfaces its resolved
+        // damage / movePeriodMs and its enemyType rig on the live enemy.
+        it('should expect enemies() to surface a per-cell enemy override', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":3,"movePeriodMs":600.0}],"F"]]}');
+            expect(game.enemies()).to.deep.equal([
+                { row: 0, col: 1, id: 0, damage: 3, movePeriodMs: 600, enemyType: 'ghost' },
             ]);
         });
 
@@ -1068,6 +1158,83 @@ function registerMazeGameTests() {
             expect(game.health_pickups()).to.deep.equal([
                 { row: 0, col: 2, id: 0 },
                 { row: 2, col: 0, id: 1 },
+            ]);
+        });
+
+        // MazeGame::treasures() — empty array when grid has no 'T' cells
+        it('should expect treasures() to return an empty array when no T cells exist', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.treasures()).to.deep.equal([]);
+        });
+
+        // MazeGame::treasures() — a bare 'T' is the default Silver treasure: value 50
+        it('should expect treasures() to default a bare T cell to silver style and value 50', function () {
+            let game = makeGame('{"grid":[["S","T","F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'silver', value: 50 }]);
+        });
+
+        // MazeGame::treasures() — the type drives the default value (gold = 100)
+        it('should expect a style override to set the default treasure value (gold = 100)', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"T","style":"gold"}],"F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'gold', value: 100 }]);
+        });
+
+        // MazeGame::treasures() — a per-cell style + explicit value override is reflected verbatim
+        it('should expect a style + value override to be reflected in treasures()', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"T","style":"gold","value":250}],"F"]]}');
+            expect(game.treasures()).to.deep.equal([{ row: 0, col: 1, style: 'gold', value: 250 }]);
+        });
+
+        // MazeGame::move_player() — auto-collecting treasure queues a treasureCollected event
+        it('should expect move_player onto a treasure cell to queue a treasureCollected event', function () {
+            let game = makeGame('{"grid":[["S","T","F"]]}');
+            game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
+            expect(game.tick(0)).to.deep.equal([
+                { type: 'treasureCollected', style: 'silver', value: 50, row: 0, col: 1 },
+            ]);
+        });
+
+        // MazeGame::collected_treasure() — empty before anything is collected
+        it('should expect collected_treasure() to be empty before any treasure is collected', function () {
+            let game = makeGame('{"grid":[["S","T","F"]]}');
+            expect(game.collected_treasure()).to.deep.equal([]);
+        });
+
+        // MazeGame::collected_treasure() — grouped per style in canonical order, no zero entries
+        it('should expect collected_treasure() to group collected treasure per style', function () {
+            let game = makeGame('{"grid":[["S","T",[{"type":"T","style":"gold"}],"T","F"]]}');
+            game.move_player(DirectionWasm.Right); // silver
+            game.move_player(DirectionWasm.Right); // gold
+            game.move_player(DirectionWasm.Right); // silver
+            expect(game.collected_treasure()).to.deep.equal([
+                { style: 'silver', count: 2 },
+                { style: 'gold', count: 1 },
+            ]);
+        });
+
+        // MazeGame::grid() — pure-char grid for the host renderer
+        it('should expect grid() to return the pure-char grid', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.grid()).to.deep.equal([['S', ' ', 'F']]);
+        });
+
+        // MazeGame::grid() — overridden cells come back as their bare char (not the array form)
+        it('should expect grid() to return chars for overridden cells', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+            expect(game.grid()).to.deep.equal([['S', 'H', 'F']]);
+        });
+
+        // MazeGame::cell_overrides() — empty when the maze has no overrides
+        it('should expect cell_overrides() to return an empty array when no overrides exist', function () {
+            let game = makeGame('{"grid":[["S","H","F"]]}');
+            expect(game.cell_overrides()).to.deep.equal([]);
+        });
+
+        // MazeGame::cell_overrides() — surfaces a static per-cell override
+        it('should expect cell_overrides() to surface a per-cell override', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+            expect(game.cell_overrides()).to.deep.equal([
+                { row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } },
             ]);
         });
 

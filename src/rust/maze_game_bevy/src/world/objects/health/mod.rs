@@ -13,6 +13,7 @@ pub(crate) mod heart;
 pub(crate) mod potion;
 
 use crate::state::HealthStyle;
+use crate::world::LevelPlacement;
 use bevy::prelude::*;
 
 /// Scale-pulse frequency (radians/sec) applied to every health pickup.
@@ -22,12 +23,12 @@ const PULSE_AMPLITUDE: f32 = 0.08;
 /// Y-axis rotation rate (radians/sec) for the slow idle spin.
 const SPIN_RATE: f32 = 1.0;
 
-/// Per-pickup entity marker. `cell` matches the `'H'` cell coordinate so
-/// the tick driver can despawn this entity from a
-/// `GameEvent::PlayerHealed { cell, .. }` payload directly.
+/// Per-pickup entity marker. The tick driver despawns this entity on a
+/// `GameEvent::PlayerHealed { cell, .. }` whose `(cell, level)` matches
 #[derive(Component)]
 pub(crate) struct HealthMarker {
     pub(crate) cell: (usize, usize),
+    pub(crate) level: usize,
 }
 
 /// Composite health-pickup assets. One sub-struct per rig variant.
@@ -55,13 +56,14 @@ pub(crate) fn spawn_health_for_cell(
     cell: char,
     r: usize,
     c: usize,
+    placement: LevelPlacement,
 ) {
     if cell != 'H' {
         return;
     }
     match health_style {
-        HealthStyle::Heart => heart::spawn_heart(commands, &assets.heart, r, c),
-        HealthStyle::Potion => potion::spawn_potion(commands, &assets.potion, r, c),
+        HealthStyle::Heart => heart::spawn_heart(commands, &assets.heart, r, c, placement),
+        HealthStyle::Potion => potion::spawn_potion(commands, &assets.potion, r, c, placement),
     }
 }
 

@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:Maze.Maui.App.Converters"
+             xmlns:model="clr-namespace:Maze.Maui.App.Models"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
+             x:DataType="viewmodel:LeaderboardsViewModel"
+             x:Class="Maze.Maui.App.Views.LeaderboardsPage"
+             Title="{Binding Title}">
+
+    <ContentPage.Resources>
+        <converters:BoolToGridLengthConverter x:Key="BoolToGridLength" />
+    </ContentPage.Resources>
+
+    <!-- The Reset item is added/removed by the code-behind based on ShowReset
+         (ToolbarItem has no IsVisible to bind); it sits left of Refresh when
+         shown. It clears the board only when the caller may (owner for a maze,
+         admin for a Play-3D board); the server enforces access independently. -->
+    <ContentPage.ToolbarItems>
+        <ToolbarItem x:Name="ResetToolbarItem"
+                     Text="Reset"
+                     Command="{Binding ResetBoardCommand}"
+                     IconImageSource="{OnPlatform 'icon_delete.png', iOS='icon_delete_ios.png', MacCatalyst='icon_delete_ios.png'}" />
+        <ToolbarItem Text="Refresh"
+                     Command="{Binding RefreshCommand}"
+                     IconImageSource="{AppThemeBinding Light=refresh.png, Dark=refresh_dark.png}" />
+    </ContentPage.ToolbarItems>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="10" RowSpacing="8">
+
+        <!-- Subject selector: a "Game" label (styled like the board column
+             headers) above the cascading Game Type → Game pickers (left, each
+             sized to its content), with the Play button right-aligned in the
+             same row. -->
+        <VerticalStackLayout Grid.Row="0" Spacing="6">
+            <Label Text="Game" FontAttributes="Bold" />
+            <Grid ColumnDefinitions="Auto,*" VerticalOptions="Center">
+                <HorizontalStackLayout Grid.Column="0" Spacing="10" VerticalOptions="Center">
+                    <Picker MinimumWidthRequest="110"
+                            ItemsSource="{Binding GameTypes}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedGameType}" />
+                    <Label Text="→" FontSize="18" VerticalOptions="Center" />
+                    <Picker x:Name="GamePicker"
+                            MinimumWidthRequest="110"
+                            ItemsSource="{Binding Games}"
+                            ItemDisplayBinding="{Binding Label}"
+                            SelectedItem="{Binding SelectedGame}"
+                            SelectedIndexChanged="OnGameSelectionChanged" />
+                </HorizontalStackLayout>
+                <Button Grid.Column="1"
+                        Text="{Binding PlayLabel}"
+                        Command="{Binding PlayCommand}"
+                        HorizontalOptions="End"
+                        VerticalOptions="Center"
+                        BackgroundColor="{StaticResource PlayButton}"
+                        TextColor="White">
+                    <!-- Dim while disabled (no winnable subject selected). A property Trigger
+                         rather than a "CommonStates" VisualStateGroup: the implicit Button
+                         style already defines a CommonStates group, and the runtime XAML
+                         loader (iOS) appends rather than replaces, producing a duplicate
+                         group name that throws "VisualStateGroup Names must be unique". -->
+                    <Button.Triggers>
+                        <Trigger TargetType="Button" Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </Button.Triggers>
+                </Button>
+            </Grid>
+        </VerticalStackLayout>
+
+        <!-- Ranking-metric toggle. Borders (not Buttons) so the active/inactive
+             background is driven purely by our DataTrigger — the default Button
+             visual-state manager would otherwise re-apply its own colour and
+             stop the inactive tab from reverting. -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="6"
+              HorizontalOptions="Start" WidthRequest="326">
+            <Border Grid.Column="0" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                <Border.Triggers>
+                    <DataTrigger TargetType="Border" Binding="{Binding IsTimeMetricSelected}" Value="True">
+                        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                    </DataTrigger>
+                </Border.Triggers>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding SelectTimeMetricCommand}" />
+                </Border.GestureRecognizers>
+                <Label Text="Fastest Time" Padding="0,10" HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Light=Black, Dark=White}">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label" Binding="{Binding IsTimeMetricSelected}" Value="True">
+                            <Setter Property="FontAttributes" Value="Bold" />
+                            <Setter Property="TextColor" Value="{AppThemeBinding Light=White, Dark={StaticResource PrimaryDarkText}}" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </Border>
+            <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                <Border.Triggers>
+                    <DataTrigger TargetType="Border" Binding="{Binding IsScoreMetricSelected}" Value="True">
+                        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                    </DataTrigger>
+                </Border.Triggers>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding SelectScoreMetricCommand}" />
+                </Border.GestureRecognizers>
+                <Label Text="Highest Score" Padding="0,10" HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Light=Black, Dark=White}">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label" Binding="{Binding IsScoreMetricSelected}" Value="True">
+                            <Setter Property="FontAttributes" Value="Bold" />
+                            <Setter Property="TextColor" Value="{AppThemeBinding Light=White, Dark={StaticResource PrimaryDarkText}}" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </Border>
+        </Grid>
+
+        <!-- Board: fixed-width columns inside a horizontal scroll so the table
+             stays readable on narrow screens (swipe sideways) and the header and
+             rows always align. Truncating cells carry a hover tooltip. -->
+        <Grid Grid.Row="2">
+            <ScrollView Orientation="Horizontal">
+                <Grid RowDefinitions="Auto,*" HorizontalOptions="Start">
+                    <Grid Grid.Row="0"
+                          ColumnSpacing="8" Padding="6,6"
+                          BackgroundColor="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray900}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="{Binding ShowPlayerColumn, Converter={StaticResource BoolToGridLength}, ConverterParameter=140}" />
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="64" />
+                            <ColumnDefinition Width="160" />
+                        </Grid.ColumnDefinitions>
+                        <Label Grid.Column="0" Text="#" FontAttributes="Bold" />
+                        <Label Grid.Column="1" Text="Player" FontAttributes="Bold" IsVisible="{Binding ShowPlayerColumn}" />
+                        <Label Grid.Column="2" Text="Time" FontAttributes="Bold" />
+                        <Label Grid.Column="3" Text="Score" FontAttributes="Bold" />
+                        <Label Grid.Column="4" Text="Completed" FontAttributes="Bold" />
+                    </Grid>
+
+                    <CollectionView Grid.Row="1"
+                                    ItemsSource="{Binding Rows}"
+                                    SelectionMode="None">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="model:LeaderboardRow">
+                                <Grid ColumnSpacing="8" Padding="6,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="{Binding ShowPlayer, Converter={StaticResource BoolToGridLength}, ConverterParameter=140}" />
+                                        <ColumnDefinition Width="96" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="160" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.Triggers>
+                                        <DataTrigger TargetType="Grid" Binding="{Binding IsHighlighted}" Value="True">
+                                            <Setter Property="BackgroundColor"
+                                                    Value="{AppThemeBinding Light={StaticResource LeaderboardHighlight}, Dark={StaticResource LeaderboardHighlightDark}}" />
+                                        </DataTrigger>
+                                    </Grid.Triggers>
+                                    <Label Grid.Column="0" Text="{Binding Rank}" />
+                                    <Grid Grid.Column="1" ColumnSpacing="6"
+                                          IsVisible="{Binding ShowPlayer}"
+                                          VerticalOptions="Center">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <controls:AvatarView Grid.Column="0"
+                                                             Bytes="{Binding AvatarBytes}"
+                                                             Size="24"
+                                                             VerticalOptions="Center" />
+                                        <Label Grid.Column="1" Text="{Binding Player}" LineBreakMode="TailTruncation"
+                                               ToolTipProperties.Text="{Binding Player}"
+                                               VerticalOptions="Center" />
+                                    </Grid>
+                                    <Label Grid.Column="2" Text="{Binding Time}" />
+                                    <Label Grid.Column="3" Text="{Binding Score}" />
+                                    <Label Grid.Column="4" Text="{Binding Completed}" LineBreakMode="TailTruncation"
+                                           ToolTipProperties.Text="{Binding Completed}" />
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                </Grid>
+            </ScrollView>
+
+            <!-- Empty/error status overlaid on the board area rather than via
+                 CollectionView.EmptyView — the EmptyView doesn't inherit the
+                 page BindingContext on Android, so its bindings silently fail. -->
+            <Label Text="{Binding StatusMessage}"
+                   IsVisible="{Binding ShowStatusMessage}"
+                   HorizontalOptions="Center" VerticalOptions="Center" />
+
+            <ActivityIndicator IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}"
+                               HorizontalOptions="Center" VerticalOptions="Center" />
+        </Grid>
+
+        <!-- Load more: left-aligned, fills the content width up to a cap and
+             shrinks on narrow screens (width computed in the code-behind). -->
+        <Button Grid.Row="3"
+                x:Name="LoadMoreButton"
+                Text="Load more"
+                Command="{Binding LoadMoreCommand}"
+                IsVisible="{Binding HasMore}"
+                HorizontalOptions="Start" />
+
+    </Grid>
+</ContentPage>

@@ -34,6 +34,8 @@ pub enum Error {
     MazeNameAlreadyExists(String),
     MazeHasTooManyCells { rows: usize, cols: usize, max: usize },
     MazeHasTooManyFeatures { keys: usize, doors: usize, max: usize },
+    MazeHasTooManyObjects { kind: &'static str, count: usize, max: usize },
+    MazeDefinitionTooLarge { bytes: usize, max: usize },
     DataModelError(DataModelError),
     Io(std::io::Error),
     SerdeJson(serde_json::Error),
@@ -81,6 +83,14 @@ impl std::fmt::Display for Error {
                 f,
                 "Maze has too many keys + doors: {keys} keys + {doors} doors = {total} exceeds the {max} limit",
                 total = keys + doors
+            ),
+            Error::MazeHasTooManyObjects { kind, count, max } => write!(
+                f,
+                "Maze has too many {kind}: {count} exceeds the limit of {max}"
+            ),
+            Error::MazeDefinitionTooLarge { bytes, max } => write!(
+                f,
+                "Maze definition is too large to store: {bytes} bytes exceeds the {max}-byte limit"
             ),
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),

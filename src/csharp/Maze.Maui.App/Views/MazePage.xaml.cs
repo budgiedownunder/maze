@@ -63,6 +63,8 @@ namespace Maze.Maui.App.Views
         readonly IDialogService _dialogService;
         readonly IDeviceTypeService _deviceTypeService;
         readonly IAppFeaturesService _appFeaturesService;
+        // Drives the inline per-cell override panel; wired to the live grid in Initialize().
+        CellOverridePanelViewModel? _overridePanelViewModel;
         uint? _lastMinSolutionLength;
         CancellationTokenSource? _fallbackInitCts;
         CancellationTokenSource? _walkCts;
@@ -152,6 +154,7 @@ namespace Maze.Maui.App.Views
             _viewModel.SetDoorRequested += (s, e) => { ChangeSelectionToDoor(); };
             _viewModel.SetEnemyRequested += (s, e) => { ChangeSelectionToEnemy(); };
             _viewModel.SetHealthRequested += (s, e) => { ChangeSelectionToHealth(); };
+            _viewModel.SetTreasureRequested += (s, e) => { ChangeSelectionToTreasure(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.WalkSolutionRequested += async (s, e) => { await WalkSolution(); };
@@ -179,6 +182,20 @@ namespace Maze.Maui.App.Views
             MazeGrid.KeyDown += OnMazeGridKeyDown;
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
 
+            // The override panel reads/writes overrides on the live grid (which
+            // implements ICellOverrideEditor) and seeds from the current selection.
+            _overridePanelViewModel = new CellOverridePanelViewModel(MazeGrid);
+            // The panel writes overrides straight to the grid, so mark the maze dirty here
+            // (the editor commands that normally flag a change are bypassed).
+            _overridePanelViewModel.OverrideChanged += (s, e) => _viewModel.NotifyMazeChanged();
+            OverridePanel.BindingContext = _overridePanelViewModel;
+            // Size the panel to the device (capped + left-aligned on desktop, full-width +
+            // height-capped/scrollable on phone/tablet), and once the panel appears and
+            // shrinks the grid, keep the selected cell in view.
+            SizeChanged += OnPageSizeChanged;
+            MazeGrid.SizeChanged += OnMazeGridSizeChanged;
+            UpdateOverridePanelLayout();
+
             MazeGrid.ActivateCell(1, 1, false);
 
             _viewModel.IsStored = MazeItem.ID != "";
@@ -204,6 +221,26 @@ namespace Maze.Maui.App.Views
         }
         private void OnPlayClicked(object sender, EventArgs e) => _ = PlayAsync(Models.GameType.TwoD);
         private void OnPlay3dClicked(object sender, EventArgs e) => _ = PlayAsync(Models.GameType.ThreeD);
+        private async void OnSettingsClicked(object sender, EventArgs e)
+        {
+            if (MazeItem is null || _viewModel.IsBusy) return;
+            // Edit the maze's 3D game settings; Apply marks the maze dirty so the
+            // change persists on the next Save (the settings ride the maze).
+            Models.MazeGameSettings? before = MazeItem.GameSettings;
+            var result = await _dialogService.ShowMazeGameSettingsEditorAsync(MazeItem.Name, MazeItem.GameSettings);
+            if (result is not null)
+            {
+                _viewModel.ApplyGameSettings(result);
+                // Only repaint the grid / refresh the override panel when a 2D-relevant
+                // default (wall / enemy / health) actually changed — the other settings are
+                // 3D-only and don't affect the 2D display.
+                if (CellSprite.MazeDefaultBaseChanged(before, result))
+                {
+                    MazeGrid.RefreshGameSettingsBaseSprites();
+                    _overridePanelViewModel?.NotifyGameSettingsChanged();
+                }
+            }
+        }
 
         private async Task PlayAsync(Models.GameType gameType)
         {
@@ -231,21 +268,22 @@ namespace Maze.Maui.App.Views
                 if (!saved) return;
             }
 
-            // For 3D launches, show the per-launch custom popup so the
-            // user can pick sky / wall texture / landmark toggles / timer.
-            // Cancelling the popup aborts the launch.
-            Models.Play3dCustomLaunchSettings? launchSettings = null;
+            // For 3D launches, show the Run / Custom Run… / Cancel chooser.
+            // Cancelling aborts the launch.
+            Models.MazeGameSettings? launchSettings = null;
             if (gameType == Models.GameType.ThreeD)
             {
-                launchSettings = await _dialogService.ShowPlay3dCustomLaunchAsync(MazeItem.Name);
+                launchSettings = await Services.Play3dLaunchResolver.ResolveAsync(_dialogService, MazeItem.Name, MazeItem.GameSettings);
                 if (launchSettings is null) return;
             }
 
-            // 2D: pass in-memory definition directly (MazeGamePage renders from it)
+            // 2D: pass in-memory definition directly (MazeGamePage renders from it),
+            //     carrying the maze's game settings so the 2D grid shows the
+            //     wall/enemy/health defaults
             // 3D: pass the saved MazeItem by ID (Play3dGamePage fetches from server)
             Models.MazeItem navigationItem = gameType == Models.GameType.ThreeD
                 ? MazeItem
-                : new Models.MazeItem { ID = MazeItem.ID, Name = MazeItem.Name, Definition = currentMaze };
+                : new Models.MazeItem { ID = MazeItem.ID, Name = MazeItem.Name, Definition = currentMaze, GameSettings = MazeItem.GameSettings };
 
             _viewModel.IsBusy = true;
             try
@@ -326,6 +364,10 @@ namespace Maze.Maui.App.Views
                     if (_viewModel.CanSetHealth)
                         _viewModel.SetHealthCommand.Execute(null);
                     break;
+                case Controls.Keyboard.Key.T:
+                    if (_viewModel.CanSetTreasure)
+                        _viewModel.SetTreasureCommand.Execute(null);
+                    break;
                 case Controls.Keyboard.Key.Delete:
                     if (_viewModel.CanClear)
                         _viewModel.ClearCommand.Execute(null);
@@ -385,6 +427,13 @@ namespace Maze.Maui.App.Views
             ChangeSelectedCellsContent(Maze.CellType.Health);
         }
         /// <summary>
+        /// Changes the selected cells to treasure cells
+        /// </summary>
+        private void ChangeSelectionToTreasure()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Treasure);
+        }
+        /// <summary>
         /// Clears the selected cell(s) content
         /// </summary>
         private void ClearSelection()
@@ -401,36 +450,38 @@ namespace Maze.Maui.App.Views
             ExitSelectionModeAndUpdateControls();
         }
         /// <summary>
-        /// Deletes the selected rows
+        /// Deletes the selected rows. The grid keeps (and remaps) the row selection across
+        /// the edit, so the marching-ants selection is retained for repeated edits — unlike
+        /// a cell stamp, this does not exit selection mode.
         /// </summary>
         private void DeleteRows()
         {
-            MazeGrid.DeleteSelectedRows(); ;
-            ExitSelectionModeAndUpdateControls();
+            MazeGrid.DeleteSelectedRows();
+            UpdateControls();
         }
         /// <summary>
-        /// Deletes the selected columns
+        /// Deletes the selected columns, retaining the column selection (see <see cref="DeleteRows"/>).
         /// </summary>
         private void DeleteColumns()
         {
             MazeGrid.DeleteSelectedColumns();
-            ExitSelectionModeAndUpdateControls();
+            UpdateControls();
         }
         /// <summary>
-        /// Inserts rows at the current row selection
+        /// Inserts rows at the current row selection, retaining the selection (see <see cref="DeleteRows"/>).
         /// </summary>
         private void InsertRows()
         {
-            MazeGrid.InsertSelectedRows(); ;
-            ExitSelectionModeAndUpdateControls();
+            MazeGrid.InsertSelectedRows();
+            UpdateControls();
         }
         /// <summary>
-        /// Inserts columns at the current column selection
+        /// Inserts columns at the current column selection, retaining the selection (see <see cref="DeleteRows"/>).
         /// </summary>
         private void InsertColumns()
         {
-            MazeGrid.InsertSelectedColumns(); ;
-            ExitSelectionModeAndUpdateControls();
+            MazeGrid.InsertSelectedColumns();
+            UpdateControls();
         }
         /// <summary>
         /// Attempts to solve the maze. If successful, the solution is displayed. If not, an error message is displayed.
@@ -532,22 +583,23 @@ namespace Maze.Maui.App.Views
                 uint minSolutionLength = _lastMinSolutionLength is uint last && last <= rows * cols
                     ? last
                     : defaultMinSolutionLength;
-                // Seed Doors from the existing 'D' cell count so regenerating
-                // preserves the author's door count. Spare Doors / Spare Keys
-                // stay at 0 — the grid alone can't tell us which dootr/key
-                // cells were decoys vs real path doors, so the safe default
-                // is "no extras" and let the author opt in.
-                uint doorCount = current.IsEmpty ? 0 : MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door);
+                // Seed each auto-placed feature count from its existing cell count
+                // so regenerating preserves what the author already has (mirrors
+                // React's defaultsFromGrid). Spare Doors / Spare Keys stay at 0 —
+                // the grid alone can't tell us which door/key cells were decoys vs
+                // real path doors, so the safe default is "no extras" and let the
+                // author opt in.
+                bool hasGrid = !current.IsEmpty;
+                uint doorCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door) : 0;
                 uint spareDoors = 0, spareKeys = 0;
-                // Enemies / Health default to 0 — regenerating from an existing
-                // maze doesn't preserve their count (the safe default is "none",
-                // and the author opts in each time).
-                uint enemyCount = 0, healthCount = 0;
+                uint enemyCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Enemy) : 0;
+                uint healthCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Health) : 0;
+                uint treasureCount = hasGrid ? MazeCellCounter.CountCellsOfType(current, Maze.CellType.Treasure) : 0;
                 string? generationError = null;
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, enemyCount, healthCount, _appFeaturesService.Features.MaxMazeCells, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, enemyCount, healthCount, treasureCount, _appFeaturesService.Features.MaxMazeCells, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
@@ -568,6 +620,7 @@ namespace Maze.Maui.App.Views
                         SpareKeys = popupOptions.SpareKeys,
                         EnemyCount = popupOptions.EnemyCount,
                         HealthCount = popupOptions.HealthCount,
+                        TreasureCount = popupOptions.TreasureCount,
                     };
 
                     bool generationSucceeded = false;
@@ -724,6 +777,7 @@ namespace Maze.Maui.App.Views
             _viewModel.CanSetDoor = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetEnemy = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetHealth = !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetTreasure = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
@@ -834,6 +888,111 @@ namespace Maze.Maui.App.Views
                 ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
                 ShowSolveButtons();
                 ShowGenerateButton();
+            }
+            RefreshOverridePanel();
+        }
+        /// <summary>
+        /// Seeds the inline override panel from the current selection — shown for a
+        /// single feature cell (W/K/D/E/H) while the editor is idle, hidden otherwise.
+        /// </summary>
+        private void RefreshOverridePanel()
+        {
+            if (_overridePanelViewModel is null)
+            {
+                return;
+            }
+            CellRange? selection = MazeGrid.CurrentSelection;
+            // Show the panel for a single feature cell or a rectangular selection whose
+            // cells are all the same overridable type (e.g. a block of walls). LoadCell
+            // seeds from the top-left cell and hides the panel for start/finish/empty
+            // selections. When the panel becomes visible it shrinks the grid;
+            // OnMazeGridSizeChanged then scrolls the cell back into view.
+            if (selection is not null && !IsSolutionDisplayed && !_isWalking
+                && IsUniformSelection(selection, out Maze.CellType type))
+            {
+                _overridePanelViewModel.LoadCell(selection.Top, selection.Left, selection.Bottom, selection.Right, type);
+            }
+            else
+            {
+                _overridePanelViewModel.IsVisible = false;
+            }
+        }
+        /// <summary>
+        /// Whether every cell in the selection is the same type, and if so what that type
+        /// is. A mixed selection returns false (the override panel hides for it).
+        /// </summary>
+        /// <param name="selection">The current selection (one-based bounds)</param>
+        /// <param name="type">The shared cell type, when uniform</param>
+        /// <returns>True when the selection's cells are all the same type</returns>
+        private bool IsUniformSelection(CellRange selection, out Maze.CellType type)
+        {
+            type = MazeGrid.GetCellType(selection.Top, selection.Left);
+            for (int row = selection.Top; row <= selection.Bottom; row++)
+            {
+                for (int column = selection.Left; column <= selection.Right; column++)
+                {
+                    if (MazeGrid.GetCellType(row, column) != type)
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        /// <summary>
+        /// Keeps the override panel filling the width up to a maximum (so it spans the
+        /// width on mobile but isn't excessively wide on desktop), always left-aligned.
+        /// </summary>
+        private void OnPageSizeChanged(object? sender, EventArgs e) => UpdateOverridePanelLayout();
+        /// <summary>
+        /// Sizes the override panel for the current device: desktop is capped + left-aligned;
+        /// phone/tablet fills the width. The height is capped (full page height on desktop so
+        /// it never scrolls; half the screen on mobile) — the panel sizes to content under the
+        /// cap and its content (in a ScrollView) scrolls once it exceeds it, e.g. in landscape.
+        /// </summary>
+        private void UpdateOverridePanelLayout()
+        {
+            const double maxWidth = 480;
+            if (Width <= 0 || Height <= 0)
+            {
+                return;
+            }
+            // The discriminator is the device class, not the width — a landscape phone is
+            // wide but short, so a width breakpoint would wrongly treat it as desktop.
+            if (DeviceInfo.Idiom == DeviceIdiom.Desktop)
+            {
+                OverridePanel.HorizontalOptions = LayoutOptions.Start;
+                OverridePanel.WidthRequest = Math.Min(Width, maxWidth);
+                OverridePanel.MaximumHeightRequest = Height;
+            }
+            else
+            {
+                OverridePanel.HorizontalOptions = LayoutOptions.Fill;
+                OverridePanel.WidthRequest = -1;
+                OverridePanel.MaximumHeightRequest = Height * 0.4;
+            }
+        }
+        /// <summary>
+        /// When the grid resizes — e.g. because the override panel appeared below it and
+        /// shrank its viewport — scrolls the selected cell back into view. Fires after the
+        /// grid has its new size, so the scroll is a small animated adjustment (and the
+        /// <see cref="MazeGrid.EnsureCellVisible"/> guard skips it until the grid is laid out).
+        /// </summary>
+        private void OnMazeGridSizeChanged(object? sender, EventArgs e)
+        {
+            if (_overridePanelViewModel?.IsVisible != true)
+            {
+                return;
+            }
+            CellRange? selection = MazeGrid.CurrentSelection;
+            if (selection is not null && selection.IsSingleCell)
+            {
+                int row = selection.Top, column = selection.Left;
+                // Defer one tick: when SizeChanged fires, the grid's inner scroll view may
+                // not have taken its new (smaller) size yet, so scrolling now would read the
+                // old viewport and conclude the cell is still visible. Next tick it has
+                // settled. The EnsureCellVisible guard makes a still-unsized view a no-op.
+                Dispatcher.Dispatch(() => MazeGrid.EnsureCellVisible(row, column));
             }
         }
         /// <summary>

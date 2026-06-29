@@ -12,6 +12,19 @@
     }
 
     /// <summary>
+    /// The action chosen from the Play 3D launch chooser.
+    /// </summary>
+    public enum Play3dLaunchChoice
+    {
+        /// <summary>Cancel the launch (default — also used if the popup is dismissed).</summary>
+        Cancel = 0,
+        /// <summary>Launch with the maze's saved game settings.</summary>
+        Run = 1,
+        /// <summary>Open the settings popup for a one-off (non-persisted) launch.</summary>
+        CustomRun = 2,
+    }
+
+    /// <summary>
     /// Represents a dialog service interface
     /// </summary>
     public interface IDialogService
@@ -81,15 +94,33 @@
         public Task<Models.Difficulty?> ShowPlay3dDifficultyAsync();
 
         /// <summary>
-        /// Displays the Play 3D custom-launch picker (sky / wall texture /
-        /// landmark toggles / time limit) for a user-edited maze.
-        /// Pre-fills from the user's previously-saved settings (MAUI
-        /// <see cref="Microsoft.Maui.Storage.Preferences"/>); on Play, the
-        /// returned <see cref="Models.Play3dCustomLaunchSettings"/> is also
-        /// persisted by the popup itself for next time.
+        /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) for a
+        /// user-edited maze.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <returns>A task containing the chosen <see cref="Play3dLaunchChoice"/> (<see cref="Play3dLaunchChoice.Cancel"/> if dismissed)</returns>
+        public Task<Play3dLaunchChoice> ShowPlay3dLaunchChooserAsync(string? mazeName = null);
+
+        /// <summary>
+        /// Displays the Play 3D settings popup (sky / wall texture / landmark
+        /// toggles / time limit) for a one-off custom launch of a user-edited maze,
+        /// seeded from <paramref name="current"/> (or defaults when none). The
+        /// returned settings drive this launch only; nothing is persisted.
+        /// </summary>
+        /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <param name="current">Settings to seed the popup with, or null for defaults</param>
         /// <returns>A task containing the chosen settings, or <c>null</c> if the user cancelled</returns>
-        public Task<Models.Play3dCustomLaunchSettings?> ShowPlay3dCustomLaunchAsync(string? mazeName = null);
+        public Task<Models.MazeGameSettings?> ShowMazeGameSettingsAsync(string? mazeName = null, Models.MazeGameSettings? current = null);
+
+        /// <summary>
+        /// Displays the per-maze game-settings editor for a user-edited maze,
+        /// seeded from the maze's current settings (or defaults when none).
+        /// On Apply the returned settings are the caller's to persist with the
+        /// maze; nothing is written to the device store.
+        /// </summary>
+        /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <param name="current">The maze's current settings, or null for defaults</param>
+        /// <returns>A task containing the edited settings, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.MazeGameSettings?> ShowMazeGameSettingsEditorAsync(string? mazeName, Models.MazeGameSettings? current);
     }
 }

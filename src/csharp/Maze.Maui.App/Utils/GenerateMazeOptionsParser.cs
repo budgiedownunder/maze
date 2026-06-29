@@ -23,6 +23,7 @@ namespace Maze.Maui.App.Utils;
 /// <param name="SpareKeys">Number of spare keys to plant on off-spine branches (0 = none).</param>
 /// <param name="EnemyCount">Number of enemies to auto-place at random passable cells (0 = none).</param>
 /// <param name="HealthCount">Number of health pickups to auto-place at random passable cells (0 = none).</param>
+/// <param name="TreasureCount">Number of treasure cells to auto-place (0 = none).</param>
 internal sealed record ParsedGenerateOptions(
     uint Rows,
     uint Cols,
@@ -35,7 +36,8 @@ internal sealed record ParsedGenerateOptions(
     uint SpareDoors,
     uint SpareKeys,
     uint EnemyCount,
-    uint HealthCount);
+    uint HealthCount,
+    uint TreasureCount);
 
 /// <summary>
 /// Parses the string inputs from <see cref="Views.GenerateMazePopup"/>
@@ -65,6 +67,7 @@ internal static class GenerateMazeOptionsParser
     /// <param name="spareKeysText">Spare Keys entry text (number of spare keys; 0 = none).</param>
     /// <param name="enemyCountText">Enemies entry text (number of enemies to auto-place; 0 = none).</param>
     /// <param name="healthCountText">Health entry text (number of health pickups to auto-place; 0 = none).</param>
+    /// <param name="treasureCountText">Treasure entry text (number of treasure cells to auto-place; 0 = none).</param>
     /// <param name="maxMazeCells">Server-reported cell-count cap, or <c>null</c> if no cap.</param>
     /// <param name="parsed">The parsed options on success; <c>null</c> on failure.</param>
     /// <param name="error">An error message on failure; empty string on success.</param>
@@ -81,6 +84,7 @@ internal static class GenerateMazeOptionsParser
         string? spareKeysText,
         string? enemyCountText,
         string? healthCountText,
+        string? treasureCountText,
         int? maxMazeCells,
         out ParsedGenerateOptions? parsed,
         out string error)
@@ -131,6 +135,8 @@ internal static class GenerateMazeOptionsParser
         // for the solver, so they don't affect the key-aware solve's feature budget.
         if (!TryParseFeatureField(enemyCountText, "Enemies", ApiMaze.MaxEnemyCount, out uint enemyCount, out error)) return false;
         if (!TryParseFeatureField(healthCountText, "Health", ApiMaze.MaxHealthCount, out uint healthCount, out error)) return false;
+        // Treasure auto-places like enemies/health (its own cap, no key+door budget impact).
+        if (!TryParseFeatureField(treasureCountText, "Treasure", ApiMaze.MaxTreasureCount, out uint treasureCount, out error)) return false;
 
         // Combined key+door cap. Each real door contributes one key AND one door to the
         // grid, so the formula counts doors twice. Mirrors React's
@@ -157,7 +163,8 @@ internal static class GenerateMazeOptionsParser
             SpareDoors: spareDoors,
             SpareKeys: spareKeys,
             EnemyCount: enemyCount,
-            HealthCount: healthCount);
+            HealthCount: healthCount,
+            TreasureCount: treasureCount);
         return true;
     }
 

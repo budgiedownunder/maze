@@ -5,12 +5,23 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { ThemeProvider } from '../context/ThemeProvider'
 import { AuthProvider } from '../context/AuthProvider'
 import { AppFeaturesContext } from '../context/AppFeaturesContext'
+import { http, HttpResponse } from 'msw'
 import { MazePage } from './MazePage'
-import { solveMaze } from '../wasm/mazeWasm'
+import { solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
+import { server } from '../mocks/server'
+
+const BASE = '/api/v1'
 
 vi.mock('../wasm/mazeWasm', () => ({
   solveMaze: vi.fn(),
   generateMaze: vi.fn(),
+  // Lightweight JS stand-ins for the WASM codec: split parses the full maze JSON and
+  // reports no overrides (mock mazes are pure-char); build echoes back the grid.
+  splitDefinition: vi.fn(async (json: string) => {
+    const parsed = JSON.parse(json) as { definition: { grid: string[][] } }
+    return { grid: parsed.definition.grid, overrides: [] }
+  }),
+  buildDefinitionWithOverrides: vi.fn(async (grid: string[][]) => ({ grid })),
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
   MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
 }))
@@ -169,5 +180,66 @@ describe('MazePage walk speed control', () => {
     await waitFor(() =>
       expect(screen.queryByRole('combobox', { name: 'Walk speed' })).not.toBeInTheDocument(),
     )
+  })
+})
+
+describe('MazePage override persistence + oversized-definition error', () => {
+  beforeEach(() => {
+    setupAuth()
+  })
+
+  afterEach(() => {
+    sessionStorage.clear()
+    vi.clearAllMocks()
+  })
+
+  // Loads maze-0001, selects an empty cell and stamps a wall so the maze is dirty
+  // and the header Save button is enabled.
+  async function loadAndDirty() {
+    renderMazePage('maze-0001')
+    const cell = await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(cell)
+    const wallBtn = await screen.findByRole('button', { name: 'Set Wall' })
+    await waitFor(() => expect(wallBtn).toBeEnabled())
+    await userEvent.click(wallBtn)
+  }
+
+  it('splits the loaded definition through the WASM codec on load', async () => {
+    renderMazePage('maze-0001')
+    await screen.findByRole('button', { name: 'Solve' })
+    expect(splitDefinition).toHaveBeenCalled()
+  })
+
+  it('saves the canonical definition built from grid + overrides', async () => {
+    let sentBody: { definition?: unknown } | undefined
+    server.use(
+      http.put(`${BASE}/mazes/:id`, async ({ request }) => {
+        sentBody = (await request.json()) as { definition?: unknown }
+        return HttpResponse.json({ id: 'maze-0001', name: 'Alpha', definition: { grid: [] } })
+      }),
+    )
+    await loadAndDirty()
+    const saveBtn = screen.getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveBtn).toBeEnabled())
+    await userEvent.click(saveBtn)
+
+    await waitFor(() => expect(buildDefinitionWithOverrides).toHaveBeenCalled())
+    // The PUT body carries the definition produced by the codec (mock: { grid }).
+    await waitFor(() => expect(sentBody?.definition).toBeDefined())
+  })
+
+  it('shows the server message when a save is rejected with HTTP 422', async () => {
+    server.use(
+      http.put(
+        `${BASE}/mazes/:id`,
+        () => new HttpResponse('Maze definition is too large.', { status: 422 }),
+      ),
+    )
+    await loadAndDirty()
+    const saveBtn = screen.getByRole('button', { name: 'Save' })
+    await waitFor(() => expect(saveBtn).toBeEnabled())
+    await userEvent.click(saveBtn)
+
+    expect(await screen.findByText('Maze definition is too large.')).toBeInTheDocument()
   })
 })

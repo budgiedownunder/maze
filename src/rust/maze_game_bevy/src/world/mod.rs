@@ -1,21 +1,186 @@
 pub(crate) mod decorations;
 pub(crate) mod floor;
+pub(crate) mod gallery;
+pub(crate) mod levels;
 pub(crate) mod objects;
 pub(crate) mod roof;
 pub(crate) mod sky;
+pub(crate) mod support_pole;
 pub(crate) mod textures;
 pub(crate) mod walls;
 
+pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COUNT};
+
 use crate::hud;
 use crate::overlays::pause;
-use crate::state::{GameClock, GameConfig, GameState, GridFacing, PendingMazeJson};
+use crate::state::{
+    DoorStyle, FinishType, GameClock, GameConfig, GameState, GridFacing, LayeredAlignment,
+    MultiLevelRun, PendingLevels, PendingMazeJson, SkyType, WallType,
+};
 use bevy::prelude::*;
-use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
-use std::collections::HashSet;
+use maze::{CellEntity, GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
+use std::collections::{HashMap, HashSet};
 
 pub(crate) const CELL_SIZE: f32 = 2.0;
 pub(crate) const HALF_CELL: f32 = CELL_SIZE / 2.0;
 const EYE_HEIGHT: f32 = 1.7;
+
+/// Vertical gap between stacked levels in a multi-level run. Equal to the wall
+/// height so a level's floor sits exactly at the top of the walls of the level
+/// below — on the ceiling for a roofed level. Level 0 is the bottom.
+pub(crate) const LEVEL_HEIGHT: f32 = crate::world::walls::WALL_HEIGHT;
+
+/// The gapless world Y of a level's floor: `level * LEVEL_HEIGHT`. The actual
+/// base used by the renderer is the precomputed `base_level_y` table (see
+/// [`level_bases`]), which adds a per-level gap below any level that carries
+/// pools; this is the no-gap fallback used for single-level games and tests.
+pub(crate) fn world_y(level: usize, y: f32) -> f32 {
+    y + level as f32 * LEVEL_HEIGHT
+}
+
+/// Vertical clearance reserved **below** a level's floor when that level carries a
+/// recessed pool (water / lava). A pool's surface, basin and bobbing rocks all sit
+/// below the floor plane; lifting the whole level by this much keeps that
+/// subterranean geometry above the level below's wall-top (where the cell's
+/// underside is sealed), so nothing pokes through into the level beneath. Covers
+/// the deepest case (lava rocks) plus a safety margin.
+pub(crate) const POOL_GAP: f32 = 0.7;
+
+/// Precomputes each level's world-space floor Y in one pass (the `base_level_y`
+/// table). `world(0) = 0`; `world(L) = world(L-1) + LEVEL_HEIGHT + gap(L)`, where
+/// `gap(L)` is [`POOL_GAP`] when level `L` carries a pool and `0` otherwise — so
+/// the stack only grows where a pool's subterranean geometry needs the clearance.
+pub(crate) fn level_bases(level_has_pool: &[bool]) -> Vec<f32> {
+    let mut bases = Vec::with_capacity(level_has_pool.len());
+    let mut y = 0.0;
+    for (level, &has_pool) in level_has_pool.iter().enumerate() {
+        if level > 0 {
+            y += LEVEL_HEIGHT + if has_pool { POOL_GAP } else { 0.0 };
+        }
+        bases.push(y);
+    }
+    bases
+}
+
+/// Where a level sits in world space: its index (for the Y lift) plus the X/Z
+/// centring offset its grid gets under the run's [`LayeredAlignment`]. Threaded
+/// through the spawn helpers in place of a bare `level`, so a level's geometry is
+/// built the same way everywhere — local cell coordinates wrapped in
+/// [`Self::world_x`] / [`Self::world_y`] / [`Self::world_z`]. The bottom (base)
+/// level always has a zero X/Z offset, so single-level games and `Edge` stacks
+/// are byte-identical to the pre-Step-8 render.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LevelPlacement {
+    pub(crate) level: usize,
+    /// This level's world-space floor Y — the precomputed `base_level_y[level]`
+    /// (see [`level_bases`]). Replaces the bare `level * LEVEL_HEIGHT` lift so a
+    /// pool-bearing level can be raised to make room for its sunken pool.
+    base_y: f32,
+    offset_x: f32,
+    offset_z: f32,
+}
+
+/// The X/Z offset (in **cells**, `(row_offset, col_offset)`) of `level`'s grid
+/// from the base origin, given every level's `(rows, cols)` footprint (`dims`,
+/// bottom level at index 0) under `alignment` for a run seeded with `seed`. This is
+/// the single source the renderer ([`LevelPlacement::for_level`]) and the generator
+/// ([`crate::world::levels::aligned_landing`]) both read, so the layout they each
+/// compute agrees and a ladder lands.
+///
+/// `Edge` → corner (zero); `Centre` → centred on the base. The two random modes
+/// flip a per-level edge/centre coin ([`LayeredAlignment::resolve`]) and differ
+/// only in the anchor:
+/// * `RandomBase` measures each level from the **base**, so a corner-stacked level
+///   can stick out past a centred one below it.
+/// * `RandomLevel` measures each level **within the level below** (a prefix sum
+///   down the stack), so a smaller level always nests inside its parent.
+pub(crate) fn level_offset_cells(
+    level: usize,
+    dims: &[(usize, usize)],
+    alignment: LayeredAlignment,
+    seed: u64,
+) -> (isize, isize) {
+    let base = dims.first().copied().unwrap_or((0, 0));
+    // Inset of a `(r, c)` grid placed within an enclosing `(er, ec)` one, per the
+    // edge/centre choice (centre = half the size difference; edge = flush corner).
+    let inset = |enclosing: (usize, usize), inner: (usize, usize), centre: bool| -> (isize, isize) {
+        if centre {
+            (
+                (enclosing.0 as isize - inner.0 as isize) / 2,
+                (enclosing.1 as isize - inner.1 as isize) / 2,
+            )
+        } else {
+            (0, 0)
+        }
+    };
+    let is_centre = |l: usize| alignment.resolve(seed, l) == LayeredAlignment::Centre;
+    match alignment {
+        // Each level offset within the level directly below it — accumulate down.
+        LayeredAlignment::RandomLevel => {
+            let mut off = (0isize, 0isize);
+            for l in 1..=level.min(dims.len().saturating_sub(1)) {
+                let (dr, dc) = inset(dims[l - 1], dims[l], is_centre(l));
+                off.0 += dr;
+                off.1 += dc;
+            }
+            off
+        }
+        // Edge / Centre / RandomBase: each level offset from the base directly.
+        _ => {
+            let cur = dims.get(level).copied().unwrap_or(base);
+            inset(base, cur, is_centre(level))
+        }
+    }
+}
+
+impl LevelPlacement {
+    /// The placement for `level` given every level's footprint (`dims`, bottom level
+    /// at index 0) under `alignment` for a run seeded with `seed`, with its floor at
+    /// `base_y` (the precomputed [`level_bases`] entry). The X/Z offset comes from
+    /// [`level_offset_cells`] — the same source the generator uses — so the layouts
+    /// agree. (`x` maps to columns, `z` to rows.)
+    pub(crate) fn for_level(
+        level: usize,
+        dims: &[(usize, usize)],
+        alignment: LayeredAlignment,
+        base_y: f32,
+        seed: u64,
+    ) -> Self {
+        let (row_off, col_off) = level_offset_cells(level, dims, alignment, seed);
+        Self {
+            level,
+            base_y,
+            offset_x: col_off as f32 * CELL_SIZE,
+            offset_z: row_off as f32 * CELL_SIZE,
+        }
+    }
+
+    /// Maps a cell-local X (column centre) into world space for this level.
+    pub(crate) fn world_x(&self, x: f32) -> f32 {
+        x + self.offset_x
+    }
+
+    /// Maps a cell-local Y into world space for this level: `base_level_y[level] + y`.
+    pub(crate) fn world_y(&self, y: f32) -> f32 {
+        self.base_y + y
+    }
+
+    /// This level's world-space floor Y (`base_level_y[level]`).
+    pub(crate) fn base_y(&self) -> f32 {
+        self.base_y
+    }
+
+    /// Maps a cell-local Z (row centre) into world space for this level.
+    pub(crate) fn world_z(&self, z: f32) -> f32 {
+        z + self.offset_z
+    }
+
+    /// World-space offset added to a ground-level camera position to lift + centre
+    /// it onto this level (X/Z centring + the level's Y).
+    pub(crate) fn camera_offset(&self) -> Vec3 {
+        Vec3::new(self.offset_x, self.base_y, self.offset_z)
+    }
+}
 
 /// How far back from the cell centre — in the direction OPPOSITE the
 /// player's current facing — the camera is positioned. A non-zero shift
@@ -97,6 +262,7 @@ pub fn generate_maze_json(
     spare_keys: u32,
     enemy_count: u32,
     health_count: u32,
+    treasure_count: u32,
 ) -> Result<String, String> {
     let options = GeneratorOptions {
         row_count: rows as usize,
@@ -113,6 +279,7 @@ pub fn generate_maze_json(
         spare_keys: Some(spare_keys as usize),
         enemy_count: Some(enemy_count as usize),
         health_count: Some(health_count as usize),
+        treasure_count: Some(treasure_count as usize),
     };
     let maze = Generator { options }
         .generate()
@@ -130,14 +297,16 @@ pub fn generate_maze_json(
 /// dead-ends pick up landmark objects (brazier / urn / pillar / chest). The
 /// intended solve is: collect the key, navigate the spine down and east,
 /// then hold against the real door to open it before reaching the finish.
-/// See `demo_grid_is_well_formed` for the structural guarantees this layout
-/// upholds.
+/// A bare treasure (`T` at `(3,3)`) sits in a dead-end off the start corridor —
+/// playable from `cargo run` and demonstrating that treasure takes precedence
+/// over the dead-end landmark prop. See `demo_grid_is_well_formed` for the
+/// structural guarantees this layout upholds.
 pub(crate) fn demo_grid() -> Vec<Vec<char>> {
     vec![
         vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
         vec!['W', 'S', ' ', 'K', ' ', 'E', ' ', 'H', ' ', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'D', 'W'],
-        vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
+        vec!['W', ' ', ' ', 'T', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
         vec!['W', ' ', 'W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
@@ -157,6 +326,92 @@ pub(crate) fn grid_to_json(grid: &[Vec<char>]) -> String {
         })
         .collect();
     format!("{{\"grid\":[{}]}}", rows.join(","))
+}
+
+/// Advances a multi-level run to the next level on an interim finish: banks the
+/// completed level's score + treasure into the run totals, builds the next
+/// level's game (carrying the player's HP, and the whole bag when the run is
+/// configured not to reset it), and resets the per-level view state to the new
+/// level's start. The caller must ensure the run is not already on its final
+/// level ([`MultiLevelRun::is_final`]).
+///
+/// This performs the *logical* swap only — the active game, grid, and player
+/// camera move to the new level instantly. The stacked-world rendering and the
+/// climb/transition animation are layered on separately.
+pub(crate) fn advance_to_next_level(
+    state: &mut GameState,
+    run: &mut MultiLevelRun,
+    config: &GameConfig,
+) {
+    // Bank the completed level's contribution to the run totals before the
+    // live game is replaced.
+    run.banked_score += state.game.score();
+    merge_treasure(&mut run.carried_treasure, &state.game.collected_treasure());
+
+    let next_index = run.current_level + 1;
+    let carried_hp = state.game.hp();
+    let carried_bag = state.game.bag().to_vec();
+
+    let opts = MazeGameOptions {
+        enemy_move_period_ms: Some(config.enemy_move_period_ms),
+        enemy_damage: Some(config.enemy_damage),
+        max_hp: Some(config.max_hp),
+        starting_hp: Some(carried_hp),
+    };
+    let mut next_game = MazeGame::from_json_with_options(&run.levels[next_index], opts)
+        .expect("multi-level run holds maze JSON produced by the generator");
+    if !run.reset_bag_between_levels {
+        next_game.seed_carried_bag(carried_bag);
+    }
+
+    let grid = next_game.grid().to_vec();
+    let start_row = next_game.player_row();
+    let start_col = next_game.player_col();
+    let facing = initial_facing(&grid, start_row, start_col);
+    let start_yaw = facing.to_yaw();
+    let start_pos = camera_pos_for(start_row, start_col, start_yaw);
+
+    let mut explored = HashSet::new();
+    explore_cell(&mut explored, &grid, start_row, start_col);
+
+    state.game = next_game;
+    state.grid = grid;
+    state.facing = facing;
+    state.visual_pos = start_pos;
+    state.visual_yaw = start_yaw;
+    state.visual_pitch = 0.0;
+    state.anim = None;
+    state.explored = explored;
+    state.damage_flash_timer = 0.0;
+    // Lift + centre the camera onto the new level. The move animation stays in the
+    // level's local frame; `movement_system` adds this offset when writing the
+    // camera transform, so reaching an interim finish takes the player up onto the
+    // next level (and centred over it under `Centre` alignment). A smooth climb
+    // animation is a later refinement — this is the placement snap.
+    let placement = LevelPlacement::for_level(
+        next_index,
+        &run.level_dims,
+        config.layered_alignment,
+        run.level_bases.get(next_index).copied().unwrap_or(next_index as f32 * LEVEL_HEIGHT),
+        config.seed,
+    );
+    state.camera_offset = placement.camera_offset();
+    run.current_level = next_index;
+}
+
+/// Folds a level's per-style treasure counts into the run's cumulative tally,
+/// preserving the (ascending-value) order `collected_treasure` returns.
+fn merge_treasure(acc: &mut Vec<(maze::TreasureStyle, u32)>, add: &[(maze::TreasureStyle, u32)]) {
+    for &(style, count) in add {
+        if count == 0 {
+            continue;
+        }
+        if let Some(entry) = acc.iter_mut().find(|(s, _)| *s == style) {
+            entry.1 += count;
+        } else {
+            acc.push((style, count));
+        }
+    }
 }
 
 pub(crate) fn lcg(state: &mut u64) -> f32 {
@@ -209,6 +464,16 @@ pub(crate) fn cell_centre(row: usize, col: usize) -> Vec3 {
 /// is `(sin(yaw), 0, cos(yaw))`.
 pub(crate) fn camera_pos_for(row: usize, col: usize, yaw: f32) -> Vec3 {
     cell_centre(row, col) + Vec3::new(yaw.sin(), 0.0, yaw.cos()) * CAMERA_EDGE_OFFSET
+}
+
+/// World (X, Z) of cell `(r, c)`'s centre under `placement` — the same mapping the
+/// spawn helpers use. Lets the transition compare a finish's world position to the
+/// next level's start (a ladder needs them aligned; see `ladder_allowed`).
+pub(crate) fn cell_world_xz(r: usize, c: usize, placement: LevelPlacement) -> Vec2 {
+    Vec2::new(
+        placement.world_x(c as f32 * CELL_SIZE + 1.0),
+        placement.world_z(r as f32 * CELL_SIZE + 1.0),
+    )
 }
 
 pub(crate) fn explore_cell(
@@ -293,10 +558,692 @@ pub(crate) fn camera_fov_resize_system(
     }
 }
 
+/// Immutable per-session render assets shared by every level's geometry. Bundled
+/// so [`spawn_level`] takes one reference instead of a long argument list.
+struct LevelRenderAssets<'a> {
+    wall: &'a walls::WallAssets,
+    nonoccluding: &'a walls::NonOccludingAssets,
+    floor: &'a floor::FloorAssets,
+    decoration: &'a decorations::DecorationAssets,
+    object: &'a objects::ObjectAssets,
+    roof: &'a roof::RoofAssets,
+}
+
+/// Renders one level's full geometry at its `placement` (the level's Y lift +
+/// X/Z centring offset, threaded through every spawn helper). `is_final` keeps the
+/// finish orb only on the top level — interim finishes omit it (a transition rig
+/// replaces it later). Every level's enemies are spawned with their real per-level
+/// ids; `enemy_animation_system` drives only the current level's, so off-level
+/// enemies idle in place.
+#[allow(clippy::too_many_arguments)]
+fn spawn_level(
+    commands: &mut Commands,
+    assets: &LevelRenderAssets,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    placement: LevelPlacement,
+    is_final: bool,
+    // True only when an interim finish on this level has the next level's start
+    // directly above it (so a ladder can land); otherwise a ladder finish falls
+    // back to a portal. Irrelevant on the final level.
+    ladder_allowed: bool,
+    // Cells whose dead-end landmark to suppress (gallery finish-rig alcoves).
+    dead_end_skip: &[(usize, usize)],
+    // True when this level's start cell sits above a ladder finish on the level
+    // below — its floor becomes an (open) hatch the climb emerges through.
+    hatch_at_start: bool,
+    // True when this level's own finish resolved to a ladder: if the level is
+    // roofed, its finish-cell roof tile carries the climb's opening (a holed tile)
+    // so the ladder isn't sealed under a solid ceiling. Irrelevant on open levels
+    // (no roof) and on the final level (orb, no ladder).
+    finish_is_ladder_here: bool,
+    // True when the level below this one is roofed — the start-cell hatch then
+    // leaves its underside to that level's holed roof tile.
+    below_roofed: bool,
+    // How far this level was lifted to make room for its sunken pools (0 when it
+    // carries none, or for the bottom level). When non-zero, each cell's underside
+    // is sealed `gap` below the floor so the level below sees a clean ceiling.
+    gap: f32,
+    // Sparkle rays each treasure chest on this level gets — the same count for
+    // every chest across the whole run, computed once in `spawn_world` from the
+    // total treasure over all levels so the additive overdraw stays bounded for the
+    // whole stack. See `rays_per_chest`.
+    treasure_rays: usize,
+    // Rocks each lava cell on this level gets — likewise a global across-levels
+    // budget computed once in `spawn_world`. See `lava::run_lava_rocks`.
+    lava_rocks: usize,
+    // The level-above's placement + `(rows, cols)` footprint, or `None` for the top
+    // level — forwarded to the door spawn so a raised portcullis under a taper gap
+    // (no cell above its world XZ) stays visible instead of hiding.
+    placement_above: Option<LevelPlacement>,
+    dims_above: Option<(usize, usize)>,
+) {
+    // Row-major scan order matches `MazeGame`'s enemy-id assignment, so bumping
+    // this per `'E'` keeps the live level's `EnemyMarker.id` aligned with the
+    // runtime `maze::Enemy.id`.
+    let mut enemy_id: u32 = 0;
+    for (r, row) in grid.iter().enumerate() {
+        for (c, &cell) in row.iter().enumerate() {
+            let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
+            // Seal this cell's underside when the level was lifted for its pools:
+            // a non-pool cell gets a solid stone block filling the gap below its
+            // floor; a pool cell gets a thin cap at the gap bottom (its sunken
+            // basin sits above). Either way, from the level below every cell shows
+            // one clean stone underside at the same Y, never the pool beneath.
+            // A hatch start cell is the exception: it's an opening the climb emerges
+            // through, so sealing it would block the hole — leave it clear.
+            let is_hatch_cell = cell == 'S' && hatch_at_start;
+            if gap > 0.0 && !is_hatch_cell {
+                spawn_underside_seal(
+                    commands,
+                    assets.floor,
+                    r,
+                    c,
+                    placement,
+                    gap,
+                    walls::pool_type_at(grid, cell_entities, config, r, c).is_some(),
+                );
+            }
+            if cell == 'W' {
+                // A solid wall renders nothing itself — the adjacent open cell
+                // draws the panel. A non-occluding wall (water / lava / iron
+                // fence) is un-skipped: it renders its in-cell geometry plus the
+                // panels facing any solid-wall neighbours (panels toward open /
+                // non-occluding neighbours and the grid edge are suppressed in
+                // `spawn_walls_for_cell`). Water / lava pools double as the floor;
+                // the iron fence stands on a normal tile.
+                let wall_type = objects::overrides::resolve_wall_type(cell_entity, config.wall_type);
+                if !wall_type.is_non_occluding() {
+                    continue;
+                }
+                walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
+                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_rocks);
+                // On a lifted (floating) level, a pool cell's basin side below the
+                // rim would otherwise show through to the level below — and, under
+                // taper, to its exposed surrounding ring. Seal its exposed edges so
+                // it reads as the level's solid floor edge.
+                if gap > 0.0 && matches!(wall_type, WallType::Water | WallType::Lava) {
+                    floor::spawn_pool_edge_seal(commands, assets.floor, r, c, grid.len(), grid[r].len(), placement, gap);
+                }
+                if matches!(wall_type, WallType::IronFence) {
+                    floor::tile::spawn_tile(commands, assets.floor, r, c, placement);
+                }
+                roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement, false);
+                continue;
+            }
+            walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
+            decorations::spawn_decorations_for_cell(commands, assets.decoration, grid, cell_entities, cell, r, c, config, placement);
+            floor::spawn_floor_for_cell(commands, assets.floor, grid, cell, r, c, placement, hatch_at_start, below_roofed, gap);
+            // Every level's enemies get their real per-level row-major id (matching
+            // that level's `MazeGame`'s enemy ids), so each level's enemies come
+            // alive when it becomes the current level. `enemy_animation_system`
+            // moves only the current level's enemies; an off-level enemy holds its
+            // position and idle-bobs.
+            objects::spawn_objects_for_cell(commands, assets.object, grid, cell, r, c, config, cell_entity, enemy_id, treasure_rays, placement, is_final, ladder_allowed, dead_end_skip);
+            if cell == 'E' {
+                enemy_id += 1;
+            }
+            // Doors are spawned here (not inside `spawn_objects_for_cell`)
+            // because the panel borrows the cell's wall material from
+            // `wall_assets`.
+            objects::door::spawn_door_for_cell(commands, &assets.object.door, assets.wall, &assets.decoration.wall, materials, grid, cell_entities, cell, r, c, config, cell_entity, placement, placement_above, dims_above);
+            // The ladder finish's roof tile carries the climb's opening (holed) so
+            // the ladder isn't sealed under a solid ceiling on a roofed level.
+            let holed = cell == 'F' && finish_is_ladder_here;
+            roof::spawn_roof_for_cell(commands, assets.roof, assets.wall, grid, r, c, config, placement, holed);
+        }
+    }
+}
+
+/// Marker on a cell's underside seal — the stone block / cap that closes the
+/// vertical gap a pool-bearing level was lifted by, so the level below sees a
+/// clean ceiling instead of the sunken pool. Tagged so the rendering tests can
+/// count them.
+#[derive(Component)]
+pub(crate) struct UndersideSeal;
+
+/// Thin cap height under a pool cell's basin (the rest of the gap is open above
+/// it, holding the recessed surface + rocks).
+const UNDERSIDE_CAP_THICKNESS: f32 = 0.06;
+
+/// Seals a cell's underside on a level lifted by `gap` to hold its pools. A
+/// non-pool cell gets a solid stone block filling the whole gap below its floor
+/// (so there's no hollow at an open edge); a pool cell gets a thin cap at the gap
+/// bottom, its recessed basin sitting in the space above. Both present the same
+/// flat stone underside at the gap bottom to the level below, so a pool cell reads
+/// no differently from any other when viewed from beneath.
+fn spawn_underside_seal(
+    commands: &mut Commands,
+    floor: &floor::FloorAssets,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+    gap: f32,
+    is_pool: bool,
+) {
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let gap_bottom = placement.base_y() - gap;
+    let top = if is_pool {
+        gap_bottom + UNDERSIDE_CAP_THICKNESS
+    } else {
+        placement.base_y()
+    };
+    let height = (top - gap_bottom).max(UNDERSIDE_CAP_THICKNESS);
+    let centre_y = gap_bottom + height / 2.0;
+    match (floor.floor_mesh.clone(), floor.tile_mat.clone()) {
+        (Some(mesh), Some(mat)) => {
+            commands.spawn((
+                UndersideSeal,
+                Transform::from_xyz(x, centre_y, z)
+                    .with_scale(Vec3::new(1.0, height / floor::FLOOR_THICKNESS, 1.0)),
+                Mesh3d(mesh),
+                MeshMaterial3d(mat),
+            ));
+        }
+        _ => {
+            commands.spawn((UndersideSeal, Transform::from_xyz(x, centre_y, z)));
+        }
+    };
+}
+
+/// Hand-built level set for the `MAZE_DEMO=multilevel_edge` / `multilevel_centre`
+/// native demos — a walkable stack for verifying the stacked rendering under each
+/// layer alignment. A **shrinking open-platform pyramid**: an open `9×9` platform
+/// at the bottom (live), a `5×5` above it, a `3×3` on top — each a genuinely
+/// smaller grid (not a padded one), so with the demo's open perimeter (see
+/// `spawn_world`) every platform's edge shows sky instead of a wall and you can
+/// look up past the lower platforms to the ones above. `multilevel_edge` stacks
+/// the grids to a common corner; `multilevel_centre` centres each smaller grid
+/// over the bottom level (a centred pyramid). The run's single finish **orb is on
+/// the far corner of the top `3×3`**, in the open, so it reads from below.
+///
+/// Each demo's two interim transitions are designed to exercise **both** concrete
+/// finish types in a single walkthrough: the **bottom→middle** climb is a **ladder**
+/// (the middle's start cell sits directly above the bottom's finish in world XZ, so
+/// the climb lands on real floor through the hatch) and the **middle→top** step is a
+/// **portal** (the top's start is *not* world-aligned over the middle's finish, so it
+/// falls back to a portal). Because `edge` and `centre` shift the upper grids
+/// differently — `edge` keeps a common corner (aligned ⇔ same grid `(row, col)`),
+/// `centre` shifts each smaller grid in by half the size difference — the finish/
+/// start cells that line up vertically differ between the two, so each alignment
+/// gets its own grids. Collectible cells are kept off each other's `(row, col)`
+/// across levels so the live game's collection events never disturb an upper level's
+/// matching marker.
+fn multilevel_demo_levels(alignment: LayeredAlignment) -> Vec<String> {
+    multilevel_demo_grids(alignment).iter().map(|g| grid_to_json(g)).collect()
+}
+
+/// The three char grids (bottom → top) of the walk demo for `alignment` — exposed
+/// separately so a caller can post-process them (e.g. the random demo strips the
+/// enemies) before serialising.
+fn multilevel_demo_grids(alignment: LayeredAlignment) -> [Vec<Vec<char>>; 3] {
+    let build = |rows: &[&str]| -> Vec<Vec<char>> {
+        rows.iter().map(|row| row.chars().collect()).collect()
+    };
+    let (bottom, middle, top) = match alignment {
+        // Corner-aligned: cell (r,c) maps to the same world XZ on every level, so a
+        // ladder needs the next start at the *same* grid (r,c) as the finish.
+        // The random modes reuse these grids — their per-level alignment is resolved
+        // from the seed at render time, and the renderer auto-detects ladder vs portal
+        // per level, so the hand-placed S/F lineup needn't match any one alignment.
+        LayeredAlignment::Edge | LayeredAlignment::RandomBase | LayeredAlignment::RandomLevel => (
+            // Bottom 9×9 (live). Ladder at F(2,2) — the middle's S(2,2) is directly
+            // above. Objects sit OUTSIDE the 5×5/3×3 upper footprints (rows ≥ 6) so
+            // they never share an upper level's marker cell.
+            build(&[
+                "         ",
+                "         ",
+                "  F      ",
+                "         ",
+                "         ",
+                "         ",
+                "  K   E  ",
+                "       S ",
+                "    T    ",
+            ]),
+            // Middle 5×5. S(2,2) sits above the bottom's F(2,2) (ladder up); F(1,1)
+            // is its finish, NOT below the top's start (portal up).
+            build(&[
+                "     ",
+                " F  H",
+                "  S  ",
+                "     ",
+                " T   ",
+            ]),
+            // Top 3×3. S(0,1) is offset from the middle's F(1,1) → portal arrival;
+            // F(2,2) — the orb — is the far corner, in the open.
+            build(&[
+                " S ",
+                "   ",
+                "  F",
+            ]),
+        ),
+        // Centre-aligned (base 9×9): the 5×5 shifts in by 2 cells, the 3×3 by 3, so
+        // a ladder needs the next start offset by that shift from the finish.
+        LayeredAlignment::Centre => (
+            // Bottom 9×9 (live). Ladder at F(4,4) — world-centred under the middle's
+            // S(2,2). Objects ride the outer ring (rows/cols 0 or 8) so they clear
+            // the centred upper footprints and don't share an upper marker cell.
+            build(&[
+                "S       E",
+                "         ",
+                "         ",
+                "         ",
+                "    F    ",
+                "         ",
+                "         ",
+                "         ",
+                "K   T    ",
+            ]),
+            // Middle 5×5. S(2,2) sits world-above the bottom's F(4,4) (ladder up);
+            // F(1,1) is its finish, not world-aligned under the top's start (portal).
+            build(&[
+                "     ",
+                " F H ",
+                "  S  ",
+                " T   ",
+                "     ",
+            ]),
+            // Top 3×3. S(1,1) is world-offset from the middle's F(1,1) → portal
+            // arrival; F(2,2) — the orb — is the far corner, in the open.
+            build(&[
+                "   ",
+                " S ",
+                "  F",
+            ]),
+        ),
+    };
+    [bottom, middle, top]
+}
+
+/// Hand-built stack for the `MAZE_DEMO=multilevel_centre_hide_enemies` /
+/// `multilevel_centre_no_hide_enemies` demos — the `multilevel_centre` tapered,
+/// centred setup (so the bottom `9×9`'s outer ring stays exposed beneath the
+/// smaller `5×5` / `3×3` upper levels) with eight **stationary** enemies parked
+/// around that exposed ring. Each is neutralised the same way the gallery does it —
+/// a per-cell `damage: 0` + huge `movePeriodMs` override — so it never leaves its
+/// cell and never hurts the walkthrough. Climb off the bottom level and look down:
+/// with `hide_completed_enemies` on (`…_hide_enemies`) the ring of enemies vanishes;
+/// with it off (`…_no_hide_enemies`) they stay in view. Because the enemies never
+/// move, "gone" can't be mistaken for "wandered out of sight". The middle/top grids
+/// are identical to `multilevel_centre`, so bottom→middle is a ladder and
+/// middle→top a portal exactly as there.
+fn multilevel_hide_demo_levels() -> Vec<String> {
+    use serde_json::{json, Value};
+    // A stationary, harmless enemy cell — matches the gallery's neutralised display
+    // enemies (huge move period pins it on its cell; zero damage keeps the
+    // walkthrough safe).
+    let enemy = || json!([{ "type": "E", "damage": 0, "movePeriodMs": 3_600_000.0 }]);
+    let build = |rows: &[&str]| -> Vec<Vec<Value>> {
+        rows.iter()
+            .map(|r| r.chars().map(|c| Value::String(c.to_string())).collect())
+            .collect()
+    };
+    // Bottom 9×9 (live): S(0,0) start, F(4,4) ladder up. Eight stationary enemies
+    // ride the top (row 0) and bottom (row 8) edges — clear of the centred 5×5/3×3
+    // upper footprints (world rows 2–6) and of the S→F interior path, so they stay
+    // visible from the levels above and aren't bumped on the way to the finish.
+    let mut bottom = build(&[
+        "S        ",
+        "         ",
+        "         ",
+        "         ",
+        "    F    ",
+        "         ",
+        "         ",
+        "         ",
+        "         ",
+    ]);
+    for &(r, c) in &[(0, 4), (0, 6), (0, 8), (8, 0), (8, 2), (8, 4), (8, 6), (8, 8)] {
+        bottom[r][c] = enemy();
+    }
+    // Middle 5×5 + top 3×3 — identical to `multilevel_centre` so the ladder/portal
+    // transitions and the hatch all behave the same.
+    let middle = build(&[
+        "     ",
+        " F H ",
+        "  S  ",
+        " T   ",
+        "     ",
+    ]);
+    let top = build(&[
+        "   ",
+        " S ",
+        "  F",
+    ]);
+    [bottom, middle, top]
+        .iter()
+        .map(|grid| json!({ "grid": grid }).to_string())
+        .collect()
+}
+
+/// Hand-built 2-level stack for `MAZE_DEMO=multilevel_portcullis` — a **pool-free**
+/// edge-aligned tapered stack (so no level is lifted) carrying **two** portcullis
+/// gates on the bottom level, one under the upper floor and one under open sky, so
+/// the gap-aware grille hide can be eyeballed both ways:
+///
+/// * **Covered gate `(2,2)`** sits under the smaller top level. Its raised grille
+///   would poke into the floor above, so opening it on the bottom level rises the
+///   grille and then **hides** it. Its static frame's **lintel** still pokes
+///   `LINTEL_HEIGHT (0.22)` up through that floor, so climbing up and standing over
+///   `(2,2)` you look **down** and see the lintel.
+/// * **Outer-edge gate `(4,2)`** sits on the bottom's south edge, which the 3×3
+///   top doesn't cover — there's open sky above it, so its raised grille rises into
+///   open air and **stays visible**.
+///
+/// The demo forces `door_style = Portcullis`. Each gate needs its own key (keys are
+/// fungible, so collect both before opening both); neither gate nor key is on the
+/// S→F path (`F(0,2)` ladders straight up to the top start).
+fn multilevel_portcullis_demo_levels() -> Vec<String> {
+    let build = |rows: &[&str]| -> Vec<Vec<char>> {
+        rows.iter().map(|row| row.chars().collect()).collect()
+    };
+    // Bottom 5×5 (live): S(0,0); F(0,2) ladders up to the top start. Gate D(2,2) in
+    // an N–S corridor (walls (2,1)/(2,3)) under the top floor → covered; gate D(4,2)
+    // on the south edge (walls (4,1)/(4,3)) under open sky → a taper gap. Keys K(3,2)
+    // and K(3,4) sit in the open row-3 band, reachable without passing either gate.
+    let bottom = build(&[
+        "S F  ",
+        "     ",
+        " WDW ",
+        "  K K",
+        " WDW ",
+    ]);
+    // Top 3×3 (edge-aligned, smaller → a taper): S(0,2) sits directly above the
+    // bottom's F(0,2) (ladder + hatch). F(0,0) is the orb; (2,2) is open so you can
+    // stand over the covered gate and look down at its lintel. Cols 3–4 and row 3–4
+    // of the bottom have no cell here, exposing the south-edge gate to open sky.
+    let top = build(&[
+        "  S",
+        "   ",
+        "F  ",
+    ]);
+    [bottom, top].iter().map(|grid| grid_to_json(grid)).collect()
+}
+
+/// Hand-built 2-level stack for `MAZE_DEMO=multilevel_pool_hatch` — an edge-aligned
+/// stack whose **bottom level has a ladder finish** (so the top level's start carries
+/// a hatch) and whose **top level carries a lava pool**, so that level is **lifted**
+/// by `POOL_GAP`. Today the per-cell underside seal that closes that lift gap is
+/// spawned for *every* cell of the lifted level — **including the hatch start cell**
+/// — so it fills the opening and blocks the hole. Stand on the bottom level and look
+/// **up** at the finish before climbing: the ladder should rise through a hole in the
+/// ceiling, but the seal caps it with solid stone.
+fn multilevel_pool_hatch_demo_levels() -> Vec<String> {
+    use serde_json::{json, Value};
+    let build = |rows: &[&str]| -> Vec<Vec<Value>> {
+        rows.iter()
+            .map(|r| r.chars().map(|c| Value::String(c.to_string())).collect())
+            .collect()
+    };
+    // Bottom 5×5 (live): S(0,0) → F(4,4) ladder up — look up at F before climbing.
+    let bottom = build(&[
+        "S    ",
+        "     ",
+        "     ",
+        "     ",
+        "    F",
+    ]);
+    // Top 5×5 (edge-aligned): S(4,4) above the bottom's F(4,4) (ladder + hatch). A
+    // lava pool at (2,2) makes this level pool-bearing → lifted; F(0,0) is the orb.
+    // The S→F route skirts the pool along the borders.
+    let mut top = build(&[
+        "F    ",
+        "     ",
+        "     ",
+        "     ",
+        "    S",
+    ]);
+    top[2][2] = json!([{ "type": "W", "wallType": "lava" }]);
+    [bottom, top]
+        .iter()
+        .map(|grid| json!({ "grid": grid }).to_string())
+        .collect()
+}
+
+/// Hand-built 2-level stack for `MAZE_DEMO=multilevel_lava_island` — a centred,
+/// open-perimeter stack whose smaller upper level carries a lava ring on its outer
+/// cells. The upper (`5×5` over a `9×9` bottom → a 2-cell exposed ring all round)
+/// is pool-bearing, so it's lifted and floats over the larger bottom level. Stand
+/// on the bottom level's open ring and look up all the way around: the floating
+/// island's lava edges should read as its solid floor edge (the pool floor-edge
+/// seal), not glowing liquid showing through from the side.
+fn multilevel_lava_island_demo_levels() -> Vec<String> {
+    use serde_json::{json, Value};
+    let lava = || json!([{ "type": "W", "wallType": "lava" }]);
+    let ch = |c: char| Value::String(c.to_string());
+    // Bottom 9×9 (live), fully open: walk the ring and look up at the floating
+    // island. S / F sit on the outer ring, clear of the island's footprint.
+    let bottom: Vec<Vec<Value>> = (0..9)
+        .map(|r| {
+            (0..9)
+                .map(|c| match (r, c) {
+                    (8, 4) => ch('S'),
+                    (0, 4) => ch('F'),
+                    _ => ch(' '),
+                })
+                .collect()
+        })
+        .collect();
+    // Upper 5×5, centred (a 2-cell exposed ring all round). Lava on the whole
+    // perimeter ring; the interior 3×3 holds the start + orb.
+    let upper: Vec<Vec<Value>> = (0..5)
+        .map(|r| {
+            (0..5)
+                .map(|c| {
+                    if r == 0 || r == 4 || c == 0 || c == 4 {
+                        lava()
+                    } else if (r, c) == (1, 1) {
+                        ch('S')
+                    } else if (r, c) == (3, 3) {
+                        ch('F')
+                    } else {
+                        ch(' ')
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    [bottom, upper]
+        .iter()
+        .map(|grid| json!({ "grid": grid }).to_string())
+        .collect()
+}
+
+/// Which native multi-level demo `MAZE_DEMO` selected, if any.
+#[derive(Clone, Copy)]
+enum MultilevelDemo {
+    /// `multilevel_edge` / `multilevel_centre` (`perimeter = false`) and their
+    /// `…_with_perimeter` variants (`perimeter = true`): a walkable tapered stack
+    /// under the given layer alignment. The perimeter variants add a solid wall ring
+    /// so the support-pole placement can be eyeballed with edges carried by walls.
+    Walk { alignment: LayeredAlignment, perimeter: bool },
+    /// `multilevel_centre_hide_enemies` (`hide = true`) /
+    /// `multilevel_centre_no_hide_enemies` (`hide = false`): the centred stack with
+    /// frozen edge enemies, for eyeballing `hide_completed_enemies`.
+    HideEnemies { hide: bool },
+    /// `multilevel_edge_roofed`: the edge-aligned tapered stack under an enclosed
+    /// (dungeon) sky, so every level is roofed. Its bottom→middle transition is a
+    /// ladder, so the bottom (roofed) level's finish exercises the holed roof tile
+    /// + the level-above hatch's dropped underside — the roof-aware hatch path.
+    Roofed { alignment: LayeredAlignment },
+    /// `multilevel_portcullis`: a pool-free 2-level stack with a portcullis door on
+    /// the bottom level, for eyeballing whether the door frame's lintel pokes up
+    /// through the floor of the level above.
+    Portcullis,
+    /// `multilevel_pool_hatch`: a 2-level stack with a ladder finish + a lava pool on
+    /// the (lifted) top level, for eyeballing whether the underside seal blocks the
+    /// hatch hole over the ladder.
+    PoolHatch,
+    /// `multilevel_lava_island`: a 2-level centred stack whose smaller upper level
+    /// (lifted, floating) carries a lava ring on its outer cells, for eyeballing the
+    /// pool floor-edge seal — stand on the larger bottom level's open ring and look
+    /// up all the way around: the floating upper level's edges should read as solid
+    /// floor edge, not glowing lava.
+    LavaIsland,
+    /// `multilevel_random_base`: the tapered walk stack under `RandomBase`, so each
+    /// level resolves to `Edge` or `Centre` independently from the seed, **measured
+    /// from the base** — for eyeballing a mixed stack where a corner-stacked level can
+    /// cantilever past a centred one below it. Fixed seed chosen to mix the levels.
+    RandomBase,
+    /// `multilevel_random_level`: the SAME walk stack + seed under `RandomLevel`, so
+    /// each level is offset **within the level below** — the A/B counterpart to
+    /// `RandomBase`: same edge/centre choices, but every level nests (no overhang).
+    RandomLevel,
+}
+
+impl MultilevelDemo {
+    /// Layer alignment to render under — the hide demos are always centred, the
+    /// portcullis / pool-hatch demos always edge-aligned (so an upper cell sits
+    /// directly over the one below).
+    fn alignment(self) -> LayeredAlignment {
+        match self {
+            MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => alignment,
+            MultilevelDemo::HideEnemies { .. } | MultilevelDemo::LavaIsland => LayeredAlignment::Centre,
+            MultilevelDemo::Portcullis | MultilevelDemo::PoolHatch => LayeredAlignment::Edge,
+            MultilevelDemo::RandomBase => LayeredAlignment::RandomBase,
+            MultilevelDemo::RandomLevel => LayeredAlignment::RandomLevel,
+        }
+    }
+    /// The hand-built level stack for this demo.
+    fn levels(self) -> Vec<String> {
+        match self {
+            MultilevelDemo::Walk { alignment, .. } | MultilevelDemo::Roofed { alignment } => {
+                multilevel_demo_levels(alignment)
+            }
+            MultilevelDemo::HideEnemies { .. } => multilevel_hide_demo_levels(),
+            MultilevelDemo::Portcullis => multilevel_portcullis_demo_levels(),
+            MultilevelDemo::PoolHatch => multilevel_pool_hatch_demo_levels(),
+            MultilevelDemo::LavaIsland => multilevel_lava_island_demo_levels(),
+            // The walk grids with the enemies stripped (these demos are for eyeballing
+            // the mixed alignment, not combat); the per-level random alignment is
+            // applied at render time, so both random modes reuse the same grids.
+            MultilevelDemo::RandomBase | MultilevelDemo::RandomLevel => {
+                multilevel_demo_grids(self.alignment())
+                    .iter()
+                    .map(|grid| {
+                        let no_enemies: Vec<Vec<char>> = grid
+                            .iter()
+                            .map(|row| row.iter().map(|&c| if c == 'E' { ' ' } else { c }).collect())
+                            .collect();
+                        grid_to_json(&no_enemies)
+                    })
+                    .collect()
+            }
+        }
+    }
+    /// Whether to wall the perimeter. Off for the open see-through demos; on for the
+    /// `…_with_perimeter` walk variants (a solid ring carries the upper levels'
+    /// edge-touching corners, so fewer support poles). The roofed demo leaves it
+    /// off — its enclosed sky walls the perimeter anyway.
+    fn perimeter_walls(self) -> bool {
+        matches!(self, MultilevelDemo::Walk { perimeter: true, .. })
+    }
+    /// Value `GameConfig::hide_completed_enemies` is forced to for this demo. The
+    /// hide demos' enemies are pinned + neutralised per cell in their grids, so no
+    /// move-period override is needed here.
+    fn hide_completed_enemies(self) -> bool {
+        matches!(self, MultilevelDemo::HideEnemies { hide: true })
+    }
+    /// Sky type this demo forces, if any — the roofed demo overrides the base sky
+    /// to an enclosed (dungeon) one so every level is roofed. `None` leaves the
+    /// configured sky untouched (the open walk / hide demos).
+    fn sky_type_override(self) -> Option<SkyType> {
+        match self {
+            MultilevelDemo::Roofed { .. } => Some(SkyType::Dungeon),
+            _ => None,
+        }
+    }
+    /// Door style this demo forces, if any — the portcullis demo overrides it so its
+    /// one door renders as a portcullis (the rig whose lintel we're inspecting).
+    /// `None` leaves the configured style untouched.
+    fn door_style_override(self) -> Option<DoorStyle> {
+        match self {
+            MultilevelDemo::Portcullis => Some(DoorStyle::Portcullis),
+            _ => None,
+        }
+    }
+    /// Seed this demo forces, if any. The random-alignment demo pins a seed that
+    /// resolves its three levels to a *mix* of edge / centre (so the demo actually
+    /// shows both, not an all-edge stack); see `RANDOM_DEMO_SEED`. `None` leaves the
+    /// configured seed untouched.
+    fn seed_override(self) -> Option<u64> {
+        match self {
+            MultilevelDemo::RandomBase | MultilevelDemo::RandomLevel => Some(RANDOM_DEMO_SEED),
+            _ => None,
+        }
+    }
+}
+
+/// Seed shared by the `multilevel_random_base` / `multilevel_random_level` demos,
+/// chosen so `LayeredAlignment::resolve` gives a visible mix across the stack's
+/// levels (level 1 and level 2 differ). Using the SAME seed for both makes them a
+/// clean A/B — identical edge/centre choices, differing only in base-anchored (can
+/// overhang) vs parent-anchored (nests). Asserted by a test so a future hash change
+/// that collapses the mix is caught. With this seed the levels resolve bottom→top as
+/// edge, edge, centre, centre.
+const RANDOM_DEMO_SEED: u64 = 19;
+
+/// A deterministic per-level perimeter coin-flip for `perimeter_random`. Hashed
+/// from the level's grid + index (FNV-1a) so the same maze always randomises the
+/// same way, but each level lands independently.
+fn perimeter_random_for_level(grid: &[Vec<char>], level: usize) -> bool {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325 ^ (level as u64).wrapping_mul(0x0100_0000_01b3);
+    for row in grid {
+        for &c in row {
+            h = (h ^ c as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h & 1 == 0
+}
+
+/// This level's effective sky type: the top level takes the `[levels.top]`
+/// override where set, every other level (and any single-level run) the base sky.
+/// The single source of truth for both [`level_render_config`] (each level's
+/// ceilings/perimeter render under this) and the [`sky::LevelSkies`] table the
+/// dome-swap watcher reads on a level transition.
+fn effective_sky(config: &GameConfig, is_final: bool, multi_level: bool) -> SkyType {
+    if multi_level && is_final {
+        config.top_sky_type.unwrap_or(config.sky_type)
+    } else {
+        config.sky_type
+    }
+}
+
+/// The per-level `GameConfig` a level renders under — a clone of the base config
+/// with only its `sky_type` / `perimeter_walls` resolved to this level's effective
+/// values. The final (top) level takes the `[levels.top]` override where set; any
+/// level may have its perimeter randomised by `perimeter_random` (the top override
+/// still wins). Single-level runs render under the base config unchanged.
+fn level_render_config(config: &GameConfig, is_final: bool, multi_level: bool, grid: &[Vec<char>], level: usize) -> GameConfig {
+    // `wall_type = "random"` rolls one concrete type for the whole level, seeded by
+    // (seed, level) — resolved here (even single-level) so every downstream
+    // `resolve_wall_type` reads a concrete type and the level is one coherent style.
+    let wall_type = if config.wall_type_random {
+        WallType::random_for_level(level, config.seed)
+    } else {
+        config.wall_type
+    };
+    if !multi_level {
+        return GameConfig { wall_type, ..config.clone() };
+    }
+    let sky_type = effective_sky(config, is_final, true);
+    let perimeter_walls = match config.top_perimeter_walls {
+        Some(top) if is_final => top,
+        _ if config.perimeter_random => perimeter_random_for_level(grid, level),
+        _ => config.perimeter_walls,
+    };
+    GameConfig { sky_type, perimeter_walls, wall_type, ..config.clone() }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_world(
     mut commands: Commands,
     pending: Res<PendingMazeJson>,
+    pending_levels: Option<Res<PendingLevels>>,
     config: Res<GameConfig>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
@@ -304,34 +1251,115 @@ pub(crate) fn spawn_world(
     mut images: Option<ResMut<Assets<Image>>>,
     window: Query<&Window>,
 ) {
-    // Maze source: either the JS host pre-generated / supplied JSON via
-    // `PendingMazeJson` (the `/game/?id=…` or `/game/?difficulty=…` paths), or
-    // we fall back to the built-in demo grid (the native / no-config path).
-    // Generation failures are surfaced before we ever reach here — see
-    // `generate_maze_json` and `maze_game_bevy_wasm::start_with_config`.
+    // Maze sources for the run. The bottom (live) level is `levels[0]`; any levels
+    // above it are stacked as static geometry until the player climbs to them (the
+    // run-state machine swaps the live game on a transition). The JS host supplies
+    // one maze today — multi-level generation feeds in later — so the only
+    // multi-level case here is the native `MAZE_DEMO=multilevel` hand-built stack
+    // for verifying the stacked rendering. Generation failures are surfaced before
+    // we ever reach here — see `generate_maze_json` and
+    // `maze_game_bevy_wasm::start_with_config`.
     let game_opts = MazeGameOptions {
         enemy_move_period_ms: Some(config.enemy_move_period_ms),
         enemy_damage: Some(config.enemy_damage),
         max_hp: Some(config.max_hp),
         starting_hp: Some(config.starting_hp),
     };
-    let (game, grid) = match pending.0.as_deref() {
-        Some(json) => {
-            let game = MazeGame::from_json_with_options(json, game_opts)
-                .expect("maze JSON was validated by the REST API");
-            let grid = game.grid().to_vec();
-            (game, grid)
-        }
-        None => {
-            let grid = demo_grid();
-            let json = grid_to_json(&grid);
-            (
-                MazeGame::from_json_with_options(&json, game_opts)
-                    .expect("demo grid is hardcoded and always valid"),
-                grid,
-            )
+    // `MAZE_DEMO=<focus>` native run — a rig showroom or the multi-level stack;
+    // both relax the round timer so there's no pressure while inspecting. These
+    // env demos are native-runtime only: under `cfg(test)` they are forced off so
+    // a headless test always uses the maze it supplies (or the built-in demo
+    // grid), regardless of a developer's shell `MAZE_DEMO` — otherwise running
+    // `cargo test` with it set would swap the maze out from under the assertions.
+    let gallery_focus = if cfg!(test) {
+        None
+    } else {
+        gallery::requested_focus()
+    };
+    // A non-empty `PendingLevels` override supplies the whole run directly (a
+    // multi-level host launch, or the rendering tests). Otherwise the native
+    // `MAZE_DEMO=multilevel` env var selects the hand-built demo stack.
+    let injected_levels = pending_levels
+        .as_ref()
+        .map(|p| p.0.clone())
+        .filter(|levels| !levels.is_empty());
+    // `MAZE_DEMO` multi-level demos: `multilevel_edge` / `multilevel_centre` walk a
+    // tapered stack under each layer alignment; `multilevel_centre_hide_enemies` /
+    // `multilevel_centre_no_hide_enemies` park frozen enemies on the bottom level's
+    // exposed edge ring to eyeball `hide_completed_enemies`. `Some` when active.
+    let multilevel_demo: Option<MultilevelDemo> = if cfg!(test)
+        || injected_levels.is_some()
+        || pending.0.is_some()
+        || gallery_focus.is_some()
+    {
+        None
+    } else {
+        match std::env::var("MAZE_DEMO").as_deref() {
+            Ok("multilevel_edge") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Edge, perimeter: false }),
+            Ok("multilevel_centre") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: false }),
+            Ok("multilevel_edge_with_perimeter") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Edge, perimeter: true }),
+            Ok("multilevel_centre_with_perimeter") => Some(MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: true }),
+            Ok("multilevel_centre_no_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: false }),
+            Ok("multilevel_centre_hide_enemies") => Some(MultilevelDemo::HideEnemies { hide: true }),
+            Ok("multilevel_edge_roofed") => Some(MultilevelDemo::Roofed { alignment: LayeredAlignment::Edge }),
+            Ok("multilevel_portcullis") => Some(MultilevelDemo::Portcullis),
+            Ok("multilevel_pool_hatch") => Some(MultilevelDemo::PoolHatch),
+            Ok("multilevel_lava_island") => Some(MultilevelDemo::LavaIsland),
+            Ok("multilevel_random_base") => Some(MultilevelDemo::RandomBase),
+            Ok("multilevel_random_level") => Some(MultilevelDemo::RandomLevel),
+            _ => None,
         }
     };
+    let levels: Vec<String> = if let Some(levels) = injected_levels {
+        levels
+    } else if let Some(json) = pending.0.as_deref() {
+        vec![json.to_string()]
+    } else if let Some(focus) = gallery_focus.as_deref() {
+        // Native-only — the web/WASM path always supplies a maze via
+        // `PendingMazeJson`. The gallery places every entity rig beside its default.
+        vec![gallery::json(focus)]
+    } else if let Some(demo) = multilevel_demo {
+        demo.levels()
+    } else {
+        vec![grid_to_json(&demo_grid())]
+    };
+
+    // The multilevel demo applies the demo's chosen layer alignment (`edge`
+    // corner-stacks, `centre` centres each smaller level) and opens the perimeter so
+    // the stack is genuinely see-through — except the `…_with_perimeter`
+    // variants, which wall it (solid default brick) to eyeball support poles with
+    // edges carried by walls. The hide demos additionally force
+    // `hide_completed_enemies` (their edge enemies are pinned + neutralised per cell
+    // in the grid); the roofed demo forces an enclosed (dungeon) sky so every level
+    // is roofed (eyeballing the roof-aware hatch over the bottom ladder finish).
+    // Demo-only; every other launch keeps its configured values.
+    let config: GameConfig = if let Some(demo) = multilevel_demo {
+        GameConfig {
+            perimeter_walls: demo.perimeter_walls(),
+            layered_alignment: demo.alignment(),
+            hide_completed_enemies: demo.hide_completed_enemies(),
+            sky_type: demo.sky_type_override().unwrap_or(config.sky_type),
+            door_style: demo.door_style_override().unwrap_or(config.door_style),
+            seed: demo.seed_override().unwrap_or(config.seed),
+            ..(*config).clone()
+        }
+    } else {
+        (*config).clone()
+    };
+    // Replace the resource with this (possibly demo-overridden) config so the rest
+    // of the game agrees with the render — `advance_to_next_level` reads the
+    // `GameConfig` resource to compute each level's camera placement, so it must
+    // see the same `layered_alignment` the geometry was built with. A no-op for
+    // non-demo launches (the value is an exact clone of the existing resource).
+    commands.insert_resource(config.clone());
+
+    // The bottom level is the live game in `GameState`; build it with the session
+    // options. Its per-cell rig overrides (sparse) are cloned out before the game
+    // is moved into `GameState`, for the spawn scan to pick per-cell rigs.
+    let game = MazeGame::from_json_with_options(&levels[0], game_opts)
+        .expect("maze JSON is host-validated or a hardcoded demo, so it always parses");
+    let grid = game.grid().to_vec();
+    let cell_entities = game.cell_entities().clone();
 
     let start_row = game.player_row();
     let start_col = game.player_col();
@@ -350,88 +1378,405 @@ pub(crate) fn spawn_world(
         visual_yaw: start_yaw,
         visual_pitch: 0.0,
         anim: None,
+        transition: None,
         explored,
         won: false,
         lost: false,
         paused: false,
         damage_flash_timer: 0.0,
+        // The player starts on the bottom level (placement offset zero); advancing
+        // a level lifts + centres the camera (see `advance_to_next_level`).
+        camera_offset: Vec3::ZERO,
     });
 
     // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see
     // `GameConfig::default`) is what the no-config / demo path uses, so this
     // single source covers both the configured Play 3D session and the
-    // fallback.
+    // fallback. The rig galleries get a long timer so there's no time pressure
+    // while inspecting the rigs.
     commands.insert_resource(GameClock {
-        remaining_secs: config.timer_seconds.max(0.0),
+        remaining_secs: if gallery_focus.is_some() || multilevel_demo.is_some() {
+            3600.0
+        } else {
+            config.timer_seconds.max(0.0)
+        },
         elapsed_secs: 0.0,
         last_displayed_secs: -1,
     });
 
     spawn_camera(&mut commands, start_pos, start_yaw);
+    // Each level's effective sky (the top level may override it). The global dome
+    // can only show one at a time, so spawn the bottom level's now and let
+    // `sky_switch_on_level_change` re-skin it as the player climbs into a level
+    // with a different sky. A single-level run holds one entry and never swaps —
+    // byte-for-byte the previous single-dome behaviour.
+    let level_count = levels.len();
+    let level_skies: Vec<SkyType> = (0..level_count)
+        .map(|level| effective_sky(&config, level + 1 == level_count, level_count > 1))
+        .collect();
+    let bottom_sky = level_skies.first().copied().unwrap_or(config.sky_type);
     sky::spawn_sky(
         &mut commands,
         &mut meshes,
         &mut materials,
         &mut images,
-        &config,
+        &GameConfig {
+            sky_type: bottom_sky,
+            ..config.clone()
+        },
     );
+    commands.insert_resource(sky::LevelSkies(level_skies));
 
     let wall_assets = walls::build_wall_assets(&mut meshes, &mut materials, &mut images);
+    let nonoccluding_assets =
+        walls::build_non_occluding_assets(&mut meshes, &mut materials, &mut images);
+    // The lava-steam emitter runs every frame and needs its wisp assets after
+    // spawn_world returns, so they live in a resource rather than a local bundle.
+    commands.insert_resource(walls::lava::build_lava_steam_assets(&mut meshes, &mut materials));
     let floor_assets = floor::build_floor_assets(&mut meshes, &mut materials, &mut images);
     let decoration_assets =
         decorations::build_decoration_assets(&mut meshes, &mut materials, &mut images);
     let object_assets = objects::build_object_assets(&mut meshes, &mut materials, &mut images);
     let roof_assets = roof::build_roof_assets(&mut meshes, &mut materials, &mut images, &config);
 
-    // Row-major scan order matches `MazeGame`'s enemy-id assignment, so
-    // bumping this counter per `'E'` keeps the Bevy `EnemyMarker.id`
-    // aligned with the runtime `maze::Enemy.id`.
-    let mut enemy_id: u32 = 0;
-    for (r, row) in grid.iter().enumerate() {
-        for (c, &cell) in row.iter().enumerate() {
-            if cell == 'W' {
-                continue;
+    // Render every level, stacked on the Y axis (and, under `Centre` alignment,
+    // its smaller grids centred on X/Z). The bottom level (index 0) is live — its
+    // enemies track the runtime `MazeGame` in `GameState`; every level above is
+    // static geometry until the player climbs to it. Only the top (final) level
+    // keeps the finish orb; interim finishes omit it (a transition rig replaces it
+    // later). A single-level game is a one-element loop, so its render is unchanged.
+    let level_assets = LevelRenderAssets {
+        wall: &wall_assets,
+        nonoccluding: &nonoccluding_assets,
+        floor: &floor_assets,
+        decoration: &decoration_assets,
+        object: &object_assets,
+        roof: &roof_assets,
+    };
+    // The bottom level's footprint is the reference the upper levels' `Centre`
+    // offsets are measured against.
+    let base_dims = (grid.len(), grid.first().map_or(0, |row| row.len()));
+
+    // Each level's `(rows, cols)` footprint. A door spawn reads the level-above's
+    // footprint to decide whether a raised portcullis has a cell to intrude on (a
+    // tapered upper level may leave a gap above a lower door — see
+    // `objects::door::has_cell_above`). Level 0 reuses the already-parsed grid.
+    let level_dims: Vec<(usize, usize)> = levels
+        .iter()
+        .enumerate()
+        .map(|(level, json)| {
+            if level == 0 {
+                base_dims
+            } else {
+                let g = MazeGame::from_json(json)
+                    .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+                (g.grid().len(), g.grid().first().map_or(0, |row| row.len()))
             }
-            walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, r, c, &config);
-            decorations::spawn_decorations_for_cell(
-                &mut commands,
-                &decoration_assets,
-                &grid,
-                cell,
-                r,
-                c,
-                &config,
-            );
-            floor::spawn_floor_for_cell(&mut commands, &floor_assets, &grid, cell, r, c);
-            objects::spawn_objects_for_cell(
-                &mut commands,
-                &object_assets,
-                &grid,
-                cell,
-                r,
-                c,
-                &config,
-                enemy_id,
-            );
-            if cell == 'E' {
-                enemy_id += 1;
+        })
+        .collect();
+
+    // Precompute each level's world-space floor Y (the `base_level_y` table) before
+    // building any geometry: a level that carries a sunken pool (water / lava) is
+    // lifted by `POOL_GAP` so its recessed surface + bobbing rocks clear the
+    // wall-top of the level below — where each cell's underside is sealed — instead
+    // of poking through into it. A pool-free level adds nothing (sits on the walls
+    // below as before). `level_bases` accumulates this in one pass.
+    // Per level, from one parse of its grid: whether it carries a pool, its
+    // treasure-cell count, and its lava-cell count.
+    let level_meta: Vec<(bool, usize, usize)> = levels
+        .iter()
+        .enumerate()
+        .map(|(level, json)| {
+            let (lgrid, lcells) = if level == 0 {
+                (grid.clone(), cell_entities.clone())
+            } else {
+                let g = MazeGame::from_json(json)
+                    .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+                (g.grid().to_vec(), g.cell_entities().clone())
+            };
+            // Detect pools against this level's effective wall type — a rolled
+            // `random` water / lava level must be counted here too (it drives the
+            // pool lift + the cross-level lava-rocks budget below).
+            let lcfg = GameConfig {
+                wall_type: if config.wall_type_random {
+                    WallType::random_for_level(level, config.seed)
+                } else {
+                    config.wall_type
+                },
+                ..config.clone()
+            };
+            let mut has_pool = false;
+            let mut lava_cells = 0usize;
+            for (r, row) in lgrid.iter().enumerate() {
+                for c in 0..row.len() {
+                    match walls::pool_type_at(&lgrid, &lcells, &lcfg, r, c) {
+                        Some(WallType::Lava) => {
+                            has_pool = true;
+                            lava_cells += 1;
+                        }
+                        Some(_) => has_pool = true,
+                        None => {}
+                    }
+                }
             }
-            // Doors are spawned here (not inside `spawn_objects_for_cell`)
-            // because the panel borrows the cell's wall material from
-            // `wall_assets`.
-            objects::door::spawn_door_for_cell(
-                &mut commands,
-                &object_assets.door,
-                &wall_assets,
-                &decoration_assets.wall,
-                &mut materials,
-                &grid,
-                cell,
-                r,
-                c,
-                &config,
-            );
-            roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
+            let treasure = lgrid.iter().flatten().filter(|&&ch| ch == 'T').count();
+            (has_pool, treasure, lava_cells)
+        })
+        .collect();
+    let level_has_pool: Vec<bool> = level_meta.iter().map(|(p, _, _)| *p).collect();
+    let bases = level_bases(&level_has_pool);
+    // Each level's placement, so a level can read the one directly above it (the
+    // door spawn maps a cell up to the level above to decide a portcullis hide).
+    // Resolves any per-level `Random` alignment from `config.seed` — the same
+    // resolution the generator used, so the geometry agrees.
+    let level_placements: Vec<LevelPlacement> = (0..level_dims.len())
+        .map(|level| {
+            LevelPlacement::for_level(level, &level_dims, config.layered_alignment, bases[level], config.seed)
+        })
+        .collect();
+    // The additive sparkle-ray overdraw is the mobile-GPU pain point, and EVERY
+    // level's treasure renders at once, so the ray budget is global to the whole
+    // stack: bound it by the total treasure across all levels, not per level. A
+    // single-level run is byte-identical to the per-maze behaviour.
+    let treasure_rays = objects::treasure::run_treasure_rays(level_meta.iter().map(|(_, t, _)| *t));
+    // Likewise every lava cell on every level bobs its rocks each frame, so the
+    // rock budget is global to the whole stack — bound by the total lava cells over
+    // all levels (see `run_lava_rocks`).
+    let lava_rocks = walls::lava::run_lava_rocks(level_meta.iter().map(|(_, _, l)| *l));
+
+    // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
+    // only when the next level's start sits directly above it (same world XZ) so
+    // the climb lands on real floor; otherwise the finish falls back to a portal,
+    // which can be entered anywhere. Under `centre` alignment a smaller upper
+    // level's start is offset off the lower finish, so a ladder won't be used
+    // there — exactly the constraint that a portal can always replace a ladder
+    // but not the reverse.
+    let find_cell = |g: &[Vec<char>], target: char| -> Option<(usize, usize)> {
+        g.iter()
+            .enumerate()
+            .find_map(|(r, row)| row.iter().position(|&ch| ch == target).map(|c| (r, c)))
+    };
+    let cell_world_xz = |g: &[Vec<char>], target: char, p: LevelPlacement| -> Option<Vec2> {
+        find_cell(g, target).map(|(r, c)| cell_world_xz(r, c, p))
+    };
+    // Per level: world (start XZ, finish XZ) + the finish cell coords. The XZ pair
+    // decides whether the next start sits directly above (the ladder-vs-portal
+    // constraint); the finish cell resolves the concrete rig kind for the hatch.
+    type LevelAnchor = (Option<Vec2>, Option<Vec2>, Option<(usize, usize)>);
+    let level_anchors: Vec<LevelAnchor> = levels
+        .iter()
+        .enumerate()
+        .map(|(level, json)| {
+            let lgrid: Vec<Vec<char>> = if level == 0 {
+                grid.clone()
+            } else {
+                MazeGame::from_json(json)
+                    .expect("multi-level maze JSON is host-validated or a hardcoded demo")
+                    .grid()
+                    .to_vec()
+            };
+            let placement = level_placements[level];
+            (
+                cell_world_xz(&lgrid, 'S', placement),
+                cell_world_xz(&lgrid, 'F', placement),
+                find_cell(&lgrid, 'F'),
+            )
+        })
+        .collect();
+
+    // Whether each level's interim finish resolved to a LADDER (start above AND the
+    // configured finish type picks a ladder there). The level above a ladder finish
+    // gets a hatch in its start cell's floor (the "roof" the climb emerges through).
+    let finish_is_ladder: Vec<bool> = (0..level_count)
+        .map(|level| {
+            if level + 1 == level_count {
+                return false; // final level: orb, never a transition rig
+            }
+            let aligned = match (
+                level_anchors.get(level).and_then(|a| a.1),
+                level_anchors.get(level + 1).and_then(|a| a.0),
+            ) {
+                (Some(finish), Some(next_start)) => finish.distance_squared(next_start) < 1e-3,
+                _ => false,
+            };
+            aligned
+                && level_anchors.get(level).and_then(|a| a.2).is_some_and(|(r, c)| {
+                    config.finish_type.concrete_for_cell(r, c, config.seed) == FinishType::Ladder
+                })
+        })
+        .collect();
+
+    for (level, level_json) in levels.iter().enumerate() {
+        let is_final = level + 1 == level_count;
+        // The vertical gap this level was lifted by — non-zero only for an upper
+        // level that carries a pool. Where non-zero, each cell's underside is
+        // sealed `gap` below the floor so the level beneath sees a clean ceiling
+        // rather than the sunken pool. Level 0 is never lifted (nothing below it).
+        let gap = if level > 0 && level_has_pool[level] { POOL_GAP } else { 0.0 };
+        // A ladder needs the next level's start directly above this level's finish.
+        let ladder_allowed = !is_final
+            && match (
+                level_anchors.get(level).and_then(|a| a.1),
+                level_anchors.get(level + 1).and_then(|a| a.0),
+            ) {
+                (Some(finish), Some(next_start)) => finish.distance_squared(next_start) < 1e-3,
+                _ => false,
+            };
+        // Only the bottom (gallery) level ever suppresses dead-end landmarks — at
+        // the cells where the `finishes`/`gallery` showroom code-spawns a rig.
+        let dead_end_skip: Vec<(usize, usize)> = if level == 0 {
+            gallery_focus
+                .as_deref()
+                .map(|focus| {
+                    gallery::finish_rig_cells(focus).into_iter().map(|(_, r, c)| (r, c)).collect()
+                })
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        // This level's start gets a hatch in its floor when the level below it has
+        // a ladder finish — the opening the climb emerges through, closing once the
+        // player has come up. The bottom level (no level below) never has one.
+        let hatch_at_start = level >= 1 && finish_is_ladder.get(level - 1).copied().unwrap_or(false);
+        // This level's own finish resolved to a ladder — on a roofed level its
+        // finish-cell roof tile is holed so the climb isn't sealed under a ceiling.
+        let finish_is_ladder_here = finish_is_ladder.get(level).copied().unwrap_or(false);
+        // Whether the level directly below is roofed. A lower level is never the
+        // top, so it always renders under the base sky — hence the base sky's
+        // enclosure decides it. Drives the start-cell hatch's underside.
+        let below_roofed = level >= 1 && config.sky_type.is_enclosed();
+        if level == 0 {
+            // The live level reuses the already-parsed grid + per-cell overrides.
+            let placement = level_placements[0];
+            let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
+        } else {
+            // Upper levels need only their grid + per-cell overrides for the static
+            // geometry; the game options don't affect either, so parse without them.
+            let level_game = MazeGame::from_json(level_json)
+                .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+            let level_grid = level_game.grid().to_vec();
+            let level_cells = level_game.cell_entities().clone();
+            let placement = level_placements[level];
+            let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
+        }
+    }
+
+    // Support poles: a level with no solid walls (e.g. all water / lava) carries
+    // nothing, so on an open-perimeter stack the floor above it floats. Brace each
+    // UPPER level at its corners — one pole per corner that isn't already held up by
+    // a solid perimeter wall at the lower level's edge, or by a solid wall directly
+    // below it. Max four per level; poles rise from a lower level to the one above,
+    // never from the top level. Visual-only.
+    if level_count > 1 {
+        let pole_assets = support_pole::build_support_pole_assets(&mut meshes, &mut materials);
+        // (grid, cell-entities, placement) per level — level 0 reuses the live grid.
+        let level_info = levels
+            .iter()
+            .enumerate()
+            .map(|(level, json)| {
+                let (g, cells) = if level == 0 {
+                    (grid.clone(), cell_entities.clone())
+                } else {
+                    let lg = MazeGame::from_json(json)
+                        .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+                    (lg.grid().to_vec(), lg.cell_entities().clone())
+                };
+                (g, cells, level_placements[level])
+            })
+            .collect::<Vec<_>>();
+        // A perimeter wall carries the upper floor's edges only when it's solid (a
+        // water/lava perimeter is a non-occluding pool ring and can't).
+        let perimeter_solid = config.perimeter_walls && !config.wall_type.is_non_occluding();
+        // The world-Y a pole hanging under upper level `upper` must reach at (x, z):
+        // the floor of the highest level below it whose footprint actually sits under
+        // that point. A tapered / mixed-aligned (edge↔centre) upper corner can
+        // overhang the level immediately below, so the pole has to keep going past it
+        // to the level that visually carries that spot rather than stopping in mid-air
+        // at the nearer level's floor height. The base level always sits under it.
+        let floor_below = |x: f32, z: f32, upper: usize| -> f32 {
+            for l in (0..upper).rev() {
+                let (gl, _, pl) = &level_info[l];
+                let rows_l = gl.len();
+                let cols_l = gl.first().map_or(0, |r| r.len());
+                let within = x >= pl.world_x(0.0)
+                    && x <= pl.world_x(cols_l as f32 * CELL_SIZE)
+                    && z >= pl.world_z(0.0)
+                    && z <= pl.world_z(rows_l as f32 * CELL_SIZE);
+                if within {
+                    return bases[l];
+                }
+            }
+            bases[0]
+        };
+        for i in 0..level_count - 1 {
+            let (gi, ci, pi) = &level_info[i];
+            let (gj, _, pj) = &level_info[i + 1];
+            let rows_i = gi.len();
+            let cols_i = gi.first().map_or(0, |r| r.len());
+            let rows_j = gj.len();
+            let cols_j = gj.first().map_or(0, |r| r.len());
+            // Map an upper (i+1) cell down to the level-`i` cell directly beneath it.
+            // Centring offsets are whole multiples of `CELL_SIZE`, so it's an integer
+            // shift (0 under edge alignment); the upper footprint is contained in the
+            // lower one, so the mapped cell is in bounds.
+            let dr = ((pj.world_z(0.0) - pi.world_z(0.0)) / CELL_SIZE).round() as isize;
+            let dc = ((pj.world_x(0.0) - pi.world_x(0.0)) / CELL_SIZE).round() as isize;
+            let supported = |cr: usize, cc: usize| {
+                let (mr, mc) = (cr as isize + dr, cc as isize + dc);
+                if mr < 0 || mc < 0 || mr as usize >= rows_i || mc as usize >= cols_i {
+                    return false;
+                }
+                let (mr, mc) = (mr as usize, mc as usize);
+                let at_edge = mr == 0 || mr == rows_i - 1 || mc == 0 || mc == cols_i - 1;
+                let solid_below =
+                    gi[mr][mc] == 'W' && !walls::is_non_occluding_wall(gi, ci, &config, mr, mc);
+                (at_edge && perimeter_solid) || solid_below
+            };
+            for (cr, cc) in support_pole::corner_poles(rows_j, cols_j, supported) {
+                // The corner cell's OUTWARD corner, tucked just inside the footprint.
+                let inset = support_pole::CORNER_INSET;
+                let x = if cc == 0 {
+                    pj.world_x(cc as f32 * CELL_SIZE) + inset
+                } else {
+                    pj.world_x(cc as f32 * CELL_SIZE + CELL_SIZE) - inset
+                };
+                let z = if cr == 0 {
+                    pj.world_z(cr as f32 * CELL_SIZE) + inset
+                } else {
+                    pj.world_z(cr as f32 * CELL_SIZE + CELL_SIZE) - inset
+                };
+                support_pole::spawn_support_pole(&mut commands, &pole_assets, x, z, floor_below(x, z, i + 1), bases[i + 1]);
+            }
+        }
+    }
+
+    // The finish transition rigs (ladder / portal) aren't cell overrides, so the
+    // `gallery` / `finishes` showrooms code-spawn them against the bottom level
+    // here — non-functional showpieces (their dead-end landmark is suppressed via
+    // `dead_end_skip`, so the rig stands alone in its alcove).
+    if let Some(focus) = gallery_focus.as_deref() {
+        let placement = level_placements[0];
+        for (rig, r, c) in gallery::finish_rig_cells(focus) {
+            match rig {
+                FinishType::Portal => objects::finish::portal::spawn_portal(
+                    &mut commands,
+                    &object_assets.finish.portal,
+                    r,
+                    c,
+                    placement,
+                ),
+                _ => objects::finish::ladder::spawn_ladder(
+                    &mut commands,
+                    &object_assets.common,
+                    &object_assets.finish.ladder,
+                    &grid,
+                    r,
+                    c,
+                    placement,
+                ),
+            }
         }
     }
 
@@ -439,11 +1784,15 @@ pub(crate) fn spawn_world(
         &mut commands,
         &window,
         &config,
+        (grid.len(), grid.first().map_or(0, |row| row.len())),
         &mut meshes,
         &mut color_materials,
+        &mut images,
     );
     hud::clock::spawn_clock_hud(&mut commands, &window);
-    hud::statusbar::spawn_statusbar(&mut commands, &window, &config);
+    hud::score::spawn_score_hud(&mut commands, &window);
+    hud::time_bonus::spawn_time_bonus_hud(&mut commands, &window);
+    hud::statusbar::spawn_statusbar(&mut commands, &window, &config, levels.len() > 1);
     hud::bag::spawn_bag_hud(&mut commands, &window, &mut images);
     hud::hp::spawn_hp_hud(
         &mut commands,
@@ -452,5 +1801,576 @@ pub(crate) fn spawn_world(
         config.max_hp,
         config.starting_hp,
     );
+
+    // Record the run state and spawn the level indicator (a no-op for a
+    // single-level run). The bottom level's maze is already live in `GameState`;
+    // `MultiLevelRun` holds every level's JSON plus the per-level totals + the
+    // level index for the indicator and the win/transition decision.
+    let mut run = MultiLevelRun::new(levels);
+    // Hand the run the pool-gap-aware floor table computed above, so a level
+    // transition lifts the camera by the same base the geometry was built with.
+    run.level_bases = bases;
+    // The bag-carry policy comes from the session config (the server's
+    // `levels.reset_bag`); single-level games never transition, so it's inert.
+    run.reset_bag_between_levels = config.reset_bag_between_levels;
+    // The native multilevel demos carry the bag forward between levels so the
+    // carry behaviour is visible — the bottom level's key stays in the bag as you
+    // climb, overriding the config default.
+    if multilevel_demo.is_some() {
+        run.reset_bag_between_levels = false;
+    }
+    hud::level::spawn_level_indicator(&mut commands, &window, &run);
+    commands.insert_resource(run);
+
     pause::spawn_paused_overlay(&mut commands);
+}
+
+#[cfg(test)]
+mod multi_level_tests {
+    use super::{advance_to_next_level, camera_pos_for, explore_cell, initial_facing, merge_treasure};
+    use crate::state::{GameConfig, GameState, MultiLevelRun};
+    use maze::{Direction, MazeGame, TreasureStyle};
+    use std::collections::HashSet;
+
+    /// Builds a `GameState` from a maze JSON the same way `spawn_world` does,
+    /// so `advance_to_next_level` can be exercised without a Bevy app.
+    fn state_from(json: &str) -> GameState {
+        let game = MazeGame::from_json(json).expect("valid maze JSON");
+        let grid = game.grid().to_vec();
+        let row = game.player_row();
+        let col = game.player_col();
+        let facing = initial_facing(&grid, row, col);
+        let visual_yaw = facing.to_yaw();
+        let visual_pos = camera_pos_for(row, col, visual_yaw);
+        let mut explored = HashSet::new();
+        explore_cell(&mut explored, &grid, row, col);
+        GameState {
+            game,
+            grid,
+            facing,
+            visual_pos,
+            visual_yaw,
+            visual_pitch: 0.0,
+            anim: None,
+            transition: None,
+            explored,
+            won: false,
+            lost: false,
+            paused: false,
+            damage_flash_timer: 0.0,
+            camera_offset: bevy::prelude::Vec3::ZERO,
+        }
+    }
+
+    fn run_of(levels: &[&str], reset_bag: bool) -> MultiLevelRun {
+        let mut run = MultiLevelRun::new(levels.iter().map(|s| s.to_string()).collect());
+        run.reset_bag_between_levels = reset_bag;
+        run
+    }
+
+    #[test]
+    fn run_methods_report_count_finality_and_cumulative_score() {
+        let mut run = run_of(&["a", "b"], true);
+        run.banked_score = 10;
+        assert_eq!(run.level_count(), 2);
+        assert!(!run.is_final(), "level 0 of 2 is not final");
+        assert_eq!(run.cumulative_score(5), 15);
+        run.current_level = 1;
+        assert!(run.is_final(), "level 1 of 2 is final");
+    }
+
+    #[test]
+    fn advance_banks_score_and_swaps_to_the_next_level() {
+        let l0 = r#"{"grid":[["S","K","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // collect the key → score 1
+        assert_eq!(state.game.score(), 1);
+
+        let mut run = run_of(&[l0, l1], true);
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+
+        assert_eq!(run.current_level, 1);
+        assert_eq!(run.banked_score, 1, "the completed level's score is banked");
+        assert_eq!(state.grid, vec![vec!['S', ' ', 'F']], "swapped to level 1's grid");
+        assert_eq!((state.game.player_row(), state.game.player_col()), (0, 0));
+        // Same-footprint levels → no X/Z centring, just the Y lift onto level 1.
+        assert_eq!(
+            state.camera_offset,
+            bevy::prelude::Vec3::new(0.0, crate::world::LEVEL_HEIGHT, 0.0),
+            "the camera is lifted onto level 1",
+        );
+    }
+
+    // Walks the player to `(target_r, target_c)` across an open (wall-free) demo
+    // platform — row first, then column.
+    fn walk_to(state: &mut GameState, target_r: usize, target_c: usize) {
+        for _ in 0..64 {
+            if state.game.player_row() > target_r {
+                state.game.move_player(Direction::Up);
+            } else if state.game.player_row() < target_r {
+                state.game.move_player(Direction::Down);
+            } else if state.game.player_col() > target_c {
+                state.game.move_player(Direction::Left);
+            } else if state.game.player_col() < target_c {
+                state.game.move_player(Direction::Right);
+            } else {
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn edge_demo_shows_a_ladder_then_a_portal() {
+        use crate::state::{FinishType, LayeredAlignment};
+        let levels = super::multilevel_demo_levels(LayeredAlignment::Edge);
+        let refs: Vec<&str> = levels.iter().map(|s| s.as_str()).collect();
+        let config = GameConfig::default(); // Edge alignment, Ladder finish type.
+
+        let mut state = state_from(&levels[0]);
+        let mut run = run_of(&refs, true);
+
+        walk_to(&mut state, 2, 2); // bottom finish, directly below the middle start
+        assert!(state.game.is_complete(), "reached the bottom finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Ladder,
+            "0→1 climbs a ladder (middle start sits above the bottom finish)",
+        );
+        state.transition = None;
+        advance_to_next_level(&mut state, &mut run, &config);
+
+        walk_to(&mut state, 1, 1); // middle finish, NOT below the top start
+        assert!(state.game.is_complete(), "reached the middle finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Portal,
+            "1→2 steps through a portal (top start is offset from the middle finish)",
+        );
+    }
+
+    #[test]
+    fn centre_demo_shows_a_ladder_then_a_portal() {
+        use crate::state::{FinishType, LayeredAlignment};
+        let levels = super::multilevel_demo_levels(LayeredAlignment::Centre);
+        let refs: Vec<&str> = levels.iter().map(|s| s.as_str()).collect();
+        let config = GameConfig {
+            layered_alignment: LayeredAlignment::Centre,
+            ..GameConfig::default()
+        };
+
+        let mut state = state_from(&levels[0]);
+        let mut run = run_of(&refs, true);
+
+        walk_to(&mut state, 4, 4); // bottom finish, world-centred under the middle start
+        assert!(state.game.is_complete(), "reached the bottom finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Ladder,
+            "0→1 climbs a ladder (middle start sits world-above the bottom finish)",
+        );
+        state.transition = None;
+        advance_to_next_level(&mut state, &mut run, &config);
+
+        walk_to(&mut state, 1, 1); // middle finish, not world-aligned under the top start
+        assert!(state.game.is_complete(), "reached the middle finish");
+        crate::transition::start_level_transition(&mut state, &run, &config);
+        assert_eq!(
+            state.transition.as_ref().unwrap().kind,
+            FinishType::Portal,
+            "1→2 steps through a portal (top start is world-offset from the middle finish)",
+        );
+    }
+
+    #[test]
+    fn start_transition_arms_a_ladder_when_the_next_start_is_above() {
+        use crate::state::FinishType;
+        // l1's start (0,1) sits directly above l0's finish (0,1) → ladder, and the
+        // run is NOT yet swapped (the swap happens when the climb completes).
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["F","S"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right);
+        assert!(state.game.is_complete(), "player reached the finish");
+
+        let run = run_of(&[l0, l1], true);
+        crate::transition::start_level_transition(&mut state, &run, &GameConfig::default());
+        let t = state.transition.as_ref().expect("a transition is armed");
+        assert_eq!(t.kind, FinishType::Ladder);
+        assert_eq!(run.current_level, 0, "the swap is deferred to completion");
+    }
+
+    #[test]
+    fn start_transition_falls_back_to_a_portal_when_no_start_is_above() {
+        use crate::state::FinishType;
+        // l1's start (0,0) is NOT above l0's finish (0,1) → even the default Ladder
+        // finish type transitions via a portal.
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["S","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right);
+
+        let run = run_of(&[l0, l1], true);
+        crate::transition::start_level_transition(&mut state, &run, &GameConfig::default());
+        assert_eq!(state.transition.as_ref().unwrap().kind, FinishType::Portal);
+    }
+
+    #[test]
+    fn start_transition_targets_the_next_level_default_start_pose() {
+        // The transition must settle on exactly the pose `advance_to_next_level`
+        // produces (next start cell, default facing), so play resumes seamlessly.
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["F","S"]]}"#;
+
+        let mut t_state = state_from(l0);
+        t_state.game.move_player(Direction::Right);
+        let run = run_of(&[l0, l1], true);
+        crate::transition::start_level_transition(&mut t_state, &run, &GameConfig::default());
+        let trans = t_state.transition.as_ref().unwrap();
+        let (target_pos, target_yaw) = (trans.target_pos, trans.target_yaw);
+
+        let mut a_state = state_from(l0);
+        a_state.game.move_player(Direction::Right);
+        let mut a_run = run_of(&[l0, l1], true);
+        advance_to_next_level(&mut a_state, &mut a_run, &GameConfig::default());
+
+        let settled_pos = a_state.visual_pos + a_state.camera_offset;
+        assert!(
+            (target_pos - settled_pos).length() < 1e-3,
+            "transition target {target_pos:?} should match the settled pose {settled_pos:?}",
+        );
+        assert!((target_yaw - a_state.visual_yaw).abs() < 1e-3, "and the same facing");
+    }
+
+    #[test]
+    fn advance_resets_the_bag_by_default() {
+        let l0 = r#"{"grid":[["S","K","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // bag now holds the key
+        assert_eq!(state.game.bag().len(), 1);
+
+        let mut run = run_of(&[l0, l1], true); // reset_bag = true
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+        assert!(state.game.bag().is_empty(), "default resets the bag each level");
+    }
+
+    #[test]
+    fn advance_carries_the_bag_when_configured() {
+        let l0 = r#"{"grid":[["S","K","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // bag now holds the key
+
+        let mut run = run_of(&[l0, l1], false); // reset_bag = false → carry
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+        assert_eq!(state.game.bag().len(), 1, "the carried bag seeds the next level");
+    }
+
+    #[test]
+    fn advance_folds_collected_treasure_into_the_run_tally() {
+        let l0 = r#"{"grid":[["S","T","F"]]}"#; // bare 'T' → Silver, value 50
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        state.game.move_player(Direction::Right); // collect the treasure
+
+        let mut run = run_of(&[l0, l1], true);
+        advance_to_next_level(&mut state, &mut run, &GameConfig::default());
+
+        assert_eq!(run.carried_treasure, vec![(TreasureStyle::Silver, 1)]);
+        assert_eq!(run.banked_score, 50, "silver's reward value is banked");
+    }
+
+    #[test]
+    fn level_placement_offsets_match_alignment() {
+        use crate::state::LayeredAlignment;
+        use crate::world::{LevelPlacement, CELL_SIZE, LEVEL_HEIGHT};
+        use bevy::prelude::Vec3;
+
+        // A 9→7→5 taper chain (offsets are base-relative for Edge/Centre, so the
+        // intermediate level's size doesn't affect the queried level).
+        let chain = [(9, 9), (7, 7), (5, 5)];
+        // Edge: never any X/Z offset, just the Y lift.
+        let edge = LevelPlacement::for_level(2, &chain, LayeredAlignment::Edge, 2.0 * LEVEL_HEIGHT, 0);
+        assert_eq!(edge.world_x(1.0), 1.0);
+        assert_eq!(edge.world_z(1.0), 1.0);
+        assert_eq!(edge.camera_offset(), Vec3::new(0.0, 2.0 * LEVEL_HEIGHT, 0.0));
+
+        // Centre: a 5×5 grid centred in a 9×9 base shifts in by (9-5)/2 = 2 cells.
+        let centre = LevelPlacement::for_level(2, &chain, LayeredAlignment::Centre, LEVEL_HEIGHT, 0);
+        let shift = 2.0 * CELL_SIZE;
+        assert_eq!(centre.world_x(1.0), 1.0 + shift);
+        assert_eq!(centre.world_z(1.0), 1.0 + shift);
+        assert_eq!(centre.camera_offset(), Vec3::new(shift, LEVEL_HEIGHT, shift));
+
+        // The base level (same dims) has zero X/Z offset under either mode.
+        let base = LevelPlacement::for_level(0, &chain, LayeredAlignment::Centre, 0.0, 0);
+        assert_eq!(base.camera_offset(), Vec3::ZERO);
+    }
+
+    #[test]
+    fn advance_under_centre_alignment_centres_the_camera_over_a_smaller_level() {
+        use crate::state::LayeredAlignment;
+        use crate::world::{CELL_SIZE, LEVEL_HEIGHT};
+        use bevy::prelude::Vec3;
+        // Bottom 1×5, next level 1×3 (smaller). Under `Centre`, the 1×3 is shifted
+        // in by (5-3)/2 = 1 cell in X (cols); rows match, so no Z shift.
+        let l0 = r#"{"grid":[["S"," "," "," ","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut state = state_from(l0);
+        let mut run = run_of(&[l0, l1], true);
+        let config = GameConfig {
+            layered_alignment: LayeredAlignment::Centre,
+            ..GameConfig::default()
+        };
+        advance_to_next_level(&mut state, &mut run, &config);
+        assert_eq!(state.camera_offset, Vec3::new(CELL_SIZE, LEVEL_HEIGHT, 0.0));
+    }
+
+    #[test]
+    fn multilevel_demo_levels_taper() {
+        use crate::state::LayeredAlignment;
+        // Both native `MAZE_DEMO=multilevel_*` stacks: at least two levels, each a
+        // parseable maze with its own start + finish, and a strictly shrinking
+        // (square) grid as you climb — the open-platform pyramid.
+        for alignment in [LayeredAlignment::Edge, LayeredAlignment::Centre] {
+            let levels = super::multilevel_demo_levels(alignment);
+            assert!(levels.len() >= 2, "the demo stacks at least two levels");
+            let mut prev_dim: Option<usize> = None;
+            for json in &levels {
+                let game = MazeGame::from_json(json).expect("each demo level parses");
+                let grid = game.grid();
+                assert_eq!(grid.len(), grid[0].len(), "each demo level is square");
+                let dim = grid.len();
+                if let Some(prev) = prev_dim {
+                    assert!(dim < prev, "each level up is a strictly smaller grid ({dim} < {prev})");
+                }
+                prev_dim = Some(dim);
+            }
+        }
+    }
+
+    #[test]
+    fn roofed_demo_uses_an_enclosed_sky_over_the_edge_ladder_stack() {
+        use super::MultilevelDemo;
+        use crate::state::{LayeredAlignment, SkyType};
+        let demo = MultilevelDemo::Roofed { alignment: LayeredAlignment::Edge };
+        // Forces an enclosed (roofed) sky so every level is roofed — the bottom
+        // ladder finish then exercises the holed roof + dropped hatch underside.
+        assert_eq!(demo.sky_type_override(), Some(SkyType::Dungeon));
+        assert!(demo.sky_type_override().unwrap().is_enclosed());
+        // Reuses the edge walk stack, whose bottom→middle transition is a ladder.
+        assert_eq!(demo.alignment(), LayeredAlignment::Edge);
+        assert_eq!(
+            demo.levels().len(),
+            super::multilevel_demo_levels(LayeredAlignment::Edge).len()
+        );
+        // The enclosed sky walls the perimeter itself, so no perimeter override; and
+        // it isn't a hide demo.
+        assert!(!demo.perimeter_walls());
+        assert!(!demo.hide_completed_enemies());
+    }
+
+    #[test]
+    fn the_portcullis_and_pool_hatch_demos_are_edge_aligned_ladder_hatch_stacks() {
+        use super::MultilevelDemo;
+        use crate::state::{DoorStyle, LayeredAlignment};
+        let find = |g: &[Vec<char>], ch: char| {
+            g.iter().enumerate().find_map(|(r, row)| row.iter().position(|&c| c == ch).map(|c| (r, c)))
+        };
+        // Both demos are a 2-level EDGE stack whose bottom finish sits directly under
+        // the top start, so a ladder + hatch form (each issue needs the hatch).
+        for demo in [MultilevelDemo::Portcullis, MultilevelDemo::PoolHatch] {
+            assert_eq!(demo.alignment(), LayeredAlignment::Edge);
+            let levels = demo.levels();
+            assert_eq!(levels.len(), 2, "a 2-level stack");
+            let bottom = MazeGame::from_json(&levels[0]).expect("bottom parses");
+            let top = MazeGame::from_json(&levels[1]).expect("top parses");
+            assert_eq!(
+                find(bottom.grid(), 'F'),
+                find(top.grid(), 'S'),
+                "edge-aligned: the top start sits directly above the bottom finish"
+            );
+        }
+        // Portcullis demo forces a portcullis door. The bottom carries TWO gates and
+        // the top is a smaller (tapered) edge stack, so one gate sits under the upper
+        // floor (a cell above → hides when raised) and one under the bottom's exposed
+        // edge (no cell above → stays visibly raised).
+        let pc = MultilevelDemo::Portcullis;
+        assert_eq!(pc.door_style_override(), Some(DoorStyle::Portcullis));
+        let pc_levels = pc.levels();
+        let pc_bottom = MazeGame::from_json(&pc_levels[0]).expect("bottom parses");
+        let pc_top = MazeGame::from_json(&pc_levels[1]).expect("top parses");
+        let doors: Vec<(usize, usize)> = pc_bottom
+            .grid()
+            .iter()
+            .enumerate()
+            .flat_map(|(r, row)| {
+                row.iter().enumerate().filter(|(_, &c)| c == 'D').map(move |(c, _)| (r, c))
+            })
+            .collect();
+        assert_eq!(doors.len(), 2, "two portcullis gates on the bottom level");
+        let (top_rows, top_cols) = (pc_top.grid().len(), pc_top.grid()[0].len());
+        let (bottom_rows, bottom_cols) = (pc_bottom.grid().len(), pc_bottom.grid()[0].len());
+        assert!(
+            top_rows < bottom_rows && top_cols < bottom_cols,
+            "the top is a smaller (tapered) footprint so the bottom's outer edge is exposed",
+        );
+        // Edge-aligned: a bottom cell has a cell above iff it's inside the top's
+        // corner footprint. Exactly one gate is covered, exactly one is exposed.
+        let covered = |&(r, c): &(usize, usize)| r < top_rows && c < top_cols;
+        assert_eq!(doors.iter().filter(|d| covered(d)).count(), 1, "one gate under the upper floor");
+        assert_eq!(doors.iter().filter(|d| !covered(d)).count(), 1, "one gate under open sky");
+        // Pool-hatch demo: no door override; the top level carries a lava pool cell
+        // (a 'W' cell with a lava override) so it'll be lifted, exercising the seal.
+        let ph = MultilevelDemo::PoolHatch;
+        assert_eq!(ph.door_style_override(), None);
+        let ph_levels = ph.levels();
+        assert!(ph_levels[1].contains("lava"), "top level carries a lava pool");
+        let ph_top = MazeGame::from_json(&ph_levels[1]).expect("parses");
+        assert_eq!(ph_top.grid()[2][2], 'W', "the lava pool is a wall-type cell at (2,2)");
+    }
+
+    #[test]
+    fn the_lava_island_demo_is_a_centred_taper_with_a_lava_ringed_upper() {
+        use super::MultilevelDemo;
+        use crate::state::LayeredAlignment;
+        let demo = MultilevelDemo::LavaIsland;
+        // Centred so the bottom level's open ring surrounds the floating upper on all
+        // sides — you can look up at its sealed edges all the way around.
+        assert_eq!(demo.alignment(), LayeredAlignment::Centre);
+        assert!(!demo.perimeter_walls(), "open perimeter so the floating edges are visible");
+        let levels = demo.levels();
+        assert_eq!(levels.len(), 2, "a 2-level stack");
+        let bottom = MazeGame::from_json(&levels[0]).expect("bottom parses");
+        let top = MazeGame::from_json(&levels[1]).expect("top parses");
+        let (br, bc) = (bottom.grid().len(), bottom.grid()[0].len());
+        let (tr, tc) = (top.grid().len(), top.grid()[0].len());
+        assert!(tr < br && tc < bc, "the upper is a smaller (tapered) footprint");
+        assert!(levels[1].contains("lava"), "the upper level carries lava pools");
+        // The upper's whole perimeter ring is pool ('W') cells, so its outer edges
+        // float over the bottom's exposed ring — what the floor-edge seal occludes.
+        let g = top.grid();
+        assert!(
+            (0..tc).all(|c| g[0][c] == 'W' && g[tr - 1][c] == 'W')
+                && (0..tr).all(|r| g[r][0] == 'W' && g[r][tc - 1] == 'W'),
+            "every upper perimeter cell is a pool cell",
+        );
+    }
+
+    #[test]
+    fn the_random_demos_are_random_aligned_enemy_free_and_their_seed_mixes_the_levels() {
+        use super::{MultilevelDemo, RANDOM_DEMO_SEED};
+        use crate::state::LayeredAlignment;
+        let base = MultilevelDemo::RandomBase;
+        let level = MultilevelDemo::RandomLevel;
+        assert_eq!(base.alignment(), LayeredAlignment::RandomBase);
+        assert_eq!(level.alignment(), LayeredAlignment::RandomLevel);
+        // Both demos share the walk grids, three levels, enemies stripped (they're for
+        // eyeballing alignment, not combat).
+        for demo in [base, level] {
+            let levels = demo.levels();
+            assert_eq!(levels.len(), 3, "the walk stack is three levels");
+            assert!(levels.iter().all(|json| !json.contains("\"E\"")), "no enemies");
+        }
+        // The shared pinned seed resolves the upper two levels to DIFFERENT alignments,
+        // so each demo shows a mix rather than collapsing to an all-edge stack — and,
+        // since both modes share the coin, the A/B differs only in anchoring.
+        assert_ne!(
+            LayeredAlignment::RandomBase.resolve(RANDOM_DEMO_SEED, 1),
+            LayeredAlignment::RandomBase.resolve(RANDOM_DEMO_SEED, 2),
+            "the demo seed must mix edge + centre across levels 1 and 2",
+        );
+    }
+
+    #[test]
+    fn level_render_config_applies_top_override_and_perimeter_random() {
+        use super::level_render_config;
+        use crate::state::SkyType;
+        let grid = vec![vec!['S', 'F']];
+        let base = GameConfig {
+            sky_type: SkyType::Dungeon,
+            perimeter_walls: true,
+            top_sky_type: Some(SkyType::Day),
+            top_perimeter_walls: Some(false),
+            ..GameConfig::default()
+        };
+        // The final (top) level takes the `[levels.top]` override...
+        let top = level_render_config(&base, true, true, &grid, 1);
+        assert_eq!(top.sky_type, SkyType::Day);
+        assert!(!top.perimeter_walls);
+        // ...a lower level keeps the base scene...
+        let lower = level_render_config(&base, false, true, &grid, 0);
+        assert_eq!(lower.sky_type, SkyType::Dungeon);
+        assert!(lower.perimeter_walls);
+        // ...and a single-level run is untouched even though level 0 is "final".
+        let single = level_render_config(&base, true, false, &grid, 0);
+        assert_eq!(single.sky_type, SkyType::Dungeon);
+        assert!(single.perimeter_walls);
+
+        // `perimeter_random` flips a non-top level's perimeter, deterministically.
+        let rnd = GameConfig { perimeter_walls: true, perimeter_random: true, ..GameConfig::default() };
+        let a = level_render_config(&rnd, false, true, &grid, 0).perimeter_walls;
+        let b = level_render_config(&rnd, false, true, &grid, 0).perimeter_walls;
+        assert_eq!(a, b, "same (grid, level) → same flip");
+    }
+
+    #[test]
+    fn multilevel_hide_demo_parks_frozen_enemies_on_the_exposed_bottom_edges() {
+        use super::MultilevelDemo;
+        use crate::state::LayeredAlignment;
+
+        let levels = super::multilevel_hide_demo_levels();
+        assert_eq!(levels.len(), 3, "the hide demo is a three-level stack");
+        // The bottom level must parse as a valid maze...
+        MazeGame::from_json(&levels[0]).expect("bottom level parses");
+        // ...with eight enemy cells, all on the exposed edge rows (0 / 8) and each
+        // neutralised per cell (stationary via a huge move period + harmless).
+        let bottom: serde_json::Value = serde_json::from_str(&levels[0]).unwrap();
+        let grid = bottom["grid"].as_array().unwrap();
+        let last = grid.len() - 1;
+        let mut enemies = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for cell in row.as_array().unwrap() {
+                if let Some(entities) = cell.as_array() {
+                    let e = &entities[0];
+                    assert_eq!(e["type"], "E");
+                    assert_eq!(e["damage"], 0, "enemies are harmless");
+                    assert!(e["movePeriodMs"].as_f64().unwrap() >= 3_600_000.0, "enemies are stationary");
+                    assert!(r == 0 || r == last, "enemy on an exposed edge row, not row {r}");
+                    enemies += 1;
+                }
+            }
+        }
+        assert_eq!(enemies, 8, "eight stationary, harmless edge enemies to watch (dis)appear");
+
+        // Both hide variants centre and differ only in the hide flag; a walk demo
+        // never hides.
+        let hide = MultilevelDemo::HideEnemies { hide: true };
+        let keep = MultilevelDemo::HideEnemies { hide: false };
+        assert!(hide.hide_completed_enemies() && !keep.hide_completed_enemies());
+        assert!(matches!(hide.alignment(), LayeredAlignment::Centre));
+        let walk = MultilevelDemo::Walk { alignment: LayeredAlignment::Edge, perimeter: false };
+        assert!(!walk.hide_completed_enemies() && !walk.perimeter_walls());
+        // The `…_with_perimeter` walk variants wall the perimeter.
+        let walled = MultilevelDemo::Walk { alignment: LayeredAlignment::Centre, perimeter: true };
+        assert!(walled.perimeter_walls() && !walled.hide_completed_enemies());
+    }
+
+    #[test]
+    fn merge_treasure_sums_by_style_and_skips_zero_counts() {
+        let mut acc = vec![(TreasureStyle::Silver, 1)];
+        merge_treasure(
+            &mut acc,
+            &[
+                (TreasureStyle::Silver, 2),
+                (TreasureStyle::Gold, 1),
+                (TreasureStyle::Diamonds, 0),
+            ],
+        );
+        assert_eq!(acc, vec![(TreasureStyle::Silver, 3), (TreasureStyle::Gold, 1)]);
+    }
 }

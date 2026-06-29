@@ -52,14 +52,43 @@ test.describe('Game host pause menu', () => {
     await expect(page.locator('#pause-menu')).toBeHidden()
   })
 
-  test('Restart button reloads the page', async ({ page }) => {
+  test('Restart asks for confirmation before reloading', async ({ page }) => {
     await loadGameHostStubbed(page)
     await firePaused(page, true)
-    const reloadPromise = page.waitForEvent('load')
+    // First tap shows the confirmation view, not a reload.
     await page.locator('#pm-restart').click()
+    await expect(page.locator('#pm-confirm')).toBeVisible()
+    await expect(page.locator('#pm-main')).toBeHidden()
+    // Confirming reloads the page.
+    const reloadPromise = page.waitForEvent('load')
+    await page.locator('#pm-restart-confirm').click()
     await reloadPromise
     // After reload the menu is hidden again (no paused event yet).
     await expect(page.locator('#pause-menu')).toBeHidden()
+  })
+
+  test('Restart confirmation can be cancelled', async ({ page }) => {
+    await loadGameHostStubbed(page)
+    await firePaused(page, true)
+    await page.locator('#pm-restart').click()
+    await expect(page.locator('#pm-confirm')).toBeVisible()
+    // Cancel returns to the main button list without reloading.
+    await page.locator('#pm-restart-cancel').click()
+    await expect(page.locator('#pm-main')).toBeVisible()
+    await expect(page.locator('#pm-confirm')).toBeHidden()
+    await expect(page.locator('#pm-resume')).toBeVisible()
+  })
+
+  test('reopening the menu resets to the main view after a cancelled restart', async ({ page }) => {
+    await loadGameHostStubbed(page)
+    await firePaused(page, true)
+    await page.locator('#pm-restart').click()
+    await expect(page.locator('#pm-confirm')).toBeVisible()
+    // Resume out and pause again — the menu must reopen on the main list.
+    await firePaused(page, false)
+    await firePaused(page, true)
+    await expect(page.locator('#pm-main')).toBeVisible()
+    await expect(page.locator('#pm-confirm')).toBeHidden()
   })
 
 })
@@ -153,6 +182,89 @@ test.describe('Game host pause button hidden on desktop', () => {
   })
 })
 
+test.describe('Game host score submission (on win)', () => {
+  // Drives the vanilla `maze-game-result` listener in index.html in
+  // isolation from Bevy: the WASM bundle is aborted (the module script
+  // fails fast, but the result-listener <script> runs regardless), and we
+  // fire a synthetic `maze-game-result` CustomEvent — the same event Bevy
+  // dispatches on completion. A route over POST /api/v1/scores captures the
+  // submitted body.
+
+  async function loadAndCaptureScores(page: Page, url: string) {
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
+    await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
+
+    const posted: Array<Record<string, unknown>> = []
+    await page.route('**/api/v1/scores', (route) => {
+      const req = route.request()
+      if (req.method() === 'POST') {
+        posted.push(JSON.parse(req.postData() ?? '{}'))
+        route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: '00000000-0000-0000-0000-000000000001',
+            user_id: '00000000-0000-0000-0000-000000000002',
+            score: 0,
+            elapsed_ms: 0,
+            recorded_at: '2025-04-01T12:00:00Z',
+          }),
+        })
+      } else {
+        route.continue()
+      }
+    })
+
+    await page.goto(url)
+    await expect(page.locator('#pause-menu')).toBeAttached()
+    return posted
+  }
+
+  async function fireResult(page: Page, detail: Record<string, unknown>) {
+    await page.evaluate((d) => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', { detail: d }))
+    }, detail)
+  }
+
+  test('submits the maze-id subject on a win', async ({ page }) => {
+    const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake&id=test-id')
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await expect.poll(() => posted.length).toBe(1)
+    expect(posted[0]).toEqual({ maze_id: 'test-id', score: 7, elapsed_ms: 42137 })
+  })
+
+  test('submits the challenge subject (difficulty:seed) on a curated win', async ({ page }) => {
+    const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake&difficulty=easy')
+    await fireResult(page, {
+      outcome: 'win',
+      score: 3,
+      elapsedMs: 9001,
+      difficulty: 'easy',
+      seed: 42,
+      rows: 3,
+      cols: 3,
+    })
+    await expect.poll(() => posted.length).toBe(1)
+    expect(posted[0]).toEqual({ challenge: 'easy:42', score: 3, elapsed_ms: 9001 })
+  })
+
+  test('does not submit on a loss', async ({ page }) => {
+    const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake&id=test-id')
+    await fireResult(page, { outcome: 'lose', score: 0, elapsedMs: 5000, rows: 3, cols: 3 })
+    // Give any (erroneous) submit a chance to fire before asserting none did.
+    await page.waitForTimeout(200)
+    expect(posted).toHaveLength(0)
+  })
+
+  test('does not submit when the run has no stable subject', async ({ page }) => {
+    // Demo / no-config path: no ?id and no difficulty/seed in the detail.
+    const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake')
+    await fireResult(page, { outcome: 'win', score: 4, elapsedMs: 1234, rows: 3, cols: 3 })
+    await page.waitForTimeout(200)
+    expect(posted).toHaveLength(0)
+  })
+})
+
 test.describe('Game host user-edited maze launch (?id=...)', () => {
   // Common test setup: stub the wasm JS module so we can capture the
   // JSON payload start_with_config receives, fulfill the wasm binary
@@ -215,11 +327,11 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     expect(mazeDef.grid).toEqual([['S', ' ', 'F']])
   })
 
-  test('reads localStorage settings written by the Play3dCustomLaunchModal', async ({ page }) => {
+  test('reads localStorage settings written by the MazeGameSettingsModal', async ({ page }) => {
     await stubGameHost(page, 'My Maze')
     await page.addInitScript(() => {
       localStorage.setItem(
-        'play3dCustomLaunchSettings',
+        'mazeGameSettings',
         JSON.stringify({
           skyType: 'sunset',
           wallType: 'wood',
@@ -270,7 +382,7 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
   })
 
   test('URL query params override localStorage (MAUI native-popup path)', async ({ page }) => {
-    // The MAUI native Play3dCustomLaunchPopup writes the chosen settings
+    // The MAUI native MazeGameSettingsPopup writes the chosen settings
     // as URL query params (MAUI's WebView can't share the React SPA's
     // localStorage), and /game/index.html prefers URL params over
     // localStorage so MAUI's explicit per-launch choice always wins.
@@ -278,7 +390,7 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     await page.addInitScript(() => {
       // Stale localStorage from a prior browser-only launch.
       localStorage.setItem(
-        'play3dCustomLaunchSettings',
+        'mazeGameSettings',
         JSON.stringify({
           skyType: 'night',
           wallType: 'brick',

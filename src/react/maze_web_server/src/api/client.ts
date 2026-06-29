@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -74,6 +74,48 @@ export function startOAuth(provider: string): void {
 
 export function getMe(token: string): Promise<UserProfile> {
   return request<UserProfile>('/users/me', {
+    headers: authHeaders(token),
+  })
+}
+
+// Builds the avatar request path for a user, appending the `avatar_updated_at`
+// marker as a `?v=` cache-buster when known. This is the URL `fetchUserAvatar`
+// requests — NOT an `<img src>`: the route is guarded, so the image is loaded
+// via an authenticated fetch (a bare `<img>` can't carry the bearer token).
+export function avatarUrl(userId: string, updatedAt?: string | null): string {
+  const base = `${BASE}/users/${encodeURIComponent(userId)}/avatar`
+  return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
+}
+
+// Fetches a user's avatar image as a Blob over an authenticated request.
+// Resolves to the Blob on success and throws (with a `.status`) on a non-OK
+// response — callers treat a 404 as "no avatar" and fall back to the placeholder.
+export async function fetchUserAvatar(token: string, userId: string, updatedAt?: string | null): Promise<Blob> {
+  const response = await fetch(avatarUrl(userId, updatedAt), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) await throwForStatus(response)
+  return response.blob()
+}
+
+// Uploads (or replaces) the caller's avatar. The server canonicalises the image
+// to a 256x256 PNG and returns the new `avatar_updated_at` marker. Note: no
+// `Content-Type` header — the browser sets `multipart/form-data` with the
+// correct boundary for a `FormData` body; `authHeaders` would wrongly force JSON.
+export function uploadAvatar(token: string, file: File): Promise<{ avatar_updated_at: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  return request<{ avatar_updated_at: string }>('/users/me/avatar', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+}
+
+// Removes the caller's avatar (idempotent server-side — 204 even if none set).
+export function deleteAvatar(token: string): Promise<void> {
+  return requestEmpty('/users/me/avatar', {
+    method: 'DELETE',
     headers: authHeaders(token),
   })
 }
@@ -174,14 +216,16 @@ export async function getMazes(token: string, includeDefinitions: boolean): Prom
     headers: authHeaders(token),
   })
   return items
-    .map(item => ({
-      id: item.id,
-      name: item.name,
-      // definition is the full Maze JSON string: {id, name, definition: {grid:[...]}}
-      definition: item.definition
-        ? (JSON.parse(item.definition) as { definition: MazeDefinition }).definition
-        : { grid: [] },
-    }))
+    .map(item => {
+      // definition is the full Maze JSON string: {id, name, definition:{grid}, game_settings?}
+      const parsed = item.definition ? (JSON.parse(item.definition) as Maze) : null
+      return {
+        id: item.id,
+        name: item.name,
+        definition: parsed?.definition ?? { grid: [] },
+        game_settings: parsed?.game_settings,
+      }
+    })
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -212,4 +256,75 @@ export function deleteMaze(token: string, id: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(token),
   })
+}
+
+// --- Scores -----------------------------------------------------------------
+
+export interface LeaderboardQuery {
+  // Exactly one subject (mazeId or challenge) must be set.
+  mazeId?: string
+  challenge?: string
+  metric?: ScoreMetric
+  direction?: SortDirection
+  limit?: number
+  offset?: number
+  includeUsernames?: boolean
+}
+
+export interface HistoryQuery {
+  limit?: number
+  offset?: number
+}
+
+// Reads a page of a leaderboard, ranked by `metric` / `direction` (the server
+// defaults to fastest-time-first when omitted). Exactly one subject — a stored
+// `mazeId` or a curated `challenge` — must be set.
+export function getLeaderboard(token: string, query: LeaderboardQuery): Promise<ScoreboardResponse> {
+  if ((query.mazeId == null) === (query.challenge == null)) {
+    throw new Error('getLeaderboard requires exactly one of mazeId / challenge')
+  }
+  const params = new URLSearchParams()
+  if (query.mazeId != null) params.set('maze_id', query.mazeId)
+  if (query.challenge != null) params.set('challenge', query.challenge)
+  if (query.metric != null) params.set('metric', query.metric)
+  if (query.direction != null) params.set('direction', query.direction)
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  if (query.includeUsernames != null) params.set('include_usernames', String(query.includeUsernames))
+  return request<ScoreboardResponse>(`/scores?${params.toString()}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// Resets a leaderboard to empty (DELETE). Exactly one subject — a stored `mazeId`
+// (maze owner only) or a curated `challenge` (admin only); the server enforces
+// access and rejects otherwise. Returns the number of score rows removed.
+export function resetLeaderboard(token: string, query: { mazeId?: string; challenge?: string }): Promise<ResetScoresResponse> {
+  if ((query.mazeId == null) === (query.challenge == null)) {
+    throw new Error('resetLeaderboard requires exactly one of mazeId / challenge')
+  }
+  const params = new URLSearchParams()
+  if (query.mazeId != null) params.set('maze_id', query.mazeId)
+  if (query.challenge != null) params.set('challenge', query.challenge)
+  return request<ResetScoresResponse>(`/scores?${params.toString()}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// Reads a page of the authenticated player's own run history (most recent first).
+export function getScoreHistory(token: string, query: HistoryQuery = {}): Promise<ScoreboardResponse> {
+  const params = new URLSearchParams()
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  const qs = params.toString()
+  return request<ScoreboardResponse>(`/scores/me${qs ? `?${qs}` : ''}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// Reads a curated difficulty's preset (unauthenticated). The leaderboard UI
+// uses its fixed `seed` to build the challenge board key.
+export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
+  return request<Play3dConfig>(`/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`)
 }

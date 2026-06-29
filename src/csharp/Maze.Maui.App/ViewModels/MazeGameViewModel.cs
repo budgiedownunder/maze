@@ -16,6 +16,14 @@ namespace Maze.Maui.App.ViewModels
         public double Opacity => Filled ? 1.0 : 0.25;
     }
 
+    /// <summary>One grouped bag chip — an icon plus a rolling count (<c>[icon] × N</c> chips). 
+    /// One chip per held item type: a single key chip,
+    /// then one per collected treasure style.</summary>
+    /// <param name="IconSource">The chip's icon image (e.g. <c>"key.png"</c> / <c>"gold.png"</c>).</param>
+    /// <param name="AltText">Accessibility label for the icon (e.g. "Gold treasure").</param>
+    /// <param name="Count">How many of this item type the player holds (always >= 1).</param>
+    public readonly record struct BagChip(string IconSource, string AltText, int Count);
+
     /// <summary>
     /// View model for the maze game page. Receives a <see cref="MazeItem"/> via Shell navigation,
     /// then drives a <see cref="MazeGame"/> session when <see cref="StartGame"/> is called by the page.
@@ -30,6 +38,9 @@ namespace Maze.Maui.App.ViewModels
         // Tracks each enemy's last-known cell by id so EnemyMoved events (which carry
         // only the new cell) can tell the grid which cell to vacate.
         private readonly Dictionary<uint, (int row, int col)> _enemyCells = new();
+        // Each enemy's fixed visual rig by id, so a move passes the enemy's own rig — a
+        // cell shared by differing enemies (or a neighbour swap) keeps each sprite correct.
+        private readonly Dictionary<uint, EnemyType?> _enemyTypes = new();
 
         /// <summary>
         /// Constructor
@@ -82,14 +93,60 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(BagCount))]
+        [NotifyPropertyChangedFor(nameof(BagChips))]
         [NotifyPropertyChangedFor(nameof(IsBagEmpty))]
         private IReadOnlyList<BagItem> bag = [];
+
+        /// <summary>
+        /// Per-style tally of treasure collected this run, in ascending value order.
+        /// Refreshed on each TreasureCollected event; drives the bag's treasure chips.
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(BagChips))]
+        [NotifyPropertyChangedFor(nameof(IsBagEmpty))]
+        private IReadOnlyList<CollectedTreasureInfo> collectedTreasures = [];
 
         /// <summary>Number of items currently in the bag — convenience for bindings.</summary>
         public int BagCount => Bag.Count;
 
-        /// <summary>Whether the bag is currently empty — convenience for bindings.</summary>
-        public bool IsBagEmpty => Bag.Count == 0;
+        /// <summary>Bag-chip icon for a treasure style — the same per-style loot icons used
+        /// for the in-grid treasure cells.</summary>
+        private static string TreasureBagIcon(TreasureStyle style) => style switch
+        {
+            TreasureStyle.Gold => "gold.png",
+            TreasureStyle.Diamonds => "diamonds.png",
+            TreasureStyle.Jewels => "jewels.png",
+            _ => "silver.png",
+        };
+
+        /// <summary>
+        /// The bag as grouped <c>[icon] × N</c> chips (mirrors the React bag): a single
+        /// key chip for the held keys, then one chip per collected treasure style in the
+        /// engine's ascending-value order. Zero-count types are omitted, so the key chip
+        /// vanishes once keys are consumed and a style only appears once collected.
+        /// </summary>
+        public IReadOnlyList<BagChip> BagChips
+        {
+            get
+            {
+                var chips = new List<BagChip>();
+                if (Bag.Count > 0)
+                {
+                    chips.Add(new BagChip("key.png", "Key", Bag.Count));
+                }
+                foreach (CollectedTreasureInfo t in CollectedTreasures)
+                {
+                    if (t.Count > 0)
+                    {
+                        chips.Add(new BagChip(TreasureBagIcon(t.Style), $"{t.Style} treasure", (int)t.Count));
+                    }
+                }
+                return chips;
+            }
+        }
+
+        /// <summary>Whether the bag is currently empty (no keys and no treasure) — convenience for bindings.</summary>
+        public bool IsBagEmpty => BagChips.Count == 0;
 
         /// <summary>
         /// Whether the game is in a lost state (e.g. player is stranded).
@@ -166,10 +223,12 @@ namespace Maze.Maui.App.ViewModels
             LoadStatus = "";
             _gameGrid = gameGrid;
             Bag = [];
+            CollectedTreasures = [];
             IsLost = false;
             IsPaused = false;
             LoseReason = LoseReason.None;
             _enemyCells.Clear();
+            _enemyTypes.Clear();
 
             if (_mazeItem?.Definition is null)
             {
@@ -190,7 +249,10 @@ namespace Maze.Maui.App.ViewModels
                 MaxHp = _game.MaxHp;
                 gameGrid.BeginGameRuntime();
                 foreach (var enemy in _game.Enemies)
+                {
                     _enemyCells[enemy.Id] = ((int)enemy.Row, (int)enemy.Column);
+                    _enemyTypes[enemy.Id] = enemy.EnemyType;
+                }
                 gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
                 // Enemies move on a fixed cadence — run the tick loop continuously
                 // while any exist (the page's timer keeps firing while Tick() returns true).
@@ -352,7 +414,7 @@ namespace Maze.Maui.App.ViewModels
                     case GameEventKind.EnemyMoved:
                         uint id = evt.Payload;
                         (int oldRow, int oldCol) = _enemyCells.TryGetValue(id, out var pos) ? pos : (-1, -1);
-                        _gameGrid.SetEnemyCell(oldRow, oldCol, (int)evt.Row, (int)evt.Column, id);
+                        _gameGrid.SetEnemyCell(oldRow, oldCol, (int)evt.Row, (int)evt.Column, id, _enemyTypes.GetValueOrDefault(id));
                         _enemyCells[id] = ((int)evt.Row, (int)evt.Column);
                         break;
                     case GameEventKind.PlayerDamaged:
@@ -370,6 +432,12 @@ namespace Maze.Maui.App.ViewModels
                         _gameGrid.MarkKeyCollected((int)evt.Row, (int)evt.Column);
                         Bag = _game.Bag;
                         break;
+                    case GameEventKind.TreasureCollected:
+                        // Treasure was auto-collected on walk-over: clear its grid
+                        // visual and refresh the per-style tally so the bag chip updates.
+                        _gameGrid.MarkTreasureCollected((int)evt.Row, (int)evt.Column);
+                        CollectedTreasures = _game.CollectedTreasures;
+                        break;
                 }
             }
         }
@@ -384,6 +452,7 @@ namespace Maze.Maui.App.ViewModels
             _gameGrid?.IsInteractionLocked = false;
             _gameGrid = null;
             Bag = [];
+            CollectedTreasures = [];
         }
 
         private async Task ShowResultPopup(string message, bool won)

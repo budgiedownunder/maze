@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
+import { Avatar } from '../components/Avatar'
 import { ChangePasswordModal } from '../components/ChangePasswordModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { EmailAddressesPanel } from '../components/EmailAddressesPanel'
@@ -14,11 +13,9 @@ type View = 'account' | 'changePassword'
 
 export function AccountPage() {
   const token = useToken() ?? ''
-  const { logout } = useAuth()
+  const { logout, refreshProfile } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
 
   // Read the one-shot `welcome` flag from navigation state. Set by
   // `OAuthCallbackPage` for first-time OAuth signups so users notice
@@ -45,11 +42,15 @@ export function AccountPage() {
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [avatarBusy, setAvatarBusy] = useState(false)
+  const [avatarError, setAvatarError] = useState<string | null>(null)
+
   useEffect(() => {
-    const busy = isSaving || isLoading || isDeleting
+    const busy = isSaving || isLoading || isDeleting || avatarBusy
     document.body.classList.toggle('is-busy', busy)
     return () => document.body.classList.remove('is-busy')
-  }, [isSaving, isLoading, isDeleting])
+  }, [isSaving, isLoading, isDeleting, avatarBusy])
 
   useEffect(() => {
     api.getMe(token)
@@ -82,6 +83,51 @@ export function AccountPage() {
       setError(err.status === 409 ? 'Username already in use' : (err.message ?? 'Failed to save profile'))
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Mirrors the server's accepted formats + 2 MiB cap so an oversize/ wrong
+  // file is rejected before a pointless upload round-trip.
+  const ACCEPTED_AVATAR_TYPES = ['image/png', 'image/jpeg']
+  const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+  async function handleAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    // Reset the input so picking the *same* file again re-fires `change`.
+    e.target.value = ''
+    if (!file) return
+    setAvatarError(null)
+    if (!ACCEPTED_AVATAR_TYPES.includes(file.type)) {
+      setAvatarError('Please choose a PNG or JPEG image.')
+      return
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setAvatarError('Image must be 2 MB or smaller.')
+      return
+    }
+    setAvatarBusy(true)
+    try {
+      const { avatar_updated_at } = await api.uploadAvatar(token, file)
+      setSaved(s => (s ? { ...s, avatar_updated_at } : s))
+      await refreshProfile() // update the header avatar too
+    } catch (ex: unknown) {
+      setAvatarError((ex as { message?: string }).message ?? 'Failed to upload avatar')
+    } finally {
+      setAvatarBusy(false)
+    }
+  }
+
+  async function handleAvatarRemove() {
+    setAvatarError(null)
+    setAvatarBusy(true)
+    try {
+      await api.deleteAvatar(token)
+      setSaved(s => (s ? { ...s, avatar_updated_at: null } : s))
+      await refreshProfile()
+    } catch (ex: unknown) {
+      setAvatarError((ex as { message?: string }).message ?? 'Failed to remove avatar')
+    } finally {
+      setAvatarBusy(false)
     }
   }
 
@@ -121,27 +167,52 @@ export function AccountPage() {
           onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <h1 className="app-header-title">My Account</h1>
-        <div className="header-actions">
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title="My Account" titleAs="h1" />
       <main className="account-main">
         {welcome && (
           <p role="status" className="account-welcome-banner">
             Welcome to Maze! Take a moment to set your username and full name.
           </p>
+        )}
+
+        {!isLoading && saved && <h3 className="account-section-title">Profile</h3>}
+
+        {!isLoading && saved && (
+          <section className="account-avatar" aria-label="Avatar">
+            <button
+              type="button"
+              className="account-avatar-button"
+              disabled={avatarBusy}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label={saved.avatar_updated_at ? 'Change avatar' : 'Upload avatar'}
+              title={saved.avatar_updated_at ? 'Change avatar' : 'Upload avatar'}
+            >
+              <Avatar userId={saved.id} avatarUpdatedAt={saved.avatar_updated_at} size={96} alt="Your avatar" />
+            </button>
+            <div className="account-avatar-actions">
+              <button
+                type="button"
+                className="btn-gray"
+                disabled={avatarBusy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {avatarBusy ? 'Working...' : saved.avatar_updated_at ? 'Change' : 'Upload'}
+              </button>
+              {saved.avatar_updated_at && (
+                <button type="button" className="btn-link" disabled={avatarBusy} onClick={handleAvatarRemove}>
+                  Remove
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={handleAvatarFile}
+                hidden
+              />
+              {avatarError && <p role="alert" className="error-msg">{avatarError}</p>}
+            </div>
+          </section>
         )}
 
         {isLoading ? (

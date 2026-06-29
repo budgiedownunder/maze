@@ -34,6 +34,10 @@ namespace Maze.Maui.App.Models
         [JsonPropertyName("elapsedMs")]
         public long ElapsedMs { get; set; }
 
+        /// <summary>Final score at completion.</summary>
+        [JsonPropertyName("score")]
+        public ulong Score { get; set; }
+
         /// <summary>Difficulty label (<c>easy</c> / <c>tricky</c> / <c>hard</c>),
         /// or <c>null</c> for the no-config / specific-maze paths.</summary>
         [JsonPropertyName("difficulty")]

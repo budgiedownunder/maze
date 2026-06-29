@@ -1,5 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -121,6 +122,24 @@ pub trait UserStore {
         user_id: Uuid,
         email: &str,
     ) -> Result<(), Error>;
+    /// Stores (or replaces) the user's avatar image. `png_bytes` is the
+    /// canonical avatar the caller has already produced — the store treats it
+    /// as opaque and performs no decoding, re-encoding, or format validation.
+    /// The server canonicalises every upload to a 256×256 PNG before calling
+    /// this, so a stored avatar is always a PNG and no content-type is
+    /// persisted. Stamps [`data_model::User::avatar_updated_at`] so the
+    /// "has an avatar" signal and the cache-buster move in lock-step with the
+    /// bytes. Rejects with [`Error::UserIdNotFound`] when no active user has
+    /// the given id.
+    async fn set_user_avatar(&mut self, id: Uuid, png_bytes: Vec<u8>) -> Result<(), Error>;
+    /// Loads the user's avatar bytes, or `None` when the user has no avatar
+    /// (never set, or since cleared, or no such user). A stored avatar is
+    /// always a PNG; the caller owns the `Content-Type` on the way out.
+    async fn get_user_avatar(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    /// Removes the user's avatar if present and clears
+    /// [`data_model::User::avatar_updated_at`]. Idempotent — clearing a user
+    /// that has no avatar (or no such user) is a successful no-op.
+    async fn clear_user_avatar(&mut self, id: Uuid) -> Result<(), Error>;
 }
 
 /// Contains the identifying details for a maze item and (optionally)
@@ -246,6 +265,164 @@ pub trait EmailAuditLog {
     ) -> Result<Vec<EmailAuditEntry>, Error>;
 }
 
+/// One completed-run score record. A run's subject is one of two — exactly
+/// one of `maze_id` / `challenge` is set (an app-layer invariant; there is no
+/// portable cross-column CHECK under SQLx-Any / MySQL):
+///
+///   * a stored **user maze** → `maze_id` (FK `mazes(id)`), or
+///   * a **curated / shared game** → `challenge` = `"<difficulty>:<seed>"`.
+///
+/// `user_id` is the **player** (not the maze owner), so boards aggregate every
+/// player of a subject. `score` / `elapsed_ms` are `u64` here (matching the
+/// engine + the game-result wire) and stored as `i64` / `BIGINT`.
+///
+/// No `ToSchema` derive — the typed `Uuid` fields would require utoipa's
+/// `uuid`/`chrono` features; the OpenAPI wire shape is defined by the server
+/// layer (which owns the response DTO).
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct ScoreEntry {
+    /// Row id.
+    pub id: Uuid,
+    /// The player who recorded the run.
+    pub user_id: Uuid,
+    /// The stored maze played, or `None` for a curated/shared game.
+    pub maze_id: Option<String>,
+    /// The curated/shared game played (`"<difficulty>:<seed>"`), or `None` for
+    /// a user maze.
+    pub challenge: Option<String>,
+    /// Final score at completion.
+    pub score: u64,
+    /// Elapsed run time in milliseconds.
+    pub elapsed_ms: u64,
+    /// When the run was recorded (server-stamped at record time).
+    pub recorded_at: DateTime<Utc>,
+}
+
+/// The metric a leaderboard ranks by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScoreMetric {
+    /// Completion time (`elapsed_ms`).
+    Time,
+    /// Final score.
+    Score,
+}
+
+/// Sort direction for a leaderboard's primary metric.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortDirection {
+    /// Smallest first.
+    Ascending,
+    /// Largest first.
+    Descending,
+}
+
+/// Ordering for a leaderboard query: the primary `metric` sorted in
+/// `direction`, with a fixed sensible tie-break (the *other* metric — faster /
+/// higher among equal primaries) followed by `recorded_at` / `id` as
+/// deterministic final keys. Only the primary direction follows `direction`
+/// (normal table-sort behaviour — the tie-breaks stay fixed so a UI column
+/// toggle reads naturally and pagination stays deterministic). The clauses are
+/// built from fixed column names — never user input.
+///
+/// "Best first" depends on the metric: `Time` + `Ascending` (fastest first)
+/// and `Score` + `Descending` (highest first) are the two canonical board
+/// views; the opposite directions surface the worst runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScoreOrdering {
+    /// Which metric to rank by.
+    pub metric: ScoreMetric,
+    /// The primary metric's sort direction.
+    pub direction: SortDirection,
+}
+
+/// Per-completed-run score history: records a won run and serves the
+/// leaderboards (per-maze, per-curated-challenge) and personal history over
+/// them. One row per completed run — "best" is a query, not a stored flag.
+/// The board/history reads are **paged** (`limit` + `offset`); callers cap
+/// `limit` to a sane maximum.
+/// A leaderboard row: a recorded run plus the player's `username` when the
+/// caller asked for it (`include_usernames`). `username` is `None` when names
+/// weren't requested, or when the player can't be resolved. The username is
+/// resolved by the storage layer (each backend picks its strategy — e.g.
+/// SqlStore joins `users` in the board query) rather than by callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScoreboardEntry {
+    /// The recorded run.
+    pub entry: ScoreEntry,
+    /// The player's username, when resolved.
+    pub username: Option<String>,
+    /// The player's [`User::avatar_updated_at`] marker, resolved from the same
+    /// lookup that resolves `username` (the SqlStore board JOIN / the FileStore
+    /// player-file read). `Some(ts)` means the player has an avatar and the
+    /// value is its cache-buster; `None` means no avatar (or names/avatars
+    /// weren't requested, or the player couldn't be resolved). Lets a board row
+    /// decide between rendering the player's image and the generic placeholder
+    /// without a per-row round-trip.
+    pub avatar_updated_at: Option<DateTime<Utc>>,
+}
+
+#[async_trait]
+pub trait ScoreStore {
+    /// Records a completed run. The caller supplies a fully-populated
+    /// [`ScoreEntry`]. Rejects with [`Error::Other`] when the subject invariant
+    /// is violated (neither or both of `maze_id` / `challenge` set). Returns the
+    /// row id on success.
+    async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, Error>;
+    /// A page of the leaderboard for a user maze, ranked by `ordering`. When
+    /// `include_usernames` is set, each row carries the player's username
+    /// (resolved by the backend); otherwise `username` is `None`.
+    async fn maze_leaderboard(
+        &self,
+        maze_id: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error>;
+    /// A page of the leaderboard for a curated/shared challenge, ranked by
+    /// `ordering`. `include_usernames` behaves as for [`Self::maze_leaderboard`].
+    async fn challenge_leaderboard(
+        &self,
+        challenge: &str,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+        include_usernames: bool,
+    ) -> Result<Vec<ScoreboardEntry>, Error>;
+    /// A page of a player's own run history, most recent first
+    /// (`recorded_at` descending, `id` descending). No usernames — every row is
+    /// the caller.
+    async fn user_history(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ScoreEntry>, Error>;
+    /// Deletes every score recorded against a user maze, resetting its
+    /// leaderboard to empty. Returns the number of rows removed (0 if the board
+    /// was already empty). Authorization (maze ownership) is the caller's
+    /// responsibility — this clears unconditionally by subject.
+    async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, Error>;
+    /// Deletes every score recorded against a curated/shared challenge, resetting
+    /// its leaderboard to empty. Returns the number of rows removed. Authorization
+    /// (admin) is the caller's responsibility — this clears unconditionally by
+    /// subject.
+    async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error>;
+}
+
+/// Enforces the dual-keyed subject invariant for a [`ScoreEntry`]: exactly one
+/// of `maze_id` / `challenge` must be set. Shared by every [`ScoreStore`]
+/// backend's `record_score` (there is no portable cross-column CHECK).
+pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
+    // `is_some() == is_some()` is true when both are set or both are unset.
+    if entry.maze_id.is_some() == entry.challenge.is_some() {
+        return Err(Error::Other(
+            "score entry must set exactly one of maze_id / challenge".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 // Store management
 #[async_trait]
 pub trait Manage {
@@ -254,7 +431,7 @@ pub trait Manage {
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + ScoreStore + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

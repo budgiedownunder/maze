@@ -54,14 +54,26 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task GoToDesignAndPlayCommand_NavigatesToMazesPage()
+        public async Task GoToMazesCommand_NavigatesToMazesPage()
         {
             var (vm, nav, _) = BuildVm();
 
-            await vm.GoToDesignAndPlayCommand.ExecuteAsync(null);
+            await vm.GoToMazesCommand.ExecuteAsync(null);
 
             nav.Verify(
                 n => n.GoToAsync("MazesPage", It.IsAny<IDictionary<string, object>?>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task GoToLeaderboardsCommand_NavigatesToLeaderboardsPage()
+        {
+            var (vm, nav, _) = BuildVm();
+
+            await vm.GoToLeaderboardsCommand.ExecuteAsync(null);
+
+            nav.Verify(
+                n => n.GoToAsync("LeaderboardsPage", It.IsAny<IDictionary<string, object>?>()),
                 Times.Once);
         }
 

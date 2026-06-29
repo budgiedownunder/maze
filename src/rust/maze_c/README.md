@@ -60,12 +60,28 @@ uint32_t maze_c_maze_game_hp(MazeGameC* ptr);
 uint32_t maze_c_maze_game_max_hp(MazeGameC* ptr);
 int32_t maze_c_maze_game_enemy_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_enemy(MazeGameC* ptr, int32_t index,
-                                   uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
+                                   uint32_t* row_out, uint32_t* col_out, uint32_t* id_out,
+                                   uint32_t* damage_out, float* move_period_ms_out,
+                                   int32_t* enemy_type_out);
                                                         // 1 = success, 0 = out-of-range
+                                                        // damage_out / move_period_ms_out: resolved per-enemy values
+                                                        // enemy_type_out: -1 = no rig override, 0 = goblin, 1 = ghost
 int32_t maze_c_maze_game_health_pickup_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_health_pickup(MazeGameC* ptr, int32_t index,
                                            uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
                                                         // id_out always 0; 1 = success, 0 = out-of-range
+int32_t maze_c_maze_game_treasure_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_treasure(MazeGameC* ptr, int32_t index,
+                                      uint32_t* row_out, uint32_t* col_out,
+                                      int32_t* style_out, uint32_t* value_out);
+                                                        // 1 = success, 0 = out-of-range
+                                                        // style_out: 0 = silver, 1 = gold, 2 = diamonds, 3 = jewels
+                                                        // value_out: resolved reward (override else the type's default)
+int32_t maze_c_maze_game_collected_treasure_count(MazeGameC* ptr); // distinct styles collected
+uint8_t maze_c_maze_game_get_collected_treasure(MazeGameC* ptr, int32_t index,
+                                                 int32_t* style_out, uint32_t* count_out);
+                                                        // 1 = success, 0 = out-of-range; per-style tally, zero-count omitted
+                                                        // style_out: 0 = silver, 1 = gold, 2 = diamonds, 3 = jewels
 
 // Keys (uncollected; valid pointer assumed; out parameters may be null)
 int32_t maze_c_maze_game_key_count(MazeGameC* ptr);
@@ -136,6 +152,7 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 | 3 | PlayerHealed | the consumed pickup cell | HP after the heal |
 | 4 | PlayerNotHealed | the spared pickup cell | reason code (`0` = already at max HP); message via `get_tick_event_string_payload` |
 | 5 | KeyCollected | the consumed key cell | collected key id |
+| 6 | TreasureCollected | the consumed treasure cell | treasure score value |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 

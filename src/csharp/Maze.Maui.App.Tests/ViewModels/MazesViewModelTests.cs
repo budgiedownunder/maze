@@ -349,12 +349,39 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task NewAsync_NavigatesToDesignWithFreshMazeItem()
+        public async Task GoToDesignAsync_LoadsFullMazeSoTheEditorGetsGameSettings()
         {
-            var (vm, _, _, nav) = BuildVm();
+            var (vm, _, service, nav) = BuildVm();
+            // The list summary has no game_settings; the single-maze GET carries them.
+            var listItem = MakeItem("1", "Alpha");
+            var fullMaze = new MazeItem
+            {
+                ID = "1",
+                Name = "Alpha",
+                GameSettings = new MazeGameSettings { TimerSeconds = 120 },
+            };
+            service.Setup(s => s.GetMazeItem("1")).ReturnsAsync(fullMaze);
+
+            await vm.GoToDesignCommand.ExecuteAsync(listItem);
+
+            service.Verify(s => s.GetMazeItem("1"), Times.Once);
+            nav.Verify(n => n.GoToAsync(
+                nameof(MazePage),
+                It.Is<IDictionary<string, object>>(d => ((MazeItem)d["MazeItem"]).GameSettings!.TimerSeconds == 120)),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task NewAsync_NavigatesToDesignWithFreshMazeItem_WithoutFetchingTheServer()
+        {
+            var (vm, _, service, nav) = BuildVm();
 
             await vm.NewCommand.ExecuteAsync(null);
 
+            // A new maze has an empty id, so LoadFullMazeAsync must NOT call the
+            // single-maze GET (the API rejects an empty id and throws) — it uses the
+            // fresh item directly. Regression test for the New-maze crash.
+            service.Verify(s => s.GetMazeItem(It.IsAny<string>()), Times.Never);
             nav.Verify(n => n.GoToAsync(nameof(MazePage), It.IsAny<IDictionary<string, object>>()), Times.Once);
         }
 

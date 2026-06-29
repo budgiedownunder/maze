@@ -193,6 +193,7 @@ pub async fn resolve(
         deleted_at: None,
         created_at: chrono::Utc::now(),
         last_sign_in_at: None,
+        avatar_updated_at: None,
     };
     store.create_user(&mut new_user).await?;
     Ok(ResolveOutcome::Created(new_user))
@@ -265,6 +266,15 @@ mod tests {
     #[async_trait]
     impl UserStore for MemStore {
         async fn init_default_admin_user(&mut self, _u: &str, _e: &str, _p: &str) -> Result<User, StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
+        async fn set_user_avatar(&mut self, _id: Uuid, _png_bytes: Vec<u8>) -> Result<(), StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
+        async fn get_user_avatar(&self, _id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
+        async fn clear_user_avatar(&mut self, _id: Uuid) -> Result<(), StoreError> {
             Err(StoreError::Other("not used".into()))
         }
         async fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
@@ -392,6 +402,7 @@ mod tests {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 
@@ -538,6 +549,7 @@ mod tests {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 

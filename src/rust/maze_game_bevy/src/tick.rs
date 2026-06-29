@@ -21,11 +21,17 @@
 //! - [`maze::GameEvent::KeyCollected`] → tags the matching `KeyMarker` with
 //!   `CollectingKey`, so `key_collection_system` plays the rise-and-shrink
 //!   flourish and despawns the holder.
+//! - [`maze::GameEvent::TreasureCollected`] → tags the matching
+//!   `TreasureMarker` with `CollectingTreasure`, so
+//!   `treasure_collection_system` plays the rise-and-shrink flourish and
+//!   despawns the rig. The score the treasure adds is already folded into
+//!   `MazeGame::score`, so the HUD readout updates without extra work here.
 
 use crate::state::GameState;
 use crate::world::objects::door::DoorMarker;
 use crate::world::objects::health::HealthMarker;
 use crate::world::objects::key_holder::{CollectingKey, KeyMarker};
+use crate::world::objects::treasure::{CollectingTreasure, TreasureMarker};
 use bevy::prelude::*;
 use maze::GameEvent;
 
@@ -45,13 +51,16 @@ pub(crate) struct DamageFlash;
 /// `FixedUpdate`: deterministic game-state tick driver. Pause / win /
 /// lost all short-circuit so the world freezes at the moment of the
 /// outcome.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn game_tick_system(
     mut commands: Commands,
     time: Res<Time>,
     mut state: ResMut<GameState>,
+    run: Res<crate::state::MultiLevelRun>,
     mut doors: Query<&mut DoorMarker>,
     health_pickups: Query<(Entity, &HealthMarker)>,
     key_holders: Query<(Entity, &KeyMarker)>,
+    treasures: Query<(Entity, &TreasureMarker)>,
 ) {
     if state.paused || state.won || state.lost {
         return;
@@ -60,8 +69,11 @@ pub(crate) fn game_tick_system(
     for event in state.game.tick(dt_ms) {
         match event {
             GameEvent::DoorOpened { cell } => {
+                // The event is from the live level, so only pin that level's
+                // leaves — a same-`(row, col)` door on another level keeps its own
+                // state (see `door_animation_system`).
                 for mut marker in &mut doors {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         marker.mark_opened();
                     }
                 }
@@ -75,7 +87,7 @@ pub(crate) fn game_tick_system(
             }
             GameEvent::PlayerHealed { cell, .. } => {
                 for (entity, marker) in &health_pickups {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         commands.entity(entity).despawn();
                     }
                 }
@@ -88,8 +100,15 @@ pub(crate) fn game_tick_system(
             }
             GameEvent::KeyCollected { cell, .. } => {
                 for (entity, marker) in &key_holders {
-                    if marker.cell == cell {
+                    if marker.cell == cell && marker.level == run.current_level {
                         commands.entity(entity).insert(CollectingKey::default());
+                    }
+                }
+            }
+            GameEvent::TreasureCollected { cell, .. } => {
+                for (entity, marker) in &treasures {
+                    if marker.cell == cell && marker.level == run.current_level {
+                        commands.entity(entity).insert(CollectingTreasure::default());
                     }
                 }
             }

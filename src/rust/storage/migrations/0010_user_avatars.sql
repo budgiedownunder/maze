@@ -1,0 +1,22 @@
+-- User avatars.
+--
+-- Adds the `users.avatar_updated_at` marker column. It is nullable
+-- (`NULL` = no avatar) and doubles as the cache-buster for the avatar image
+-- URL. All schema rules from `0001_initial.sql` apply: VARCHAR(32) for an
+-- RFC 3339 timestamp (never bare TEXT), no literal DEFAULT. Added nullable so
+-- the ALTER is portable — MySQL rejects `ADD COLUMN ... NOT NULL` without a
+-- literal DEFAULT on a populated table, and the column is genuinely absent
+-- for users without an avatar anyway.
+--
+-- The companion `user_avatars` table (the BLOB holding the image bytes) is
+-- NOT created here. Its binary column type has no portable spelling across
+-- the three backends — PostgreSQL has only `BYTEA`, MySQL only `BLOB` /
+-- `LONGBLOB`, and SQLite takes `BLOB`, with no keyword common to all three —
+-- so a single migration SQL string applied verbatim to every backend can't
+-- create it. It is created per-backend in `create_user_avatars_table`
+-- (`sql_store.rs`), run from `SqlStore::new` after the portable migrations,
+-- the same way `retire_legacy_users_email_column` handles DDL the portable
+-- dialect can't express. The avatar *value* still round-trips uniformly
+-- through SQLx-Any (`Vec<u8>` ⇄ blob), so only the table's DDL is per-backend.
+
+ALTER TABLE users ADD COLUMN avatar_updated_at VARCHAR(32);

@@ -4,7 +4,7 @@
 //! motion vocabulary.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::CELL_SIZE;
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -82,13 +82,13 @@ pub(crate) fn build_potion_assets(
 /// Spawns the Potion entity hierarchy for the `'H'` cell at `(r, c)`.
 /// The marker carries the cell coordinate so the tick driver can despawn
 /// this entity on `GameEvent::PlayerHealed { cell, .. }`.
-pub(crate) fn spawn_potion(commands: &mut Commands, assets: &PotionAssets, r: usize, c: usize) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+pub(crate) fn spawn_potion(commands: &mut Commands, assets: &PotionAssets, r: usize, c: usize, placement: LevelPlacement) {
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let root = commands
         .spawn((
-            super::HealthMarker { cell: (r, c) },
-            Transform::from_xyz(x, POTION_BASE_Y, z),
+            super::HealthMarker { cell: (r, c), level: placement.level },
+            Transform::from_xyz(x, placement.world_y(POTION_BASE_Y), z),
             Visibility::default(),
         ))
         .id();

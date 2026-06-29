@@ -16,7 +16,7 @@ use data_model::{
     EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User,
     UserEmail, UserLogin,
 };
-use storage::{Error, Store};
+use storage::{Error, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreboardEntry, SortDirection, Store};
 use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -43,6 +43,7 @@ pub fn make_user(username: &str, email: &str) -> User {
         // the round-trip even though the stored value is correct.
         created_at: chrono::Utc::now().trunc_subsecs(3),
         last_sign_in_at: None,
+        avatar_updated_at: None,
     }
 }
 
@@ -949,6 +950,39 @@ pub async fn update_maze_persists_changes(store: &mut Box<dyn Store>) {
     assert_eq!(loaded.name, "renamed");
 }
 
+pub async fn create_maze_round_trips_game_settings(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+
+    // A maze carrying opaque game settings round-trips them unchanged.
+    let mut with_settings = make_maze("with-settings");
+    with_settings.game_settings = Some(serde_json::json!({
+        "skyType": "dungeon",
+        "wallType": "lava",
+        "timerSeconds": 90
+    }));
+    store
+        .create_maze(&alice, &mut with_settings)
+        .await
+        .expect("create_maze with settings");
+    let loaded = store
+        .get_maze(&alice, &with_settings.id)
+        .await
+        .expect("get_maze with settings");
+    assert_eq!(loaded.game_settings, with_settings.game_settings);
+
+    // A maze with no settings round-trips as None.
+    let mut without = make_maze("no-settings");
+    store
+        .create_maze(&alice, &mut without)
+        .await
+        .expect("create_maze no settings");
+    let loaded_without = store
+        .get_maze(&alice, &without.id)
+        .await
+        .expect("get_maze no settings");
+    assert!(loaded_without.game_settings.is_none());
+}
+
 pub async fn get_maze_is_scoped_to_owner(store: &mut Box<dyn Store>) {
     let (alice, bob) = fixture_two_users(store).await;
     let mut alice_maze = make_maze("private");
@@ -1204,6 +1238,127 @@ pub async fn purge_user_returns_not_found_for_unknown_id(store: &mut Box<dyn Sto
     assert!(
         matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
         "got {err:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — avatars
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Sample PNG-ish bytes — the store treats them as opaque, so any byte
+/// sequence exercises the binary round-trip. Includes a zero byte and a
+/// high byte to catch any text/UTF-8 mishandling on a backend.
+fn sample_avatar_bytes() -> Vec<u8> {
+    vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x00, 0xFF]
+}
+
+pub async fn set_user_avatar_round_trips_via_get_user_avatar(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let bytes = sample_avatar_bytes();
+    store
+        .set_user_avatar(alice.id, bytes.clone())
+        .await
+        .expect("set_user_avatar");
+    let got = store.get_user_avatar(alice.id).await.expect("get_user_avatar");
+    assert_eq!(got, Some(bytes), "avatar bytes must round-trip unchanged");
+    // The marker on the users row must move in lock-step with the bytes.
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.avatar_updated_at.is_some(),
+        "set_user_avatar must stamp avatar_updated_at"
+    );
+}
+
+pub async fn get_user_avatar_returns_none_when_unset(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let got = store.get_user_avatar(alice.id).await.expect("get_user_avatar");
+    assert_eq!(got, None, "a user with no avatar must return None");
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.avatar_updated_at.is_none(),
+        "a user with no avatar must have avatar_updated_at = None"
+    );
+}
+
+pub async fn set_user_avatar_replaces_existing(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .set_user_avatar(alice.id, vec![1, 2, 3])
+        .await
+        .expect("first set");
+    store
+        .set_user_avatar(alice.id, vec![9, 8, 7, 6])
+        .await
+        .expect("second set replaces");
+    let got = store.get_user_avatar(alice.id).await.expect("get_user_avatar");
+    assert_eq!(got, Some(vec![9, 8, 7, 6]), "latest set must win");
+}
+
+pub async fn clear_user_avatar_removes_it(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .set_user_avatar(alice.id, sample_avatar_bytes())
+        .await
+        .expect("set_user_avatar");
+    store
+        .clear_user_avatar(alice.id)
+        .await
+        .expect("clear_user_avatar");
+    assert_eq!(
+        store.get_user_avatar(alice.id).await.expect("get_user_avatar"),
+        None,
+        "avatar must be gone after clear"
+    );
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.avatar_updated_at.is_none(),
+        "clear_user_avatar must reset avatar_updated_at to None"
+    );
+}
+
+pub async fn clear_user_avatar_is_idempotent_when_unset(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    // Clearing a user that never had an avatar is a successful no-op.
+    store
+        .clear_user_avatar(alice.id)
+        .await
+        .expect("clear with no avatar must succeed");
+    assert_eq!(
+        store.get_user_avatar(alice.id).await.expect("get_user_avatar"),
+        None
+    );
+}
+
+pub async fn set_user_avatar_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .set_user_avatar(id, sample_avatar_bytes())
+        .await
+        .expect_err("setting an avatar for an unknown user must fail");
+    assert!(
+        matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn purge_user_cascades_to_avatar(store: &mut Box<dyn Store>) {
+    // Hard-delete must take the avatar with it: the SqlStore FK
+    // `ON DELETE CASCADE` removes the user_avatars row, and the FileStore
+    // hard-delete removes the user directory (avatar.png included).
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .set_user_avatar(alice.id, sample_avatar_bytes())
+        .await
+        .expect("set_user_avatar");
+    assert!(
+        store.get_user_avatar(alice.id).await.expect("pre-purge get").is_some(),
+        "precondition: avatar present before purge"
+    );
+    store.purge_user(alice.id).await.expect("purge_user");
+    assert_eq!(
+        store.get_user_avatar(alice.id).await.expect("post-purge get"),
+        None,
+        "purge must remove the avatar"
     );
 }
 
@@ -1867,4 +2022,365 @@ pub async fn empty_clears_all_data(store: &mut Box<dyn Store>) {
     // when the user's mazes directory no longer exists. The user-list
     // assertion is sufficient: no users → no mazes (mazes are owned).
     assert!(store.get_users().await.expect("get_users").is_empty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ScoreStore
+// ─────────────────────────────────────────────────────────────────────────
+
+fn score_entry(
+    user_id: Uuid,
+    maze_id: Option<&str>,
+    challenge: Option<&str>,
+    score: u64,
+    elapsed_ms: u64,
+) -> ScoreEntry {
+    ScoreEntry {
+        id: Uuid::new_v4(),
+        user_id,
+        maze_id: maze_id.map(str::to_string),
+        challenge: challenge.map(str::to_string),
+        score,
+        elapsed_ms,
+        // Millisecond precision so the value round-trips identically through the
+        // SQL backends (which store RFC 3339 to millis) and FileStore.
+        recorded_at: Utc::now().trunc_subsecs(3),
+    }
+}
+
+const FASTEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Time,
+    direction: SortDirection::Ascending,
+};
+const SLOWEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Time,
+    direction: SortDirection::Descending,
+};
+const HIGHEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Score,
+    direction: SortDirection::Descending,
+};
+const LOWEST: ScoreOrdering = ScoreOrdering {
+    metric: ScoreMetric::Score,
+    direction: SortDirection::Ascending,
+};
+
+// Seeds a maze owned by `owner` and returns its assigned id.
+async fn fixture_maze(store: &mut Box<dyn Store>, owner: &User, name: &str) -> String {
+    let mut maze = make_maze(name);
+    store.create_maze(owner, &mut maze).await.expect("fixture_maze");
+    maze.id
+}
+
+pub async fn score_record_round_trips_for_both_subjects(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_id = fixture_maze(store, &alice, "board-maze").await;
+
+    let on_maze = score_entry(alice.id, Some(&maze_id), None, 5, 4_200);
+    let on_challenge = score_entry(alice.id, None, Some("hard:7"), 3, 9_100);
+    let maze_row = store.record_score(&on_maze).await.expect("record maze score");
+    let challenge_row = store
+        .record_score(&on_challenge)
+        .await
+        .expect("record challenge score");
+    assert_eq!(maze_row, on_maze.id);
+    assert_eq!(challenge_row, on_challenge.id);
+
+    let board = store
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
+        .await
+        .expect("maze_leaderboard");
+    assert_eq!(board, vec![ScoreboardEntry { entry: on_maze.clone(), username: None, avatar_updated_at: None }]);
+
+    let challenge_board = store
+        .challenge_leaderboard("hard:7", HIGHEST, 10, 0, false)
+        .await
+        .expect("challenge_leaderboard");
+    assert_eq!(challenge_board, vec![ScoreboardEntry { entry: on_challenge.clone(), username: None, avatar_updated_at: None }]);
+
+    // Personal history aggregates a player's runs across both subjects.
+    let history = store
+        .user_history(alice.id, 10, 0)
+        .await
+        .expect("user_history");
+    assert_eq!(history.len(), 2);
+}
+
+pub async fn score_record_rejects_invalid_subject(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    // Both subjects set.
+    let both = score_entry(alice.id, Some("m1"), Some("c:1"), 1, 100);
+    assert!(store.record_score(&both).await.is_err());
+    // Neither subject set.
+    let neither = score_entry(alice.id, None, None, 1, 100);
+    assert!(store.record_score(&neither).await.is_err());
+}
+
+pub async fn score_maze_leaderboard_orders_by_metric_and_direction(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_id = fixture_maze(store, &alice, "board-maze").await;
+    // (score, elapsed_ms): (10, 5000), (2, 1000), (6, 3000).
+    for (score, ms) in [(10u64, 5_000u64), (2, 1_000), (6, 3_000)] {
+        store
+            .record_score(&score_entry(alice.id, Some(&maze_id), None, score, ms))
+            .await
+            .expect("record_score");
+    }
+    let elapsed =
+        |rows: Vec<ScoreboardEntry>| rows.iter().map(|e| e.entry.elapsed_ms).collect::<Vec<_>>();
+    let scores = |rows: Vec<ScoreboardEntry>| rows.iter().map(|e| e.entry.score).collect::<Vec<_>>();
+
+    let fastest = store.maze_leaderboard(&maze_id, FASTEST, 10, 0, false).await.expect("fastest");
+    assert_eq!(elapsed(fastest), vec![1_000, 3_000, 5_000]);
+    let slowest = store.maze_leaderboard(&maze_id, SLOWEST, 10, 0, false).await.expect("slowest");
+    assert_eq!(elapsed(slowest), vec![5_000, 3_000, 1_000]);
+    let highest = store.maze_leaderboard(&maze_id, HIGHEST, 10, 0, false).await.expect("highest");
+    assert_eq!(scores(highest), vec![10, 6, 2]);
+    let lowest = store.maze_leaderboard(&maze_id, LOWEST, 10, 0, false).await.expect("lowest");
+    assert_eq!(scores(lowest), vec![2, 6, 10]);
+}
+
+pub async fn score_challenge_leaderboard_orders_and_pages(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    for score in [10u64, 2, 6, 8] {
+        store
+            .record_score(&score_entry(alice.id, None, Some("c:1"), score, 1_000))
+            .await
+            .expect("record_score");
+    }
+    // Highest first: 10, 8, 6, 2. Page of 2 from offset 0, then offset 2.
+    let page1 = store
+        .challenge_leaderboard("c:1", HIGHEST, 2, 0, false)
+        .await
+        .expect("page1");
+    assert_eq!(page1.iter().map(|e| e.entry.score).collect::<Vec<_>>(), vec![10, 8]);
+    let page2 = store
+        .challenge_leaderboard("c:1", HIGHEST, 2, 2, false)
+        .await
+        .expect("page2");
+    assert_eq!(page2.iter().map(|e| e.entry.score).collect::<Vec<_>>(), vec![6, 2]);
+    // Offset past the end yields an empty page.
+    let page3 = store
+        .challenge_leaderboard("c:1", HIGHEST, 2, 4, false)
+        .await
+        .expect("page3");
+    assert!(page3.is_empty());
+}
+
+pub async fn score_user_history_is_recent_first_and_pages(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let base = Utc::now().trunc_subsecs(3);
+    // Three runs at increasing completion times — newest must come first.
+    for secs in [0i64, 1, 2] {
+        let mut e = score_entry(alice.id, None, Some("c:1"), 1, 1_000);
+        e.recorded_at = base + Duration::seconds(secs);
+        store.record_score(&e).await.expect("record_score");
+    }
+    let all = store
+        .user_history(alice.id, 10, 0)
+        .await
+        .expect("user_history");
+    let ts: Vec<_> = all.iter().map(|e| e.recorded_at).collect();
+    assert!(ts[0] > ts[1] && ts[1] > ts[2], "must be most-recent first");
+    // Paging: one row per page.
+    let first = store.user_history(alice.id, 1, 0).await.expect("first");
+    let second = store.user_history(alice.id, 1, 1).await.expect("second");
+    assert_eq!(first[0].recorded_at, ts[0]);
+    assert_eq!(second[0].recorded_at, ts[1]);
+}
+
+pub async fn score_boards_are_empty_for_unknown_subject(store: &mut Box<dyn Store>) {
+    assert!(store
+        .maze_leaderboard("does-not-exist", FASTEST, 10, 0, false)
+        .await
+        .expect("maze_leaderboard")
+        .is_empty());
+    assert!(store
+        .challenge_leaderboard("nope:0", HIGHEST, 10, 0, false)
+        .await
+        .expect("challenge_leaderboard")
+        .is_empty());
+    assert!(store
+        .user_history(Uuid::new_v4(), 10, 0)
+        .await
+        .expect("user_history")
+        .is_empty());
+}
+
+pub async fn score_delete_user_cascades_player_rows(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 1, 100))
+        .await
+        .expect("record_score");
+    assert_eq!(store.user_history(alice.id, 10, 0).await.unwrap().len(), 1);
+    store.delete_user(alice.id).await.expect("delete_user");
+    assert!(store.user_history(alice.id, 10, 0).await.unwrap().is_empty());
+}
+
+pub async fn score_delete_maze_cascades_its_board_not_challenge_rows(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_id = fixture_maze(store, &alice, "board-maze").await;
+    store
+        .record_score(&score_entry(alice.id, Some(&maze_id), None, 5, 100))
+        .await
+        .expect("record maze score");
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:9"), 3, 100))
+        .await
+        .expect("record challenge score");
+
+    store.delete_maze(&alice, &maze_id).await.expect("delete_maze");
+
+    assert!(store
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
+        .await
+        .unwrap()
+        .is_empty());
+    // The curated challenge row has no maze parent — it survives.
+    assert_eq!(
+        store.challenge_leaderboard("c:9", HIGHEST, 10, 0, false).await.unwrap().len(),
+        1
+    );
+}
+
+pub async fn score_delete_user_cascades_boards_of_owned_mazes(store: &mut Box<dyn Store>) {
+    let (alice, bob) = fixture_two_users(store).await;
+    // Alice owns the maze; Bob plays it (boards aggregate every player).
+    let maze_id = fixture_maze(store, &alice, "alice-maze").await;
+    store
+        .record_score(&score_entry(bob.id, Some(&maze_id), None, 7, 2_000))
+        .await
+        .expect("record bob's run on alice's maze");
+    assert_eq!(store.maze_leaderboard(&maze_id, HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+
+    // Deleting Alice deletes her maze, and thus its board — including Bob's run.
+    store.delete_user(alice.id).await.expect("delete_user");
+    assert!(store
+        .maze_leaderboard(&maze_id, HIGHEST, 10, 0, false)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(store.user_history(bob.id, 10, 0).await.unwrap().is_empty());
+}
+
+/// Clearing a leaderboard removes only the targeted subject's rows, returns the
+/// number removed, and is a no-op (0) on an already-empty board.
+pub async fn score_clear_resets_only_the_targeted_board(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let maze_a = fixture_maze(store, &alice, "maze-a").await;
+    let maze_b = fixture_maze(store, &alice, "maze-b").await;
+    // Two runs on maze A, one on maze B, one on a curated challenge.
+    for s in [5u64, 3] {
+        store
+            .record_score(&score_entry(alice.id, Some(&maze_a), None, s, 1_000))
+            .await
+            .expect("record maze-a run");
+    }
+    store
+        .record_score(&score_entry(alice.id, Some(&maze_b), None, 9, 1_000))
+        .await
+        .expect("record maze-b run");
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 7, 1_000))
+        .await
+        .expect("record challenge run");
+
+    // Clearing maze A removes exactly its two rows; B and the challenge survive.
+    assert_eq!(store.clear_maze_scores(&maze_a).await.expect("clear maze a"), 2);
+    assert!(store.maze_leaderboard(&maze_a, HIGHEST, 10, 0, false).await.unwrap().is_empty());
+    assert_eq!(store.maze_leaderboard(&maze_b, HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+    assert_eq!(store.challenge_leaderboard("c:1", HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+
+    // Clearing an already-empty board is a no-op returning 0.
+    assert_eq!(store.clear_maze_scores(&maze_a).await.expect("clear empty board"), 0);
+
+    // Clearing the challenge removes its row; maze B still stands.
+    assert_eq!(store.clear_challenge_scores("c:1").await.expect("clear challenge"), 1);
+    assert!(store.challenge_leaderboard("c:1", HIGHEST, 10, 0, false).await.unwrap().is_empty());
+    assert_eq!(store.maze_leaderboard(&maze_b, HIGHEST, 10, 0, false).await.unwrap().len(), 1);
+}
+
+/// `include_usernames` resolves each player's name on a board; omitting it
+/// leaves `username` unset — regardless of backend (SqlStore joins `users`,
+/// FileStore reads the player files).
+pub async fn score_leaderboard_includes_usernames_when_requested(store: &mut Box<dyn Store>) {
+    let (alice, bob) = fixture_two_users(store).await;
+    // Both players post a run on the same curated challenge board.
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 5, 1_000))
+        .await
+        .expect("alice run");
+    store
+        .record_score(&score_entry(bob.id, None, Some("c:1"), 9, 2_000))
+        .await
+        .expect("bob run");
+
+    // include_usernames = true → both names resolved.
+    let named = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, true)
+        .await
+        .expect("named board");
+    assert_eq!(named.len(), 2);
+    let mut names: Vec<String> = named.iter().filter_map(|e| e.username.clone()).collect();
+    names.sort();
+    assert_eq!(names, vec![alice.username.clone(), bob.username.clone()]);
+
+    // include_usernames = false → no names resolved.
+    let anon = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, false)
+        .await
+        .expect("anon board");
+    assert!(anon.iter().all(|e| e.username.is_none()));
+}
+
+/// A board row carries the player's `avatar_updated_at` (resolved via the same
+/// lookup that resolves `username`): `Some` for a player with an avatar, `None`
+/// for one without and whenever `include_usernames` is false.
+pub async fn score_leaderboard_includes_avatar_updated_at_when_requested(
+    store: &mut Box<dyn Store>,
+) {
+    let (alice, bob) = fixture_two_users(store).await;
+    // Alice has an avatar; bob does not.
+    store
+        .set_user_avatar(alice.id, vec![0x89, 0x50, 0x4E, 0x47])
+        .await
+        .expect("set alice avatar");
+    store
+        .record_score(&score_entry(alice.id, None, Some("c:1"), 5, 1_000))
+        .await
+        .expect("alice run");
+    store
+        .record_score(&score_entry(bob.id, None, Some("c:1"), 9, 2_000))
+        .await
+        .expect("bob run");
+
+    // include_usernames = true → avatars resolved alongside names.
+    let named = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, true)
+        .await
+        .expect("named board");
+    let alice_row = named
+        .iter()
+        .find(|e| e.entry.user_id == alice.id)
+        .expect("alice row");
+    let bob_row = named
+        .iter()
+        .find(|e| e.entry.user_id == bob.id)
+        .expect("bob row");
+    assert!(
+        alice_row.avatar_updated_at.is_some(),
+        "player with an avatar must resolve avatar_updated_at on the board"
+    );
+    assert!(
+        bob_row.avatar_updated_at.is_none(),
+        "player without an avatar must have avatar_updated_at = None"
+    );
+
+    // include_usernames = false → the avatar lookup is skipped too.
+    let anon = store
+        .challenge_leaderboard("c:1", HIGHEST, 10, 0, false)
+        .await
+        .expect("anon board");
+    assert!(anon.iter().all(|e| e.avatar_updated_at.is_none()));
 }

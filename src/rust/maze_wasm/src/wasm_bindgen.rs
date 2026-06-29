@@ -3,8 +3,8 @@ use crate::wasm_common::{
     new_maze, new_maze_game, to_cell_type_enum, to_generation_algorithm, DirectionWasm,
     GenerationAlgorithmWasm, MazeCellTypeWasm, MazeGameWasm, MoveResultWasm, MazeWasm,
 };
-use data_model::MazePoint;
-use js_sys::{Array, Object, Reflect};
+use data_model::{CellEntity, MazePoint};
+use js_sys::{Array, Object, Reflect, JSON};
 use maze::{Generator, GeneratorOptions, MazeSolution, MazeSolver};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
@@ -173,12 +173,31 @@ fn to_js_key_obj(row: usize, col: usize, id: u32) -> Object {
     obj
 }
 
-/// Converts an enemy's current state to a JavaScript object (`{ row, col, id }`).
-fn to_js_enemy_obj(row: usize, col: usize, id: u32) -> Object {
+/// Converts an enemy's current state to a JavaScript object
+/// (`{ row, col, id, damage, movePeriodMs, enemyType? }`). `damage` and
+/// `movePeriodMs` are the resolved per-enemy values (per-cell override else the
+/// per-game default); `enemyType` is present only when the spawn cell carried a
+/// rig override, so renderers fall back to their own default when it is absent.
+fn to_js_enemy_obj(enemy: &maze::Enemy) -> Object {
     let obj = Object::new();
-    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
-    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
-    Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(enemy.row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(enemy.col as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(enemy.id as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("damage"), &JsValue::from_f64(enemy.damage as f64)).unwrap();
+    Reflect::set(
+        &obj,
+        &JsValue::from_str("movePeriodMs"),
+        &JsValue::from_f64(enemy.move_period_ms as f64),
+    )
+    .unwrap();
+    if let Some(enemy_type) = enemy.enemy_type {
+        Reflect::set(
+            &obj,
+            &JsValue::from_str("enemyType"),
+            &JsValue::from_str(enemy_type.as_wire_str()),
+        )
+        .unwrap();
+    }
     obj
 }
 
@@ -194,6 +213,31 @@ fn to_js_health_pickup_obj(row: usize, col: usize, id: u32) -> Object {
     Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
     Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
     Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id as f64)).unwrap();
+    obj
+}
+
+/// Converts an uncollected treasure cell to a JavaScript object
+/// (`{ row, col, style, value }`). `style` is the lowercase wire string for the
+/// treasure's type / rig; `value` is the resolved score reward (the per-cell
+/// override else the type's default value). Renderers key on `(row, col)` —
+/// a consumed treasure clears to `' '` and drops out of the snapshot.
+fn to_js_treasure_obj(row: usize, col: usize, style: maze::TreasureStyle, value: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("style"), &JsValue::from_str(style.as_wire_str())).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("value"), &JsValue::from_f64(value as f64)).unwrap();
+    obj
+}
+
+/// Converts a per-style collected-treasure tally to a JavaScript object
+/// (`{ style, count }`). `style` is the lowercase wire string; `count` is the
+/// number of that style the player has collected so far. Feeds the bag's
+/// grouped per-style display.
+fn to_js_collected_treasure_obj(style: maze::TreasureStyle, count: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("style"), &JsValue::from_str(style.as_wire_str())).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("count"), &JsValue::from_f64(count as f64)).unwrap();
     obj
 }
 
@@ -237,6 +281,13 @@ fn to_js_game_event_obj(event: &maze::GameEvent) -> Object {
         maze::GameEvent::KeyCollected { cell: (row, col), id } => {
             Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("keyCollected")).unwrap();
             Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(*id as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
+        maze::GameEvent::TreasureCollected { cell: (row, col), style, value } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("treasureCollected")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("style"), &JsValue::from_str(style.as_wire_str())).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("value"), &JsValue::from_f64(*value as f64)).unwrap();
             Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
             Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
         }
@@ -814,7 +865,7 @@ impl MazeGameWasm {
     pub fn enemies(&self) -> Array {
         let result = Array::new();
         for enemy in self.game.enemies() {
-            result.push(&to_js_enemy_obj(enemy.row, enemy.col, enemy.id));
+            result.push(&to_js_enemy_obj(&enemy));
         }
         result
     }
@@ -859,6 +910,170 @@ impl MazeGameWasm {
             }
         }
         result
+    }
+
+    /// Returns the uncollected treasure cells as a JavaScript `Array` of
+    /// `{ row, col, style, value }` objects, in row-major order. `style` drives
+    /// the rendered rig; `value` is the score awarded on pickup (the per-cell
+    /// override else the type's default value). A consumed treasure clears to
+    /// `' '` and drops out of the snapshot, so renderers key on `(row, col)`.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","T","F"]]}');
+    ///         console.log("treasures() = ", game.treasures());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn treasures(&self) -> Array {
+        let result = Array::new();
+        for ((r, c), style, value) in self.game.treasures() {
+            result.push(&to_js_treasure_obj(r, c, style, value));
+        }
+        result
+    }
+
+    /// Returns the treasure collected so far as a JavaScript `Array` of
+    /// `{ style, count }` objects, grouped per style in ascending default value
+    /// (silver, gold, jewels, diamonds). Styles never collected are omitted, so
+    /// every `count` is at least `1`. Feeds the bag's grouped per-style display.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","T","F"]]}');
+    ///         game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
+    ///         console.log("collected_treasure() = ", game.collected_treasure());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn collected_treasure(&self) -> Array {
+        let result = Array::new();
+        for (style, count) in self.game.collected_treasure() {
+            result.push(&to_js_collected_treasure_obj(style, count));
+        }
+        result
+    }
+    #[wasm_bindgen]
+    /// Returns the static maze grid as a 2D array of single-character strings
+    /// (`"S"`/`"F"`/`"W"`/`"K"`/`"D"`/`"E"`/`"H"`/`" "`).
+    ///
+    /// The host renders walls, flags and feature-cell sprites from this. Unlike the
+    /// stored definition (where an overridden cell is an array), this is always the
+    /// plain-character form, so callers never parse the char-or-array wire shape.
+    /// Dynamic state (player, enemies, door open/closed, collected keys / consumed
+    /// health) comes from the other getters; per-cell visual overrides come from
+    /// [`MazeGameWasm::cell_overrides`].
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("grid() = ", game.grid());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn grid(&self) -> Array {
+        let rows = Array::new();
+        for row in self.game.grid() {
+            let js_row = Array::new();
+            for &ch in row {
+                js_row.push(&JsValue::from_str(&ch.to_string()));
+            }
+            rows.push(&js_row);
+        }
+        rows
+    }
+    #[wasm_bindgen]
+    /// Returns the per-cell overrides as an array of `{ row, col, entity }`, where
+    /// `entity` is the wire-shape override object (a `type` discriminator plus the set
+    /// fields, e.g. `{ type: "H", healthStyle: "potion" }`).
+    ///
+    /// The host reads static visual rigs (health / key / door) from these; the moving
+    /// enemy's rig rides the live enemy object ([`MazeGameWasm::enemies`]) instead,
+    /// since it walks away from its spawn cell. Returns an empty array for a maze with
+    /// no overrides.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+    ///         console.log("cell_overrides() = ", game.cell_overrides());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn cell_overrides(&self) -> Result<Array, JsValue> {
+        let result = Array::new();
+        for ((row, col), entities) in self.game.cell_entities() {
+            if let Some(entity) = entities.first() {
+                let json = serde_json::to_string(entity).map_err(|e| {
+                    JsValue::from_str(&format!("failed to serialise cell entity: {e}"))
+                })?;
+                let obj = Object::new();
+                Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64))?;
+                Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64))?;
+                Reflect::set(&obj, &JsValue::from_str("entity"), &JSON::parse(&json)?)?;
+                result.push(&obj);
+            }
+        }
+        Ok(result)
     }
 
     /// Returns the time in milliseconds until the next [`MazeGameWasm::tick`]
@@ -1394,6 +1609,207 @@ impl MazeWasm {
             return Err(JsValue::from_str("column out of bounds"));
         }
         Ok(to_js_cell_info_obj(self.maze.definition.grid[row][col]))
+    }
+    #[wasm_bindgen]
+    /// Returns the per-cell entity override at the given location, or `null`
+    /// when the cell carries none.
+    ///
+    /// The returned object is the entity in its wire shape — a `type`
+    /// discriminator (`"E"` / `"H"` / `"K"` / `"D"`) plus only the override
+    /// fields that are set, e.g. `{ type: "E", enemyType: "ghost", damage: 2 }` —
+    /// so JavaScript never parses the char-or-array grid form itself.
+    ///
+    /// # Arguments
+    ///
+    /// * `row` - Row index (zero-based)
+    /// * `col` - Column index (zero-based)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error if the target location is out of range.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(1, 3);
+    ///         maze.set_enemy_cells(0, 1, 0, 1);
+    ///         maze.set_cell_entity(0, 1, { type: "E", enemyType: "ghost", damage: 2 });
+    ///         console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1));
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn get_cell_entity(&self, row: JsValue, col: JsValue) -> Result<JsValue, JsValue> {
+        let row = Self::arg_to_usize("row", row)?;
+        if row >= self.maze.definition.row_count() {
+            return Err(JsValue::from_str("row out of bounds"));
+        }
+        let col = Self::arg_to_usize("col", col)?;
+        if col >= self.maze.definition.col_count() {
+            return Err(JsValue::from_str("column out of bounds"));
+        }
+        match self
+            .maze
+            .definition
+            .cell_entities
+            .get(&(row, col))
+            .and_then(|entities| entities.first())
+        {
+            Some(entity) => {
+                let json = serde_json::to_string(entity).map_err(|e| {
+                    JsValue::from_str(&format!("failed to serialise cell entity: {e}"))
+                })?;
+                JSON::parse(&json)
+            }
+            None => Ok(JsValue::NULL),
+        }
+    }
+    #[wasm_bindgen]
+    /// Sets the per-cell entity override at the given location, replacing any
+    /// existing one.
+    ///
+    /// `entity` is the wire-shape object — a `type` discriminator plus the
+    /// override fields to set, e.g. `{ type: "E", enemyType: "ghost", damage: 2 }`.
+    /// The `type` must match the cell's current character (set the cell to the
+    /// matching kind first, e.g. via `set_enemy_cells`). An entity that sets no
+    /// field is accepted but normalises away on the next serialise.
+    ///
+    /// # Arguments
+    ///
+    /// * `row` - Row index (zero-based)
+    /// * `col` - Column index (zero-based)
+    /// * `entity` - The entity override object
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target location is out of range
+    /// - If `entity` is not a valid entity object
+    /// - If the entity `type` does not match the cell's character
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(1, 3);
+    ///         maze.set_health_cells(0, 1, 0, 1);
+    ///         maze.set_cell_entity(0, 1, { type: "H", healthStyle: "potion", healAmount: 2 });
+    ///         console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1));
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn set_cell_entity(
+        &mut self,
+        row: JsValue,
+        col: JsValue,
+        entity: JsValue,
+    ) -> Result<(), JsValue> {
+        let row = Self::arg_to_usize("row", row)?;
+        if row >= self.maze.definition.row_count() {
+            return Err(JsValue::from_str("row out of bounds"));
+        }
+        let col = Self::arg_to_usize("col", col)?;
+        if col >= self.maze.definition.col_count() {
+            return Err(JsValue::from_str("column out of bounds"));
+        }
+        let json = JSON::stringify(&entity)
+            .map_err(|_| JsValue::from_str("entity is not a serialisable object"))?
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("entity is not a serialisable object"))?;
+        let parsed: CellEntity = serde_json::from_str(&json)
+            .map_err(|e| JsValue::from_str(&format!("invalid cell entity: {e}")))?;
+        let cell_char = self.maze.definition.grid[row][col];
+        if parsed.cell_char() != cell_char {
+            return Err(JsValue::from_str(&format!(
+                "cell entity type '{}' does not match cell character '{}'",
+                parsed.cell_char(),
+                cell_char
+            )));
+        }
+        self.maze
+            .definition
+            .cell_entities
+            .insert((row, col), vec![parsed]);
+        Ok(())
+    }
+    #[wasm_bindgen]
+    /// Clears any per-cell entity override at the given location. A cell with no
+    /// override is unaffected.
+    ///
+    /// # Arguments
+    ///
+    /// * `row` - Row index (zero-based)
+    /// * `col` - Column index (zero-based)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error if the target location is out of range.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(1, 3);
+    ///         maze.set_enemy_cells(0, 1, 0, 1);
+    ///         maze.set_cell_entity(0, 1, { type: "E", damage: 2 });
+    ///         maze.clear_cell_entity(0, 1);
+    ///         console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1)); // null
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn clear_cell_entity(&mut self, row: JsValue, col: JsValue) -> Result<(), JsValue> {
+        let row = Self::arg_to_usize("row", row)?;
+        if row >= self.maze.definition.row_count() {
+            return Err(JsValue::from_str("row out of bounds"));
+        }
+        let col = Self::arg_to_usize("col", col)?;
+        if col >= self.maze.definition.col_count() {
+            return Err(JsValue::from_str("column out of bounds"));
+        }
+        self.maze.definition.cell_entities.remove(&(row, col));
+        Ok(())
     }
     #[wasm_bindgen]
     /// Sets the start cell location within the maze instance
@@ -2126,6 +2542,7 @@ impl MazeWasm {
     /// * `spare_keys` - Number of spare keys planted on off-spine branches after solvability check (undefined = default 0)
     /// * `enemy_count` - Number of enemy cells to auto-place at random passable cells (undefined = default 0)
     /// * `health_count` - Number of health-pickup cells to auto-place at random passable cells (undefined = default 0)
+    /// * `treasure_count` - Number of treasure cells to auto-place dead-end-first, type-weighted (undefined = default 0)
     ///
     /// # Returns
     ///
@@ -2194,6 +2611,7 @@ impl MazeWasm {
         spare_keys: JsValue,
         enemy_count: JsValue,
         health_count: JsValue,
+        treasure_count: JsValue,
     ) -> Result<(), JsValue> {
         let row_count = Self::arg_to_usize("row_count", row_count)?;
         let col_count = Self::arg_to_usize("col_count", col_count)?;
@@ -2235,6 +2653,7 @@ impl MazeWasm {
         let spare_keys = Self::opt_arg_to_usize("spare_keys", spare_keys)?;
         let enemy_count = Self::opt_arg_to_usize("enemy_count", enemy_count)?;
         let health_count = Self::opt_arg_to_usize("health_count", health_count)?;
+        let treasure_count = Self::opt_arg_to_usize("treasure_count", treasure_count)?;
 
         let options = GeneratorOptions {
             row_count,
@@ -2251,6 +2670,7 @@ impl MazeWasm {
             spare_keys,
             enemy_count,
             health_count,
+            treasure_count,
         };
 
         let maze = Generator { options }

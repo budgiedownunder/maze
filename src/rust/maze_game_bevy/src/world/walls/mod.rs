@@ -1,15 +1,24 @@
-pub(crate) mod ew_panel;
-pub(crate) mod ns_panel;
+pub(crate) mod iron_fence;
+pub(crate) mod lava;
+pub(crate) mod rim;
+pub(crate) mod solid;
+pub(crate) mod water;
 
-use crate::state::GameConfig;
+pub(crate) use solid::spawn_walls_for_cell;
+
+use crate::images::make_image;
+use crate::state::{GameConfig, WallType};
+use crate::world::objects::overrides::resolve_wall_type;
 use crate::world::textures::brick::make_brick_texture;
 use crate::world::textures::cobblestone::make_cobblestone_texture;
 use crate::world::textures::dressed_stone::make_dressed_stone_texture;
 use crate::world::textures::wood::make_wood_texture;
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
-use ew_panel::EwPanelAssets;
-use ns_panel::{NsPanelAssets, WallMaterialSpec};
+use maze::CellEntity;
+use solid::ew_panel::EwPanelAssets;
+use solid::ns_panel::{NsPanelAssets, WallMaterialSpec};
+use std::collections::HashMap;
 
 pub(crate) const WALL_HEIGHT: f32 = 3.0;
 pub(crate) const WALL_THICKNESS: f32 = 0.05;
@@ -57,7 +66,7 @@ pub(crate) const WALL_MATERIAL_COBBLESTONE: usize = 3;
 // whether the texture is monochrome or RGB-coloured:
 //   - Greyscale textures (brick, dressed_stone): emissive carries the
 //     chromaticity. Texture is greyscale, emissive RGB tints it.
-//   - RGB-coloured textures (wood, cobblestone — Step 11.S): texture
+//   - RGB-coloured textures (wood, cobblestone): texture
 //     carries per-pixel chromaticity AND per-plank/per-cobble tone
 //     variation. Emissive must stay near-neutral brightness or it
 //     compounds with the texture and saturates.
@@ -156,48 +165,13 @@ pub(crate) fn build_wall_assets(
     ];
 
     WallAssets {
-        ns: ns_panel::build_ns_panel_assets(meshes, materials, &ns_specs),
-        ew: ew_panel::build_ew_panel_assets(meshes, materials, &ew_specs),
+        ns: solid::ns_panel::build_ns_panel_assets(meshes, materials, &ns_specs),
+        ew: solid::ew_panel::build_ew_panel_assets(meshes, materials, &ew_specs),
     }
 }
 
-/// Deterministic hash of `(row, col, seed)` → wall tint variant index in
-/// `0..WALL_TINT_VARIANTS`. Used by `spawn_world` so each cell picks a
-/// stable tint for its walls; the same seed always tints the same cells.
-pub(crate) fn wall_tint_index(r: usize, c: usize, seed: u64) -> usize {
-    let mut h = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    h = h.wrapping_add((r as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9));
-    h = h.wrapping_add((c as u64).wrapping_mul(0x94D0_49BB_1331_11EB));
-    h ^= h >> 30;
-    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    h ^= h >> 27;
-    (h % WALL_TINT_VARIANTS as u64) as usize
-}
-
-/// Deterministic per-quadrant hash returning a wall-material kind in
-/// `0..WALL_MATERIAL_VARIANTS`. The maze is split into a 2×2 NW/NE/SW/SE
-/// grid; each quadrant gets one kind and the seed permutes the
-/// quadrant-to-kind assignment so different seeds rotate the mapping while
-/// keeping all four quadrants distinct (`(zone + shuffle) % 4` over zones
-/// 0..4 is a permutation).
-pub(crate) fn wall_material_index(
-    r: usize,
-    c: usize,
-    rows: usize,
-    cols: usize,
-    seed: u64,
-) -> usize {
-    // Use 2*r < rows / 2*c < cols so the split lands at the midpoint without
-    // floating-point or integer-division surprises.
-    let zone_r: u64 = if r * 2 < rows { 0 } else { 1 };
-    let zone_c: u64 = if c * 2 < cols { 0 } else { 1 };
-    let zone = zone_r * 2 + zone_c;
-    let shuffle = (seed.wrapping_mul(0xF0E1_D2C3_B4A5_9687) >> 32) % WALL_MATERIAL_VARIANTS as u64;
-    ((zone + shuffle) % WALL_MATERIAL_VARIANTS as u64) as usize
-}
-
 /// The wall material kind (`WALL_MATERIAL_*` index) used by cell `(r, c)`.
-/// Mirrors the kind-selection logic in [`spawn_walls_for_cell`]: the
+/// Mirrors the kind-selection logic in [`solid::spawn_walls_for_cell`]: the
 /// per-quadrant material variation when that landmark is on, otherwise the
 /// single configured `wall_type`. A door panel reuses this so it always
 /// renders in the same material as the wall it sits between.
@@ -209,214 +183,345 @@ pub(crate) fn wall_kind_for_cell(
     config: &GameConfig,
 ) -> usize {
     if config.landmarks.wall_material_variation {
-        wall_material_index(r, c, rows, cols, config.seed)
+        solid::wall_material_index(r, c, rows, cols, config.seed)
     } else {
-        config.wall_type.to_kind_index()
+        // A non-occluding per-maze wall_type has no panel material; fall back to
+        // brick for any solid panel still drawn around it.
+        config.wall_type.to_kind_index().unwrap_or(WALL_MATERIAL_BRICK)
     }
 }
 
-pub(crate) fn spawn_walls_for_cell(
-    commands: &mut Commands,
-    assets: &WallAssets,
+/// The forced `WALL_MATERIAL_*` index from a `'W'` cell's wall-type override, or
+/// `None` when the cell has no wall override, a field-less one, or a
+/// non-occluding type (which has no panel material). Used to texture an adjacent
+/// open cell's panel from its wall neighbour's override; `None` means "use the
+/// cell's normal default kind", so plain walls keep their variation/per-maze look.
+pub(crate) fn wall_override_kind(entity: Option<&CellEntity>) -> Option<usize> {
+    if let Some(CellEntity::Wall(over)) = entity {
+        if let Some(wt) = over.wall_type {
+            return WallType::from_wire_str(wt.as_wire_str()).to_kind_index();
+        }
+    }
+    None
+}
+
+/// Whether the `'W'` cell at `(r, c)` is non-occluding (renders an in-cell pool
+/// / bar lattice rather than a solid panel). A non-`'W'` cell is never
+/// non-occluding. Resolves the cell's per-cell `wallType` override against the
+/// per-maze default — the same resolution the spawn loop uses to decide whether
+/// to skip the cell. Shared by the panel-suppression logic ([`solid`]) and the
+/// door corridor / leaf logic ([`crate::world::objects::door`]), which both
+/// treat a non-occluding neighbour as an opening, not a wall (its panel is
+/// suppressed, so a swing has nothing to anchor against and a leaf must seal it).
+pub(crate) fn is_non_occluding_wall(
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
     r: usize,
     c: usize,
+) -> bool {
+    grid[r][c] == 'W'
+        && resolve_wall_type(
+            cell_entities.get(&(r, c)).and_then(|v| v.first()),
+            config.wall_type,
+        )
+        .is_non_occluding()
+}
+
+/// `true` when the player can look *across* cell `(r, c)` to whatever lies
+/// beyond — an open/passable cell, or a low water/lava pool seen over its
+/// surface. A solid wall blocks the view, and an iron fence is looked *through*
+/// (between its bars), not across — both are `false`. The iron fence uses this to
+/// pick its edges: it draws a bar grille on an edge facing a looked-across
+/// neighbour (open ground or a pool), and so never between two adjacent fences
+/// (a fence isn't looked across, so the run stays continuous with no inner bars).
+pub(crate) fn can_be_looked_across(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     config: &GameConfig,
-) {
+    r: usize,
+    c: usize,
+) -> bool {
+    grid[r][c] != 'W'
+        || matches!(
+            resolve_wall_type(
+                cell_entities.get(&(r, c)).and_then(|v| v.first()),
+                config.wall_type,
+            ),
+            WallType::Water | WallType::Lava
+        )
+}
+
+/// The pool type of cell `(r, c)` — `Some(Water)` / `Some(Lava)` for a
+/// non-occluding `'W'` cell whose surface is recessed below floor level, else
+/// `None` (a solid wall, iron fence, or passable cell). The pool rim
+/// ([`rim::spawn_pool_rim`]) uses this to leave the shared edge between two pools
+/// **of the same type** open (one continuous basin) while skirting every other
+/// edge — including the border between *different* pool types, which must not read
+/// as merged.
+pub(crate) fn pool_type_at(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> Option<WallType> {
+    if grid[r][c] != 'W' {
+        return None;
+    }
+    let wt = resolve_wall_type(cell_entities.get(&(r, c)).and_then(|v| v.first()), config.wall_type);
+    matches!(wt, WallType::Water | WallType::Lava).then_some(wt)
+}
+
+/// How far a pool surface's *free* edges are pulled in from the cell boundary.
+/// The surface sheet is full-cell so joined pools meet seamlessly, but a free edge
+/// sitting exactly on the boundary is coplanar with the rim / floor-edge seal
+/// there, so its animated (waving) edge z-fights and shows a thin moving sliver —
+/// glaring on a floating tapered level seen from below. Pulling the free edge just
+/// inside the rim's inner face hides it. A little over the rim thickness gives
+/// margin without visibly shrinking the pool.
+const SURFACE_EDGE_INSET: f32 = 2.0 * WALL_THICKNESS;
+
+/// The transform for a pool cell's surface sheet, with its **free** edges inset so
+/// they tuck behind the rim instead of reaching the cell boundary (see
+/// [`SURFACE_EDGE_INSET`]). A free edge is one where a rim is drawn — the grid
+/// boundary or a neighbour that isn't the *same* pool type; an edge shared with a
+/// same-type pool stays full (zero inset), so the joined surfaces still abut
+/// exactly and the wave flows unbroken across the basin. The inset is applied as a
+/// per-axis scale plus a recentring shift that leaves each non-free edge on its
+/// original boundary.
+pub(crate) fn pool_surface_transform(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    wall_type: WallType,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+) -> Transform {
     let rows = grid.len();
     let cols = grid[r].len();
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let free = |nr: usize, nc: usize| pool_type_at(grid, cell_entities, config, nr, nc) != Some(wall_type);
+    let i = SURFACE_EDGE_INSET;
+    let inset_n = if r == 0 || free(r - 1, c) { i } else { 0.0 };
+    let inset_s = if r + 1 >= rows || free(r + 1, c) { i } else { 0.0 };
+    let inset_w = if c == 0 || free(r, c - 1) { i } else { 0.0 };
+    let inset_e = if c + 1 >= cols || free(r, c + 1) { i } else { 0.0 };
+    // Recentre so each non-inset edge stays on its original boundary (a shared
+    // same-type edge keeps inset 0, so adjacent surfaces still meet exactly).
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0) + (inset_w - inset_e) / 2.0;
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0) + (inset_n - inset_s) / 2.0;
+    let y = placement.world_y(-rim::RECESS_DEPTH);
+    Transform::from_xyz(x, y, z).with_scale(Vec3::new(
+        (CELL_SIZE - inset_w - inset_e) / CELL_SIZE,
+        1.0,
+        (CELL_SIZE - inset_n - inset_s) / CELL_SIZE,
+    ))
+}
 
-    // Material variation supersedes per-cell tint: when on, every wall in
-    // this cell takes the quadrant's material kind and the `wall_tint`
-    // toggle is bypassed. When off, fall back to the original tinted-brick
-    // path (tint index 0 when `wall_tint` is also off).
-    if config.landmarks.wall_material_variation {
-        let kind = wall_material_index(r, c, rows, cols, config.seed);
-        // North face
-        if r == 0 || grid[r - 1][c] == 'W' {
-            ns_panel::spawn_ns_face_material(
-                commands,
-                &assets.ns,
-                kind,
-                Vec3::new(x, PANEL_Y, z - HALF_CELL),
-            );
+/// Builds a tileable greyscale ripple texture from a set of integer-frequency
+/// plane waves (`(freq_u, freq_v)` cycles across the texture) interfered together.
+/// Integer frequencies keep it seamless across cells. Values sit near the top of
+/// the range so, as a pool material's emissive texture, it gently lightens /
+/// darkens the surface into ripples rather than blacking it out. More /
+/// higher-frequency waves read as finer ripples; fewer / lower as broader swells.
+pub(crate) fn ripple_texture(
+    images: &mut Assets<Image>,
+    waves: &[(f32, f32)],
+    amp: f32,
+) -> Handle<Image> {
+    use std::f32::consts::TAU;
+    const S: u32 = 64;
+    let mut pixels = vec![255u8; (S * S * 4) as usize];
+    for y in 0..S {
+        for x in 0..S {
+            let u = x as f32 / S as f32;
+            let v = y as f32 / S as f32;
+            let sum: f32 = waves
+                .iter()
+                .map(|&(fu, fv)| (u * TAU * fu + v * TAU * fv).sin())
+                .sum();
+            let n = if waves.is_empty() {
+                0.0
+            } else {
+                sum / waves.len() as f32
+            };
+            let val = (0.80 + amp * n).clamp(0.0, 1.0);
+            let p = (val * 255.0) as u8;
+            let idx = ((y * S + x) * 4) as usize;
+            pixels[idx] = p;
+            pixels[idx + 1] = p;
+            pixels[idx + 2] = p;
+            pixels[idx + 3] = 255;
         }
-        // South face
-        if r + 1 >= rows || grid[r + 1][c] == 'W' {
-            ns_panel::spawn_ns_face_material(
-                commands,
-                &assets.ns,
-                kind,
-                Vec3::new(x, PANEL_Y, z + HALF_CELL),
-            );
-        }
-        // East face
-        if c + 1 >= cols || grid[r][c + 1] == 'W' {
-            ew_panel::spawn_ew_face_material(
-                commands,
-                &assets.ew,
-                kind,
-                Vec3::new(x + HALF_CELL, PANEL_Y, z),
-            );
-        }
-        // West face
-        if c == 0 || grid[r][c - 1] == 'W' {
-            ew_panel::spawn_ew_face_material(
-                commands,
-                &assets.ew,
-                kind,
-                Vec3::new(x - HALF_CELL, PANEL_Y, z),
-            );
-        }
-        return;
     }
+    images.add(make_image(S, S, pixels))
+}
 
-    // Per-cell wall-tint: hash (r, c, seed) → one of the
-    // WALL_TINT_VARIANTS material variants so every cell's walls
-    // pick up a subtly different shade, and the same maze always
-    // looks the same. When the per-difficulty `landmarks.wall_tint`
-    // toggle is off, every cell falls back to variant 0 (the base).
-    let tint = if config.landmarks.wall_tint {
-        wall_tint_index(r, c, config.seed)
-    } else {
-        0
-    };
-    // The texture kind for the tinted path is now configured per
-    // difficulty via `GameConfig.wall_type` — same set of four kinds the
-    // quadrant-variation path uses, but a single choice for the whole
-    // maze instead of a per-quadrant assignment.
-    let kind = config.wall_type.to_kind_index();
+/// A gentle travelling-wave surface displacement for a pool tile centred at world
+/// `(x, z)` at time `t`. Returns the vertical offset to add to the surface's
+/// resting Y, plus a small tilt rotation. The wave is phased purely by **world
+/// position** (not cell index), so adjacent pool tiles read as one continuous
+/// moving surface rather than each bobbing on its own clock; the tilt follows the
+/// local wave gradient so neighbouring tiles' shared edges stay aligned (no step
+/// at the seam). `amp` / `k` (spatial frequency) / `speed` tune the motion — water
+/// passes a gentle set, lava a slightly more agitated one for bubbling.
+pub(crate) fn pool_wave(x: f32, z: f32, t: f32, amp: f32, k: f32, speed: f32) -> (f32, Quat) {
+    // Separable wave: one component travelling along X, one along Z (with a
+    // slightly different temporal rate so the two don't lock into a grid pattern).
+    let px = k * x + speed * t;
+    let pz = k * z + speed * t * 0.8;
+    let y = amp * 0.5 * (px.sin() + pz.sin());
+    // Local slopes → small-angle tilt that orients the flat tile to the wave so
+    // adjacent tiles meet edge-to-edge.
+    let dydx = amp * 0.5 * k * px.cos();
+    let dydz = amp * 0.5 * k * pz.cos();
+    let rot = Quat::from_rotation_z(dydx) * Quat::from_rotation_x(-dydz);
+    (y, rot)
+}
 
-    // North face
-    if r == 0 || grid[r - 1][c] == 'W' {
-        ns_panel::spawn_ns_face_tinted(
-            commands,
-            &assets.ns,
-            kind,
-            tint,
-            Vec3::new(x, PANEL_Y, z - HALF_CELL),
-        );
+/// In-cell geometry for the non-occluding wall types: the water / lava pool
+/// surfaces and the iron-fence bar lattice. Built once per session alongside
+/// [`WallAssets`] and reused for every non-occluding `'W'` cell.
+pub(crate) struct NonOccludingAssets {
+    pub(crate) water: water::WaterAssets,
+    pub(crate) lava: lava::LavaAssets,
+    pub(crate) iron_fence: iron_fence::IronFenceAssets,
+    pub(crate) rim: rim::RimAssets,
+}
+
+pub(crate) fn build_non_occluding_assets(
+    meshes: &mut Option<ResMut<Assets<Mesh>>>,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    images: &mut Option<ResMut<Assets<Image>>>,
+) -> NonOccludingAssets {
+    NonOccludingAssets {
+        water: water::build_water_assets(meshes, materials, images),
+        lava: lava::build_lava_assets(meshes, materials, images),
+        iron_fence: iron_fence::build_iron_fence_assets(meshes, materials),
+        rim: rim::build_rim_assets(meshes, materials, images),
     }
-    // South face
-    if r + 1 >= rows || grid[r + 1][c] == 'W' {
-        ns_panel::spawn_ns_face_tinted(
-            commands,
-            &assets.ns,
-            kind,
-            tint,
-            Vec3::new(x, PANEL_Y, z + HALF_CELL),
-        );
-    }
-    // East face
-    if c + 1 >= cols || grid[r][c + 1] == 'W' {
-        ew_panel::spawn_ew_face_tinted(
-            commands,
-            &assets.ew,
-            kind,
-            tint,
-            Vec3::new(x + HALF_CELL, PANEL_Y, z),
-        );
-    }
-    // West face
-    if c == 0 || grid[r][c - 1] == 'W' {
-        ew_panel::spawn_ew_face_tinted(
-            commands,
-            &assets.ew,
-            kind,
-            tint,
-            Vec3::new(x - HALF_CELL, PANEL_Y, z),
-        );
+}
+
+/// Spawns the in-cell geometry for a non-occluding wall cell `(r, c)`. Water and
+/// lava render a floor-level pool surface that doubles as the cell's floor;
+/// iron-fence renders bar grilles on its open edges (its floor tile is spawned
+/// separately by the caller, since — unlike the pools — the fence stands on a
+/// normal floor). A
+/// solid `wall_type` never reaches here: the caller gates on
+/// [`WallType::is_non_occluding`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_non_occluding_for_cell(
+    commands: &mut Commands,
+    assets: &NonOccludingAssets,
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    wall_type: WallType,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+    // Rocks each lava cell gets — the global across-levels budget computed once in
+    // `spawn_world` (see `lava::run_lava_rocks`). Ignored for non-lava cells.
+    lava_rocks: usize,
+) {
+    match wall_type {
+        // Water / lava render a recessed surface plus rim skirts filling the band
+        // up to floor level on every edge facing a non-pool cell.
+        WallType::Water => {
+            let surface = pool_surface_transform(grid, cell_entities, config, wall_type, r, c, placement);
+            water::spawn_water(commands, &assets.water, placement, surface);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
+        }
+        WallType::Lava => {
+            let surface = pool_surface_transform(grid, cell_entities, config, wall_type, r, c, placement);
+            lava::spawn_lava(commands, &assets.lava, r, c, placement, surface, lava_rocks);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
+        }
+        // The fence needs the grid + overrides to bar only the edges facing a
+        // passable cell or a water/lava pool.
+        WallType::IronFence => {
+            iron_fence::spawn_iron_fence(commands, &assets.iron_fence, grid, cell_entities, config, r, c, placement)
+        }
+        WallType::Brick | WallType::DressedStone | WallType::Wood | WallType::Cobblestone => {}
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
-    #[test]
-    fn wall_tint_index_is_deterministic() {
-        let seed = 0xDEAD_BEEFu64;
-        assert_eq!(wall_tint_index(3, 5, seed), wall_tint_index(3, 5, seed));
+    fn entity(json: &str) -> CellEntity {
+        serde_json::from_str(json).expect("valid cell-entity JSON")
     }
 
     #[test]
-    fn wall_tint_index_always_in_range() {
-        for r in 0..20 {
-            for c in 0..20 {
-                let idx = wall_tint_index(r, c, 0x1234_5678);
-                assert!(idx < WALL_TINT_VARIANTS, "got {idx}");
-            }
+    fn wall_override_kind_forces_solid_texture() {
+        let cobble = entity(r#"{ "type": "W", "wallType": "cobblestone" }"#);
+        assert_eq!(wall_override_kind(Some(&cobble)), Some(WALL_MATERIAL_COBBLESTONE));
+        let wood = entity(r#"{ "type": "W", "wallType": "wood" }"#);
+        assert_eq!(wall_override_kind(Some(&wood)), Some(WALL_MATERIAL_WOOD));
+    }
+
+    #[test]
+    fn wall_override_kind_is_none_for_non_panel_cases() {
+        // Non-occluding type has no panel material; a field-less or absent
+        // override, or a non-wall entity, also yields None (use the default kind).
+        assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "W", "wallType": "lava" }"#))), None);
+        assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "W" }"#))), None);
+        assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "E", "enemyType": "ghost" }"#))), None);
+        assert_eq!(wall_override_kind(None), None);
+    }
+
+    #[test]
+    fn pool_surface_transform_insets_only_free_edges() {
+        use crate::state::LayeredAlignment;
+        // Two horizontally-adjacent lava cells: the shared east/west edge stays full
+        // (so the joined surfaces meet and the wave flows), the three free edges
+        // (grid boundary) are pulled in.
+        let grid = vec![vec!['W', 'W']];
+        let cfg = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let cells = HashMap::new();
+        let placement = LevelPlacement::for_level(0, &[(1, 2)], LayeredAlignment::Edge, 0.0, 0);
+        let t = pool_surface_transform(&grid, &cells, &cfg, WallType::Lava, 0, 0, placement);
+        let inset = 2.0 * WALL_THICKNESS;
+        // X has one free edge (west), Z has two (north + south).
+        assert!((t.scale.x - (CELL_SIZE - inset) / CELL_SIZE).abs() < 1e-6);
+        assert!((t.scale.z - (CELL_SIZE - 2.0 * inset) / CELL_SIZE).abs() < 1e-6);
+        // The shared east edge is left exactly on the original cell boundary, so the
+        // two surfaces still abut seamlessly.
+        let east_face = t.translation.x + t.scale.x * (CELL_SIZE / 2.0);
+        let orig_east = placement.world_x(1.0) + CELL_SIZE / 2.0;
+        assert!((east_face - orig_east).abs() < 1e-6, "shared edge stays put");
+        // The opposite (free) west edge is pulled inward by the inset.
+        let west_face = t.translation.x - t.scale.x * (CELL_SIZE / 2.0);
+        assert!((west_face - (placement.world_x(1.0) - CELL_SIZE / 2.0 + inset)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pool_wave_is_bounded_and_position_phased() {
+        let (amp, k, speed) = (0.04, 0.785, 0.8);
+        // The vertical offset never leaves the ±amp band (|sin + sin| * 0.5 ≤ 1),
+        // and the returned tilt is a valid (normalised) rotation.
+        for &(x, z, t) in &[(0.0, 0.0, 0.0), (1.0, 2.0, 0.5), (10.0, 7.0, 3.3)] {
+            let (y, rot) = pool_wave(x, z, t, amp, k, speed);
+            assert!(y.abs() <= amp + 1e-6, "offset {y} exceeds amp {amp}");
+            assert!(rot.is_normalized());
         }
+        // Phased by world position: two tiles at the same instant displace
+        // differently, so a multi-cell pool reads as a moving surface, not a
+        // single rigid bob.
+        let (y0, _) = pool_wave(0.0, 0.0, 0.0, amp, k, speed);
+        let (y1, _) = pool_wave(3.0, 0.0, 0.0, amp, k, speed);
+        assert!((y0 - y1).abs() > 1e-6, "wave must vary with world x");
     }
 
     #[test]
-    fn wall_tint_index_changes_with_seed() {
-        // Different seeds should produce a different tint for at least one cell
-        // (otherwise the seed is being ignored).
-        let mut diffs = 0;
-        for r in 0..10 {
-            for c in 0..10 {
-                if wall_tint_index(r, c, 0) != wall_tint_index(r, c, 1) {
-                    diffs += 1;
-                }
-            }
-        }
-        assert!(diffs > 0, "seed had no effect across 100 cells");
-    }
-
-    #[test]
-    fn wall_material_index_is_deterministic() {
-        let seed = 0xDEAD_BEEFu64;
-        assert_eq!(
-            wall_material_index(3, 5, 10, 10, seed),
-            wall_material_index(3, 5, 10, 10, seed)
-        );
-    }
-
-    #[test]
-    fn wall_material_index_all_in_range() {
-        for r in 0..20 {
-            for c in 0..20 {
-                let idx = wall_material_index(r, c, 20, 20, 0x1234_5678);
-                assert!(idx < WALL_MATERIAL_VARIANTS, "got {idx}");
-            }
-        }
-    }
-
-    #[test]
-    fn wall_material_index_quadrants_get_distinct_kinds() {
-        // For a 10×10 grid sample one cell deep inside each quadrant —
-        // (2,2) NW, (2,7) NE, (7,2) SW, (7,7) SE. All four must pick a
-        // different material kind (the quadrant-to-kind mapping is a
-        // permutation of 0..WALL_MATERIAL_VARIANTS).
-        let seed = 0x1234_5678u64;
-        let kinds: HashSet<usize> = [
-            wall_material_index(2, 2, 10, 10, seed),
-            wall_material_index(2, 7, 10, 10, seed),
-            wall_material_index(7, 2, 10, 10, seed),
-            wall_material_index(7, 7, 10, 10, seed),
-        ]
-        .into_iter()
-        .collect();
-        assert_eq!(kinds.len(), WALL_MATERIAL_VARIANTS);
-    }
-
-    #[test]
-    fn wall_material_index_seed_permutes_mapping() {
-        // For two different seeds, the cell at (2,2) (top-left quadrant)
-        // should land on a different material kind for at least one seed
-        // pair — otherwise the seed isn't actually permuting the mapping.
-        let mut diffs = 0;
-        for seed in 0..32u64 {
-            if wall_material_index(2, 2, 10, 10, seed)
-                != wall_material_index(2, 2, 10, 10, seed + 1)
-            {
-                diffs += 1;
-            }
-        }
-        assert!(diffs > 0, "seed had no effect across 32 pairs");
+    fn pool_wave_with_zero_amplitude_is_flat_and_level() {
+        // A degenerate (amp = 0) wave leaves the surface flat and at its resting
+        // level — the tilt collapses to identity.
+        let (y, rot) = pool_wave(3.0, 5.0, 1.0, 0.0, 0.785, 0.8);
+        assert_eq!(y, 0.0);
+        assert!(rot.angle_between(Quat::IDENTITY) < 1e-6);
     }
 }

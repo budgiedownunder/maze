@@ -208,6 +208,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         public void RemoveFromGrid()
         {
+            // Stop the animation timer before discarding the frame — otherwise the
+            // dispatcher timer keeps ticking on an orphaned frame, and reinitialising the
+            // frame (e.g. on each insert) leaks a timer that floods the UI thread and
+            // starves cell redraws.
+            StopDashAnimation();
             foreach (var border in frameBorders)
                 border.RemoveFromGrid();
         }

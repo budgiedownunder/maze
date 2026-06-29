@@ -16,6 +16,7 @@ const {
   MockMazeWasm,
   mockMazeFree, mockToJson, mockFromJson, mockGenerate, mockSolve,
   mockSolutionFree, mockGetPathPoints, mockInit, mockMazeInstance,
+  mockGetRowCount, mockGetColCount, mockGetCell, mockGetCellEntity,
   MockMazeGameWasm,
   mockGameFree, mockGameFromJson, mockMovePlayer, mockPlayerRow, mockPlayerCol,
   mockPlayerDirection, mockIsComplete, mockVisitedCells, mockGameInstance,
@@ -28,12 +29,20 @@ const {
   const mockSolutionFree = vi.fn()
   const mockGetPathPoints = vi.fn()
   const mockInit = vi.fn().mockResolvedValue(undefined)
+  const mockGetRowCount = vi.fn()
+  const mockGetColCount = vi.fn()
+  const mockGetCell = vi.fn()
+  const mockGetCellEntity = vi.fn()
   const mockMazeInstance = {
     free: mockMazeFree,
     to_json: mockToJson,
     from_json: mockFromJson,
     generate: mockGenerate,
     solve: mockSolve,
+    get_row_count: mockGetRowCount,
+    get_col_count: mockGetColCount,
+    get_cell: mockGetCell,
+    get_cell_entity: mockGetCellEntity,
   }
   const MockMazeWasm = vi.fn().mockImplementation(function() { return mockMazeInstance })
 
@@ -59,6 +68,7 @@ const {
   return {
     MockMazeWasm, mockMazeFree, mockToJson, mockFromJson, mockGenerate, mockSolve,
     mockSolutionFree, mockGetPathPoints, mockInit, mockMazeInstance,
+    mockGetRowCount, mockGetColCount, mockGetCell, mockGetCellEntity,
     MockMazeGameWasm, mockGameFree, mockGameFromJson, mockMovePlayer, mockPlayerRow,
     mockPlayerCol, mockPlayerDirection, mockIsComplete, mockVisitedCells, mockGameInstance,
   }
@@ -97,6 +107,7 @@ const sampleOptions: GenerateOptions = {
   spareKeys: 1,
   enemyCount: 3,
   healthCount: 2,
+  treasureCount: 4,
 }
 
 beforeEach(() => {
@@ -107,6 +118,11 @@ beforeEach(() => {
   mockToJson.mockReturnValue(JSON.stringify({ id: '', name: '', definition: sampleDefinition }))
   mockSolve.mockReturnValue({ get_path_points: mockGetPathPoints, free: mockSolutionFree })
   mockGetPathPoints.mockReturnValue([])
+  // Grid/override readers default to an empty maze (the loop simply doesn't run).
+  mockGetRowCount.mockReturnValue(0)
+  mockGetColCount.mockReturnValue(0)
+  mockGetCell.mockReturnValue({ cell_type: 0 })
+  mockGetCellEntity.mockReturnValue(null)
   // Game defaults
   mockGameFromJson.mockReturnValue(mockGameInstance)
   mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
@@ -138,16 +154,27 @@ describe('generateMaze', () => {
       1,    // spareKeys
       3,    // enemyCount
       2,    // healthCount
+      4,    // treasureCount
     )
   })
 
-  it('returns the definition from the WASM to_json output', async () => {
-    const generatedDefinition: MazeDefinition = { grid: [['S', ' '], [' ', 'F']] }
-    mockToJson.mockReturnValue(JSON.stringify({ id: '', name: '', definition: generatedDefinition }))
+  it('returns the grid and per-cell overrides read from the generated maze', async () => {
+    // 1×2 generated maze: S at (0,0), a gold treasure at (0,1). The generator
+    // emits the treasure's style as a per-cell override, which must be extracted
+    // (not left as a char-or-array grid cell). Cell-type ordinals: S=1, T=8.
+    mockGetRowCount.mockReturnValue(1)
+    mockGetColCount.mockReturnValue(2)
+    mockGetCell.mockImplementation((_r: number, c: number) => ({ cell_type: c === 0 ? 1 : 8 }))
+    mockGetCellEntity.mockImplementation((_r: number, c: number) =>
+      c === 1 ? { type: 'T', style: 'gold' } : null,
+    )
 
     const result = await generateMaze(sampleOptions)
 
-    expect(result).toEqual(generatedDefinition)
+    expect(result).toEqual({
+      grid: [['S', 'T']],
+      overrides: [{ row: 0, col: 1, entity: { type: 'T', style: 'gold' } }],
+    })
   })
 
   it('frees the WASM maze instance on success', async () => {

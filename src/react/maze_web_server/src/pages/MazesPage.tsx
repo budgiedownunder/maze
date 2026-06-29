@@ -1,21 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AppHeader } from '../components/AppHeader'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
-import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { useTheme } from '../context/ThemeContext'
+import { MazeGameSettingsModal } from '../components/MazeGameSettingsModal'
+import { Play3dLaunchChooser } from '../components/Play3dLaunchChooser'
 import { useToken } from '../context/AuthContext'
 import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
+import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
 import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
 
 export function MazesPage() {
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
   const token = useToken()
   const navigate = useNavigate()
 
@@ -36,7 +34,10 @@ export function MazesPage() {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [isDuplicating, setIsDuplicating] = useState(false)
 
+  // Play-3D launch chooser (Run / Custom Run / Cancel); `maze3dCustom` is the
+  // one-off Custom-Run settings modal, reached from the chooser.
   const [maze3dLaunch, setMaze3dLaunch] = useState<Maze | null>(null)
+  const [maze3dCustom, setMaze3dCustom] = useState<Maze | null>(null)
 
   const { play, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
     usePlayMaze({ onLaunch3d: setMaze3dLaunch })
@@ -166,44 +167,47 @@ export function MazesPage() {
         />
       )}
       {maze3dLaunch && (
-        <Play3dCustomLaunchModal
+        <Play3dLaunchChooser
           mazeName={maze3dLaunch.name}
+          onRun={() => {
+            const m = maze3dLaunch
+            setMaze3dLaunch(null)
+            launchPlay3dWithSettings(m.id, normalizeMazeGameSettings(m.game_settings ?? {}))
+          }}
+          onCustomRun={() => { setMaze3dCustom(maze3dLaunch); setMaze3dLaunch(null) }}
           onCancel={() => setMaze3dLaunch(null)}
-          onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
         />
       )}
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">Mazes</span>
-        <div className="header-actions">
-          <button
-            className="btn-icon"
-            onClick={() => navigate('/mazes/new')}
-            aria-label="New maze"
-            title="New maze"
-          >
-            <img src="/images/icons/icon_new.png" alt="New maze" style={{ width: '1.1rem', height: '1.1rem' }} />
-          </button>
-          <button
-            className="btn-icon"
-            onClick={() => setRefreshCount(c => c + 1)}
-            aria-label="Refresh"
-            title="Refresh"
-          >
-            <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
-          </button>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      {maze3dCustom && (
+        <MazeGameSettingsModal
+          mazeName={maze3dCustom.name}
+          initialSettings={normalizeMazeGameSettings(maze3dCustom.game_settings ?? {})}
+          onCancel={() => { setMaze3dLaunch(maze3dCustom); setMaze3dCustom(null) }}
+          onSubmit={settings => {
+            const id = maze3dCustom.id
+            setMaze3dCustom(null)
+            launchPlay3dWithSettings(id, settings)
+          }}
+        />
+      )}
+      <AppHeader title="Mazes">
+        <button
+          className="btn-icon"
+          onClick={() => navigate('/mazes/new')}
+          aria-label="New maze"
+          title="New maze"
+        >
+          <img src="/images/icons/icon_new.png" alt="New maze" style={{ width: '1.1rem', height: '1.1rem' }} />
+        </button>
+        <button
+          className="btn-icon"
+          onClick={() => setRefreshCount(c => c + 1)}
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
+        </button>
+      </AppHeader>
       <main className="maze-list-page">
         {isLoading && <p aria-label="Loading">Loading…</p>}
         {!isLoading && error && (

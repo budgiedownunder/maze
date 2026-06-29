@@ -5,6 +5,7 @@
              x:Class="Maze.Maui.App.Views.MazePage"
              xmlns:model ="clr-namespace:Maze.Maui.App.Models"
              xmlns:viewmodel ="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:views ="clr-namespace:Maze.Maui.App.Views"
              x:DataType="viewmodel:MazeViewModel"
              Title="{Binding MazeItem.Name}">
 
@@ -24,6 +25,8 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="0" />
                 <RowDefinition Height="*" />
+                <!-- Override panel row — collapses when the panel is hidden. -->
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
@@ -48,6 +51,9 @@
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
                 <ImageButton x:Name="SetHealthBtn" IsVisible="{Binding CanSetHealth}" Command="{Binding SetHealthCommand}" Source="health_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
+                <ImageButton x:Name="SetTreasureBtn" IsVisible="{Binding CanSetTreasure}" Command="{Binding SetTreasureCommand}" Source="treasure_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
                 <ImageButton x:Name="ClearBtn" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" Source="clear_button.png"
@@ -94,6 +100,9 @@
                 <ImageButton x:Name="Play3dBtn" Clicked="OnPlay3dClicked" Source="play_3d_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
+                <ImageButton x:Name="SettingsBtn" Clicked="OnSettingsClicked" Source="settings_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
             </FlexLayout>
 
             <!-- Maze Grid with built-in frozen-pane scroll -->
@@ -104,7 +113,7 @@
             </controls:MazeGrid>
 
             <!-- Bottom buttons -->
-            <StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="End" HorizontalOptions="Start" Padding="10" Spacing="10">
+            <StackLayout x:Name="BottomRowLayout" Grid.Row="3" Orientation="Horizontal" VerticalOptions="End" HorizontalOptions="Start" Padding="10" Spacing="10">
                 <!--<Button
                         x:Name="TestBtn"
                         Text="Test"
@@ -115,7 +124,7 @@
 
             <!-- Keyboard-shortcut key, shown on desktop while a cell is active. Mirrors the React editor's shortcuts hint. -->
             <Label x:Name="ShortcutsHint"
-                   Grid.Row="2"
+                   Grid.Row="3"
                    IsVisible="False"
                    VerticalOptions="End"
                    HorizontalOptions="Fill"
@@ -124,7 +133,13 @@
                    FontSize="12"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-                   Text="[W] Wall    [S] Start    [F] Finish    [K] Key    [D] Door    [E] Enemy    [H] Health    [DEL] Clear    [&#8592;&#8593;&#8594;&#8595;] Move    [Shift] Range" />
+                   Text="[W] Wall    [S] Start    [F] Finish    [K] Key    [D] Door    [E] Enemy    [H] Health    [T] Treasure    [DEL] Clear    [&#8592;&#8593;&#8594;&#8595;] Move    [Shift] Range" />
+
+            <!-- Inline per-cell override panel — below the grid; the Auto row collapses when hidden -->
+            <!-- Width set responsively in code-behind (fills up to a max), always left-aligned -->
+            <views:CellOverridePanelView x:Name="OverridePanel"
+                                         Grid.Row="2"
+                                         HorizontalOptions="Start" />
 
             <Border IsVisible="{Binding IsBusy}"
                     BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
@@ -132,7 +147,7 @@
                     Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
                     VerticalOptions="Fill"
                     HorizontalOptions="Fill"
-                    Grid.RowSpan="3">
+                    Grid.RowSpan="4">
                 <ActivityIndicator x:Name="BusyIndicator"
                                    IsRunning="{Binding IsBusy}"
                                    Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"

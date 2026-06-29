@@ -5,7 +5,7 @@
 
 use crate::images::make_image;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::CELL_SIZE;
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
@@ -207,19 +207,22 @@ pub(crate) fn spawn_goblin(
     r: usize,
     c: usize,
     id: u32,
+    placement: LevelPlacement,
 ) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let y = placement.world_y(ENEMY_BASE_Y);
     let body = match (assets.body_mesh.clone(), assets.body_mat.clone()) {
         (Some(mesh), Some(mat)) => commands
             .spawn((
                 super::EnemyMarker {
                     id,
                     spawn_cell: (r, c),
+                    placement,
                 },
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
-                Transform::from_xyz(x, ENEMY_BASE_Y, z),
+                Transform::from_xyz(x, y, z),
             ))
             .id(),
         _ => commands
@@ -227,8 +230,9 @@ pub(crate) fn spawn_goblin(
                 super::EnemyMarker {
                     id,
                     spawn_cell: (r, c),
+                    placement,
                 },
-                Transform::from_xyz(x, ENEMY_BASE_Y, z),
+                Transform::from_xyz(x, y, z),
             ))
             .id(),
     };

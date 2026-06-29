@@ -124,6 +124,37 @@ pub fn validate_maze_cell_count(rows: usize, cols: usize, max: usize) -> Result<
 /// ];
 /// assert!(validate_maze_feature_count(&grid, 16).is_ok());
 /// ```
+/// Validates that the serialised maze definition fits within the supplied
+/// per-store byte cap. A store that persists the definition into a
+/// length-bounded column (e.g. `SqlStore`'s `VARCHAR(16000)`) calls this from
+/// `create_maze` / `update_maze` on the exact string it is about to write, so
+/// an over-cap maze is refused with a clear error rather than truncated or
+/// rejected by the database. The cell-count cap is a proxy for size that
+/// assumes plain single-character cells; per-cell entity overrides inflate a
+/// cell well beyond that, so this byte check is the authoritative storage
+/// guard.
+///
+/// # Returns
+///
+/// `Ok(())` if `bytes ≤ max`,
+/// `Err(Error::MazeDefinitionTooLarge { bytes, max })` otherwise.
+///
+/// # Examples
+///
+/// Probe a 12 KB and a 20 KB serialised definition against a 16 KB cap
+/// ```
+/// use storage::validation::validate_maze_definition_size;
+///
+/// assert!(validate_maze_definition_size(12_000, 16_000).is_ok());
+/// assert!(validate_maze_definition_size(20_000, 16_000).is_err());
+/// ```
+pub fn validate_maze_definition_size(bytes: usize, max: usize) -> Result<(), Error> {
+    if bytes > max {
+        return Err(Error::MazeDefinitionTooLarge { bytes, max });
+    }
+    Ok(())
+}
+
 pub fn validate_maze_feature_count(grid: &[Vec<char>], max: usize) -> Result<(), Error> {
     let mut keys = 0usize;
     let mut doors = 0usize;
@@ -138,6 +169,60 @@ pub fn validate_maze_feature_count(grid: &[Vec<char>], max: usize) -> Result<(),
     }
     if keys + doors > max {
         return Err(Error::MazeHasTooManyFeatures { keys, doors, max });
+    }
+    Ok(())
+}
+
+/// Validates that a maze carries no more enemies / health pickups / treasure than
+/// [`maze::MAX_ENEMY_COUNT`] / [`maze::MAX_HEALTH_COUNT`] / [`maze::MAX_TREASURE_COUNT`]
+/// respectively — the same per-type caps generation enforces, applied to authored
+/// mazes so the editor cannot paint a maze whose in-game object count exceeds what
+/// generation would ever place. (An unbounded treasure pile, for instance,
+/// overwhelms a mobile GPU with per-chest lights and sparkles.) Each store calls
+/// this from `create_maze` / `update_maze`. Doors are not checked here — they fall
+/// under the combined key + door cap validated by [`validate_maze_feature_count`].
+///
+/// # Returns
+///
+/// `Ok(())` if every limited type is at or under its cap,
+/// `Err(Error::MazeHasTooManyObjects { kind, count, max })` for the first type
+/// that exceeds it.
+///
+/// # Examples
+///
+/// A maze with a handful of each object passes; one with more treasure than the
+/// cap is refused
+/// ```
+/// use storage::validation::validate_maze_object_counts;
+///
+/// let ok: Vec<Vec<char>> = vec![vec!['S', 'E', 'T', 'H', 'F']];
+/// assert!(validate_maze_object_counts(&ok).is_ok());
+///
+/// let too_much_treasure: Vec<Vec<char>> = vec![std::iter::repeat_n('T', 13).collect()];
+/// assert!(validate_maze_object_counts(&too_much_treasure).is_err());
+/// ```
+pub fn validate_maze_object_counts(grid: &[Vec<char>]) -> Result<(), Error> {
+    let mut enemies = 0usize;
+    let mut health = 0usize;
+    let mut treasure = 0usize;
+    for row in grid {
+        for &ch in row {
+            match ch {
+                'E' => enemies += 1,
+                'H' => health += 1,
+                'T' => treasure += 1,
+                _ => {}
+            }
+        }
+    }
+    for (count, max, kind) in [
+        (enemies, maze::MAX_ENEMY_COUNT, "enemies"),
+        (health, maze::MAX_HEALTH_COUNT, "health pickups"),
+        (treasure, maze::MAX_TREASURE_COUNT, "treasure items"),
+    ] {
+        if count > max {
+            return Err(Error::MazeHasTooManyObjects { kind, count, max });
+        }
     }
     Ok(())
 }
@@ -163,6 +248,7 @@ mod tests {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         }
     }
 
@@ -253,6 +339,30 @@ mod tests {
         assert!(matches!(err, Error::MazeHasTooManyCells { .. }));
     }
 
+    // ─── validate_maze_definition_size ───────────────────────────────────
+
+    #[test]
+    fn validate_maze_definition_size_accepts_at_cap() {
+        validate_maze_definition_size(16_000, 16_000).expect("at-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_definition_size_accepts_under_cap() {
+        validate_maze_definition_size(12_345, 16_000).expect("under-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_definition_size_rejects_over_cap() {
+        let err = validate_maze_definition_size(16_001, 16_000).expect_err("over-cap should fail");
+        match err {
+            Error::MazeDefinitionTooLarge { bytes, max } => {
+                assert_eq!(bytes, 16_001);
+                assert_eq!(max, 16_000);
+            }
+            other => panic!("expected MazeDefinitionTooLarge, got {other:?}"),
+        }
+    }
+
     // ─── validate_maze_feature_count ─────────────────────────────────────
 
     fn grid_with_keys_and_doors(keys: usize, doors: usize) -> Vec<Vec<char>> {
@@ -295,5 +405,55 @@ mod tests {
             vec![' ', 'W', ' ', ' '],
         ];
         validate_maze_feature_count(&grid, 0).expect("no K/D so any cap passes");
+    }
+
+    // ─── validate_maze_object_counts ─────────────────────────────────────
+
+    fn grid_with_cell(ch: char, n: usize) -> Vec<Vec<char>> {
+        vec![std::iter::repeat_n(ch, n).collect()]
+    }
+
+    #[test]
+    fn validate_maze_object_counts_accepts_each_type_at_cap() {
+        validate_maze_object_counts(&grid_with_cell('E', maze::MAX_ENEMY_COUNT))
+            .expect("enemies at cap should pass");
+        validate_maze_object_counts(&grid_with_cell('H', maze::MAX_HEALTH_COUNT))
+            .expect("health at cap should pass");
+        validate_maze_object_counts(&grid_with_cell('T', maze::MAX_TREASURE_COUNT))
+            .expect("treasure at cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_object_counts_rejects_over_cap_treasure() {
+        let err = validate_maze_object_counts(&grid_with_cell('T', maze::MAX_TREASURE_COUNT + 1))
+            .expect_err("over-cap treasure should fail");
+        match err {
+            Error::MazeHasTooManyObjects { kind, count, max } => {
+                assert_eq!(kind, "treasure items");
+                assert_eq!(count, maze::MAX_TREASURE_COUNT + 1);
+                assert_eq!(max, maze::MAX_TREASURE_COUNT);
+            }
+            other => panic!("expected MazeHasTooManyObjects, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_maze_object_counts_rejects_over_cap_enemies() {
+        let err = validate_maze_object_counts(&grid_with_cell('E', maze::MAX_ENEMY_COUNT + 1))
+            .expect_err("over-cap enemies should fail");
+        assert!(matches!(
+            err,
+            Error::MazeHasTooManyObjects { kind: "enemies", .. }
+        ));
+    }
+
+    #[test]
+    fn validate_maze_object_counts_ignores_keys_doors_and_terrain() {
+        // K/D (counted by the feature validator) and S/F/W/' ' don't count here.
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', 'K', 'D', 'W', 'F'],
+            vec![' ', 'K', 'D', ' ', ' '],
+        ];
+        validate_maze_object_counts(&grid).expect("no E/H/T so it passes");
     }
 }

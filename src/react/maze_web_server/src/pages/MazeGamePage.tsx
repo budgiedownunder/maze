@@ -2,11 +2,10 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
-import { getBag, getHp, getMaxHp, MazeGameLoseReason } from '../wasm/mazeWasm'
-import { useMenuVariant } from '../hooks/useMenuVariant'
-import { HamburgerMenu } from '../components/HamburgerMenu'
+import { getBag, getCollectedTreasure, getHp, getMaxHp, getGameGrid, getGameCellOverrides, MazeGameLoseReason } from '../wasm/mazeWasm'
+import type { TreasureStyle } from '../types/cellEntities'
+import { AppHeader } from '../components/AppHeader'
 import { MazeGrid } from '../components/MazeGrid'
 import { GameResultPopup } from '../components/GameResultPopup'
 import { PausePopup } from '../components/PausePopup'
@@ -19,11 +18,27 @@ const KEY_MAP: Record<string, MazeGameDirection> = {
   ArrowRight: MazeGameDirection.Right, d: MazeGameDirection.Right, D: MazeGameDirection.Right,
 }
 
+// Bag-chip icons — the same per-style loot icons (coins / gems) used for the
+// in-grid treasure cells. Keys reuse the key icon.
+const TREASURE_BAG_ICONS: Record<TreasureStyle, string> = {
+  silver:   '/images/maze/silver.svg',
+  gold:     '/images/maze/gold.svg',
+  diamonds: '/images/maze/diamonds.svg',
+  jewels:   '/images/maze/jewels.svg',
+}
+
+// One grouped bag entry: an icon, a count, and its alt text. Built from the held
+// keys plus the per-style collected-treasure tally; zero-count types are omitted.
+interface BagChip {
+  key: string
+  src: string
+  alt: string
+  count: number
+}
+
 export function MazeGamePage() {
   const { id } = useParams<{ id: string }>()
   const token = useToken()
-  const menuVariant = useMenuVariant()
-  const { theme, toggleTheme } = useTheme()
 
   const [maze, setMaze] = useState<Maze | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -38,12 +53,41 @@ export function MazeGamePage() {
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
   const [{ game, version, loading, error, damageFlashKey, paused }, move, restart, togglePause] = useMazeGame(definitionJson)
 
-  // Bag contents — recomputed whenever the game advances (version bump). Keys
-  // are auto-collected on walk-over, so the bag grows as the player moves.
-  const bag = useMemo(
-    () => (game ? getBag(game) : []),
-    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
+  // Display grid + variant overrides read straight from the live game object — the
+  // single source of truth. grid() returns a pure-char grid (overridden cells reported
+  // as their base char), and cell_overrides() returns the variant per overridden cell;
+  // MazeGrid pairs them to pick the right sprite. Reading from the game (rather than a
+  // separate codec pass over the definition) avoids a second WASM maze overlapping the
+  // live tick loop. (Live enemy rigs ride the game object too, so they render mid-move.)
+  const displayGrid = useMemo(
+    () => (game ? getGameGrid(game) : null),
+    [game],
   )
+  const cellOverrides = useMemo(
+    () => (game ? new Map(getGameCellOverrides(game).map(o => [`${o.row},${o.col}`, o.entity])) : undefined),
+    [game],
+  )
+
+  // Bag chips — recomputed whenever the game advances (version bump). Each item
+  // type renders as one grouped `[icon] × N` chip: a single key chip for the
+  // held keys, then one chip per collected treasure style (ascending value, the
+  // order the engine returns). Zero-count types are omitted entirely, so the key
+  // chip vanishes once keys are consumed and a style only appears once collected.
+  const bagChips = useMemo<BagChip[]>(() => {
+    if (!game) return []
+    const chips: BagChip[] = []
+    const keyCount = getBag(game).length
+    if (keyCount > 0) {
+      chips.push({ key: 'key', src: '/images/maze/key.svg', alt: 'Key', count: keyCount })
+    }
+    for (const { style, count } of getCollectedTreasure(game)) {
+      if (count > 0) {
+        const label = `${style.charAt(0).toUpperCase()}${style.slice(1)} treasure`
+        chips.push({ key: style, src: TREASURE_BAG_ICONS[style], alt: label, count })
+      }
+    }
+    return chips
+  }, [game, version]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // HP HUD state — re-read each version bump.
   const hp = useMemo(
@@ -102,32 +146,17 @@ export function MazeGamePage() {
 
   return (
     <div className="maze-game-page">
-      <header className="app-header">
-        <div className="header-actions">
-          {menuVariant === 'hamburger' && <HamburgerMenu />}
-        </div>
-        <span className="app-header-title">{maze?.name ?? ''}</span>
-        <div className="header-actions">
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {theme === 'dark' ? '☀' : '☾'}
-          </button>
-        </div>
-      </header>
+      <AppHeader title={maze?.name ?? ''} />
 
       <div className="maze-game-content">
         {loadError && <p className="error-msg" role="alert">{loadError}</p>}
         {error && <p className="error-msg" role="alert">{error}</p>}
 
-        {!loadError && !error && (!maze || !game || loading) && (
+        {!loadError && !error && (!maze || !game || loading || !displayGrid) && (
           <p className="loading-msg" role="status" aria-label="Loading">Loading…</p>
         )}
 
-        {maze && game && !loading && !loadError && !error && (
+        {maze && game && displayGrid && !loading && !loadError && !error && (
           <>
             {damageFlashKey > 0 && (
               <div
@@ -138,13 +167,15 @@ export function MazeGamePage() {
             )}
 
             <MazeGrid
-              grid={maze.definition.grid}
+              grid={displayGrid}
               solution={null}
               activeCell={null}
               anchorCell={null}
               game={game}
               version={version}
               cellSize={gameCellSize}
+              cellOverrides={cellOverrides}
+              gameSettings={maze?.game_settings}
             />
 
             <div className="maze-game-status">
@@ -164,9 +195,14 @@ export function MazeGamePage() {
 
               <div className="maze-bag" aria-label="Bag">
                 <span>BAG</span>
-                {bag.length === 0
+                {bagChips.length === 0
                   ? <span className="maze-bag-empty">empty</span>
-                  : bag.map((_, i) => <img key={i} src="/images/maze/key.svg" alt="Key" />)}
+                  : bagChips.map(chip => (
+                      <span key={chip.key} className="maze-bag-chip">
+                        <img src={chip.src} alt={chip.alt} />
+                        <span className="maze-bag-chip-count">&times;{chip.count}</span>
+                      </span>
+                    ))}
               </div>
             </div>
 

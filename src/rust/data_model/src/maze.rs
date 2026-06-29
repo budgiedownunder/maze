@@ -12,6 +12,10 @@ pub struct Maze {
     pub name: String,
     /// MazeDefinition, containing the layout of the maze
     pub definition: MazeDefinition,
+    /// Optional game settings
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Object>)]
+    pub game_settings: Option<serde_json::Value>,
 }
 
 impl PartialEq for Maze {
@@ -58,6 +62,7 @@ impl Maze {
             id: "".to_string(),
             name: "".to_string(),
             definition,
+            game_settings: None,
         }
     }
     /// Resets a maze definition instance to empty
@@ -121,6 +126,7 @@ impl Maze {
             id: "".to_string(),
             name: "".to_string(),
             definition: MazeDefinition::from_vec(grid),
+            game_settings: None,
         }
     }
     /// Generates the JSON string representation for the maze
@@ -277,6 +283,47 @@ mod tests {
         maze.from_json(s).expect("Failed to deserialize");
         assert_eq!(maze.definition.row_count(), 2);
         assert_eq!(maze.definition.col_count(), 3);
+    }
+
+    #[test]
+    fn omits_game_settings_when_absent() {
+        let maze = Maze::new(MazeDefinition::new(0, 0));
+        assert!(maze.game_settings.is_none());
+        let s = maze.to_json().expect("Failed to serialize");
+        assert!(
+            !s.contains("game_settings"),
+            "a maze with no settings must serialize without the key: {s}"
+        );
+    }
+
+    #[test]
+    fn serializes_game_settings_when_present() {
+        let mut maze = Maze::new(MazeDefinition::new(0, 0));
+        maze.game_settings = Some(serde_json::json!({ "skyType": "dungeon" }));
+        let s = maze.to_json().expect("Failed to serialize");
+        assert_eq!(
+            s,
+            r#"{"id":"","name":"","definition":{"grid":[]},"game_settings":{"skyType":"dungeon"}}"#
+        );
+    }
+
+    #[test]
+    fn round_trips_game_settings() {
+        let mut maze = Maze::from_vec(vec![vec!['S', 'F']]);
+        maze.game_settings = Some(serde_json::json!({ "wallType": "lava", "timerSeconds": 90 }));
+        let json = maze.to_json().expect("Failed to serialize");
+        let mut loaded = Maze::new(MazeDefinition::new(0, 0));
+        loaded.from_json(&json).expect("Failed to deserialize");
+        assert_eq!(loaded.game_settings, maze.game_settings);
+    }
+
+    #[test]
+    fn deserializes_missing_game_settings_as_none() {
+        // A maze JSON written before game settings existed must still load.
+        let mut maze = Maze::new(MazeDefinition::new(0, 0));
+        let s = r#"{"id":"id","name":"n","definition":{"grid":[]}}"#;
+        maze.from_json(s).expect("Failed to deserialize");
+        assert!(maze.game_settings.is_none());
     }
 
     #[test]

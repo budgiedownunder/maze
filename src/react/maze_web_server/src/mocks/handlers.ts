@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, RenewResponse, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -100,6 +100,105 @@ export const mockMazeEnemyHealth: Maze = {
   },
 }
 
+// A single treasure on the S→F path: walk onto it to auto-collect, verifying the
+// in-grid treasure sprite disappears (rendered from the runtime's live treasure
+// list, not the static grid char) and the collected style shows in the bag. Kept
+// out of `mockMazes`, served by id directly.
+export const mockMazeTreasure: Maze = {
+  id: 'maze-treasure',
+  name: 'Treasure',
+  definition: {
+    grid: [
+      ['S', 'T', 'F'],
+    ],
+  },
+}
+
+// A maze persisted WITH a per-cell override: the enemy cell at (0,1) carries the
+// canonical array form. Used to verify the editor loads + renders a saved override.
+// Kept out of `mockMazes`, served by id directly. The array-form cell isn't expressible
+// in the simplified `string[][]` client type, hence the cast.
+export const mockMazeOverride: Maze = {
+  id: 'maze-override',
+  name: 'Override',
+  definition: {
+    grid: [['S', [{ type: 'E', enemyType: 'ghost', damage: 2 }], 'F']],
+  } as unknown as Maze['definition'],
+}
+
+// A maze whose STATIC feature cells (health/key/door) carry overrides, in the
+// canonical array form. Used to verify the 2D game renders the static variant sprites
+// (the regression where MazeGamePage handed the raw array-form grid to MazeGrid showed
+// these cells empty). Layout: S, potion-health, pedestal-key, swing-door, F.
+export const mockMazeOverrideStatic: Maze = {
+  id: 'maze-override-static',
+  name: 'OverrideStatic',
+  definition: {
+    grid: [[
+      'S',
+      [{ type: 'H', healthStyle: 'potion' }],
+      [{ type: 'K', keyHolder: 'pedestal' }],
+      [{ type: 'D', doorStyle: 'swing' }],
+      'F',
+    ]],
+  } as unknown as Maze['definition'],
+}
+
+// A maze persisted WITH per-maze 3D game settings. Used to verify the editor
+// seeds the settings modal from the maze's saved settings (not localStorage).
+// Kept out of `mockMazes`, served by id directly.
+export const mockMazeWithSettings: Maze = {
+  id: 'maze-settings',
+  name: 'WithSettings',
+  definition: { grid: [['S', ' ', 'F']] },
+  game_settings: {
+    skyType: 'day',
+    wallType: 'wood',
+    perimeterWalls: true,
+    doorStyle: 'swing',
+    keyHolder: 'pedestal',
+    enemyType: 'goblin',
+    healthStyle: 'heart',
+    wallTint: false,
+    wallMaterialVariation: false,
+    deadEndObjects: true,
+    wallDecorations: true,
+    floorAccents: true,
+    timerSeconds: 222,
+  },
+}
+
+// A maze whose per-maze game settings make ghost the default enemy and lava the
+// default wall, with NO per-cell overrides. Used to verify the 2D game renders those
+// maze-default bases (the 'E' enemy as a ghost, the 'W' wall as lava). Kept out of
+// `mockMazes`, served by id directly. Layout: an enemy on the S→F path and a wall
+// off-path.
+export const mockMazeSettingsDisplay: Maze = {
+  id: 'maze-settings-display',
+  name: 'SettingsDisplay',
+  definition: {
+    grid: [
+      ['S', 'E', 'F'],
+      ['W', ' ', ' '],
+    ],
+  },
+  game_settings: {
+    skyType: 'night',
+    wallType: 'lava',
+    perimeterWalls: true,
+    doorStyle: 'swing',
+    keyHolder: 'pedestal',
+    enemyType: 'ghost',
+    healthStyle: 'heart',
+    wallTint: false,
+    wallMaterialVariation: false,
+    deadEndObjects: true,
+    wallDecorations: true,
+    floorAccents: true,
+    timerSeconds: 60,
+  },
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -153,6 +252,20 @@ function mintToken(prefix: string): string {
   return `${prefix}-${tokenCounter}-${Date.now()}`
 }
 
+// In-memory avatar state: a tiny valid 1x1 PNG served as the stored image, plus
+// the `avatar_updated_at` marker. Upload stamps the marker (so GET /users/me
+// reflects it and the avatar GET serves bytes); remove clears it. Stateful so
+// the upload -> display flow works end-to-end through the service worker (e2e).
+const MOCK_AVATAR_PNG = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMEAYHEr8+/AAAAAElFTkSuQmCC'),
+  c => c.charCodeAt(0),
+)
+let mockAvatarUpdatedAt: string | null = null
+
+export function resetMockAvatar(): void {
+  mockAvatarUpdatedAt = null
+}
+
 export const handlers = [
   http.get(`${BASE}/features`, () => {
     return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [], email_enabled: true, max_maze_cells: null })
@@ -184,7 +297,24 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/users/me`, () => {
-    return HttpResponse.json(mockProfile)
+    return HttpResponse.json({ ...mockProfile, avatar_updated_at: mockAvatarUpdatedAt })
+  }),
+
+  // Avatar serve — returns the stored bytes once an avatar is set, else 404
+  // (the client then shows the placeholder). Ignores the id (single mock user).
+  http.get(`${BASE}/users/:id/avatar`, () => {
+    if (mockAvatarUpdatedAt == null) return new HttpResponse(null, { status: 404 })
+    return new HttpResponse(MOCK_AVATAR_PNG, { headers: { 'Content-Type': 'image/png' } })
+  }),
+
+  http.post(`${BASE}/users/me/avatar`, () => {
+    mockAvatarUpdatedAt = new Date().toISOString()
+    return HttpResponse.json({ avatar_updated_at: mockAvatarUpdatedAt })
+  }),
+
+  http.delete(`${BASE}/users/me/avatar`, () => {
+    mockAvatarUpdatedAt = null
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.put(`${BASE}/users/me/profile`, async ({ request }) => {
@@ -295,6 +425,11 @@ export const handlers = [
       ?? (params.id === mockMazeKeyDoor.id ? mockMazeKeyDoor : undefined)
       ?? (params.id === mockMazeEnemyGauntlet.id ? mockMazeEnemyGauntlet : undefined)
       ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
+      ?? (params.id === mockMazeTreasure.id ? mockMazeTreasure : undefined)
+      ?? (params.id === mockMazeOverride.id ? mockMazeOverride : undefined)
+      ?? (params.id === mockMazeOverrideStatic.id ? mockMazeOverrideStatic : undefined)
+      ?? (params.id === mockMazeWithSettings.id ? mockMazeWithSettings : undefined)
+      ?? (params.id === mockMazeSettingsDisplay.id ? mockMazeSettingsDisplay : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),
@@ -323,5 +458,35 @@ export const handlers = [
     if (!exists) return new HttpResponse(null, { status: 404 })
     mockMazes = mockMazes.filter(m => m.id !== params.id)
     return new HttpResponse(null, { status: 200 })
+  }),
+
+  // Scores — curated preset (for the leaderboard seed), personal history, and
+  // the leaderboard itself.
+  http.get(`${BASE}/game/play3d-config`, ({ request }) => {
+    const difficulty = new URL(request.url).searchParams.get('difficulty') ?? 'easy'
+    const seeds: Record<string, number> = { easy: 111, tricky: 222, hard: 333 }
+    return HttpResponse.json<Play3dConfig>({ difficulty, seed: seeds[difficulty] ?? 999 })
+  }),
+
+  http.get(`${BASE}/scores/me`, () => {
+    // Most recent first — the page picks scores[0] as the default subject.
+    const scores: ScoreEntry[] = [
+      { id: 'sh1', user_id: mockProfile.id, maze_id: 'maze-0001', challenge: null, score: 7, elapsed_ms: 42137, recorded_at: '2025-04-02T10:00:00.000Z' },
+      { id: 'sh2', user_id: mockProfile.id, maze_id: null, challenge: 'easy:111', score: 5, elapsed_ms: 51020, recorded_at: '2025-04-01T10:00:00.000Z' },
+    ]
+    return HttpResponse.json<ScoreboardResponse>({ scores, limit: 100, offset: 0, has_more: false })
+  }),
+
+  http.get(`${BASE}/scores`, ({ request }) => {
+    const url = new URL(request.url)
+    const mazeId = url.searchParams.get('maze_id')
+    const challenge = url.searchParams.get('challenge')
+    const withNames = url.searchParams.get('include_usernames') !== 'false'
+    const subject = { maze_id: mazeId, challenge }
+    const scores: ScoreEntry[] = [
+      { id: 'lb1', user_id: 'other-1', ...subject, score: 9, elapsed_ms: 31204, recorded_at: '2025-04-02T09:00:00.000Z', username: withNames ? 'alice' : undefined },
+      { id: 'lb2', user_id: mockProfile.id, ...subject, score: 7, elapsed_ms: 42137, recorded_at: '2025-04-02T10:00:00.000Z', username: withNames ? mockProfile.username : undefined },
+    ]
+    return HttpResponse.json<ScoreboardResponse>({ scores, limit: 20, offset: 0, has_more: false })
   }),
 ]

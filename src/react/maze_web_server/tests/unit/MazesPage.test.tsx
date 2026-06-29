@@ -380,7 +380,7 @@ describe('MazesPage', () => {
     expect(play3dButtons).toHaveLength(2)
   })
 
-  it('clicking Play in 3D on solvable maze opens the custom-launch modal, then Play navigates to /game/?id=...', async () => {
+  it('clicking Play in 3D on solvable maze opens the launch chooser, then Run navigates to /game/?id=...', async () => {
     ;(solveMaze as Mock).mockResolvedValue([{ row: 0, col: 0 }])
 
     renderMazesPage()
@@ -391,16 +391,31 @@ describe('MazesPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: `Play in 3D ${mockMazeAlpha.name}` }))
 
-    // The Play3dCustomLaunchModal opens — no navigation yet.
+    // The launch chooser opens — no navigation yet.
     await waitFor(() =>
-      expect(screen.getByRole('dialog', { name: /Play 3D — customise launch/i })).toBeInTheDocument(),
+      expect(screen.getByRole('dialog', { name: /Play 3D —/i })).toBeInTheDocument(),
     )
     expect(locationStub.href).toBe('')
 
-    // Clicking Play inside the modal triggers the navigation. Scope
-    // the query to the dialog so "Play" doesn't collide with the row
-    // "Play" / "Play 3D" action buttons.
-    const dialog = screen.getByRole('dialog', { name: /Play 3D — customise launch/i })
+    // Run launches with the maze's saved settings.
+    await userEvent.click(screen.getByRole('button', { name: /^Run$/ }))
+    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('clicking Play in 3D then Custom Run opens the settings modal and launches a one-off', async () => {
+    ;(solveMaze as Mock).mockResolvedValue([{ row: 0, col: 0 }])
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    await userEvent.click(screen.getByRole('button', { name: `Play in 3D ${mockMazeAlpha.name}` }))
+    await userEvent.click(await screen.findByRole('button', { name: /custom run/i }))
+
+    const dialog = await screen.findByRole('dialog', { name: /customise launch/i })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Play' }))
     await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
     expect(mockNavigate).not.toHaveBeenCalled()

@@ -5,7 +5,7 @@
 //! The orchestrator in [`super`] decides when this rig applies and spawns the
 //! frame; this module owns the rise motion and the frame geometry.
 
-use crate::world::walls::{PANEL_H, PANEL_W};
+use crate::world::walls::{PANEL_H, PANEL_W, WALL_HEIGHT};
 use bevy::prelude::*;
 
 /// How far the grille rises when fully open — just past its own height so the
@@ -55,13 +55,53 @@ pub(crate) fn spawn_frame(
             piece(sign * half, PANEL_H / 2.0, post_scale),
         ));
     }
+    // Lintel: its TOP sits flush at the ceiling (`WALL_HEIGHT`) rather than stacked
+    // on top of the full-height posts — otherwise it pokes `LINTEL_HEIGHT` above the
+    // cell, into the floor of the level above on a non-top level. The lintel is wider
+    // than and in front of the posts, so it cleanly caps the gate; the slight overlap
+    // with the post tops is hidden behind it.
     commands.spawn((
         Mesh3d(mesh),
         MeshMaterial3d(mat),
         piece(
             0.0,
-            PANEL_H + LINTEL_HEIGHT / 2.0,
+            WALL_HEIGHT - LINTEL_HEIGHT / 2.0,
             Vec3::new(PANEL_W + FRAME_THICKNESS * 2.0, LINTEL_HEIGHT, FRAME_THICKNESS),
         ),
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The frame's lintel must stay within the cell's height — its top capped at the
+    /// ceiling — so it never pokes into the floor of the level above on a non-top
+    /// level. (Built at the origin with no rotation, so local Y == world-frame Y.)
+    #[test]
+    fn the_frame_lintel_top_does_not_exceed_the_ceiling() {
+        let mut app = App::new();
+        app.add_systems(Update, |mut commands: Commands| {
+            spawn_frame(
+                &mut commands,
+                Some(Handle::default()),
+                Some(Handle::default()),
+                Vec3::ZERO,
+                0.0,
+            );
+        });
+        app.update();
+        // The frame spawns two posts (`scale.y == PANEL_H`) and one lintel
+        // (`scale.y == LINTEL_HEIGHT`). The lintel's top = centre + half its height.
+        let mut q = app.world_mut().query::<&Transform>();
+        let lintel = q
+            .iter(app.world())
+            .find(|t| (t.scale.y - LINTEL_HEIGHT).abs() < 1e-6)
+            .expect("the frame spawns a lintel cuboid");
+        let top = lintel.translation.y + lintel.scale.y / 2.0;
+        assert!(
+            top <= WALL_HEIGHT + 1e-6,
+            "lintel top {top} exceeds the ceiling {WALL_HEIGHT}"
+        );
+    }
 }

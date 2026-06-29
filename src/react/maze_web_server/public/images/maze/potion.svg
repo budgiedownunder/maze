@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Potion">
+  <rect x="13.3" y="3" width="5.4" height="4" rx="1" fill="#a9744f" stroke="#5e3b22" stroke-width="1.2"/>
+  <rect x="14" y="6.5" width="4" height="4.5" fill="#cfe8ef" stroke="#2a6b7c" stroke-width="1.4"/>
+  <path d="M14 10.5 L14 13 C9 15 6.5 19 6.5 23 C6.5 26.6 9.6 28.5 16 28.5 C22.4 28.5 25.5 26.6 25.5 23 C25.5 19 23 15 18 13 L18 10.5 Z" fill="#cfe8ef" stroke="#2a6b7c" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M9 21 C9 25 12 26.6 16 26.6 C20 26.6 23 25 23 21 C23 19.8 22.4 18.4 21.3 17.2 C18 18.5 14 18.5 10.7 17.2 C9.6 18.4 9 19.8 9 21 Z" fill="#7b3ff2"/>
+</svg>

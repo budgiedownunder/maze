@@ -9,6 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -23,7 +24,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreboardEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -78,6 +79,7 @@ mod test_definitions {
    struct MockUser {
         user: User,
         mazes: HashMap<String, MockMaze>,
+        avatar: Option<Vec<u8>>,
     }
 
     impl MockUser {
@@ -85,6 +87,7 @@ mod test_definitions {
             MockUser {
                 user: User::default(),
                 mazes: HashMap::new(),
+                avatar: None,
             }
         }
 
@@ -97,6 +100,7 @@ mod test_definitions {
                 email: self.user.email().to_string(),
                 emails: self.user.emails.clone(),
                 has_password: !self.user.password_hash.is_empty(),
+                avatar_updated_at: self.user.avatar_updated_at,
             }
         }
         
@@ -107,9 +111,10 @@ mod test_definitions {
             MockUser {
                 user: new_user,
                 mazes: HashMap::new(),
+                avatar: None,
             }
-        }        
-    } 
+        }
+    }
 
     /**************/
     /* Mock store */
@@ -118,6 +123,7 @@ mod test_definitions {
         users: HashMap<Uuid, MockUser>,
         tokens: HashMap<Uuid, OneTimeToken>,
         audit_entries: HashMap<Uuid, EmailAuditEntry>,
+        scores: Vec<ScoreEntry>,
     }
 
     impl MockStore {
@@ -126,6 +132,7 @@ mod test_definitions {
                 users: new_users_map(user_defs),
                 tokens: HashMap::new(),
                 audit_entries: HashMap::new(),
+                scores: Vec::new(),
             }
         }
 
@@ -141,6 +148,36 @@ mod test_definitions {
                 return Ok(mock_user);
             }
             Err(StoreError::UserIdNotFound(id.to_string()))
+        }
+
+        /// Wraps a board page into `ScoreboardEntry`s, resolving each row's
+        /// username from the mock users when requested (mirrors the real
+        /// stores' storage-owned resolution).
+        fn attach_mock_usernames(
+            &self,
+            page: Vec<ScoreEntry>,
+            include_usernames: bool,
+        ) -> Vec<ScoreboardEntry> {
+            page.into_iter()
+                .map(|entry| {
+                    let (username, avatar_updated_at) = if include_usernames {
+                        match self.users.get(&entry.user_id) {
+                            Some(u) => (
+                                Some(u.user.username.clone()),
+                                u.user.avatar_updated_at,
+                            ),
+                            None => (None, None),
+                        }
+                    } else {
+                        (None, None)
+                    };
+                    ScoreboardEntry {
+                        entry,
+                        username,
+                        avatar_updated_at,
+                    }
+                })
+                .collect()
         }
 
         /// Find the api key to use for a given username. If the username does not exist,
@@ -336,6 +373,24 @@ mod test_definitions {
         /// Adds the default admin user to the store if it doesn't already exist, else returns it
         async fn init_default_admin_user(&mut self, _username: &str, _email: &str, _password_hash: &str) -> Result<User, StoreError> {
             Err(StoreError::Other("init_default_admin_user() not implemented for MockStore".to_string()))
+        }
+        async fn set_user_avatar(&mut self, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(id)?;
+            mock_user.avatar = Some(png_bytes);
+            // Stamp the marker in lock-step with the bytes, mirroring the real stores.
+            mock_user.user.avatar_updated_at = Some(chrono::Utc::now());
+            Ok(())
+        }
+        async fn get_user_avatar(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+            Ok(self.users.get(&id).and_then(|u| u.avatar.clone()))
+        }
+        async fn clear_user_avatar(&mut self, id: Uuid) -> Result<(), StoreError> {
+            // Idempotent: clearing an unknown user or one with no avatar is a no-op.
+            if let Some(mock_user) = self.users.get_mut(&id) {
+                mock_user.avatar = None;
+                mock_user.user.avatar_updated_at = None;
+            }
+            Ok(())
         }
         /// Adds a new user to the store and sets the allocated `id` within the user object
         async fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
@@ -715,6 +770,116 @@ mod test_definitions {
         }
     }
 
+    // Minimal stub — the server does not exercise scoring yet (the record +
+    // leaderboard handlers land in a later step, which will flesh this out).
+    // Present so `MockStore` satisfies the `Store` supertrait bound.
+    #[async_trait]
+    impl ScoreStore for MockStore {
+        async fn record_score(&mut self, entry: &ScoreEntry) -> Result<Uuid, StoreError> {
+            // Mirror the real stores' subject invariant (exactly one of
+            // maze_id / challenge) so the handler's 400 path is exercised.
+            // `is_some() == is_some()` is true when both or neither are set.
+            if entry.maze_id.is_some() == entry.challenge.is_some() {
+                return Err(StoreError::Other(
+                    "score entry must set exactly one of maze_id / challenge".to_string(),
+                ));
+            }
+            self.scores.push(entry.clone());
+            Ok(entry.id)
+        }
+        async fn maze_leaderboard(
+            &self,
+            maze_id: &str,
+            ordering: ScoreOrdering,
+            limit: u32,
+            offset: u32,
+            include_usernames: bool,
+        ) -> Result<Vec<ScoreboardEntry>, StoreError> {
+            let page = mock_paged_board(
+                &self.scores,
+                |e| e.maze_id.as_deref() == Some(maze_id),
+                ordering,
+                limit,
+                offset,
+            );
+            Ok(self.attach_mock_usernames(page, include_usernames))
+        }
+        async fn challenge_leaderboard(
+            &self,
+            challenge: &str,
+            ordering: ScoreOrdering,
+            limit: u32,
+            offset: u32,
+            include_usernames: bool,
+        ) -> Result<Vec<ScoreboardEntry>, StoreError> {
+            let page = mock_paged_board(
+                &self.scores,
+                |e| e.challenge.as_deref() == Some(challenge),
+                ordering,
+                limit,
+                offset,
+            );
+            Ok(self.attach_mock_usernames(page, include_usernames))
+        }
+        async fn user_history(
+            &self,
+            user_id: Uuid,
+            limit: u32,
+            offset: u32,
+        ) -> Result<Vec<ScoreEntry>, StoreError> {
+            let mut matched: Vec<ScoreEntry> =
+                self.scores.iter().filter(|e| e.user_id == user_id).cloned().collect();
+            // Recent first: recorded_at DESC, id DESC (mirrors FileStore/SqlStore).
+            matched.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at).then(b.id.cmp(&a.id)));
+            Ok(matched.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+        async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, StoreError> {
+            let before = self.scores.len();
+            self.scores.retain(|e| e.maze_id.as_deref() != Some(maze_id));
+            Ok((before - self.scores.len()) as u64)
+        }
+        async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, StoreError> {
+            let before = self.scores.len();
+            self.scores.retain(|e| e.challenge.as_deref() != Some(challenge));
+            Ok((before - self.scores.len()) as u64)
+        }
+    }
+
+    /// Orders two score entries by `ordering`, mirroring the FileStore /
+    /// SqlStore tie-break (primary metric per direction, the other metric, then
+    /// recorded_at ASC, then id ASC). Used by the MockStore board queries so the
+    /// handler tests exercise real ordering + paging.
+    fn mock_score_cmp(ordering: ScoreOrdering, a: &ScoreEntry, b: &ScoreEntry) -> std::cmp::Ordering {
+        let primary = match ordering.metric {
+            ScoreMetric::Time => a.elapsed_ms.cmp(&b.elapsed_ms),
+            ScoreMetric::Score => a.score.cmp(&b.score),
+        };
+        let primary = match ordering.direction {
+            SortDirection::Ascending => primary,
+            SortDirection::Descending => primary.reverse(),
+        };
+        let secondary = match ordering.metric {
+            ScoreMetric::Time => b.score.cmp(&a.score),
+            ScoreMetric::Score => a.elapsed_ms.cmp(&b.elapsed_ms),
+        };
+        primary
+            .then(secondary)
+            .then(a.recorded_at.cmp(&b.recorded_at))
+            .then(a.id.cmp(&b.id))
+    }
+
+    fn mock_paged_board(
+        entries: &[ScoreEntry],
+        keep: impl Fn(&ScoreEntry) -> bool,
+        ordering: ScoreOrdering,
+        limit: u32,
+        offset: u32,
+    ) -> Vec<ScoreEntry> {
+        let mut matched: Vec<ScoreEntry> = entries.iter().filter(|e| keep(e)).cloned().collect();
+        matched.sort_by(|a, b| mock_score_cmp(ordering, a, b));
+        matched.into_iter().skip(offset as usize).take(limit as usize).collect()
+    }
+
     impl Store for MockStore {}
 
     /****************/
@@ -952,6 +1117,7 @@ mod test_definitions {
         MockUser {
             user,
             mazes: new_mazes_map(user_def.mazes.clone()),
+            avatar: None,
         }
     }
 
@@ -1313,6 +1479,7 @@ mod test_definitions {
                 email: self.email.clone(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 has_password: true,
+                avatar_updated_at: None,
             }
         }
 
@@ -1422,6 +1589,7 @@ mod test_definitions {
                 email: self.email.clone(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 has_password: true,
+                avatar_updated_at: None,
             }
         }
 
@@ -2884,6 +3052,27 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn can_create_maze_with_game_settings_that_round_trips() {
+        let mut maze = new_solvable_maze("", "settings_maze");
+        maze.game_settings = Some(serde_json::json!({
+            "skyType": "dungeon",
+            "wallType": "lava",
+            "timerSeconds": 90
+        }));
+        // run_create_maze_test asserts the POST response maze equals the input
+        // (Maze equality compares full JSON), proving game_settings survives
+        // the create handler's deserialize → store → response-serialize path.
+        run_create_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            maze,
+            StatusCode::CREATED,
+        )
+        .await;
+    }
+
+    #[actix_web::test]
     async fn cannot_create_maze_that_exceeds_feature_cap() {
         // 9 keys + 8 doors = 17 > maze::MAX_TOTAL_FEATURES (16). The
         // store-level validate_maze_feature_count rejects, the handler maps
@@ -3141,6 +3330,7 @@ mod test_definitions {
             spare_keys: None,
             enemy_count: None,
             health_count: None,
+            treasure_count: None,
         }
     }
 
@@ -4146,6 +4336,7 @@ mod test_definitions {
             deleted_at: None,
             created_at: chrono::Utc::now(),
             last_sign_in_at: None,
+            avatar_updated_at: None,
         };
         {
             let mut store_lock = shared_store.write().await;
@@ -5985,10 +6176,20 @@ mod test_definitions {
         assert_eq!(body.spare_keys, 0);
         assert_eq!(body.enemy_count, 1);
         assert_eq!(body.health_count, 2);
+        assert_eq!(body.treasure_count, 3);
         assert_eq!(body.enemy_type, "goblin");
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1800);
         assert_eq!(body.max_hp, 3);
+        // Easy is a single-level run; the rest of the group is at its defaults.
+        assert_eq!(body.levels.count, 1);
+        assert_eq!(body.levels.finish_type, "ladder");
+        assert_eq!(body.levels.difficulty_change, "easier");
+        assert!(body.levels.reset_bag);
+        assert_eq!(body.levels.alignment, "edge");
+        assert!(!body.levels.perimeter_random);
+        assert!(!body.levels.hide_completed_enemies);
+        assert!(body.levels.top.is_none());
     }
 
     #[actix_web::test]
@@ -6011,10 +6212,12 @@ mod test_definitions {
         assert_eq!(body.spare_keys, 1);
         assert_eq!(body.enemy_count, 3);
         assert_eq!(body.health_count, 3);
+        assert_eq!(body.treasure_count, 5);
         assert_eq!(body.enemy_type, "goblin");
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1500);
         assert_eq!(body.max_hp, 3);
+        assert_eq!(body.levels.count, 2, "tricky is a two-level run by default");
 
         let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
         let resp = test::call_service(&app, req).await;
@@ -6031,10 +6234,57 @@ mod test_definitions {
         assert_eq!(body.spare_keys, 1);
         assert_eq!(body.enemy_count, 5);
         assert_eq!(body.health_count, 4);
+        assert_eq!(body.treasure_count, 8);
         assert_eq!(body.enemy_type, "goblin");
         assert_eq!(body.health_style, "heart");
         assert_eq!(body.enemy_move_period_ms, 1200);
         assert_eq!(body.max_hp, 3);
+        assert_eq!(body.levels.count, 3, "hard is a three-level run by default");
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_levels_group_and_clamps_the_count() {
+        use crate::config::game::{
+            DifficultyChangeConfig, FinishTypeConfig, LayeredAlignmentConfig, LevelsConfig,
+            TopLevelConfig, SkyTypeConfig, MAX_LEVEL_COUNT,
+        };
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = true;
+        // A fully-specified levels group with an over-the-cap count + a top override.
+        app_config.game.play3d.easy.levels = LevelsConfig {
+            count: 99,
+            finish_type: FinishTypeConfig::Random,
+            difficulty_change: DifficultyChangeConfig::Harder,
+            reset_bag: false,
+            alignment: LayeredAlignmentConfig::Centre,
+            taper: true,
+            perimeter_random: true,
+            hide_completed_enemies: true,
+            top: Some(TopLevelConfig {
+                sky_type: Some(SkyTypeConfig::Day),
+                perimeter_walls: Some(false),
+            }),
+        };
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.levels.count, MAX_LEVEL_COUNT, "count clamps to MAX_LEVEL_COUNT");
+        assert_eq!(body.levels.finish_type, "random");
+        assert_eq!(body.levels.difficulty_change, "harder");
+        assert!(!body.levels.reset_bag);
+        assert_eq!(body.levels.alignment, "centre");
+        assert!(body.levels.taper);
+        assert!(body.levels.perimeter_random);
+        assert!(body.levels.hide_completed_enemies);
+        let top = body.levels.top.expect("top override is surfaced");
+        assert_eq!(top.sky_type.as_deref(), Some("day"));
+        assert_eq!(top.perimeter_walls, Some(false));
     }
 
     #[actix_web::test]
@@ -6798,5 +7048,765 @@ mod test_definitions {
             .to_request();
         let renew_resp = test::call_service(&app, renew_req).await;
         assert_eq!(renew_resp.status(), StatusCode::OK, "OAuth-issued token must work with /login/renew");
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /api/v1/scores
+    // -----------------------------------------------------------------------
+
+    /// Resolves the user id the mock store allocated for a username, so the
+    /// score tests can assert the server set `user_id` from the session.
+    fn caller_user_id(mock_users: &HashMap<Uuid, MockUser>, username: &str) -> Uuid {
+        mock_users
+            .values()
+            .find(|u| u.user.username == username)
+            .expect("caller present in mock store")
+            .user
+            .id
+    }
+
+    #[tokio::test]
+    async fn record_score_with_maze_subject_succeeds() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("My Maze.json".to_string()),
+            challenge: None,
+            score: 7,
+            elapsed_ms: 42_137,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let bytes = test::read_body(resp).await;
+        let recorded: ScoreResponse = serde_json::from_slice(&bytes).expect("ScoreResponse");
+        assert_eq!(recorded.maze_id.as_deref(), Some("My Maze.json"));
+        assert_eq!(recorded.challenge, None);
+        assert_eq!(recorded.score, 7);
+        assert_eq!(recorded.elapsed_ms, 42_137);
+        // Server-owned identity: user_id comes from the session, not the body.
+        assert_eq!(recorded.user_id, caller_user_id(&mock_users, VALID_USERNAME_1));
+        assert_ne!(recorded.id, Uuid::nil());
+    }
+
+    #[tokio::test]
+    async fn record_score_with_challenge_subject_succeeds() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: None,
+            challenge: Some("hard:12345".to_string()),
+            score: 3,
+            elapsed_ms: 9_001,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        let bytes = test::read_body(resp).await;
+        let recorded: ScoreResponse = serde_json::from_slice(&bytes).expect("ScoreResponse");
+        assert_eq!(recorded.maze_id, None);
+        assert_eq!(recorded.challenge.as_deref(), Some("hard:12345"));
+    }
+
+    #[tokio::test]
+    async fn record_score_with_both_subjects_is_bad_request() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("My Maze.json".to_string()),
+            challenge: Some("hard:12345".to_string()),
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn record_score_with_no_subject_is_bad_request() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: None,
+            challenge: None,
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // No api key, no login token → the auth middleware rejects before the
+    // handler runs. As elsewhere in this suite, a middleware-level rejection
+    // surfaces through `call_service` as a panic (the guarded scope returns an
+    // `Err`, not a response), so this is asserted via `should_panic`.
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn record_score_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("My Maze.json".to_string()),
+            challenge: None,
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", None, None, Some(&body));
+        test::call_service(&app, req).await;
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /api/v1/scores  (leaderboard)  +  GET /api/v1/scores/me  (history)
+    // -----------------------------------------------------------------------
+
+    /// Three runs whose time order (fastest first) and score order (highest
+    /// first) are deliberately different, so a test can tell the orderings
+    /// apart: by time → [B, C, A]; by score → [A, C, B].
+    const SCORE_SEED: [(u64, u64); 3] = [
+        // (score, elapsed_ms)
+        (10, 300), // A
+        (5, 100),  // B
+        (8, 200),  // C
+    ];
+
+    async fn seed_maze_scores(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+        maze_id: &str,
+    ) {
+        for (score, elapsed_ms) in SCORE_SEED {
+            let body = RecordScoreRequest {
+                maze_id: Some(maze_id.to_string()),
+                challenge: None,
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            let resp = test::call_service(app, req).await;
+            assert_eq!(resp.status(), StatusCode::CREATED);
+        }
+    }
+
+    async fn read_board(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        url: &str,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+    ) -> ScoreboardResponse {
+        let req = create_test_get_request(url, api_key, login_id);
+        let resp = test::call_service(app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK, "GET {url}");
+        let bytes = test::read_body(resp).await;
+        serde_json::from_slice(&bytes).expect("ScoreboardResponse")
+    }
+
+    #[tokio::test]
+    async fn leaderboard_orders_by_time_then_score() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // Default metric is time, default direction fastest-first → [B, C, A].
+        let by_time = read_board(&app, "/api/v1/scores?maze_id=maze-1", api_key, login_id).await;
+        let times: Vec<u64> = by_time.scores.iter().map(|s| s.elapsed_ms).collect();
+        assert_eq!(times, vec![100, 200, 300]);
+        assert!(!by_time.has_more);
+        assert_eq!(by_time.offset, 0);
+
+        // metric=score → highest-first → [A, C, B].
+        let by_score =
+            read_board(&app, "/api/v1/scores?maze_id=maze-1&metric=score", api_key, login_id).await;
+        let scores: Vec<u64> = by_score.scores.iter().map(|s| s.score).collect();
+        assert_eq!(scores, vec![10, 8, 5]);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_pages_with_limit_offset_and_has_more() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // Page 1 (limit=2) of the time board [B, C, A] → [B, C], more to come.
+        let page1 =
+            read_board(&app, "/api/v1/scores?maze_id=maze-1&limit=2", api_key, login_id).await;
+        assert_eq!(page1.scores.iter().map(|s| s.elapsed_ms).collect::<Vec<_>>(), vec![100, 200]);
+        assert_eq!(page1.limit, 2);
+        assert!(page1.has_more);
+
+        // Page 2 (offset=2) → [A], no more.
+        let page2 = read_board(
+            &app,
+            "/api/v1/scores?maze_id=maze-1&limit=2&offset=2",
+            api_key,
+            login_id,
+        )
+        .await;
+        assert_eq!(page2.scores.iter().map(|s| s.elapsed_ms).collect::<Vec<_>>(), vec![300]);
+        assert!(!page2.has_more);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_caps_limit_at_server_max() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // Ask for far more than the cap — the effective limit echoed back is 100.
+        let board =
+            read_board(&app, "/api/v1/scores?maze_id=maze-1&limit=100000", api_key, login_id).await;
+        assert_eq!(board.limit, 100);
+        assert_eq!(board.scores.len(), 3);
+        assert!(!board.has_more);
+    }
+
+    #[tokio::test]
+    async fn challenge_leaderboard_reads_curated_subject() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        for (score, elapsed_ms) in SCORE_SEED {
+            let body = RecordScoreRequest {
+                maze_id: None,
+                challenge: Some("hard:12345".to_string()),
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+        }
+
+        let board =
+            read_board(&app, "/api/v1/scores?challenge=hard:12345", api_key, login_id).await;
+        assert_eq!(board.scores.iter().map(|s| s.elapsed_ms).collect::<Vec<_>>(), vec![100, 200, 300]);
+        assert!(board.scores.iter().all(|s| s.challenge.as_deref() == Some("hard:12345")));
+    }
+
+    #[tokio::test]
+    async fn leaderboard_requires_exactly_one_subject() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        // Neither subject.
+        let req = create_test_get_request("/api/v1/scores", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+
+        // Both subjects.
+        let req = create_test_get_request(
+            "/api/v1/scores?maze_id=maze-1&challenge=hard:1",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // -----------------------------------------------------------------------
+    // DELETE /api/v1/scores  (reset a leaderboard)
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn reset_maze_leaderboard_by_owner_clears_it() {
+        // The caller owns "maze_a.json" (MazeContent::OneMaze).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::OneMaze));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze_a.json").await;
+        assert_eq!(
+            read_board(&app, "/api/v1/scores?maze_id=maze_a.json", api_key, login_id).await.scores.len(),
+            3
+        );
+
+        let req = create_test_delete_request("/api/v1/scores?maze_id=maze_a.json", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: ResetScoresResponse =
+            serde_json::from_slice(&test::read_body(resp).await).expect("ResetScoresResponse");
+        assert_eq!(body.deleted, 3);
+
+        // The board is now empty.
+        assert!(read_board(&app, "/api/v1/scores?maze_id=maze_a.json", api_key, login_id)
+            .await
+            .scores
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn reset_maze_leaderboard_by_non_owner_is_forbidden() {
+        // The caller has no mazes, so it does not own "maze_a.json".
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        // Recording a score doesn't check ownership, so a board can exist.
+        seed_maze_scores(&app, api_key, login_id, "maze_a.json").await;
+
+        let req = create_test_delete_request("/api/v1/scores?maze_id=maze_a.json", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+        // The board is untouched.
+        assert_eq!(
+            read_board(&app, "/api/v1/scores?maze_id=maze_a.json", api_key, login_id).await.scores.len(),
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn reset_challenge_leaderboard_by_admin_clears_it() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), true).await;
+        for (score, elapsed_ms) in SCORE_SEED {
+            let body = RecordScoreRequest {
+                maze_id: None,
+                challenge: Some("hard:12345".to_string()),
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+        }
+
+        let req = create_test_delete_request("/api/v1/scores?challenge=hard:12345", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: ResetScoresResponse =
+            serde_json::from_slice(&test::read_body(resp).await).expect("ResetScoresResponse");
+        assert_eq!(body.deleted, 3);
+        assert!(read_board(&app, "/api/v1/scores?challenge=hard:12345", api_key, login_id)
+            .await
+            .scores
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn reset_challenge_leaderboard_by_non_admin_is_forbidden() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_delete_request("/api/v1/scores?challenge=hard:12345", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn reset_leaderboard_requires_exactly_one_subject() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), true).await;
+        // Neither subject.
+        let req = create_test_delete_request("/api/v1/scores", api_key, login_id);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+        // Both subjects.
+        let req = create_test_delete_request(
+            "/api/v1/scores?maze_id=maze_a.json&challenge=hard:1",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn reset_leaderboard_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_delete_request("/api/v1/scores?challenge=hard:1", None, None);
+        test::call_service(&app, req).await;
+    }
+
+    #[tokio::test]
+    async fn leaderboard_rejects_bad_metric_and_direction() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let req = create_test_get_request(
+            "/api/v1/scores?maze_id=maze-1&metric=bogus",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+
+        let req = create_test_get_request(
+            "/api/v1/scores?maze_id=maze-1&direction=sideways",
+            api_key,
+            login_id,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn history_returns_callers_runs_paged() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        seed_maze_scores(&app, api_key, login_id, "maze-1").await;
+
+        // All three runs belong to the caller; page size 2 → has_more.
+        let page1 = read_board(&app, "/api/v1/scores/me?limit=2", api_key, login_id).await;
+        assert_eq!(page1.scores.len(), 2);
+        assert!(page1.has_more);
+        assert!(page1.scores.iter().all(|s| s.maze_id.as_deref() == Some("maze-1")));
+
+        let page2 = read_board(&app, "/api/v1/scores/me?limit=2&offset=2", api_key, login_id).await;
+        assert_eq!(page2.scores.len(), 1);
+        assert!(!page2.has_more);
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn leaderboard_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_get_request("/api/v1/scores?maze_id=maze-1", None, None);
+        test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn history_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_get_request("/api/v1/scores/me", None, None);
+        test::call_service(&app, req).await;
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /api/v1/scores — player usernames (include_usernames)
+    // -----------------------------------------------------------------------
+
+    /// The api key the mock store allocated for a username, so a test can post a
+    /// run as a player other than the caller.
+    fn api_key_for(mock_users: &HashMap<Uuid, MockUser>, username: &str) -> Uuid {
+        mock_users
+            .values()
+            .find(|u| u.user.username == username)
+            .expect("user present in mock store")
+            .user
+            .api_key
+    }
+
+    async fn post_challenge_score(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+        challenge: &str,
+        score: u64,
+        elapsed_ms: u64,
+    ) {
+        let body = RecordScoreRequest {
+            maze_id: None,
+            challenge: Some(challenge.to_string()),
+            score,
+            elapsed_ms,
+        };
+        let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+        assert_eq!(test::call_service(app, req).await.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn leaderboard_includes_usernames_for_multiple_players() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 2, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let user2_key = api_key_for(&mock_users, VALID_USERNAME_2);
+
+        // user_1 (the caller) posts via login token; user_2 posts via api key.
+        post_challenge_score(&app, api_key, login_id, "easy:1", 5, 1000).await;
+        post_challenge_score(&app, Some(user2_key), None, "easy:1", 9, 2000).await;
+
+        // Default (param omitted) → usernames resolved + present for both players.
+        let board = read_board(&app, "/api/v1/scores?challenge=easy:1", api_key, login_id).await;
+        assert_eq!(board.scores.len(), 2);
+        let names: std::collections::HashSet<String> =
+            board.scores.iter().filter_map(|s| s.username.clone()).collect();
+        assert!(names.contains(VALID_USERNAME_1), "caller username present: {names:?}");
+        assert!(names.contains(VALID_USERNAME_2), "other player username present: {names:?}");
+    }
+
+    #[tokio::test]
+    async fn leaderboard_omits_usernames_when_excluded() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 2, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let user2_key = api_key_for(&mock_users, VALID_USERNAME_2);
+        post_challenge_score(&app, api_key, login_id, "easy:1", 5, 1000).await;
+        post_challenge_score(&app, Some(user2_key), None, "easy:1", 9, 2000).await;
+
+        // include_usernames=false → every row's username is absent.
+        let board = read_board(
+            &app,
+            "/api/v1/scores?challenge=easy:1&include_usernames=false",
+            api_key,
+            login_id,
+        )
+        .await;
+        assert_eq!(board.scores.len(), 2);
+        assert!(board.scores.iter().all(|s| s.username.is_none()));
+
+        // Explicit include_usernames=true → present (parity with the default).
+        let board_true = read_board(
+            &app,
+            "/api/v1/scores?challenge=easy:1&include_usernames=true",
+            api_key,
+            login_id,
+        )
+        .await;
+        assert!(board_true.scores.iter().all(|s| s.username.is_some()));
+    }
+
+    // **************************************************************************************************
+    // Tests: avatar endpoints
+    //   POST   /api/v1/users/me/avatar
+    //   DELETE /api/v1/users/me/avatar
+    //   GET    /api/v1/users/{id}/avatar
+    // **************************************************************************************************
+
+    /// Encodes a tiny solid-colour image to the given format for upload tests.
+    fn encode_test_image(width: u32, height: u32, format: image::ImageFormat) -> Vec<u8> {
+        let img = image::RgbImage::from_pixel(width, height, image::Rgb([20, 120, 200]));
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), format)
+            .expect("encode test image");
+        bytes
+    }
+
+    /// Builds a `multipart/form-data` body with a single `file` part, returning
+    /// the body bytes and the boundary to put on the Content-Type header.
+    fn multipart_file_body(filename: &str, content_type: &str, data: &[u8]) -> (Vec<u8>, String) {
+        let boundary = "avatartestboundary7f3c".to_string();
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n")
+                .as_bytes(),
+        );
+        body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
+        body.extend_from_slice(data);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        (body, boundary)
+    }
+
+    /// Builds an authenticated `POST /users/me/avatar` multipart request.
+    fn avatar_upload_request(
+        boundary: &str,
+        body: Vec<u8>,
+        login_id: Uuid,
+    ) -> actix_http::Request {
+        test::TestRequest::post()
+            .uri("/api/v1/users/me/avatar")
+            .insert_header(("Authorization", format!("Bearer {login_id}")))
+            .insert_header((
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            ))
+            .set_payload(body)
+            .to_request()
+    }
+
+    const PNG_SIGNATURE: [u8; 4] = [0x89, 0x50, 0x4E, 0x47];
+
+    #[actix_web::test]
+    async fn upload_avatar_stores_canonical_png_and_serves_it() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        // Upload a non-square PNG → 200 + the new marker.
+        let png = encode_test_image(10, 20, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("a.png", "image/png", &png);
+        let resp = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let _updated: crate::api::v1::endpoints::avatar::AvatarUpdatedResponse =
+            test::read_body_json(resp).await;
+
+        // The profile now carries the marker.
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+        assert!(
+            me.avatar_updated_at.is_some(),
+            "profile must carry avatar_updated_at after upload"
+        );
+
+        // GET the avatar as a signed-in viewer — any id is readable when authed.
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let content_type = get_resp
+            .headers()
+            .get(actix_web::http::header::CONTENT_TYPE)
+            .expect("content-type")
+            .to_str()
+            .expect("ascii content-type")
+            .to_string();
+        assert_eq!(content_type, "image/png");
+        let served = test::read_body(get_resp).await;
+        assert_eq!(&served[..4], &PNG_SIGNATURE, "served bytes must be a PNG");
+    }
+
+    #[actix_web::test]
+    async fn upload_avatar_converts_jpeg_to_png() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        let jpeg = encode_test_image(12, 12, image::ImageFormat::Jpeg);
+        let (body, boundary) = multipart_file_body("a.jpg", "image/jpeg", &jpeg);
+        let resp = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let served = test::read_body(get_resp).await;
+        assert_eq!(
+            &served[..4],
+            &PNG_SIGNATURE,
+            "a JPEG upload must be re-encoded and served as PNG"
+        );
+    }
+
+    #[actix_web::test]
+    async fn upload_avatar_rejects_non_image() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, _api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        // Bytes that aren't a decodable image — even though the part claims PNG,
+        // the server validates by decoding, so this is rejected.
+        let (body, boundary) = multipart_file_body("a.png", "image/png", b"this is not an image");
+        let resp = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn upload_avatar_unauthenticated_fails() {
+        // The auth middleware short-circuits unauthenticated guarded requests
+        // with an error, which `call_service` surfaces as a panic — the same
+        // convention the other `*_unauthenticated_fails` tests use.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, _api_key, _login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let png = encode_test_image(8, 8, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("a.png", "image/png", &png);
+        let req = test::TestRequest::post()
+            .uri("/api/v1/users/me/avatar")
+            .insert_header((
+                "Content-Type",
+                format!("multipart/form-data; boundary={boundary}"),
+            ))
+            .set_payload(body)
+            .to_request();
+        let _ = test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_avatar_clears_marker_and_image() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let login = login_id.expect("login id");
+
+        // Upload, then delete.
+        let png = encode_test_image(8, 8, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("a.png", "image/png", &png);
+        let up = test::call_service(&app, avatar_upload_request(&boundary, body, login)).await;
+        assert_eq!(up.status(), StatusCode::OK);
+
+        let del = test::call_service(
+            &app,
+            create_test_delete_request("/api/v1/users/me/avatar", api_key, login_id),
+        )
+        .await;
+        assert_eq!(del.status(), StatusCode::NO_CONTENT);
+
+        // Marker gone from the profile.
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+        assert!(
+            me.avatar_updated_at.is_none(),
+            "avatar_updated_at must be cleared after delete"
+        );
+
+        // Image now 404s.
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn get_avatar_returns_404_when_unset() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        let me_resp =
+            test::call_service(&app, create_test_get_request("/api/v1/users/me", api_key, login_id))
+                .await;
+        let me: UserItem = test::read_body_json(me_resp).await;
+
+        let get_resp = test::call_service(
+            &app,
+            create_test_get_request(&format!("/api/v1/users/{}/avatar", me.id), api_key, login_id),
+        )
+        .await;
+        assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn get_avatar_unauthenticated_fails() {
+        // The serve route is guarded like the rest of the API — an
+        // unauthenticated GET is rejected by the auth middleware (surfaced as a
+        // call_service panic, matching the other *_unauthenticated_fails tests).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, _users, _api_key, _login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = test::TestRequest::get()
+            .uri(&format!("/api/v1/users/{}/avatar", Uuid::new_v4()))
+            .to_request();
+        let _ = test::call_service(&app, req).await;
     }
 }

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Maze.Maui.App.AvatarView">
+    <!-- Circular frame: Border clips its content to the StrokeShape, so the
+         image is masked to a circle, with a thin black ring on the edge to
+         match the web client. -->
+    <Border x:Name="Ring"
+            Stroke="Black"
+            StrokeThickness="1"
+            BackgroundColor="#E5E7EB"
+            Padding="0"
+            HorizontalOptions="Start"
+            VerticalOptions="Center">
+        <Border.StrokeShape>
+            <Ellipse />
+        </Border.StrokeShape>
+        <Image x:Name="AvatarImage" Aspect="AspectFill" />
+    </Border>
+</ContentView>

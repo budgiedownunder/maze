@@ -606,6 +606,7 @@ pub trait App: LinePrinter + Send {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         match gen.generate() {

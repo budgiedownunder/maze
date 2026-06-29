@@ -1,5 +1,5 @@
 use crate::wasm_common::{new_maze, new_maze_game, to_cell_type_enum, MazeGameWasm, MazeWasm};
-use data_model::MazePoint;
+use data_model::{CellEntity, MazePoint};
 use maze::{MazeSolution, MazeSolver};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
@@ -276,6 +276,24 @@ pub extern "C" fn maze_wasm_set_health_cells(
     end_col: u32,
 ) -> u32 {
     set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'H')
+}
+
+/// Sets cells to treasure (`'T'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'T'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_treasure_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'T')
 }
 
 /// Sets cells values in a `MazeWasm` to empty
@@ -630,6 +648,90 @@ pub extern "C" fn maze_wasm_to_json(maze_wasm: *mut MazeWasm) -> u32 {
         Ok(json_str) => create_maze_wasm_string_result(json_str.as_str()),
     }
 }
+/// Returns the per-cell entity override at `(row, col)` as a `MazeWasmResult`:
+/// `value_type = String` carrying the entity's wire JSON
+/// (e.g. `{"type":"E","enemyType":"ghost","damage":2}`) when present, or
+/// `value_type = None` when the cell carries no override.
+///
+/// # Returns
+///
+/// Pointer to a `MazeWasmResult`.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_get_cell_entity(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    let entity = maze_wasm
+        .maze
+        .definition
+        .cell_entities
+        .get(&(row as usize, col as usize))
+        .and_then(|entities| entities.first());
+    match entity {
+        Some(entity) => match serde_json::to_string(entity) {
+            Ok(json_str) => create_maze_wasm_string_result(json_str.as_str()),
+            Err(error) => create_maze_wasm_error_result(Some(error.to_string().as_str())),
+        },
+        None => to_maze_wasm_result_ptr(MazeWasmResultValueType::None as u8, 0, None),
+    }
+}
+/// Sets the per-cell entity override at `(row, col)` from its wire JSON,
+/// replacing any existing one. The entity `type` must match the cell's current
+/// character.
+///
+/// # Returns
+///
+/// Zero on success, else an error pointer (parse error, out-of-range cell, or
+/// a `type`/cell-character mismatch).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_cell_entity(
+    maze_wasm: *mut MazeWasm,
+    row: u32,
+    col: u32,
+    json_string_ptr: *mut u8,
+) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    let json_str = ptr_to_string(json_string_ptr);
+    let entity: CellEntity = match serde_json::from_str(&json_str) {
+        Ok(entity) => entity,
+        Err(error) => return create_maze_wasm_error_ptr(error.to_string().as_str()),
+    };
+    let (r, c) = (row as usize, col as usize);
+    if r >= maze_wasm.maze.definition.row_count() || c >= maze_wasm.maze.definition.col_count() {
+        return create_maze_wasm_error_ptr("cell out of range");
+    }
+    let cell_char = maze_wasm.maze.definition.grid[r][c];
+    if entity.cell_char() != cell_char {
+        return create_maze_wasm_error_ptr(&format!(
+            "cell entity type '{}' does not match cell character '{}'",
+            entity.cell_char(),
+            cell_char
+        ));
+    }
+    maze_wasm
+        .maze
+        .definition
+        .cell_entities
+        .insert((r, c), vec![entity]);
+    0
+}
+/// Clears any per-cell entity override at `(row, col)`. A cell with no override
+/// is unaffected.
+///
+/// # Returns
+///
+/// Zero (always succeeds).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_clear_cell_entity(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    maze_wasm
+        .maze
+        .definition
+        .cell_entities
+        .remove(&(row as usize, col as usize));
+    0
+}
 /// Solves a `MazeWasm` for its solution path
 ///
 /// # Returns
@@ -817,6 +919,7 @@ pub struct GeneratorOptionsWasm {
     pub spare_keys:         u32,
     pub enemy_count:        u32,
     pub health_count:       u32,
+    pub treasure_count:     u32,
 }
 /// Creates a new `GeneratorOptionsWasm` with the given required fields and default optional fields.
 ///
@@ -848,6 +951,7 @@ pub extern "C" fn new_generator_options_wasm(
         spare_keys:         0,
         enemy_count:        0,
         health_count:       0,
+        treasure_count:     0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -941,6 +1045,16 @@ pub extern "C" fn generator_options_set_health_count(ptr: *mut GeneratorOptionsW
     let opts = unsafe { &mut *ptr };
     opts.health_count = value;
 }
+/// Sets the number of treasure cells to auto-place (`0` = none, the default).
+/// Placed dead-end-first and rarity-weighted; clamped by the generator to
+/// `maze::MAX_TREASURE_COUNT` and to the number of eligible cells.
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_treasure_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.treasure_count = value;
+}
 /// Generates a maze, populating the given `MazeWasm`.
 ///
 /// # Returns
@@ -985,6 +1099,7 @@ pub extern "C" fn maze_wasm_generate(
         spare_keys: Some(opts.spare_keys as usize),
         enemy_count: Some(opts.enemy_count as usize),
         health_count: Some(opts.health_count as usize),
+        treasure_count: Some(opts.treasure_count as usize),
     };
 
     let generator = Generator { options: generator_options };
@@ -1466,6 +1581,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event(
         maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
         maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
         maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
+        maze::GameEvent::TreasureCollected { cell: (r, c), .. } => (6u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
@@ -1514,6 +1630,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event_payload(
             maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
         },
         maze::GameEvent::KeyCollected { id, .. } => *id,
+        maze::GameEvent::TreasureCollected { value, .. } => *value,
     };
     unsafe {
         if !out_payload.is_null() {
@@ -1659,9 +1776,13 @@ pub extern "C" fn maze_game_wasm_enemy_count(maze_game_wasm: *mut MazeGameWasm) 
     game.enemies().len() as i32
 }
 
-/// Retrieves a single enemy's current cell + stable id by index. Writes
-/// the enemy's row / column / id into the out parameters. Returns `0` on
-/// success, `-1` on null pointer or out-of-range index.
+/// Retrieves a single enemy's current cell, stable id, and resolved per-enemy
+/// tunables by index. Writes row / column / id plus `out_damage` /
+/// `out_move_period_ms` (resolved values: per-cell override else the per-game
+/// default) and `out_enemy_type` (the rig override: `-1` when the spawn cell
+/// set none, else the [`maze::EnemyType`] ordinal — `0` = goblin, `1` = ghost)
+/// into the out parameters. Returns `0` on success, `-1` on null pointer or
+/// out-of-range index.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_game_wasm_get_enemy(
@@ -1670,6 +1791,9 @@ pub extern "C" fn maze_game_wasm_get_enemy(
     out_row: *mut u32,
     out_col: *mut u32,
     out_id: *mut u32,
+    out_damage: *mut u32,
+    out_move_period_ms: *mut f32,
+    out_enemy_type: *mut i32,
 ) -> i32 {
     if maze_game_wasm.is_null() {
         return -1;
@@ -1689,6 +1813,141 @@ pub extern "C" fn maze_game_wasm_get_enemy(
         }
         if !out_id.is_null() {
             *out_id = enemy.id;
+        }
+        if !out_damage.is_null() {
+            *out_damage = enemy.damage;
+        }
+        if !out_move_period_ms.is_null() {
+            *out_move_period_ms = enemy.move_period_ms;
+        }
+        if !out_enemy_type.is_null() {
+            *out_enemy_type = enemy_type_to_ffi(enemy.enemy_type);
+        }
+    }
+    0
+}
+
+/// Encodes an optional enemy rig override for the FFI boundary: `-1` for
+/// "no per-cell override", else the [`maze::EnemyType`] ordinal (`0` = goblin,
+/// `1` = ghost). C# maps the ordinal back to its `EnemyType`.
+fn enemy_type_to_ffi(enemy_type: Option<maze::EnemyType>) -> i32 {
+    match enemy_type {
+        None => -1,
+        Some(maze::EnemyType::Goblin) => 0,
+        Some(maze::EnemyType::Ghost) => 1,
+    }
+}
+
+/// Returns the number of uncollected treasure cells (live `'T'`),
+/// or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_treasure_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.treasures().len() as i32
+}
+
+/// Retrieves a single uncollected treasure cell by index: its cell, visual
+/// style, and resolved reward value. `out_style` is the [`maze::TreasureStyle`]
+/// ordinal (`0` = silver, `1` = gold, `2` = diamonds, `3` = jewels); `out_value`
+/// the score the treasure awards (per-cell override else the rarity-derived
+/// default). Returns `0` on success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_treasure(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_style: *mut i32,
+    out_value: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let treasures = game.treasures();
+    if index < 0 || index as usize >= treasures.len() {
+        return -1;
+    }
+    let ((row, col), style, value) = treasures[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = col as u32;
+        }
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_value.is_null() {
+            *out_value = value;
+        }
+    }
+    0
+}
+
+/// Encodes a treasure's visual style for the FFI boundary: the
+/// [`maze::TreasureStyle`] ordinal (`0` = silver, `1` = gold, `2` = diamonds,
+/// `3` = jewels). A treasure always has a style (a bare `'T'` defaults to
+/// silver), so there is no `-1` "none" case. C# maps the ordinal back to its
+/// `TreasureStyle`.
+fn treasure_style_to_ffi(style: maze::TreasureStyle) -> i32 {
+    match style {
+        maze::TreasureStyle::Silver => 0,
+        maze::TreasureStyle::Gold => 1,
+        maze::TreasureStyle::Diamonds => 2,
+        maze::TreasureStyle::Jewels => 3,
+    }
+}
+
+/// Returns the number of distinct treasure styles the player has collected so
+/// far (the length of the grouped per-style tally), or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_collected_treasure_count(
+    maze_game_wasm: *mut MazeGameWasm,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.collected_treasure().len() as i32
+}
+
+/// Retrieves one entry of the grouped per-style collected-treasure tally by
+/// index: `out_style` is the [`maze::TreasureStyle`] ordinal (`0` = silver,
+/// `1` = gold, `2` = diamonds, `3` = jewels); `out_count` the number of that
+/// style collected. Entries are ordered by ascending default value; styles
+/// never collected are omitted, so every `out_count` is at least `1`. Returns `0` on
+/// success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_collected_treasure(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_style: *mut i32,
+    out_count: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let collected = game.collected_treasure();
+    if index < 0 || index as usize >= collected.len() {
+        return -1;
+    }
+    let (style, count) = collected[index as usize];
+    unsafe {
+        if !out_style.is_null() {
+            *out_style = treasure_style_to_ffi(style);
+        }
+        if !out_count.is_null() {
+            *out_count = count;
         }
     }
     0

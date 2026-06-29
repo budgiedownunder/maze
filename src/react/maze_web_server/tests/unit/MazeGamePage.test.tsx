@@ -4,9 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { mockMazeAlpha } from '../../src/mocks/handlers'
+import { mockMazeAlpha, mockMazeOverrideStatic } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { MazeGamePage } from '../../src/pages/MazeGamePage'
+import { MAZE_GAME_SETTINGS_DEFAULTS } from '../../src/utils/mazeGameSettings'
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -22,10 +23,13 @@ const { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstanc
     keys:             vi.fn().mockReturnValue([]),
     doors:            vi.fn().mockReturnValue([]),
     bag:              vi.fn().mockReturnValue([]),
+    collected_treasure: vi.fn().mockReturnValue([]),
     hp:               vi.fn().mockReturnValue(3),
     max_hp:           vi.fn().mockReturnValue(3),
     enemies:          vi.fn().mockReturnValue([]),
     health_pickups:   vi.fn().mockReturnValue([]),
+    grid:             vi.fn().mockReturnValue([['S', ' ', 'F']]),
+    cell_overrides:   vi.fn().mockReturnValue([]),
     free:             vi.fn(),
   }
   const mockMove = vi.fn()
@@ -45,9 +49,18 @@ vi.mock('../../src/hooks/useMazeGame', () => ({
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
 }))
 
+// The WASM bridge is left real — getBag/getHp/getMaxHp/getGameGrid/getGameCellOverrides
+// all operate on the mock game object (which stubs grid()/cell_overrides()/etc.).
+
 vi.mock('../../src/components/MazeGrid', () => ({
   MazeGrid: (props: Record<string, unknown>) => (
-    <div data-testid="maze-grid" data-version={props.version as number} />
+    <div
+      data-testid="maze-grid"
+      data-version={props.version as number}
+      data-grid={JSON.stringify(props.grid)}
+      data-overrides={JSON.stringify(props.cellOverrides ? Array.from((props.cellOverrides as Map<string, unknown>).entries()) : null)}
+      data-game-settings={JSON.stringify(props.gameSettings ?? null)}
+    />
   ),
 }))
 
@@ -99,6 +112,8 @@ beforeEach(() => {
   mockGameInstance.lose_reason.mockReturnValue(null)
   mockGameInstance.hp.mockReturnValue(3)
   mockGameInstance.max_hp.mockReturnValue(3)
+  mockGameInstance.bag.mockReturnValue([])
+  mockGameInstance.collected_treasure.mockReturnValue([])
   mockUseMazeGame.mockReturnValue([
     { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
     mockMove,
@@ -344,12 +359,52 @@ describe('MazeGamePage', () => {
     expect(bag.textContent).toMatch(/empty/)
   })
 
-  it('bag shows a key icon for each collected key', async () => {
+  it('bag groups collected keys into a single key chip with a count', async () => {
     mockGameInstance.bag.mockReturnValue([{ type: 'key', id: 0 }, { type: 'key', id: 1 }])
     renderPage()
     await waitForLoad()
     const bag = document.querySelector('.maze-bag')!
-    expect(bag.querySelectorAll('img')).toHaveLength(2)
+    // One grouped key chip, not one icon per key.
+    expect(bag.querySelectorAll('img')).toHaveLength(1)
+    expect(within(bag as HTMLElement).getByAltText('Key')).toBeInTheDocument()
+    expect(bag.textContent).toMatch(/×2/)
+  })
+
+  it('bag shows a per-style chip with a count for each collected treasure style', async () => {
+    mockGameInstance.collected_treasure.mockReturnValue([
+      { style: 'silver', count: 3 },
+      { style: 'gold', count: 1 },
+    ])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')! as HTMLElement
+    const silver = within(bag).getByAltText('Silver treasure')
+    expect(silver).toHaveAttribute('src', '/images/maze/silver.svg')
+    const gold = within(bag).getByAltText('Gold treasure')
+    expect(gold).toHaveAttribute('src', '/images/maze/gold.svg')
+    expect(bag.textContent).toMatch(/×3/)
+    expect(bag.textContent).toMatch(/×1/)
+  })
+
+  it('bag shows the key chip alongside treasure chips', async () => {
+    mockGameInstance.bag.mockReturnValue([{ type: 'key', id: 0 }])
+    mockGameInstance.collected_treasure.mockReturnValue([{ style: 'jewels', count: 2 }])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')! as HTMLElement
+    expect(within(bag).getByAltText('Key')).toBeInTheDocument()
+    expect(within(bag).getByAltText('Jewels treasure')).toHaveAttribute('src', '/images/maze/jewels.svg')
+    expect(bag.querySelectorAll('.maze-bag-chip')).toHaveLength(2)
+  })
+
+  it('bag omits zero-count treasure styles and shows "empty" with nothing held', async () => {
+    mockGameInstance.bag.mockReturnValue([])
+    mockGameInstance.collected_treasure.mockReturnValue([{ style: 'gold', count: 0 }])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')! as HTMLElement
+    expect(bag.querySelectorAll('.maze-bag-chip')).toHaveLength(0)
+    expect(bag.textContent).toMatch(/empty/)
   })
 
   it('keyboard legend shows arrow and letter key hints', async () => {
@@ -410,5 +465,63 @@ describe('MazeGamePage', () => {
     renderPage()
     await waitForLoad()
     expect(screen.queryByTestId('pause-popup')).not.toBeInTheDocument()
+  })
+})
+
+describe('MazeGamePage per-cell overrides', () => {
+  it('hands MazeGrid the pure-char grid + variant overrides read from the live game', async () => {
+    // The display grid and overrides come straight from the live game object: grid()
+    // returns a pure-char grid (overridden cells reported as their base char), and
+    // cell_overrides() returns the variant per overridden cell. MazeGrid must receive
+    // both — the regression where static cells rendered empty was the array form
+    // leaking through instead of this pure-char grid.
+    mockGameInstance.grid.mockReturnValue([['S', 'H', 'K', 'D', 'F']])
+    mockGameInstance.cell_overrides.mockReturnValue([
+      { row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } },
+    ])
+    renderPage(mockMazeOverrideStatic.id)
+    await waitForLoad()
+
+    const gridEl = screen.getByTestId('maze-grid')
+    const grid = JSON.parse(gridEl.getAttribute('data-grid')!) as unknown[][]
+    expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
+    expect(grid).toEqual([['S', 'H', 'K', 'D', 'F']])
+
+    const overrides = JSON.parse(gridEl.getAttribute('data-overrides')!) as [string, unknown][]
+    expect(overrides).toEqual([['0,1', { type: 'H', healthStyle: 'potion' }]])
+  })
+
+  it('passes an empty override map for a no-override maze (pure-char grid)', async () => {
+    mockGameInstance.grid.mockReturnValue([['S', ' ', 'F']])
+    mockGameInstance.cell_overrides.mockReturnValue([])
+    renderPage(mockMazeAlpha.id)
+    await waitForLoad()
+    const gridEl = screen.getByTestId('maze-grid')
+    const grid = JSON.parse(gridEl.getAttribute('data-grid')!) as unknown[][]
+    expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
+    const overrides = JSON.parse(gridEl.getAttribute('data-overrides')!) as [string, unknown][]
+    expect(overrides).toEqual([])
+  })
+})
+
+describe('MazeGamePage maze game settings', () => {
+  it('passes the loaded maze game_settings to MazeGrid so the 2D game shows the maze defaults', async () => {
+    const settings = { ...MAZE_GAME_SETTINGS_DEFAULTS, enemyType: 'ghost' as const, wallType: 'lava' as const }
+    server.use(
+      http.get('/api/v1/mazes/:id', () =>
+        HttpResponse.json({ ...mockMazeAlpha, game_settings: settings }),
+      ),
+    )
+    renderPage(mockMazeAlpha.id)
+    await waitForLoad()
+    const gridEl = screen.getByTestId('maze-grid')
+    expect(JSON.parse(gridEl.getAttribute('data-game-settings')!)).toEqual(settings)
+  })
+
+  it('passes null game settings for a maze with none', async () => {
+    renderPage(mockMazeAlpha.id)
+    await waitForLoad()
+    const gridEl = screen.getByTestId('maze-grid')
+    expect(JSON.parse(gridEl.getAttribute('data-game-settings')!)).toBeNull()
   })
 })

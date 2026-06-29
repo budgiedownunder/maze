@@ -1,6 +1,6 @@
 use super::{FloorAssets, FloorCell};
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::CELL_SIZE;
+use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -27,20 +27,27 @@ pub(crate) fn build_tile_material(
     })
 }
 
-pub(crate) fn spawn_tile(commands: &mut Commands, assets: &FloorAssets, r: usize, c: usize) {
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+pub(crate) fn spawn_tile(
+    commands: &mut Commands,
+    assets: &FloorAssets,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+) {
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let y = placement.world_y(0.0);
     match (assets.floor_mesh.clone(), assets.tile_mat.clone()) {
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 FloorCell,
-                Transform::from_xyz(x, 0.0, z),
+                Transform::from_xyz(x, y, z),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((FloorCell, Transform::from_xyz(x, 0.0, z)));
+            commands.spawn((FloorCell, Transform::from_xyz(x, y, z)));
         }
     }
 }

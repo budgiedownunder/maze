@@ -37,9 +37,9 @@ test('Home menu item navigates back to home from /account', async ({ page }) => 
   await expect(page).toHaveURL(/\/$/)
 })
 
-test('Design & Play menu item navigates to /mazes', async ({ page }) => {
+test('Mazes menu item navigates to /mazes', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
-  await page.getByRole('menuitem', { name: /design & play/i }).click()
+  await page.getByRole('menuitem', { name: /^mazes$/i }).click()
   await expect(page).toHaveURL(/\/mazes$/)
 })
 

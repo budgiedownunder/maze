@@ -18,6 +18,10 @@
 //!   recorded as a [`DoorMotion`] and applied each frame by
 //!   `door_animation_system`.
 //!
+//! A **non-occluding** wall neighbour (water / lava / iron fence) counts as an
+//! open edge here, not a wall: its panel is suppressed, so a leaf must seal that
+//! side and a swing has no panel to hinge against — see [`open_for_door`].
+//!
 //! The motion rigs live in sibling files: [`swing`] (hinge), [`slide`] (drop
 //! into the floor), [`portcullis`] (rise into a framed gate), and [`dissolve`]
 //! (fade a per-leaf material). The slab is in [`panel`] and the lock in
@@ -36,11 +40,12 @@ use crate::state::{DoorStyle, GameConfig, GameState};
 use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
-use crate::world::walls::{wall_kind_for_cell, WallAssets, PANEL_W};
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::walls::{is_non_occluding_wall, wall_kind_for_cell, WallAssets, PANEL_W};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
-use maze::DoorState;
+use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
+use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_2, PI};
 
 /// How a single door leaf opens. Derived from [`DoorStyle`] per leaf (a `Swing`
@@ -61,6 +66,19 @@ pub(crate) enum DoorMotion {
 pub(crate) struct DoorMarker {
     /// Grid cell this leaf belongs to.
     pub(crate) cell: (usize, usize),
+    /// Which stacked level this leaf is on. Only the live level's leaves react to
+    /// the running game's door state — without this, a door at the same `(row,
+    /// col)` on another level would slide in lock-step with the live one (an upper
+    /// level's leaf sliding down into the live doorway).
+    pub(crate) level: usize,
+    /// Whether a cell sits directly above this door's world XZ on the level above.
+    /// A raised portcullis travels up into the next level, so it must hide when
+    /// fully open only when there's actually a cell there to intrude on. Under a
+    /// uniform stack every non-top door has one (`level + 1 < level_count`); under
+    /// taper a smaller upper level may leave a gap above a lower door, so its
+    /// raised grille rises into open air and must stay visible (see
+    /// [`has_cell_above`]).
+    has_cell_above: bool,
     /// Yaw orienting the leaf so its local +X spans the opening and its local
     /// +Z (keyhole / decoration face) points out toward the neighbour.
     closed_yaw: f32,
@@ -110,16 +128,61 @@ pub(crate) fn build_door_assets(
     }
 }
 
-/// `true` when the door cell is a straight corridor — exactly two open edges on
-/// OPPOSING sides (N+S or E+W). Out-of-bounds counts as a wall.
-fn is_straight_corridor(grid: &[Vec<char>], r: usize, c: usize) -> bool {
+/// Which axis a door cell's straight corridor runs along.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CorridorAxis {
+    /// Passage runs north–south (walls east & west).
+    NorthSouth,
+    /// Passage runs east–west (walls north & south).
+    EastWest,
+}
+
+/// Whether the in-bounds neighbour `(nr, nc)` reads as a passage opening for door
+/// placement: a passable cell, **or** a non-occluding wall (water / lava / iron
+/// fence). A non-occluding cell has no wall panel, so a door leaf must seal that
+/// side and a swing has nothing to anchor against — exactly like an open
+/// neighbour. Only a *solid* wall counts as a wall here.
+fn open_for_door(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    nr: usize,
+    nc: usize,
+) -> bool {
+    grid[nr][nc] != 'W' || is_non_occluding_wall(grid, cell_entities, config, nr, nc)
+}
+
+/// The axis of the door cell's straight corridor, or `None` if it isn't one.
+///
+/// A straight corridor has *solid* walls on both sides of one axis and at least
+/// one open passage on the perpendicular axis. Out-of-bounds counts as a wall, so
+/// a corridor capped by the grid edge at one end still qualifies — the swing rig
+/// only needs the two facing walls to anchor its hinge, so whether the far end is
+/// closed by a wall or by the maze boundary is immaterial. A **non-occluding**
+/// neighbour (water / lava / iron fence) counts as an *opening*, not a wall — its
+/// panel is suppressed, so a swing can't hinge against it (see [`open_for_door`]).
+/// Corners, T-/cross-junctions, and open areas return `None` (any third open side
+/// disqualifies it).
+fn corridor_axis(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> Option<CorridorAxis> {
     let rows = grid.len();
     let cols = grid[r].len();
-    let n = r > 0 && grid[r - 1][c] != 'W';
-    let s = r + 1 < rows && grid[r + 1][c] != 'W';
-    let e = c + 1 < cols && grid[r][c + 1] != 'W';
-    let w = c > 0 && grid[r][c - 1] != 'W';
-    (n && s && !e && !w) || (e && w && !n && !s)
+    let n = r > 0 && open_for_door(grid, cell_entities, config, r - 1, c);
+    let s = r + 1 < rows && open_for_door(grid, cell_entities, config, r + 1, c);
+    let e = c + 1 < cols && open_for_door(grid, cell_entities, config, r, c + 1);
+    let w = c > 0 && open_for_door(grid, cell_entities, config, r, c - 1);
+    if !e && !w && (n || s) {
+        Some(CorridorAxis::NorthSouth)
+    } else if !n && !s && (e || w) {
+        Some(CorridorAxis::EastWest)
+    } else {
+        None
+    }
 }
 
 /// The wall material a leaf borrows: the N/S panel material when its face normal
@@ -151,6 +214,9 @@ struct LeafSpec {
     /// Swing leaves are seen from both ends of the corridor, so they get a
     /// keyhole on both faces; per-edge leaves only on the outward face.
     keyhole_both_faces: bool,
+    /// Whether a cell sits above this door's cell on the level above — see
+    /// [`DoorMarker::has_cell_above`]. Same for every leaf of a cell.
+    has_cell_above: bool,
 }
 
 /// Clones `src` into an alpha-blended dissolve material, records it in `out` so
@@ -178,6 +244,7 @@ fn spawn_leaf(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     r: usize,
     c: usize,
+    level: usize,
     config: &GameConfig,
     spec: LeafSpec,
 ) {
@@ -204,9 +271,11 @@ fn spawn_leaf(
         .spawn((
             DoorMarker {
                 cell: (r, c),
+                level,
                 closed_yaw: spec.closed_yaw,
                 motion: spec.motion,
                 base_translation: spec.pivot_translation,
+                has_cell_above: spec.has_cell_above,
                 opened: false,
                 dissolve_materials,
             },
@@ -273,27 +342,49 @@ pub(crate) fn spawn_door_for_cell(
     decoration_assets: &WallDecorationAssets,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     cell: char,
     r: usize,
     c: usize,
     config: &GameConfig,
+    cell_entity: Option<&CellEntity>,
+    placement: LevelPlacement,
+    // The level-above's placement + `(rows, cols)` footprint, or `None` for the top
+    // level. Decides whether a raised portcullis here has a cell to intrude on above.
+    placement_above: Option<LevelPlacement>,
+    dims_above: Option<(usize, usize)>,
 ) {
     if cell != 'D' {
         return;
     }
+    // Per-cell `doorStyle` override, else the per-maze default.
+    let door_style = super::overrides::resolve_door_style(cell_entity, config.door_style);
     let rows = grid.len();
     let cols = grid[r].len();
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    // A raised portcullis travels into the level above; it must hide when open
+    // only when a cell actually sits there. Captured per cell (same for every
+    // leaf), used in `door_animation_system`.
+    let cell_above = has_cell_above(placement, placement_above, r, c, dims_above);
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    // The leaf-anchor Y for this level; every edge centre / pivot below derives
+    // from it, and the leaf-motion systems offset from the captured base
+    // translation, so the whole leaf stays on its stacked floor. Level 0 is the
+    // identity.
+    let base_y = placement.world_y(0.0);
     let kind = wall_kind_for_cell(r, c, rows, cols, config);
 
     // A swinging door only reads well between two facing walls, so it's the one
-    // special case: a single central leaf in a straight corridor. Everything
-    // else seals each open edge with its own leaf.
-    if config.door_style == DoorStyle::Swing && is_straight_corridor(grid, r, c) {
-        let normal_z = r > 0 && grid[r - 1][c] != 'W'; // N/S corridor → normal along Z
+    // special case: a single central leaf when the cell is a straight corridor
+    // (including one capped at an end by the grid edge). Everything else seals
+    // each open edge with its own leaf.
+    let swing_axis = (door_style == DoorStyle::Swing)
+        .then(|| corridor_axis(grid, cell_entities, config, r, c))
+        .flatten();
+    if let Some(axis) = swing_axis {
+        let normal_z = axis == CorridorAxis::NorthSouth; // N/S corridor → normal along Z
         let closed_yaw = if normal_z { 0.0 } else { FRAC_PI_2 };
-        let edge_centre = Vec3::new(x, 0.0, z);
+        let edge_centre = Vec3::new(x, base_y, z);
         let pivot_translation =
             edge_centre + Quat::from_rotation_y(closed_yaw) * Vec3::new(-PANEL_W / 2.0, 0.0, 0.0);
         spawn_leaf(
@@ -303,6 +394,7 @@ pub(crate) fn spawn_door_for_cell(
             materials,
             r,
             c,
+            placement.level,
             config,
             LeafSpec {
                 closed_yaw,
@@ -312,6 +404,7 @@ pub(crate) fn spawn_door_for_cell(
                 motion: DoorMotion::Swing,
                 face_id: if normal_z { 0 } else { 2 },
                 keyhole_both_faces: true,
+                has_cell_above: cell_above,
             },
         );
         return;
@@ -319,17 +412,21 @@ pub(crate) fn spawn_door_for_cell(
 
     // Per-edge leaves. The chosen style's motion applies to each, except a
     // `Swing` style degrades to `Slide` here (no walls to anchor a hinge).
-    let motion = match config.door_style {
+    let motion = match door_style {
         DoorStyle::Swing | DoorStyle::Slide => DoorMotion::Slide,
         DoorStyle::Portcullis => DoorMotion::Portcullis,
         DoorStyle::Dissolve => DoorMotion::Dissolve,
     };
+    // A leaf seals each open edge. An edge is "open" if its neighbour is passable
+    // OR a non-occluding wall (water / lava / iron fence) — that side has no wall
+    // panel, so the door must seal it (see [`open_for_door`]). Out-of-bounds and
+    // solid walls are closed.
     // (open?, closed_yaw, edge centre, decoration face id, normal-along-Z?)
     let edges = [
-        (r > 0 && grid[r - 1][c] != 'W', PI, Vec3::new(x, 0.0, z - HALF_CELL), 0u32, true),
-        (r + 1 < rows && grid[r + 1][c] != 'W', 0.0, Vec3::new(x, 0.0, z + HALF_CELL), 1, true),
-        (c + 1 < cols && grid[r][c + 1] != 'W', FRAC_PI_2, Vec3::new(x + HALF_CELL, 0.0, z), 2, false),
-        (c > 0 && grid[r][c - 1] != 'W', -FRAC_PI_2, Vec3::new(x - HALF_CELL, 0.0, z), 3, false),
+        (r > 0 && open_for_door(grid, cell_entities, config, r - 1, c), PI, Vec3::new(x, base_y, z - HALF_CELL), 0u32, true),
+        (r + 1 < rows && open_for_door(grid, cell_entities, config, r + 1, c), 0.0, Vec3::new(x, base_y, z + HALF_CELL), 1, true),
+        (c + 1 < cols && open_for_door(grid, cell_entities, config, r, c + 1), FRAC_PI_2, Vec3::new(x + HALF_CELL, base_y, z), 2, false),
+        (c > 0 && open_for_door(grid, cell_entities, config, r, c - 1), -FRAC_PI_2, Vec3::new(x - HALF_CELL, base_y, z), 3, false),
     ];
     for (open, closed_yaw, edge_centre, face_id, normal_z) in edges {
         if !open {
@@ -344,6 +441,7 @@ pub(crate) fn spawn_door_for_cell(
             materials,
             r,
             c,
+            placement.level,
             config,
             LeafSpec {
                 closed_yaw,
@@ -353,9 +451,37 @@ pub(crate) fn spawn_door_for_cell(
                 motion,
                 face_id,
                 keyhole_both_faces: false,
+                has_cell_above: cell_above,
             },
         );
     }
+}
+
+/// Whether a cell sits directly above this door's `(r, c)` on the next level up.
+/// Maps the door's grid index to the level-above cell sharing its world XZ by the
+/// difference of the two levels' base offsets (read straight off their placements,
+/// so it's correct under any alignment — `Edge`, `Centre`, or a per-level `Random`
+/// mix — the same down-mapping the support poles use). `None` `placement_above` /
+/// `dims_above` (the top level) has nothing above. Under a uniform stack the offset
+/// difference is zero and every cell has one (the old `level + 1 < level_count`);
+/// under taper a smaller upper grid may leave a lower cell uncovered.
+fn has_cell_above(
+    placement: LevelPlacement,
+    placement_above: Option<LevelPlacement>,
+    r: usize,
+    c: usize,
+    dims_above: Option<(usize, usize)>,
+) -> bool {
+    let (Some(above), Some((rows_above, cols_above))) = (placement_above, dims_above) else {
+        return false;
+    };
+    // Centring offsets are whole multiples of `CELL_SIZE`, so the shift is an
+    // integer cell count (0 under edge alignment).
+    let drow = ((placement.world_z(0.0) - above.world_z(0.0)) / CELL_SIZE).round() as isize;
+    let dcol = ((placement.world_x(0.0) - above.world_x(0.0)) / CELL_SIZE).round() as isize;
+    let ur = r as isize + drow;
+    let uc = c as isize + dcol;
+    ur >= 0 && uc >= 0 && (ur as usize) < rows_above && (uc as usize) < cols_above
 }
 
 /// Smoothstep easing — the same `t·t·(3 − 2t)` curve [`crate::state::Animation`]
@@ -378,14 +504,22 @@ fn smoothstep(t: f32) -> f32 {
 /// with its progress; an open (or `opened`-pinned) leaf stays fully open.
 pub(crate) fn door_animation_system(
     state: Res<GameState>,
+    run: Res<crate::state::MultiLevelRun>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
-    mut doors: Query<(&DoorMarker, &mut Transform)>,
+    mut doors: Query<(&DoorMarker, &mut Transform, &mut Visibility)>,
 ) {
     if doors.is_empty() {
         return;
     }
     let states = state.game.doors();
-    for (marker, mut transform) in &mut doors {
+    for (marker, mut transform, mut visibility) in &mut doors {
+        // `state.game` is the live level's game, so only its leaves track it.
+        // Leaves on other levels keep their last pose (closed on a level not yet
+        // reached; held open on a completed one below), preventing an upper
+        // level's same-`(row, col)` door from sliding with the live one.
+        if marker.level != run.current_level {
+            continue;
+        }
         let fraction = if marker.opened {
             1.0
         } else {
@@ -423,12 +557,123 @@ pub(crate) fn door_animation_system(
                     .with_rotation(Quat::from_rotation_y(marker.closed_yaw))
             }
         };
+
+        // A vertically-travelling leaf, once open, ends up in the neighbouring
+        // level: a slid leaf below the floor (the level below), a raised portcullis
+        // above the ceiling (the level above). Hide it when fully open so it
+        // doesn't read as a phantom panel in that level. A bottom-level slide
+        // travels into open space (no level below), so it stays visible; a slide is
+        // never under a gap because the level below is always at least as large. A
+        // raised portcullis only intrudes when a cell actually sits above it — under
+        // taper a smaller upper level can leave a gap, where the grille rises into
+        // open air and must stay visible. Swing / dissolve don't leave their level.
+        let intrudes_when_open = match marker.motion {
+            DoorMotion::Slide => marker.level > 0,
+            DoorMotion::Portcullis => marker.has_cell_above,
+            DoorMotion::Swing | DoorMotion::Dissolve => false,
+        };
+        let target = if intrudes_when_open && fraction >= 0.999 {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+        if *visibility != target {
+            *visibility = target;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `corridor_axis` with no per-cell overrides — the common case in the
+    /// topology tests (every `'W'` is a plain solid wall).
+    fn corridor_axis_plain(grid: &[Vec<char>], r: usize, c: usize) -> Option<CorridorAxis> {
+        corridor_axis(grid, &HashMap::new(), &GameConfig::default(), r, c)
+    }
+
+    /// A `cell_entities` map with a single water (non-occluding) override at `rc`.
+    fn map_with_water(rc: (usize, usize)) -> HashMap<(usize, usize), Vec<CellEntity>> {
+        let mut m = HashMap::new();
+        m.insert(
+            rc,
+            vec![serde_json::from_str::<CellEntity>(r#"{"type":"W","wallType":"water"}"#).unwrap()],
+        );
+        m
+    }
+
+    use crate::state::LayeredAlignment;
+
+    /// A placement for `level` of a square `dims`-cell grid over a square `base`-cell
+    /// bottom under `align` (floor at y = 0, fixed seed — concrete alignments ignore
+    /// it). A two-level chain `[base, dims]` is enough for the `(level, level+1)`
+    /// pairs these tests build.
+    fn place(level: usize, dims: usize, base: usize, align: LayeredAlignment) -> LevelPlacement {
+        let chain = [(base, base), (dims, dims)];
+        LevelPlacement::for_level(level, &chain, align, 0.0, 0)
+    }
+
+    #[test]
+    fn has_cell_above_top_level_has_nothing_above() {
+        // `None` placement/dims above = the top level: a raised portcullis there
+        // rises into open sky, so it never has a cell above.
+        let l = place(0, 5, 5, LayeredAlignment::Edge);
+        assert!(!has_cell_above(l, None, 2, 2, None));
+    }
+
+    #[test]
+    fn has_cell_above_uniform_stack_every_cell_is_covered() {
+        // Equal footprints (no taper): zero offset difference, so every cell has one
+        // above — the old `level + 1 < level_count` behaviour.
+        let l = place(0, 5, 5, LayeredAlignment::Edge);
+        let above = place(1, 5, 5, LayeredAlignment::Edge);
+        for (r, c) in [(0, 0), (2, 2), (4, 4)] {
+            assert!(has_cell_above(l, Some(above), r, c, Some((5, 5))));
+        }
+    }
+
+    #[test]
+    fn has_cell_above_edge_taper_leaves_the_far_cells_uncovered() {
+        // Edge alignment corner-stacks the smaller upper grid at (0, 0), so only
+        // the low-row/low-col cells are covered.
+        let l = place(0, 7, 7, LayeredAlignment::Edge);
+        let above = place(1, 5, 7, LayeredAlignment::Edge);
+        let here = |r, c| has_cell_above(l, Some(above), r, c, Some((5, 5)));
+        assert!(here(0, 0), "the shared corner is covered");
+        assert!(here(4, 4), "the last covered cell");
+        assert!(!here(5, 5), "past the smaller grid → a gap above");
+        assert!(!here(0, 6), "an edge column with no cell above");
+    }
+
+    #[test]
+    fn has_cell_above_centre_taper_matches_the_inset() {
+        // Centre insets the upper grid by half the size difference (1 here), so the
+        // covered band is cells [1, 5] on each axis (mirrors `aligned_landing`).
+        let l = place(0, 7, 7, LayeredAlignment::Centre);
+        let above = place(1, 5, 7, LayeredAlignment::Centre);
+        let here = |r, c| has_cell_above(l, Some(above), r, c, Some((5, 5)));
+        assert!(!here(0, 0), "the outer ring sits over a gap");
+        assert!(here(1, 1), "first covered cell after the inset");
+        assert!(here(5, 5), "last covered cell");
+        assert!(!here(6, 6), "the far outer ring sits over a gap");
+    }
+
+    #[test]
+    fn has_cell_above_handles_a_mixed_random_alignment_pair() {
+        // Under `Random` consecutive levels can differ: an Edge level (offset 0)
+        // below a Centre level (offset +1 cell) shifts the cell-above mapping. The
+        // door reads it straight off the two placements, so it stays correct.
+        let l = place(0, 7, 7, LayeredAlignment::Edge); // corner-stacked
+        let above = place(1, 5, 7, LayeredAlignment::Centre); // centred (inset 1)
+        let here = |r, c| has_cell_above(l, Some(above), r, c, Some((5, 5)));
+        // The 5×5 upper sits over bottom cells [1, 5]; a door at (1,1) is covered,
+        // one at (0,0) is under the gap.
+        assert!(here(1, 1));
+        assert!(here(5, 5));
+        assert!(!here(0, 0));
+        assert!(!here(6, 6));
+    }
 
     #[test]
     fn smoothstep_endpoints_and_midpoint() {
@@ -450,7 +695,7 @@ mod tests {
             vec!['W', 'D', 'W'],
             vec!['W', 'F', 'W'],
         ];
-        assert!(is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), Some(CorridorAxis::NorthSouth));
     }
 
     #[test]
@@ -460,7 +705,7 @@ mod tests {
             vec!['S', 'D', 'F'],
             vec!['W', 'W', 'W'],
         ];
-        assert!(is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), Some(CorridorAxis::EastWest));
     }
 
     #[test]
@@ -470,7 +715,7 @@ mod tests {
             vec!['W', 'D', 'F'],
             vec!['W', 'W', 'W'],
         ];
-        assert!(!is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), None);
     }
 
     #[test]
@@ -480,6 +725,85 @@ mod tests {
             vec!['W', 'D', 'F'],
             vec!['W', ' ', 'W'],
         ];
-        assert!(!is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), None);
+    }
+
+    #[test]
+    fn boundary_capped_ns_corridor_is_a_corridor() {
+        // `W D W` on the top boundary row, open south into the maze. The north
+        // end is capped by the grid edge (counted as a wall), but the door still
+        // has its two facing lateral walls, so it is an N–S straight corridor.
+        let grid = vec![
+            vec!['W', 'D', 'W'],
+            vec!['W', ' ', 'W'],
+        ];
+        assert_eq!(corridor_axis_plain(&grid, 0, 1), Some(CorridorAxis::NorthSouth));
+    }
+
+    #[test]
+    fn boundary_capped_ew_corridor_is_a_corridor() {
+        // Door on the left boundary column, open east, walls north & south. The
+        // west end is capped by the grid edge — still an E–W straight corridor.
+        let grid = vec![
+            vec!['W', 'W'],
+            vec!['D', ' '],
+            vec!['W', 'W'],
+        ];
+        assert_eq!(corridor_axis_plain(&grid, 1, 0), Some(CorridorAxis::EastWest));
+    }
+
+    #[test]
+    fn boundary_corner_is_not_a_corridor() {
+        // A bend at the grid corner — open south and east (adjacent, not
+        // opposing) — must not count as a corridor (it would slide).
+        let grid = vec![
+            vec!['D', ' '],
+            vec![' ', 'W'],
+        ];
+        assert_eq!(corridor_axis_plain(&grid, 0, 0), None);
+    }
+
+    #[test]
+    fn non_occluding_lateral_wall_disqualifies_swing() {
+        // `W D W` corridor open N–S. With both laterals solid it's a straight
+        // corridor (swing). Turning the west lateral into a non-occluding water
+        // cell removes that swing anchor (its panel is suppressed), so it's no
+        // longer a corridor — it falls back to per-edge leaves.
+        let grid = vec![
+            vec!['W', ' ', 'W'],
+            vec!['W', 'D', 'W'],
+            vec!['W', ' ', 'W'],
+        ];
+        let config = GameConfig::default();
+        assert_eq!(
+            corridor_axis_plain(&grid, 1, 1),
+            Some(CorridorAxis::NorthSouth),
+            "plain solid laterals → straight corridor",
+        );
+        let water = map_with_water((1, 0));
+        assert_eq!(
+            corridor_axis(&grid, &water, &config, 1, 1),
+            None,
+            "a non-occluding lateral has no panel to hinge against → not a corridor",
+        );
+    }
+
+    #[test]
+    fn swing_survives_non_occluding_opening_on_perpendicular_axis() {
+        // Walls N & S are solid anchors; the corridor runs E–W with the east end
+        // passable and the west end a non-occluding water cell. The two solid
+        // anchors remain, so it's still a straight E–W corridor (single swing).
+        let grid = vec![
+            vec!['W', 'W', 'W'],
+            vec!['W', 'D', ' '],
+            vec!['W', 'W', 'W'],
+        ];
+        let config = GameConfig::default();
+        let water = map_with_water((1, 0));
+        assert_eq!(
+            corridor_axis(&grid, &water, &config, 1, 1),
+            Some(CorridorAxis::EastWest),
+            "solid N & S anchors + a perpendicular opening → still a swing corridor",
+        );
     }
 }

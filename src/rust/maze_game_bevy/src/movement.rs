@@ -21,6 +21,11 @@ pub(crate) fn movement_system(
     if state.paused {
         return;
     }
+    // During a level transition the camera is driven by `transition_system`;
+    // bail so we don't fight it for the camera or accept movement input.
+    if state.transition.is_some() {
+        return;
+    }
     let dt = time.delta_secs();
 
     // Advance active animation; snap to target when complete
@@ -59,8 +64,13 @@ pub(crate) fn movement_system(
         }
     }
 
-    // Movement — only when idle and the game is still in play
-    if state.anim.is_none() && !state.won && !state.lost {
+    // Movement — only when idle and the game is still in play. `!is_complete`
+    // stops a held forward key from walking straight off an interim finish before
+    // `outcome_watcher_system` starts the level transition (the two systems'
+    // order is ambiguous, so without this the held key races the transition and
+    // the climb stutters). On a completing finish we simply hold position and let
+    // the transition take over.
+    if state.anim.is_none() && !state.won && !state.lost && !state.game.is_complete() {
         let Some(keys) = keys else { return; };
         let left = keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::KeyA);
         let right = keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::KeyD);
@@ -146,9 +156,11 @@ pub(crate) fn movement_system(
         }
     }
 
-    // Update camera transform every frame
+    // Update camera transform every frame. The move animation runs in the level's
+    // local (ground) frame; lift + centre it onto the level currently being played
+    // (zero on the bottom level, so single-level games are unchanged).
     if let Ok(mut transform) = camera.single_mut() {
-        transform.translation = state.visual_pos;
+        transform.translation = state.visual_pos + state.camera_offset;
         transform.rotation =
             Quat::from_rotation_y(state.visual_yaw) * Quat::from_rotation_x(state.visual_pitch);
     }

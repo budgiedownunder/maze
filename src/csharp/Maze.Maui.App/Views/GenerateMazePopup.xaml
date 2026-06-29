@@ -128,7 +128,7 @@
                  stay measured (Opacity 0 + InputTransparent) rather than collapsed
                  via IsVisible, so the content area always sizes to the largest tab —
                  the popup doesn't resize as you switch between tabs. -->
-            <Grid x:Name="FeaturesTab" Opacity="0" InputTransparent="True" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12">
+            <Grid x:Name="FeaturesTab" Opacity="0" InputTransparent="True" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12">
                 <Label Grid.Row="0" Grid.Column="0" Text="Doors" VerticalOptions="Center"/>
                 <Entry Grid.Row="0" Grid.Column="1" x:Name="DoorCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
@@ -143,6 +143,9 @@
 
                 <Label Grid.Row="4" Grid.Column="0" Text="Health" VerticalOptions="Center"/>
                 <Entry Grid.Row="4" Grid.Column="1" x:Name="HealthCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="5" Grid.Column="0" Text="Treasure" VerticalOptions="Center"/>
+                <Entry Grid.Row="5" Grid.Column="1" x:Name="TreasureCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
             </Grid>
 
         </Grid>

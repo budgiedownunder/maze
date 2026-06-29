@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Jewels treasure">
+  <!-- diamond divided into four coloured quarters (ruby / emerald / sapphire / amethyst) -->
+  <polygon points="16,2 16,16 2,16"  fill="#d62246"/> <!-- top-left: ruby -->
+  <polygon points="16,2 30,16 16,16" fill="#2e6bd6"/> <!-- top-right: sapphire -->
+  <polygon points="2,16 16,16 16,30" fill="#9b3fd1"/> <!-- bottom-left: amethyst -->
+  <polygon points="30,16 16,30 16,16" fill="#1eae54"/> <!-- bottom-right: emerald -->
+  <path d="M16,2 V30 M2,16 H30" stroke="#ffffff" stroke-width="0.8" opacity="0.6" fill="none"/>
+  <polygon points="16,2 30,16 16,30 2,16" fill="none" stroke="#1a1a26" stroke-width="1.6" stroke-linejoin="round"/>
+</svg>

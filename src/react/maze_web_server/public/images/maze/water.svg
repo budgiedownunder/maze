@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Water">
+  <rect x="1.5" y="1.5" width="29" height="29" rx="3" fill="#2f7fc1" stroke="#1c4f7a" stroke-width="1.5"/>
+  <path d="M3 10 q4 -3 8 0 q4 3 8 0 q4 -3 8 0" fill="none" stroke="#bfe3f7" stroke-width="1.6" stroke-linecap="round" opacity="0.85"/>
+  <path d="M3 17 q4 -3 8 0 q4 3 8 0 q4 -3 8 0" fill="none" stroke="#9fd4f0" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>
+  <path d="M3 24 q4 -3 8 0 q4 3 8 0 q4 -3 8 0" fill="none" stroke="#bfe3f7" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/>
+</svg>

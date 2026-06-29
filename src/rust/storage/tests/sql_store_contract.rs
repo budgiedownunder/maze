@@ -419,6 +419,12 @@ async fn update_maze_persists_changes() {
 }
 
 #[tokio::test]
+async fn create_maze_round_trips_game_settings() {
+    let mut s = fresh_store().await;
+    contract::create_maze_round_trips_game_settings(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_maze_returns_not_found_for_unknown_id() {
     let mut s = fresh_store().await;
     contract::update_maze_returns_not_found_for_unknown_id(&mut s).await;
@@ -564,6 +570,56 @@ async fn purge_user_rejects_nil_id() {
 async fn purge_user_returns_not_found_for_unknown_id() {
     let mut s = fresh_store().await;
     contract::purge_user_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+// ─── UserStore — avatars ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn set_user_avatar_round_trips_via_get_user_avatar() {
+    let mut s = fresh_store().await;
+    contract::set_user_avatar_round_trips_via_get_user_avatar(&mut s).await;
+}
+
+#[tokio::test]
+async fn get_user_avatar_returns_none_when_unset() {
+    let mut s = fresh_store().await;
+    contract::get_user_avatar_returns_none_when_unset(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_user_avatar_replaces_existing() {
+    let mut s = fresh_store().await;
+    contract::set_user_avatar_replaces_existing(&mut s).await;
+}
+
+#[tokio::test]
+async fn clear_user_avatar_removes_it() {
+    let mut s = fresh_store().await;
+    contract::clear_user_avatar_removes_it(&mut s).await;
+}
+
+#[tokio::test]
+async fn clear_user_avatar_is_idempotent_when_unset() {
+    let mut s = fresh_store().await;
+    contract::clear_user_avatar_is_idempotent_when_unset(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_user_avatar_returns_not_found_for_unknown_id() {
+    let mut s = fresh_store().await;
+    contract::set_user_avatar_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn purge_user_cascades_to_avatar() {
+    let mut s = fresh_store().await;
+    contract::purge_user_cascades_to_avatar(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_leaderboard_includes_avatar_updated_at_when_requested() {
+    let mut s = fresh_store().await;
+    contract::score_leaderboard_includes_avatar_updated_at_when_requested(&mut s).await;
 }
 
 // ─── UserStore — has_active_admin_user ───────────────────────────────────
@@ -770,4 +826,72 @@ async fn audit_log_clears_triggered_by_user_id_under_purge() {
 async fn empty_clears_all_data() {
     let mut s = fresh_store().await;
     contract::empty_clears_all_data(&mut s).await;
+}
+
+// ─── ScoreStore ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn score_record_round_trips_for_both_subjects() {
+    let mut s = fresh_store().await;
+    contract::score_record_round_trips_for_both_subjects(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_record_rejects_invalid_subject() {
+    let mut s = fresh_store().await;
+    contract::score_record_rejects_invalid_subject(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_maze_leaderboard_orders_by_metric_and_direction() {
+    let mut s = fresh_store().await;
+    contract::score_maze_leaderboard_orders_by_metric_and_direction(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_challenge_leaderboard_orders_and_pages() {
+    let mut s = fresh_store().await;
+    contract::score_challenge_leaderboard_orders_and_pages(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_user_history_is_recent_first_and_pages() {
+    let mut s = fresh_store().await;
+    contract::score_user_history_is_recent_first_and_pages(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_boards_are_empty_for_unknown_subject() {
+    let mut s = fresh_store().await;
+    contract::score_boards_are_empty_for_unknown_subject(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_delete_user_cascades_player_rows() {
+    let mut s = fresh_store().await;
+    contract::score_delete_user_cascades_player_rows(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_delete_maze_cascades_its_board_not_challenge_rows() {
+    let mut s = fresh_store().await;
+    contract::score_delete_maze_cascades_its_board_not_challenge_rows(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_clear_resets_only_the_targeted_board() {
+    let mut s = fresh_store().await;
+    contract::score_clear_resets_only_the_targeted_board(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_delete_user_cascades_boards_of_owned_mazes() {
+    let mut s = fresh_store().await;
+    contract::score_delete_user_cascades_boards_of_owned_mazes(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_leaderboard_includes_usernames_when_requested() {
+    let mut s = fresh_store().await;
+    contract::score_leaderboard_includes_usernames_when_requested(&mut s).await;
 }

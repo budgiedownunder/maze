@@ -2,7 +2,10 @@ pub(crate) mod floor;
 pub(crate) mod wall;
 
 use crate::state::GameConfig;
+use crate::world::LevelPlacement;
 use bevy::prelude::*;
+use maze::CellEntity;
+use std::collections::HashMap;
 
 pub(crate) struct DecorationAssets {
     pub(crate) wall: wall::WallDecorationAssets,
@@ -25,11 +28,13 @@ pub(crate) fn spawn_decorations_for_cell(
     commands: &mut Commands,
     assets: &DecorationAssets,
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     cell: char,
     r: usize,
     c: usize,
     config: &GameConfig,
+    placement: LevelPlacement,
 ) {
-    wall::spawn_wall_decorations_for_cell(commands, &assets.wall, grid, r, c, config);
-    floor::spawn_floor_accents_for_cell(commands, &assets.floor, grid, cell, r, c, config);
+    wall::spawn_wall_decorations_for_cell(commands, &assets.wall, grid, cell_entities, r, c, config, placement);
+    floor::spawn_floor_accents_for_cell(commands, &assets.floor, grid, cell, r, c, config, placement);
 }

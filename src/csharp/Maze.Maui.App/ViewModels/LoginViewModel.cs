@@ -85,7 +85,11 @@ namespace Maze.Maui.App.ViewModels
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles a <see cref="LoginFlashMessage"/> by surfacing its text as the login
+        /// page's flash message.
+        /// </summary>
+        /// <param name="message">The flash-message notification</param>
         public void Receive(LoginFlashMessage message) => FlashMessage = message.Message;
 
         /// <summary>

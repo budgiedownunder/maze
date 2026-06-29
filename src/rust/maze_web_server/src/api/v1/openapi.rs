@@ -15,6 +15,8 @@ use crate::api::v1::endpoints::handlers::{
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
+use crate::api::v1::endpoints::avatar::AvatarUpdatedResponse;
+use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
 
@@ -88,6 +90,10 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::update_profile_me,
         crate::api::v1::endpoints::handlers::get_me,
         crate::api::v1::endpoints::handlers::delete_me,
+        // Self-service avatar
+        crate::api::v1::endpoints::avatar::upload_avatar,
+        crate::api::v1::endpoints::avatar::delete_avatar,
+        crate::api::v1::endpoints::avatar::get_avatar,
         // Self-service email management
         crate::api::v1::endpoints::user_emails::list_emails,
         crate::api::v1::endpoints::user_emails::add_email,
@@ -103,6 +109,11 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::get_maze_solution,
         crate::api::v1::endpoints::handlers::generate_maze,
         crate::api::v1::endpoints::handlers::solve_maze,
+        // Scores
+        crate::api::v1::endpoints::scores::record_score,
+        crate::api::v1::endpoints::scores::get_leaderboard,
+        crate::api::v1::endpoints::scores::get_my_history,
+        crate::api::v1::endpoints::scores::reset_leaderboard,
         // Users (admin)
         crate::api::v1::endpoints::handlers::get_users,
         crate::api::v1::endpoints::handlers::create_user,
@@ -121,7 +132,9 @@ impl utoipa::Modify for LoginTokenAuth {
             EmailVerificationRequest, EmailVerificationConfirmRequest,
             UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
-            GeneratorOptions, GenerationAlgorithm),
+            GeneratorOptions, GenerationAlgorithm,
+            RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
+            AvatarUpdatedResponse),
 
     ),
     servers(

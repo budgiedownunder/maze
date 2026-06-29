@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 actix-web = { version = "4", features = ["rustls-0_20"] }
 actix-files = "0.6"
+actix-multipart = "0.7"
 actix-service = "2"
 argon2 = "0.5"
 async-trait = "0.1"
@@ -23,6 +24,7 @@ comms = { path = "../comms", features = ["provider-mailgun", "provider-smtp-oaut
 config = "0.13"
 data_model = { path = "../data_model" }
 fern = "0.7"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 lazy_static = "1.4"
 log = "0.4"
 maze = { path = "../maze", features = ["generation"] }

@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { MazeDefinition } from '../types/api'
+import type { CellEntity, CellOverride } from '../types/cellEntities'
 import { exceedsMazeCellCap } from '../utils/validation'
 
 export interface CellPoint {
@@ -13,6 +14,74 @@ export interface SelectionRect {
   maxRow: number
   minCol: number
   maxCol: number
+}
+
+// ── Per-cell override map helpers ──────────────────────────────
+// Overrides are kept in a Map keyed by "row,col" (O(1) lookup for rendering),
+// replaced immutably on every change. The char grid stays the source of truth for
+// cell types; this map carries only the optional per-cell characteristics, kept in
+// lockstep with the grid by the editing/structural operations below.
+
+const cellKey = (row: number, col: number): string => `${row},${col}`
+
+const parseCellKey = (key: string): [number, number] => {
+  const comma = key.indexOf(',')
+  return [Number(key.slice(0, comma)), Number(key.slice(comma + 1))]
+}
+
+// Drops any overrides on cells inside `rect` (returns the same reference when nothing
+// changed, so React can skip the re-render). Used when a fill/clear rewrites cells —
+// a re-stamped or cleared cell resets to default characteristics.
+function dropOverridesInRect(
+  prev: Map<string, CellEntity>,
+  rect: SelectionRect,
+): Map<string, CellEntity> {
+  let changed = false
+  const next = new Map(prev)
+  for (let r = rect.minRow; r <= rect.maxRow; r++) {
+    for (let c = rect.minCol; c <= rect.maxCol; c++) {
+      if (next.delete(cellKey(r, c))) changed = true
+    }
+  }
+  return changed ? next : prev
+}
+
+// Remaps override coordinates when `count` rows/cols are inserted before index `at`:
+// any override at/after the insert point shifts along that axis.
+function remapOverridesForInsert(
+  prev: Map<string, CellEntity>,
+  axis: 'row' | 'col',
+  at: number,
+  count: number,
+): Map<string, CellEntity> {
+  if (prev.size === 0) return prev
+  const next = new Map<string, CellEntity>()
+  for (const [key, entity] of prev) {
+    let [r, c] = parseCellKey(key)
+    if (axis === 'row') { if (r >= at) r += count } else if (c >= at) { c += count }
+    next.set(cellKey(r, c), entity)
+  }
+  return next
+}
+
+// Remaps override coordinates when the `count` rows/cols starting at index `at` are
+// deleted: overrides inside the deleted band are dropped, those after it shift back.
+function remapOverridesForDelete(
+  prev: Map<string, CellEntity>,
+  axis: 'row' | 'col',
+  at: number,
+  count: number,
+): Map<string, CellEntity> {
+  if (prev.size === 0) return prev
+  const next = new Map<string, CellEntity>()
+  for (const [key, entity] of prev) {
+    let [r, c] = parseCellKey(key)
+    const v = axis === 'row' ? r : c
+    if (v >= at && v < at + count) continue
+    if (v >= at + count) { if (axis === 'row') { r -= count } else { c -= count } }
+    next.set(cellKey(r, c), entity)
+  }
+  return next
 }
 
 export interface SelectionStatus {
@@ -40,12 +109,21 @@ export function useMazeEditor() {
   const [anchorCell, setAnchorCell] = useState<CellPoint | null>(null)
   const [solution, setSolutionState] = useState<Array<CellPoint> | null>(null)
   const [isRangeMode, setIsRangeMode] = useState(false)
+  // Per-cell overrides, parallel to the char grid (see helpers above). Sparse: only
+  // cells carrying a non-default characteristic appear.
+  const [overrides, setOverrides] = useState<Map<string, CellEntity>>(new Map())
 
   const initFromDefinition = useCallback(
-    (id: string | null, name: string, definition: MazeDefinition) => {
+    (
+      id: string | null,
+      name: string,
+      definition: MazeDefinition,
+      cellOverrides: CellOverride[] = [],
+    ) => {
       setMazeId(id)
       setMazeName(name)
       setGrid(definition.grid)
+      setOverrides(new Map(cellOverrides.map(o => [cellKey(o.row, o.col), o.entity])))
       setIsDirty(false)
       setActiveCell(null)
       setAnchorCell(null)
@@ -60,13 +138,53 @@ export function useMazeEditor() {
     setIsDirty(false)
   }, [])
 
-  const applyGenerated = useCallback((definition: MazeDefinition) => {
-    setGrid(definition.grid)
+  const applyGenerated = useCallback((grid: string[][], overrides: CellOverride[] = []) => {
+    setGrid(grid)
+    // The generator can emit per-cell overrides (e.g. a treasure's style), so
+    // seed the override map from them rather than clearing it.
+    setOverrides(new Map(overrides.map(o => [cellKey(o.row, o.col), o.entity])))
     setActiveCell(null)
     setAnchorCell(null)
     setSolutionState(null)
     setIsDirty(true)
   }, [])
+
+  // ── Per-cell overrides ───────────────────────────────────────
+
+  const getOverride = useCallback(
+    (row: number, col: number): CellEntity | undefined => overrides.get(cellKey(row, col)),
+    [overrides],
+  )
+
+  // Sets (replaces) the override on a single cell. Caller ensures the entity's `type`
+  // matches the cell's char; persistence validates it again at the WASM boundary.
+  const setOverride = useCallback((row: number, col: number, entity: CellEntity) => {
+    setOverrides(prev => {
+      const next = new Map(prev)
+      next.set(cellKey(row, col), entity)
+      return next
+    })
+    setIsDirty(true)
+  }, [])
+
+  const clearOverride = useCallback((row: number, col: number) => {
+    if (!overrides.has(cellKey(row, col))) return  // no-op: don't dirty the maze
+    setOverrides(prev => {
+      const next = new Map(prev)
+      next.delete(cellKey(row, col))
+      return next
+    })
+    setIsDirty(true)
+  }, [overrides])
+
+  // Snapshot of the current overrides as a list, for persistence (the WASM codec
+  // takes `CellOverride[]`).
+  const getOverridesList = useCallback((): CellOverride[] => {
+    return Array.from(overrides, ([key, entity]) => {
+      const [row, col] = parseCellKey(key)
+      return { row, col, entity }
+    })
+  }, [overrides])
 
   const applySolution = useCallback((path: Array<CellPoint>) => {
     if (anchorCell !== null) setActiveCell(anchorCell)
@@ -124,6 +242,7 @@ export function useMazeEditor() {
     let containsDoor = false
     let containsEnemy = false
     let containsHealth = false
+    let containsTreasure = false
 
     for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
       for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
@@ -136,6 +255,7 @@ export function useMazeEditor() {
         else if (cell === 'D') containsDoor = true
         else if (cell === 'E') containsEnemy = true
         else if (cell === 'H') containsHealth = true
+        else if (cell === 'T') containsTreasure = true
       }
     }
 
@@ -144,7 +264,7 @@ export function useMazeEditor() {
       selectionRect.minCol === selectionRect.maxCol
     const isAllWalls = totalCells > 0 && wallCount === totalCells
     const isEmpty =
-      !containsWall && !containsStart && !containsFinish && !containsKey && !containsDoor && !containsEnemy && !containsHealth
+      !containsWall && !containsStart && !containsFinish && !containsKey && !containsDoor && !containsEnemy && !containsHealth && !containsTreasure
     const isStart = isSingleCell && containsStart
     const isFinish = isSingleCell && containsFinish
     const allColumnsSelected =
@@ -307,6 +427,7 @@ export function useMazeEditor() {
       }
       return next
     })
+    setOverrides(prev => dropOverridesInRect(prev, selectionRect))
     setSolutionState(null)
     setIsDirty(true)
   }, [selectionRect])
@@ -329,6 +450,10 @@ export function useMazeEditor() {
       }
       return next
     })
+    // Start/Finish are not overridable, and any cell rewritten into one loses its
+    // override; the cells cleared elsewhere were S/F (never overridden), so dropping
+    // overrides across the written selection is sufficient.
+    setOverrides(prev => dropOverridesInRect(prev, selectionRect))
     setSolutionState(null)
     setIsDirty(true)
   }, [selectionRect])
@@ -340,6 +465,7 @@ export function useMazeEditor() {
   const setDoor = useCallback(() => fillSelection('D'), [fillSelection])
   const setEnemy = useCallback(() => fillSelection('E'), [fillSelection])
   const setHealth = useCallback(() => fillSelection('H'), [fillSelection])
+  const setTreasure = useCallback(() => fillSelection('T'), [fillSelection])
   const clearCell = useCallback(() => fillSelection(' '), [fillSelection])
 
   // ── Structural editing ───────────────────────────────────────
@@ -371,6 +497,7 @@ export function useMazeEditor() {
       next.splice(insertAt, 0, ...newRows)
       return next
     })
+    setOverrides(prev => remapOverridesForInsert(prev, 'row', insertAt, insertCount))
     setActiveCell({ row: insertAt, col: 0 })
     setAnchorCell({ row: insertAt + insertCount - 1, col: cols - 1 })
     setSolutionState(null)
@@ -387,6 +514,7 @@ export function useMazeEditor() {
       next.splice(minRow, deleteCount)
       return next
     })
+    setOverrides(prev => remapOverridesForDelete(prev, 'row', minRow, deleteCount))
     if (newRowCount > 0) {
       // Clamp each end of the selection to the new grid bounds, preserving columns and
       // which end is active vs anchor (direction the user built the selection from).
@@ -418,6 +546,7 @@ export function useMazeEditor() {
         return next
       })
     )
+    setOverrides(prev => remapOverridesForInsert(prev, 'col', insertAt, insertCount))
     setActiveCell({ row: 0, col: insertAt })
     setAnchorCell({ row: rows - 1, col: insertAt + insertCount - 1 })
     setSolutionState(null)
@@ -437,6 +566,7 @@ export function useMazeEditor() {
         return next
       })
     )
+    setOverrides(prev => remapOverridesForDelete(prev, 'col', minCol, deleteCount))
     if (rows > 0 && newColCount > 0) {
       // Clamp each end of the selection to the new grid bounds, preserving rows and
       // which end is active vs anchor (direction the user built the selection from).
@@ -458,6 +588,7 @@ export function useMazeEditor() {
 
   return {
     grid,
+    overrides,
     mazeName,
     mazeId,
     isDirty,
@@ -471,6 +602,10 @@ export function useMazeEditor() {
     applyGenerated,
     applySolution,
     clearSolution,
+    getOverride,
+    setOverride,
+    clearOverride,
+    getOverridesList,
     selectAll,
     activateCell,
     activateRow,
@@ -487,6 +622,7 @@ export function useMazeEditor() {
     setDoor,
     setEnemy,
     setHealth,
+    setTreasure,
     clearCell,
     insertRowsBefore,
     deleteRows,

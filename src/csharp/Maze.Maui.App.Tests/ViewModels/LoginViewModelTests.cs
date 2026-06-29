@@ -19,7 +19,7 @@ namespace Maze.Maui.App.Tests.ViewModels
     public class LoginViewModelTests
     {
         private static AccountViewModel BuildAccountVm()
-            => new(new Mock<IAuthService>().Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object);
+            => new(new Mock<IAuthService>().Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object, new Mock<IAvatarService>().Object, new Mock<IImagePickerService>().Object);
 
         private static (LoginViewModel vm, Mock<IAuthService> auth, Mock<IAppFeaturesService> features, Mock<INavigationService> nav, AccountViewModel account)
             BuildVm(AppFeatures? appFeatures = null)

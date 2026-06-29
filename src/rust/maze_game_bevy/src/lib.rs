@@ -6,18 +6,22 @@ mod overlays;
 mod palette;
 mod state;
 mod tick;
+mod transition;
 mod world;
 
 pub use state::{
-    DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
-    Landmarks, SkyType, WallType,
+    DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult, HealthStyle,
+    KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle, WallType,
 };
-pub use world::generate_maze_json;
+pub use world::gallery::validate_demo_env;
+pub use world::{
+    generate_level_maze_jsons, generate_maze_json, LevelDifficultyChange, MAX_LEVEL_COUNT,
+};
 
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{bag, clock, hp, minimap, statusbar};
+    use crate::hud::{bag, clock, hp, level, minimap, score, statusbar, time_bonus};
     use crate::movement::{movement_system, quit_system};
     use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
@@ -26,13 +30,18 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::world::{
         objects::{
             self,
-            dead_end::brazier_flicker_system,
+            common::brazier::brazier_flicker_system,
             door::door_animation_system,
-            enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
+            enemy::{despawn_completed_level_enemies_system, enemy_animation_system, ghost::ghost_hem_wave_system},
             health::health_animation_system,
             key_holder::{key_collection_system, key_holder_system, key_sparks_system},
+            treasure::{treasure_collection_system, treasure_sparkle_system},
         },
         sky, spawn_world,
+        walls::{
+            lava::{lava_animation_system, lava_steam_system},
+            water::water_animation_system,
+        },
     };
 
     // `GameConfig` is the seam the JS host uses (via
@@ -43,14 +52,20 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     app.init_resource::<GameConfig>();
     app.insert_resource(PendingMazeJson(maze_json.map(String::from)))
         .init_state::<AppState>()
-        .insert_resource(TitleTimer(Timer::from_seconds(2.0, TimerMode::Once)))
+        .insert_resource(TitleTimer(Timer::from_seconds(3.0, TimerMode::Once)))
         .insert_resource(ClearColor(Color::BLACK))
         .add_systems(OnEnter(AppState::TitleScreen), title::setup_title)
         .add_systems(Update, title::tick_title.run_if(in_state(AppState::TitleScreen)))
+        .add_systems(Update, title::update_title_countdown.run_if(in_state(AppState::TitleScreen)))
         .add_systems(Update, title::title_resize_system.run_if(in_state(AppState::TitleScreen)))
         .add_systems(OnExit(AppState::TitleScreen), title::teardown_title)
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, crate::transition::transition_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, crate::transition::transition_fx_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::floor::hatch::hatch_close_watcher.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::floor::hatch::hatch_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::sky::sky_switch_on_level_change.run_if(in_state(AppState::Playing)))
         .add_systems(Update, outcome_watcher_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::leaf_system.run_if(in_state(AppState::Playing)))
@@ -63,11 +78,16 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, lose::lightning_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, minimap::minimap_dimensions_update_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, objects::finish::portal::portal_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_collection_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, treasure_sparkle_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, treasure_collection_system.run_if(in_state(AppState::Playing)))
         // The single game-state tick driver runs in `FixedUpdate` for
         // deterministic, frame-rate independent stepping (doors, enemies,
         // HP arithmetic). Per-entity animation systems read the resulting
@@ -75,10 +95,17 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(FixedUpdate, game_tick_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, door_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, enemy_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, despawn_completed_level_enemies_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, ghost_hem_wave_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, health_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, water_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, lava_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, lava_steam_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, hp::hp_hud_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, score::score_hud_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, time_bonus::time_bonus_hud_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, level::level_indicator_system.run_if(in_state(AppState::Playing)))
         // Damage flash runs through pause/lost so an in-flight flash from
         // the last live tick finishes fading rather than freezing on screen.
         .add_systems(Update, damage_flash_system.run_if(in_state(AppState::Playing)))
@@ -92,7 +119,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
 mod tests {
     use super::*;
     use crate::overlays::title::TitleEntity;
-    use crate::state::{AppState, GameState, GridFacing, SkyType, WallType};
+    use crate::state::{AppState, GameState, GridFacing, SkyType, TreasureStyle, WallType};
     use crate::world::{
         camera_fov_for_aspect, camera_pos_for, cell_centre,
         decorations::{floor::FloorAccent, wall::WallDecoration},
@@ -100,16 +127,24 @@ mod tests {
         floor::FloorCell,
         initial_facing,
         objects::{
-            dead_end::{BrazierBowl, DeadEndObject},
+            common::brazier::BrazierBowl,
+            dead_end::DeadEndObject,
             door::DoorMarker,
             enemy::EnemyMarker,
-            finish::orb::FinishOrb,
+            finish::{ladder::FinishLadder, orb::FinishOrb, portal::FinishPortal},
             health::HealthMarker,
             key_holder::KeyMarker,
+            treasure::{TreasureLoot, TreasureMarker},
         },
         roof::RoofCell,
         sky::dome::SkyDome,
-        walls::WallCell,
+        walls::{
+            iron_fence::IronFenceBars,
+            lava::{LavaRock, LavaSurface},
+            rim::PoolRim,
+            water::WaterSurface,
+            WallCell,
+        },
         CAMERA_EDGE_OFFSET, CAMERA_FOV_REFERENCE_ASPECT, CAMERA_FOV_VERTICAL_MAX_RADIANS,
         CAMERA_FOV_VERTICAL_RADIANS,
     };
@@ -147,6 +182,46 @@ mod tests {
         app
     }
 
+    /// A playing app with both a custom maze JSON and a custom `GameConfig`
+    /// (`build_app`'s `init_resource` keeps the pre-inserted config).
+    fn make_playing_app_with_maze_and_config(maze_json: &str, config: GameConfig) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
+        build_app(&mut app, Some(maze_json));
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update();
+        app
+    }
+
+    /// A playing app whose run is the given stacked level set (bottom level
+    /// first), supplied via the `PendingLevels` override so the multi-level
+    /// rendering path can be exercised headlessly without the native env var.
+    fn make_playing_app_with_levels(levels: &[&str]) -> App {
+        make_playing_app_with_levels_and_config(levels, GameConfig::default())
+    }
+
+    /// As [`make_playing_app_with_levels`] but with a custom `GameConfig` (e.g. a
+    /// `layered_alignment`), so the alignment-dependent rendering can be checked.
+    fn make_playing_app_with_levels_and_config(levels: &[&str], config: GameConfig) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
+        app.insert_resource(crate::state::PendingLevels(
+            levels.iter().map(|s| s.to_string()).collect(),
+        ));
+        build_app(&mut app, None);
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update();
+        app
+    }
+
     fn expected_wall_panel_count(grid: &[Vec<char>]) -> usize {
         let rows = grid.len();
         grid.iter()
@@ -180,6 +255,51 @@ mod tests {
         let mut app = make_title_app();
         let count = app.world_mut().query::<&Text2d>().iter(app.world()).count();
         assert!(count >= 2, "expected at least 2 text entities, got {count}");
+    }
+
+    #[test]
+    fn minimap_dimensions_readout_matches_demo_grid() {
+        use crate::hud::minimap::MinimapDimensions;
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = format!("{} x {}", grid[0].len(), grid.len());
+        let labels: Vec<String> = app
+            .world_mut()
+            .query_filtered::<&Text2d, With<MinimapDimensions>>()
+            .iter(app.world())
+            .map(|t| t.0.clone())
+            .collect();
+        assert_eq!(labels, vec![expected], "one dimensions readout, cols x rows");
+    }
+
+    #[test]
+    fn minimap_dimensions_readout_follows_the_active_level() {
+        use crate::hud::minimap::MinimapDimensions;
+        use crate::state::{GameConfig, GameState, MultiLevelRun};
+        // Two differently-sized levels: 1×2 ("2 x 1") then 1×3 ("3 x 1").
+        let l0 = r#"{"grid":[["S","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+
+        let read = |app: &mut App| -> String {
+            app.world_mut()
+                .query_filtered::<&Text2d, With<MinimapDimensions>>()
+                .iter(app.world())
+                .next()
+                .map(|t| t.0.clone())
+                .unwrap_or_default()
+        };
+        assert_eq!(read(&mut app), "2 x 1", "bottom level dims");
+
+        // Swap to the taller-footprint level 1; the readout should follow.
+        app.world_mut().resource_scope(|world, mut state: Mut<GameState>| {
+            world.resource_scope(|world, mut run: Mut<MultiLevelRun>| {
+                let config = world.resource::<GameConfig>().clone();
+                crate::world::advance_to_next_level(&mut state, &mut run, &config);
+            });
+        });
+        app.update();
+        assert_eq!(read(&mut app), "3 x 1", "readout follows the active level");
     }
 
     #[test]
@@ -521,6 +641,227 @@ mod tests {
     }
 
     #[test]
+    fn multi_level_run_stacks_each_level_a_level_height_higher() {
+        // Three identical 1×2 levels (a start + a finish). Every passable cell
+        // spawns one floor tile, so each level contributes two — lifted to its
+        // own `world_y(level, 0.0)` band.
+        let level = r#"{"grid":[["S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[level, level, level]);
+        let mut query = app.world_mut().query::<(&FloorCell, &Transform)>();
+        let ys: Vec<f32> = query.iter(app.world()).map(|(_, t)| t.translation.y).collect();
+        assert_eq!(ys.len(), 6, "two floor tiles × three levels");
+        for level in 0..3 {
+            let expected = crate::world::world_y(level, 0.0);
+            let n = ys.iter().filter(|y| (**y - expected).abs() < 1e-3).count();
+            assert_eq!(n, 2, "level {level} keeps its two floor tiles at y = {expected}");
+        }
+    }
+
+    #[test]
+    fn multi_level_run_has_a_single_finish_orb_on_the_top_level() {
+        // Two levels, each with a finish: only the top (final) level keeps the
+        // orb — the interim finish omits it.
+        let level = r#"{"grid":[["S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[level, level]);
+        let mut query = app.world_mut().query::<(&FinishOrb, &Transform)>();
+        let orbs: Vec<f32> = query.iter(app.world()).map(|(_, t)| t.translation.y).collect();
+        assert_eq!(orbs.len(), 1, "only the top level keeps the finish orb");
+        assert!(
+            orbs[0] > crate::world::LEVEL_HEIGHT,
+            "the orb rides the upper level, a full LEVEL_HEIGHT up — got y = {}",
+            orbs[0],
+        );
+    }
+
+    #[test]
+    fn interim_finish_draws_the_transition_rig_chosen_by_finish_type() {
+        use crate::state::FinishType;
+        // Vertically-aligned levels: the upper level's start `(0,1)` sits directly
+        // above the lower level's finish `(0,1)`, so a ladder is allowed.
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["F","S"]]}"#;
+
+        // Default finish type is Ladder: the interim (bottom) finish gets a ladder
+        // rig (several sub-meshes), no portal; the top keeps the orb.
+        let mut ladder = make_playing_app_with_levels(&[lower, upper]);
+        assert!(
+            ladder.world_mut().query::<&FinishLadder>().iter(ladder.world()).count() > 0,
+            "the interim finish should draw a ladder rig by default when a start is above",
+        );
+        assert_eq!(
+            ladder.world_mut().query::<&FinishPortal>().iter(ladder.world()).count(),
+            0,
+            "no portal when finish_type is Ladder and a ladder is allowed",
+        );
+        assert_eq!(
+            ladder.world_mut().query::<&FinishOrb>().iter(ladder.world()).count(),
+            1,
+            "the final level still keeps its orb",
+        );
+
+        // FinishType::Portal swaps the interim rig to a portal (one body), no ladder.
+        let mut portal = make_playing_app_with_levels_and_config(
+            &[lower, upper],
+            GameConfig { finish_type: FinishType::Portal, ..GameConfig::default() },
+        );
+        assert_eq!(
+            portal.world_mut().query::<&FinishPortal>().iter(portal.world()).count(),
+            1,
+            "the interim finish should draw a single portal body",
+        );
+        assert_eq!(
+            portal.world_mut().query::<&FinishLadder>().iter(portal.world()).count(),
+            0,
+            "no ladder when finish_type is Portal",
+        );
+    }
+
+    #[test]
+    fn a_ladder_finish_with_no_start_above_falls_back_to_a_portal() {
+        // The upper level's start `(0,0)` is NOT above the lower finish `(0,1)`, so
+        // even a Ladder finish type must fall back to a portal (you can't climb to
+        // nothing). This is the rule that a portal can always replace a ladder.
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[lower, upper]); // default = Ladder
+        assert_eq!(
+            app.world_mut().query::<&FinishLadder>().iter(app.world()).count(),
+            0,
+            "a ladder with no start above must not be drawn",
+        );
+        assert_eq!(
+            app.world_mut().query::<&FinishPortal>().iter(app.world()).count(),
+            1,
+            "it falls back to a portal instead",
+        );
+    }
+
+    #[test]
+    fn hatch_spawns_in_the_start_above_a_ladder_finish_only() {
+        use crate::world::floor::hatch::LevelHatch;
+        // Aligned: l1's start (0,1) sits above l0's ladder finish (0,1), so level 1's
+        // start cell carries a hatch (and the bottom level never does).
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["F","S"]]}"#;
+        let mut ladder = make_playing_app_with_levels(&[lower, upper]);
+        let levels: Vec<usize> = ladder
+            .world_mut()
+            .query::<&LevelHatch>()
+            .iter(ladder.world())
+            .map(|h| h.level)
+            .collect();
+        assert_eq!(levels, vec![1], "one hatch, on the level above the ladder finish");
+
+        // Misaligned → portal finish → no hatch anywhere.
+        let mut portal =
+            make_playing_app_with_levels(&[r#"{"grid":[["S","F"]]}"#, r#"{"grid":[["S","F"]]}"#]);
+        assert_eq!(
+            portal.world_mut().query::<&LevelHatch>().iter(portal.world()).count(),
+            0,
+            "a portal finish needs no hatch above it",
+        );
+    }
+
+    #[test]
+    fn hatch_closes_when_the_player_climbs_onto_its_level() {
+        use crate::state::{GameConfig, GameState, MultiLevelRun};
+        use crate::world::floor::hatch::LevelHatch;
+        let lower = r#"{"grid":[["S","F"]]}"#;
+        let upper = r#"{"grid":[["F","S"]]}"#;
+        let mut app = make_playing_app_with_levels(&[lower, upper]);
+
+        let closing = |app: &mut App| -> bool {
+            app.world_mut()
+                .query::<&LevelHatch>()
+                .iter(app.world())
+                .next()
+                .map(|h| h.closing)
+                .unwrap_or(false)
+        };
+        assert!(!closing(&mut app), "the hatch starts open");
+
+        // Climb onto level 1, then let the close watcher run.
+        app.world_mut().resource_scope(|world, mut state: Mut<GameState>| {
+            world.resource_scope(|world, mut run: Mut<MultiLevelRun>| {
+                let config = world.resource::<GameConfig>().clone();
+                crate::world::advance_to_next_level(&mut state, &mut run, &config);
+            });
+        });
+        app.update();
+        assert!(closing(&mut app), "the hatch closes once the player arrives on its level");
+    }
+
+    #[test]
+    fn single_level_game_keeps_the_orb_and_draws_no_transition_rig() {
+        // A one-level game is its own final level, so it keeps the orb and never
+        // draws a transition rig — unchanged from before multi-level runs.
+        let mut app = make_playing_app_with(r#"{"grid":[["S","F"]]}"#);
+        assert_eq!(app.world_mut().query::<&FinishOrb>().iter(app.world()).count(), 1);
+        assert_eq!(app.world_mut().query::<&FinishLadder>().iter(app.world()).count(), 0);
+        assert_eq!(app.world_mut().query::<&FinishPortal>().iter(app.world()).count(), 0);
+    }
+
+    #[test]
+    fn centre_alignment_shifts_a_smaller_upper_level_in_x_relative_to_edge() {
+        use crate::state::LayeredAlignment;
+        // A 1×9 bottom level + a 1×5 upper level (a smaller grid). Under `Edge`
+        // the upper level's floor sits at the origin corner; under `Centre` it
+        // shifts in by (9-5)/2 = 2 cells, so the whole demo reads as a centred
+        // stack — and, crucially, the geometry honours the configured alignment.
+        let l0 = r#"{"grid":[["S"," "," "," "," "," "," "," ","F"]]}"#;
+        let l1 = r#"{"grid":[["S"," "," "," ","F"]]}"#;
+
+        // Minimum X of the upper level's floor tiles (those a `LEVEL_HEIGHT` up).
+        fn upper_floor_min_x(app: &mut App) -> f32 {
+            let mut query = app.world_mut().query::<(&FloorCell, &Transform)>();
+            query
+                .iter(app.world())
+                .map(|(_, t)| t.translation)
+                .filter(|p| p.y > crate::world::LEVEL_HEIGHT / 2.0)
+                .map(|p| p.x)
+                .fold(f32::INFINITY, f32::min)
+        }
+
+        let mut edge = make_playing_app_with_levels_and_config(
+            &[l0, l1],
+            GameConfig { layered_alignment: LayeredAlignment::Edge, ..GameConfig::default() },
+        );
+        let mut centre = make_playing_app_with_levels_and_config(
+            &[l0, l1],
+            GameConfig { layered_alignment: LayeredAlignment::Centre, ..GameConfig::default() },
+        );
+
+        let shift = upper_floor_min_x(&mut centre) - upper_floor_min_x(&mut edge);
+        assert!(
+            (shift - 2.0 * crate::world::CELL_SIZE).abs() < 1e-3,
+            "Centre should shift the 1×5 level in by 2 cells vs Edge, got {shift}",
+        );
+    }
+
+    #[test]
+    fn floor_and_wall_counts_scale_with_the_level_count() {
+        // A wall-bearing footprint rendered as one level, then as three. Every
+        // level renders the same geometry (only its Y offset differs), so the
+        // floor and wall counts scale exactly with the level count.
+        let level = r#"{"grid":[["S","W"," "],[" ","W","F"]]}"#;
+        let single = {
+            let mut app = make_playing_app_with_levels(&[level]);
+            let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+            let walls = app.world_mut().query::<&WallCell>().iter(app.world()).count();
+            (floors, walls)
+        };
+        let triple = {
+            let mut app = make_playing_app_with_levels(&[level, level, level]);
+            let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+            let walls = app.world_mut().query::<&WallCell>().iter(app.world()).count();
+            (floors, walls)
+        };
+        assert!(single.1 > 0, "sanity: the footprint actually has wall panels");
+        assert_eq!(triple.0, single.0 * 3, "floor tiles scale with the level count");
+        assert_eq!(triple.1, single.1 * 3, "wall panels scale with the level count");
+    }
+
+    #[test]
     fn wall_decorations_toggle_off_suppresses_spawns() {
         let mut app = make_playing_app_with_config(GameConfig {
             landmarks: Landmarks {
@@ -540,7 +881,7 @@ mod tests {
     #[test]
     fn demo_grid_is_well_formed() {
         use crate::world::demo_grid;
-        use crate::world::objects::dead_end::is_dead_end;
+        use maze::is_dead_end;
         use std::collections::{HashSet, VecDeque};
 
         let grid = demo_grid();
@@ -752,14 +1093,15 @@ mod tests {
     /// the smoke test isn't sensitive to changes in the hash constants.
     fn brazier_forcing_seed() -> u64 {
         use crate::world::demo_grid;
-        use crate::world::objects::dead_end::{dead_end_object_index, is_dead_end};
+        use crate::world::objects::dead_end::dead_end_object_index;
+        use maze::is_dead_end;
         let grid = demo_grid();
         for seed in 0u64..1024 {
             for (r, row) in grid.iter().enumerate() {
                 for (c, &cell) in row.iter().enumerate() {
                     // Mirror `spawn_dead_end_object_for_cell`'s exclusions: only
                     // cells that actually receive a landmark are candidates.
-                    if matches!(cell, 'S' | 'F' | 'K' | 'D') {
+                    if matches!(cell, 'S' | 'F' | 'K' | 'D' | 'E' | 'H' | 'T') {
                         continue;
                     }
                     if is_dead_end(&grid, r, c) && dead_end_object_index(r, c, seed) == 0 {
@@ -870,6 +1212,180 @@ mod tests {
         assert_sky_spawns_dome_and_light(SkyType::Chamber);
     }
 
+    /// Two stacked levels — a minimal solvable grid each level reuses.
+    const SKY_L0: &str = r#"{"grid":[["S"," "],[" ","F"]]}"#;
+    const SKY_L1: &str = r#"{"grid":[["S"," "],[" ","F"]]}"#;
+
+    /// The single live `SkyDome` entity (there is always exactly one).
+    fn sky_dome_entity(app: &mut App) -> Entity {
+        let mut q = app.world_mut().query_filtered::<Entity, With<SkyDome>>();
+        let domes: Vec<Entity> = q.iter(app.world()).collect();
+        assert_eq!(domes.len(), 1, "expected exactly one SkyDome, got {}", domes.len());
+        domes[0]
+    }
+
+    /// Drives the run up one level (as `advance_to_next_level` does) and pumps a
+    /// frame so the swap watcher runs.
+    fn climb_one_level(app: &mut App) {
+        app.world_mut()
+            .resource_mut::<crate::state::MultiLevelRun>()
+            .current_level = 1;
+        app.update();
+    }
+
+    #[test]
+    fn level_skies_holds_each_levels_effective_sky() {
+        // Enclosed dungeon base with an open day summit — the two ends of a climb.
+        let config = GameConfig {
+            sky_type: SkyType::Dungeon,
+            top_sky_type: Some(SkyType::Day),
+            ..GameConfig::default()
+        };
+        let app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let skies = &app.world().resource::<crate::world::sky::LevelSkies>().0;
+        assert_eq!(skies, &[SkyType::Dungeon, SkyType::Day]);
+    }
+
+    #[test]
+    fn sky_switch_respawns_the_dome_on_a_differing_sky() {
+        let config = GameConfig {
+            sky_type: SkyType::Dungeon,
+            top_sky_type: Some(SkyType::Day),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        climb_one_level(&mut app);
+        // The old dome is gone and a fresh one stands in its place — still exactly
+        // one dome, but a different entity (the day sky replaced the dungeon one).
+        let after = sky_dome_entity(&mut app);
+        assert_ne!(before, after, "the dome should be respawned for the new sky");
+    }
+
+    /// Arms a level transition of `kind` at fraction `raw` of its duration, without
+    /// advancing `current_level` — the player is mid-climb / mid-step-through, not
+    /// yet arrived (as `transition_system` has it before completion).
+    fn arm_transition(app: &mut App, kind: crate::state::FinishType, raw: f32) {
+        use crate::state::{GameState, LevelTransition};
+        app.world_mut().resource_mut::<GameState>().transition = Some(LevelTransition {
+            kind,
+            elapsed: raw,
+            duration: 1.0,
+            start_pos: Vec3::ZERO,
+            target_pos: Vec3::ZERO,
+            start_yaw: 0.0,
+            target_yaw: 0.0,
+            start_pitch: 0.0,
+            target_pitch: 0.0,
+            climb_yaw: 0.0,
+            climb_pos: Vec3::ZERO,
+        });
+    }
+
+    #[test]
+    fn ladder_sky_swap_holds_until_the_camera_clears_the_hatch() {
+        use crate::state::{FinishType, MultiLevelRun};
+        let config = GameConfig {
+            sky_type: SkyType::Sunset,
+            top_sky_type: Some(SkyType::Night),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        // Early in the climb (still below the hatch) the level-below sunset holds.
+        arm_transition(&mut app, FinishType::Ladder, 0.2);
+        app.update();
+        assert_eq!(
+            sky_dome_entity(&mut app),
+            before,
+            "the sunset sky should hold while the player is still climbing"
+        );
+        assert_eq!(
+            app.world().resource::<MultiLevelRun>().current_level,
+            0,
+            "arrival hasn't happened — current_level is still the lower level"
+        );
+        // Past the end of the climb (camera clears the hole) the night sky is up,
+        // though arrival (current_level) hasn't advanced yet.
+        arm_transition(&mut app, FinishType::Ladder, 0.7);
+        app.update();
+        assert_ne!(
+            sky_dome_entity(&mut app),
+            before,
+            "the night sky should be in place as the player emerges through the hatch"
+        );
+    }
+
+    #[test]
+    fn portal_sky_swap_fires_at_the_flash_peak() {
+        use crate::state::FinishType;
+        let config = GameConfig {
+            sky_type: SkyType::Sunset,
+            top_sky_type: Some(SkyType::Night),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        // Before the flash peak the old sky holds.
+        arm_transition(&mut app, FinishType::Portal, 0.3);
+        app.update();
+        assert_eq!(
+            sky_dome_entity(&mut app),
+            before,
+            "the sky should hold until the portal flash whites out"
+        );
+        // At/after the peak (the white-out) the swap is masked by the flash.
+        arm_transition(&mut app, FinishType::Portal, 0.6);
+        app.update();
+        assert_ne!(
+            sky_dome_entity(&mut app),
+            before,
+            "the new sky should swap in behind the portal flash"
+        );
+    }
+
+    #[test]
+    fn sky_switch_is_a_no_op_when_the_sky_is_unchanged() {
+        // No top override → every level shares the base sky, so climbing must not
+        // tear down and rebuild the dome.
+        let config = GameConfig {
+            sky_type: SkyType::Day,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let before = sky_dome_entity(&mut app);
+        climb_one_level(&mut app);
+        let after = sky_dome_entity(&mut app);
+        assert_eq!(before, after, "an unchanged sky must keep the same dome entity");
+    }
+
+    #[test]
+    fn sky_swap_does_not_accumulate_sky_entities() {
+        // The point of the marker-despawn is memory neutrality: only one sky exists
+        // at a time, so the swap must despawn the whole old set before spawning the
+        // new one rather than stacking them. The headless app has no `AssetPlugin`
+        // (so no `Assets<Image>` to count), but the asset handles are ref-counted to
+        // these entities — proving the set doesn't grow proves the old dome's
+        // material + texture handles are dropped on the next sweep.
+        let config = GameConfig {
+            sky_type: SkyType::Dungeon,
+            top_sky_type: Some(SkyType::Day),
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[SKY_L0, SKY_L1], config);
+        let count_sky = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<Entity, With<crate::world::sky::SkyEntity>>()
+                .iter(app.world())
+                .count()
+        };
+        let before = count_sky(&mut app);
+        assert!(before > 0, "the bottom sky should have spawned");
+        climb_one_level(&mut app);
+        let after = count_sky(&mut app);
+        assert_eq!(before, after, "a swap must replace the sky set, not accumulate it");
+    }
+
     #[test]
     fn default_sky_type_is_night() {
         assert_eq!(GameConfig::default().sky_type, SkyType::Night);
@@ -893,6 +1409,21 @@ mod tests {
         // Case-insensitive.
         assert_eq!(SkyType::from_wire_str("DAY"), SkyType::Day);
         assert_eq!(SkyType::from_wire_str("SunSet"), SkyType::Sunset);
+    }
+
+    #[test]
+    fn only_dungeon_and_chamber_are_enclosed() {
+        assert!(SkyType::Dungeon.is_enclosed());
+        assert!(SkyType::Chamber.is_enclosed());
+        for st in [SkyType::Night, SkyType::Sunrise, SkyType::Day, SkyType::Sunset] {
+            assert!(!st.is_enclosed(), "{st:?} is open-air");
+        }
+    }
+
+    #[test]
+    fn default_perimeter_walls_is_true() {
+        // The maze is walled at its perimeter by default (open-sky mazes too).
+        assert!(GameConfig::default().perimeter_walls);
     }
 
     #[test]
@@ -927,16 +1458,39 @@ mod tests {
             WALL_MATERIAL_BRICK, WALL_MATERIAL_COBBLESTONE, WALL_MATERIAL_DRESSED_STONE,
             WALL_MATERIAL_WOOD,
         };
-        assert_eq!(WallType::Brick.to_kind_index(), WALL_MATERIAL_BRICK);
+        assert_eq!(WallType::Brick.to_kind_index(), Some(WALL_MATERIAL_BRICK));
         assert_eq!(
             WallType::DressedStone.to_kind_index(),
-            WALL_MATERIAL_DRESSED_STONE
+            Some(WALL_MATERIAL_DRESSED_STONE)
         );
-        assert_eq!(WallType::Wood.to_kind_index(), WALL_MATERIAL_WOOD);
+        assert_eq!(WallType::Wood.to_kind_index(), Some(WALL_MATERIAL_WOOD));
         assert_eq!(
             WallType::Cobblestone.to_kind_index(),
-            WALL_MATERIAL_COBBLESTONE
+            Some(WALL_MATERIAL_COBBLESTONE)
         );
+        // Non-occluding types have no panel material.
+        assert_eq!(WallType::Water.to_kind_index(), None);
+        assert_eq!(WallType::Lava.to_kind_index(), None);
+        assert_eq!(WallType::IronFence.to_kind_index(), None);
+    }
+
+    #[test]
+    fn only_special_wall_types_are_non_occluding() {
+        // The four solid textures occlude; the three special types don't —
+        // exactly the inverse of `to_kind_index` being `Some`.
+        for wt in [
+            WallType::Brick,
+            WallType::DressedStone,
+            WallType::Wood,
+            WallType::Cobblestone,
+        ] {
+            assert!(!wt.is_non_occluding(), "{wt:?} should occlude");
+            assert!(wt.to_kind_index().is_some());
+        }
+        for wt in [WallType::Water, WallType::Lava, WallType::IronFence] {
+            assert!(wt.is_non_occluding(), "{wt:?} should be non-occluding");
+            assert!(wt.to_kind_index().is_none());
+        }
     }
 
     #[test]
@@ -1009,6 +1563,90 @@ mod tests {
         let mut runtime_ids: Vec<u32> = game.iter().map(|e| e.id).collect();
         runtime_ids.sort();
         assert_eq!(marker_ids, runtime_ids);
+    }
+
+    #[test]
+    fn every_levels_enemies_spawn_with_real_per_level_ids() {
+        // Level 0 has two enemies, level 1 has one. EVERY level (not just the live
+        // bottom one) must spawn its enemies with real per-level row-major ids — no
+        // `u32::MAX` frozen-scenery stub — so each level's enemies come alive when
+        // it becomes the current level.
+        let l0 = r#"{"grid":[["S","E","E","F"]]}"#;
+        let l1 = r#"{"grid":[["S","E","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        let mut ids_by_level: std::collections::HashMap<usize, Vec<u32>> = std::collections::HashMap::new();
+        for marker in app.world_mut().query::<&EnemyMarker>().iter(app.world()) {
+            assert_ne!(marker.id, u32::MAX, "no enemy keeps the old frozen-scenery stub id");
+            ids_by_level.entry(marker.placement.level).or_default().push(marker.id);
+        }
+        for ids in ids_by_level.values_mut() {
+            ids.sort();
+        }
+        assert_eq!(ids_by_level.get(&0).cloned().unwrap_or_default(), vec![0, 1], "level 0 enemies are ids 0,1");
+        assert_eq!(ids_by_level.get(&1).cloned().unwrap_or_default(), vec![0], "level 1 enemy is id 0 (per-level)");
+    }
+
+    #[test]
+    fn an_off_level_enemy_holds_its_own_cell_and_is_not_hijacked() {
+        // Level 0's enemy (id 0) sits at cell (0,1); level 1's enemy (id 0) sits at
+        // a DIFFERENT cell (0,0). While we're on level 0, the level-1 marker must
+        // hold its OWN spawn cell (0,0) → world (1.0, 1.0), not be dragged to
+        // level-0's enemy at (0,1) → world x = 3.0 by the colliding id (the enemy
+        // analogue of the cross-level door-marker bug, where a marker keyed only by
+        // cell — not level — is driven by a same-keyed entity on another level).
+        let l0 = r#"{"grid":[["S","E","F"]]}"#;
+        let l1 = r#"{"grid":[["E","S","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        let (x, z) = app
+            .world_mut()
+            .query::<(&EnemyMarker, &Transform)>()
+            .iter(app.world())
+            .find(|(m, _)| m.placement.level == 1)
+            .map(|(_, t)| (t.translation.x, t.translation.z))
+            .expect("level 1 has an enemy marker");
+        assert!(
+            (x - 1.0).abs() < 1e-3 && (z - 1.0).abs() < 1e-3,
+            "level-1 enemy held its own cell (0,0) → (1.0, 1.0); got ({x}, {z})"
+        );
+    }
+
+    #[test]
+    fn hide_completed_enemies_despawns_lower_levels_on_ascend_only_when_enabled() {
+        use crate::state::MultiLevelRun;
+        let l0 = r#"{"grid":[["S","E","F"]]}"#;
+        let l1 = r#"{"grid":[["S","E","F"]]}"#;
+
+        // Climb from level 0 to level 1 (swaps the live game) and run a frame.
+        fn ascend(app: &mut App) {
+            let config = app.world().resource::<GameConfig>().clone();
+            app.world_mut().resource_scope(|world, mut state: Mut<GameState>| {
+                world.resource_scope(|_world, mut run: Mut<MultiLevelRun>| {
+                    crate::world::advance_to_next_level(&mut state, &mut run, &config);
+                });
+            });
+            app.update();
+        }
+        fn level0_enemies(app: &mut App) -> usize {
+            app.world_mut()
+                .query::<&EnemyMarker>()
+                .iter(app.world())
+                .filter(|m| m.placement.level == 0)
+                .count()
+        }
+
+        // Flag ON → level 0's enemy is freed once we've climbed past it.
+        let mut app_on = make_playing_app_with_levels_and_config(
+            &[l0, l1],
+            GameConfig { hide_completed_enemies: true, ..GameConfig::default() },
+        );
+        assert_eq!(level0_enemies(&mut app_on), 1, "level 0 enemy present before ascending");
+        ascend(&mut app_on);
+        assert_eq!(level0_enemies(&mut app_on), 0, "flag on: level 0 enemy despawned on ascend");
+
+        // Flag OFF (default) → the completed level's enemy stays (idles in place).
+        let mut app_off = make_playing_app_with_levels_and_config(&[l0, l1], GameConfig::default());
+        ascend(&mut app_off);
+        assert_eq!(level0_enemies(&mut app_off), 1, "flag off: level 0 enemy retained");
     }
 
     #[test]
@@ -1109,5 +1747,702 @@ mod tests {
             ghost_tag_count, expected,
             "Ghost rig must spawn one GhostTag per 'E' cell",
         );
+    }
+
+    #[test]
+    fn per_cell_ghost_override_spawns_ghost_under_goblin_default() {
+        // The maze's default enemy rig is Goblin (default `GameConfig`), but the
+        // single `'E'` cell carries a `ghost` per-cell override. The override —
+        // not the config default — must drive the spawned rig.
+        use crate::world::objects::enemy::ghost::GhostTag;
+        let json = r#"{"grid":[["S",[{"type":"E","enemyType":"ghost"}],"F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let ghost_tag_count = app
+            .world_mut()
+            .query::<&GhostTag>()
+            .iter(app.world())
+            .count();
+        assert_eq!(
+            ghost_tag_count, 1,
+            "a per-cell ghost override must spawn a ghost rig even when the maze default is Goblin",
+        );
+    }
+
+    // ── Treasure ('T' cells: open chest + collectible loot) ──────────────────
+
+    #[test]
+    fn treasure_marker_spawned_per_t_cell() {
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'T').count();
+        let count = app
+            .world_mut()
+            .query::<&TreasureMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, expected);
+        assert!(count >= 1, "demo grid must contain at least one 'T' cell");
+    }
+
+    #[test]
+    fn treasure_cell_has_no_dead_end_object() {
+        // A treasure sitting in a dead-end shows its open chest + loot, not a
+        // brazier/urn/pillar/chest landmark — treasure takes precedence.
+        let mut app = make_playing_app_with(
+            r#"{"grid":[["S"," ","F"],["W","T","W"],["W","W","W"]]}"#,
+        );
+        let dead_end = app
+            .world_mut()
+            .query::<&DeadEndObject>()
+            .iter(app.world())
+            .count();
+        let treasure = app
+            .world_mut()
+            .query::<&TreasureMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(treasure, 1, "expected the treasure marker");
+        assert_eq!(dead_end, 0, "treasure cell must not also get a dead-end object");
+    }
+
+    #[test]
+    fn treasure_loot_family_matches_style() {
+        // Each loot pile is baked into shared meshes: the coin styles
+        // (Silver / Gold) into one combined mesh; the gem styles
+        // (Diamonds / Jewels) into one mesh per colour group. So a style
+        // override that switches families changes the baked-mesh (TreasureLoot)
+        // count from 1 to one-per-group. This confirms the per-cell override is
+        // wired into the spawn dispatch (the four-way resolution itself is
+        // unit-tested in `objects::overrides`).
+        let loot = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&TreasureLoot>().iter(app.world()).count()
+        };
+        let coins = loot(r#"{"grid":[["S","T","F"]]}"#); // bare 'T' → Silver coins
+        assert_eq!(coins, 1, "coin loot bakes to a single combined mesh");
+        let gems = loot(r#"{"grid":[["S",[{"type":"T","style":"diamonds"}],"F"]]}"#);
+        assert_eq!(gems, 4, "gem loot bakes to one combined mesh per colour group");
+    }
+
+    #[test]
+    fn treasure_style_wire_round_trip() {
+        for variant in [
+            TreasureStyle::Silver,
+            TreasureStyle::Gold,
+            TreasureStyle::Diamonds,
+            TreasureStyle::Jewels,
+        ] {
+            assert_eq!(TreasureStyle::from_wire_str(variant.as_wire_str()), variant);
+        }
+        // Unknown values fall back to Silver.
+        assert_eq!(TreasureStyle::from_wire_str(""), TreasureStyle::Silver);
+        assert_eq!(TreasureStyle::from_wire_str("totally-unknown"), TreasureStyle::Silver);
+        // Case-insensitive.
+        assert_eq!(TreasureStyle::from_wire_str("GOLD"), TreasureStyle::Gold);
+    }
+
+    // ── Non-occluding wall types (water / lava / iron fence) ──────────────────
+
+    #[test]
+    fn water_override_renders_surface_and_no_floor_tile() {
+        // The 'W' cell at (1,1) carries a water override. It renders one water
+        // surface and NO floor tile (the pool serves as the floor); only the
+        // three passable cells get floor tiles.
+        let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"water"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let water = app.world_mut().query::<&WaterSurface>().iter(app.world()).count();
+        let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+        assert_eq!(water, 1, "one water surface");
+        assert_eq!(floors, 3, "only the three passable cells get floor tiles");
+    }
+
+    #[test]
+    fn lava_override_renders_surface_and_no_floor_tile() {
+        let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let lava = app.world_mut().query::<&LavaSurface>().iter(app.world()).count();
+        let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+        assert_eq!(lava, 1, "one lava surface");
+        assert_eq!(floors, 3, "only the three passable cells get floor tiles");
+    }
+
+    #[test]
+    fn iron_fence_override_renders_bars_over_a_floor_tile() {
+        // Unlike the pools, the iron fence stands on a normal floor — so the
+        // four floor tiles are the three passable cells plus the fence's own.
+        let json =
+            r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"iron_fence"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let bars = app.world_mut().query::<&IronFenceBars>().iter(app.world()).count();
+        let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+        assert_eq!(bars, 1, "one iron-fence lattice");
+        assert_eq!(floors, 4, "three passable cells + the iron-fence floor tile");
+    }
+
+    #[test]
+    fn non_occluding_neighbour_suppresses_shared_panels() {
+        // A centre cell ringed by four passable neighbours. As a solid wall it
+        // draws four panels (one per open neighbour). As a non-occluding water
+        // cell those four shared panels are suppressed, and the water cell —
+        // having no solid neighbours and no grid-edge faces — draws none, so the
+        // world has exactly four fewer wall panels.
+        let solid = r#"{"grid":[["S"," "," "],[" ","W"," "],[" "," ","F"]]}"#;
+        let water =
+            r#"{"grid":[["S"," "," "],[" ",[{"type":"W","wallType":"water"}]," "],[" "," ","F"]]}"#;
+        let panels = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&WallCell>().iter(app.world()).count()
+        };
+        assert_eq!(panels(solid), panels(water) + 4);
+    }
+
+    #[test]
+    fn non_occluding_edge_cell_draws_no_outer_wall_when_perimeter_open() {
+        // Open sky with perimeter walls off: the corner water cell (two grid edges)
+        // draws no *solid wall* panel (the sky shows past its edge; its low rim
+        // frames it instead), and its two open neighbours suppress their panels
+        // toward it. Replacing it with a solid wall makes those two neighbours each
+        // draw a panel, so the solid variant has two MORE wall panels.
+        let solid = r#"{"grid":[["S"," "],["F","W"]]}"#;
+        let water = r#"{"grid":[["S"," "],["F",[{"type":"W","wallType":"water"}]]]}"#;
+        let panels = |json: &str| {
+            let config = GameConfig {
+                perimeter_walls: false,
+                ..GameConfig::default()
+            };
+            let mut app = make_playing_app_with_maze_and_config(json, config);
+            app.world_mut().query::<&WallCell>().iter(app.world()).count()
+        };
+        assert_eq!(panels(solid), panels(water) + 2);
+    }
+
+    #[test]
+    fn no_wall_decorations_at_open_edges_without_perimeter_walls() {
+        // An all-passable open-sky maze with perimeter walls off has no wall panels
+        // at all, so no wall decorations spawn — otherwise they'd float in mid-air
+        // at the boundary where the wall would have been.
+        let json = r#"{"grid":[["S"," "," "," "," ","F"]]}"#;
+        let config = GameConfig {
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_maze_and_config(json, config);
+        let count = app.world_mut().query::<&WallDecoration>().iter(app.world()).count();
+        assert_eq!(count, 0, "open edges (no panel) must carry no floating decorations");
+    }
+
+    #[test]
+    fn perimeter_walls_restore_edge_decorations() {
+        // Walling the perimeter makes those grid-edge panels (and so their
+        // decorations) appear again. The 1/10 placement hash makes any single seed
+        // unreliable, so find one that decorates with the perimeter walled, then
+        // confirm the same seed places none when the perimeter is open.
+        let json = r#"{"grid":[["S"," "," "," "," ","F"]]}"#;
+        let decorations = |seed: u64, perimeter_walls: bool| {
+            let config = GameConfig {
+                seed,
+                perimeter_walls,
+                ..GameConfig::default()
+            };
+            let mut app = make_playing_app_with_maze_and_config(json, config);
+            app.world_mut().query::<&WallDecoration>().iter(app.world()).count()
+        };
+        let seed = (0u64..256)
+            .find(|&s| decorations(s, true) > 0)
+            .expect("some seed decorates the walled edges");
+        assert!(decorations(seed, true) > 0);
+        assert_eq!(decorations(seed, false), 0, "same seed: open edges carry none");
+    }
+
+    #[test]
+    fn pool_rim_walls_the_maze_edge() {
+        // A water cell at the top-right corner: two of its edges are the grid
+        // boundary and two face open cells. All four are rimmed (the maze perimeter
+        // is framed, not left open), so the cell gets four rim skirts.
+        let json = r#"{"grid":[["S",[{"type":"W","wallType":"water"}]],["F"," "]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 4, "an edge pool is rimmed on its grid-boundary sides too");
+    }
+
+    #[test]
+    fn non_occluding_side_reshapes_a_corridor_door() {
+        // A door in a straight N–S corridor is a single swing leaf. Turning one
+        // lateral wall into a non-occluding water cell removes the swing anchor
+        // (its panel is suppressed) AND opens that side, so the door instead seals
+        // each open edge with its own leaf — the two passable ends plus the water
+        // side — three leaves in all.
+        let swing = r#"{"grid":[["W","S","W"],["W","D","W"],["W","F","W"]]}"#;
+        let water =
+            r#"{"grid":[["W","S","W"],[[{"type":"W","wallType":"water"}],"D","W"],["W","F","W"]]}"#;
+        let leaves = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&DoorMarker>().iter(app.world()).count()
+        };
+        assert_eq!(leaves(swing), 1, "straight corridor → single swing leaf");
+        assert_eq!(
+            leaves(water), 3,
+            "non-occluding lateral → per-edge leaves on the two ends + the water side",
+        );
+    }
+
+    #[test]
+    fn upper_level_door_holds_when_a_same_cell_live_door_opens() {
+        use maze::Direction;
+        // Level 0 (live): door at (1,1), key at (2,1), start (2,0), finish (0,2).
+        // Level 1: ALSO a door at (1,1) (same grid coords). Opening level 0's door
+        // must NOT disturb level 1's leaf — a regression guard for the cross-level
+        // door bug where an upper-level leaf slid down into the live doorway.
+        let l0 = r#"{"grid":[[" "," ","F"],[" ","D"," "],["S","K"," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[" ","D"," "],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+
+        // The upper (level-1) leaves spawn near y = LEVEL_HEIGHT (3); the live
+        // (level-0) leaves near y = 0. Capture the upper leaves' resting heights.
+        let upper_ys = |app: &mut App| -> Vec<f32> {
+            let mut v: Vec<f32> = app
+                .world_mut()
+                .query::<(&DoorMarker, &Transform)>()
+                .iter(app.world())
+                .map(|(_, t)| t.translation.y)
+                .filter(|y| *y > 1.5)
+                .collect();
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            v
+        };
+        let before = upper_ys(&mut app);
+        assert!(!before.is_empty(), "level 1 has door leaves up at LEVEL_HEIGHT");
+
+        {
+            let mut state = app.world_mut().resource_mut::<GameState>();
+            state.game.move_player(Direction::Right); // collect the key
+            state.game.move_player(Direction::Up); // walk into the level-0 door → unlock
+            let _ = state.game.tick(10_000.0); // Opening → Open
+        }
+        app.update(); // door_animation_system runs
+
+        let after = upper_ys(&mut app);
+        assert_eq!(
+            before, after,
+            "the level-1 door leaves must stay put when the level-0 door at the same (row, col) opens",
+        );
+    }
+
+    #[test]
+    fn collecting_a_key_only_affects_the_live_levels_same_cell_holder() {
+        use crate::tick::game_tick_system;
+        use crate::world::objects::key_holder::{CollectingKey, KeyMarker};
+        use bevy::ecs::system::RunSystemOnce;
+        use maze::Direction;
+        // Both levels have a key at (0,1). Collecting the live (level-0) key must
+        // tag only level 0's holder — a regression guard for the cross-level
+        // collection bug where a same-(row, col) key on another level was
+        // despawned, so it never drew when the player climbed to it even though
+        // the engine still collected it. (Health + treasure share the same fix.)
+        let lvl = r#"{"grid":[["S","K","F"]]}"#;
+        let mut app = make_playing_app_with_levels(&[lvl, lvl]);
+
+        // One key holder per level at (0,1), tagged with its own level.
+        let mut levels: Vec<usize> = app
+            .world_mut()
+            .query::<&KeyMarker>()
+            .iter(app.world())
+            .filter(|m| m.cell == (0, 1))
+            .map(|m| m.level)
+            .collect();
+        levels.sort();
+        assert_eq!(levels, vec![0, 1], "one key holder per level at (0,1)");
+
+        // Collect the live level's key, then run the tick driver once.
+        app.world_mut()
+            .resource_mut::<GameState>()
+            .game
+            .move_player(Direction::Right);
+        app.world_mut()
+            .run_system_once(game_tick_system)
+            .expect("game_tick_system runs");
+
+        // Only level 0's holder is collecting; level 1's same-cell key is untouched.
+        let collecting: Vec<usize> = app
+            .world_mut()
+            .query::<(&KeyMarker, &CollectingKey)>()
+            .iter(app.world())
+            .map(|(m, _)| m.level)
+            .collect();
+        assert_eq!(
+            collecting,
+            vec![0],
+            "only the live level's key holder is collected, not level 1's same-cell key",
+        );
+    }
+
+    #[test]
+    fn a_vertically_sliding_door_leaf_hides_when_it_would_intrude_on_an_adjacent_level() {
+        use crate::state::DoorStyle;
+        use maze::Direction;
+        // `S K D F` straight corridor: collect the key, walk into the door, open it.
+        let maze = r#"{"grid":[["S","K","D","F"]]}"#;
+        let upper = r#"{"grid":[["S"," "," ","F"]]}"#;
+        let open_door = |app: &mut App| {
+            {
+                let mut state = app.world_mut().resource_mut::<GameState>();
+                state.game.move_player(Direction::Right); // collect the key
+                state.game.move_player(Direction::Right); // into the door → unlock
+                let _ = state.game.tick(10_000.0); // Opening → Open
+            }
+            app.update(); // door_animation_system sets visibility
+        };
+        let hidden = |app: &mut App| {
+            app.world_mut()
+                .query::<(&DoorMarker, &Visibility)>()
+                .iter(app.world())
+                .filter(|(_, v)| matches!(v, Visibility::Hidden))
+                .count()
+        };
+
+        // Single-level portcullis: rises into open sky (no level above) → stays visible.
+        let cfg = GameConfig { door_style: DoorStyle::Portcullis, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(maze, cfg);
+        open_door(&mut app);
+        assert_eq!(hidden(&mut app), 0, "a top-level portcullis stays visibly raised");
+
+        // Two-level portcullis on the bottom level: a level sits above → hidden when open.
+        let cfg = GameConfig { door_style: DoorStyle::Portcullis, ..GameConfig::default() };
+        let mut app = make_playing_app_with_levels_and_config(&[maze, upper], cfg);
+        open_door(&mut app);
+        assert!(hidden(&mut app) > 0, "an intruding portcullis hides when open");
+
+        // Two-level SLIDE on the bottom level: no level below → stays visible.
+        let cfg = GameConfig { door_style: DoorStyle::Slide, ..GameConfig::default() };
+        let mut app = make_playing_app_with_levels_and_config(&[maze, upper], cfg);
+        open_door(&mut app);
+        assert_eq!(hidden(&mut app), 0, "a bottom-level slide has no level below → stays visible");
+    }
+
+    #[test]
+    fn the_clock_freezes_while_a_door_is_opening() {
+        use crate::hud::clock::tick_clock_system;
+        use crate::state::{DoorStyle, GameClock};
+        use bevy::ecs::system::RunSystemOnce;
+        use maze::{Direction, DoorState};
+        use std::time::Duration;
+        // `S K D F`: collect the key, then hold into the door so it begins opening.
+        let maze = r#"{"grid":[["S","K","D","F"]]}"#;
+        let cfg = GameConfig { door_style: DoorStyle::Portcullis, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(maze, cfg);
+        {
+            let mut state = app.world_mut().resource_mut::<GameState>();
+            state.game.move_player(Direction::Right); // collect the key
+            state.game.move_player(Direction::Right); // hold into the door → starts opening
+        }
+        let opening = |app: &mut App| {
+            app.world_mut()
+                .resource::<GameState>()
+                .game
+                .doors()
+                .iter()
+                .any(|(_, p)| matches!(p, DoorState::Opening { .. }))
+        };
+        assert!(opening(&mut app), "the door is opening after holding into it with a key");
+
+        // A clock tick while the door opens must NOT advance the timer.
+        let before = app.world().resource::<GameClock>().remaining_secs;
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs_f32(0.5));
+        app.world_mut().run_system_once(tick_clock_system).expect("clock system runs");
+        assert_eq!(
+            app.world().resource::<GameClock>().remaining_secs,
+            before,
+            "the clock is frozen while the door is opening",
+        );
+
+        // Once the door finishes opening, the clock resumes.
+        app.world_mut().resource_mut::<GameState>().game.tick(10_000.0);
+        assert!(!opening(&mut app), "the door has finished opening");
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs_f32(0.5));
+        app.world_mut().run_system_once(tick_clock_system).expect("clock system runs");
+        assert!(
+            app.world().resource::<GameClock>().remaining_secs < before,
+            "the clock resumes once the door is open",
+        );
+    }
+
+    #[test]
+    fn a_portcullis_under_a_taper_gap_stays_visible_but_one_under_a_covered_cell_hides() {
+        use crate::state::{DoorStyle, LayeredAlignment};
+        use maze::Direction;
+        // Same bottom level both times: `S K D F`, with the portcullis door at
+        // column 2. Edge alignment corner-stacks the smaller upper level at column
+        // 0, so the only thing that changes the door's fate is whether the upper
+        // footprint reaches column 2. Under the old `level + 1 < level_count` rule
+        // BOTH would hide; the fix hides only the one with a cell actually above.
+        let bottom = r#"{"grid":[["S","K","D","F"]]}"#;
+        let open_door = |app: &mut App| {
+            {
+                let mut state = app.world_mut().resource_mut::<GameState>();
+                state.game.move_player(Direction::Right); // collect the key
+                state.game.move_player(Direction::Right); // into the door → unlock
+                let _ = state.game.tick(10_000.0); // Opening → Open
+            }
+            app.update(); // door_animation_system sets visibility
+        };
+        let hidden = |app: &mut App| {
+            app.world_mut()
+                .query::<(&DoorMarker, &Visibility)>()
+                .iter(app.world())
+                .filter(|(_, v)| matches!(v, Visibility::Hidden))
+                .count()
+        };
+
+        // Upper level is only 2 columns wide (a taper) and edge-stacked at column 0,
+        // so it covers columns 0–1 only — column 2's door rises into a gap → visible.
+        let narrow_upper = r#"{"grid":[["S","F"]]}"#;
+        let cfg = GameConfig {
+            door_style: DoorStyle::Portcullis,
+            layered_alignment: LayeredAlignment::Edge,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[bottom, narrow_upper], cfg);
+        open_door(&mut app);
+        assert_eq!(hidden(&mut app), 0, "a portcullis under a taper gap stays visibly raised");
+
+        // A 3-wide upper (still a taper vs the 4-wide base) reaches column 2, so the
+        // door now has a cell directly above → it hides when fully raised.
+        let wide_upper = r#"{"grid":[["S"," ","F"]]}"#;
+        let cfg = GameConfig {
+            door_style: DoorStyle::Portcullis,
+            layered_alignment: LayeredAlignment::Edge,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[bottom, wide_upper], cfg);
+        open_door(&mut app);
+        assert!(hidden(&mut app) > 0, "a portcullis under a covered cell still hides");
+    }
+
+    #[test]
+    fn an_upper_pool_level_is_lifted_and_its_underside_sealed() {
+        use crate::world::{UndersideSeal, LEVEL_HEIGHT, POOL_GAP};
+
+        // A pool-free two-level run is NOT lifted: no underside seals.
+        let plain0 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let plain1 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[plain0, plain1]);
+        assert_eq!(
+            app.world_mut().query::<&UndersideSeal>().iter(app.world()).count(),
+            0,
+            "a pool-free stack needs no underside seal and isn't lifted",
+        );
+
+        // Level 1 carries a lava pool → that level is lifted by POOL_GAP and every
+        // cell's underside is sealed, so from below the pool reads like any cell.
+        let l0 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        assert!(
+            app.world_mut().query::<&UndersideSeal>().iter(app.world()).count() > 0,
+            "the pool-bearing upper level seals its cells' undersides",
+        );
+
+        // The lava surface rests at the LIFTED level-1 floor (LEVEL_HEIGHT +
+        // POOL_GAP), recessed RECESS_DEPTH (0.3) below it — so its basin sits well
+        // above the level-0 wall-top (LEVEL_HEIGHT), not poking into the level below.
+        let surf_y = app
+            .world_mut()
+            .query::<(&LavaSurface, &Transform)>()
+            .iter(app.world())
+            .map(|(_, t)| t.translation.y)
+            .next()
+            .expect("a lava surface on the upper level");
+        let lifted_floor = LEVEL_HEIGHT + POOL_GAP;
+        assert!(
+            (surf_y - (lifted_floor - 0.3)).abs() < 0.15,
+            "lava surface {surf_y} should rest just below the lifted floor {lifted_floor}",
+        );
+        assert!(
+            surf_y > LEVEL_HEIGHT,
+            "the pool surface must sit above the level-0 wall-top ({LEVEL_HEIGHT})",
+        );
+    }
+
+    #[test]
+    fn a_floating_pool_cells_exposed_edge_gets_a_floor_stone_seal() {
+        use crate::world::floor::PoolEdgeSeal;
+        let count = |app: &mut App| {
+            app.world_mut().query::<&PoolEdgeSeal>().iter(app.world()).count()
+        };
+
+        // A lava cell on the grid edge of an UPPER level: that level is pool-bearing
+        // → lifted → floating, so its exposed basin side is sealed with floor stone.
+        let l0 = r#"{"grid":[["S"," ","F"],[" "," "," "],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[[{"type":"W","wallType":"lava"}]," "," "],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        assert!(count(&mut app) > 0, "the floating pool cell's exposed edge is sealed");
+
+        // The same lava edge cell on a SINGLE-level maze sits on the ground (no lift,
+        // open sky above the low rim by design), so it gets no edge seal.
+        let single = r#"{"grid":[["S"," ","F"],[[{"type":"W","wallType":"lava"}]," "," "],[" "," "," "]]}"#;
+        let mut app = make_playing_app_with(single);
+        assert_eq!(count(&mut app), 0, "a ground-level pool keeps its open rim (no seal)");
+    }
+
+    #[test]
+    fn the_underside_seal_skips_a_hatch_start_cell_so_the_hole_stays_open() {
+        use crate::world::UndersideSeal;
+        // Level 1's start sits directly above level 0's ladder finish (edge-aligned),
+        // so it carries a hatch; level 1 also has a lava pool, so it's lifted and its
+        // cells get underside seals — every cell EXCEPT the hatch, which must stay
+        // open or the climb's hole is blocked from below.
+        let l0 = r#"{"grid":[["S"," ","F"],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["F"," ","S"],[" ",[{"type":"W","wallType":"lava"}]," "]]}"#;
+        let mut app = make_playing_app_with_levels(&[l0, l1]);
+        // CELL_SIZE = 2, edge offset 0 → cell (r, c) is at world (x = 2c+1, z = 2r+1).
+        let seal_xz: Vec<(f32, f32)> = app
+            .world_mut()
+            .query_filtered::<&Transform, With<UndersideSeal>>()
+            .iter(app.world())
+            .map(|t| (t.translation.x, t.translation.z))
+            .collect();
+        let near = |xz: &(f32, f32), x: f32, z: f32| (xz.0 - x).abs() < 0.5 && (xz.1 - z).abs() < 0.5;
+        // A non-hatch cell (0,0) → world (1,1) IS sealed (the lift seals as before)...
+        assert!(
+            seal_xz.iter().any(|p| near(p, 1.0, 1.0)),
+            "a non-hatch cell on the lifted level is still sealed",
+        );
+        // ...but the hatch start cell (0,2) → world (5,1) is NOT sealed.
+        assert!(
+            !seal_xz.iter().any(|p| near(p, 5.0, 1.0)),
+            "the hatch start cell must be left clear so its hole isn't blocked",
+        );
+    }
+
+    #[test]
+    fn support_poles_brace_a_floating_upper_level_at_its_corners() {
+        use crate::world::support_pole::SupportPole;
+        let l0 = r#"{"grid":[["S"," ","F"],[" ","W"," "],[" "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[" ","W"," "],[" "," "," "]]}"#;
+
+        // Lava walls + open perimeter: nothing solid holds up level 1, so it's
+        // braced at all four corners (none over a solid wall or a perimeter wall).
+        let floating = GameConfig {
+            wall_type: WallType::Lava,
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[l0, l1], floating);
+        assert_eq!(
+            app.world_mut().query::<&SupportPole>().iter(app.world()).count(),
+            4,
+            "a floating, no-solid-walls upper level is braced at all four corners",
+        );
+
+        // A solid (brick) perimeter wall carries the same-size upper level's edges,
+        // so its corners need no poles.
+        let walled = GameConfig {
+            wall_type: WallType::Brick,
+            perimeter_walls: true,
+            ..GameConfig::default()
+        };
+        let mut app2 = make_playing_app_with_levels_and_config(&[l0, l1], walled);
+        assert_eq!(
+            app2.world_mut().query::<&SupportPole>().iter(app2.world()).count(),
+            0,
+            "a solid perimeter carries the corners, so no poles",
+        );
+    }
+
+    #[test]
+    fn a_support_pole_under_an_overhanging_corner_reaches_the_level_below_it() {
+        use crate::state::LayeredAlignment;
+        use crate::world::support_pole::SupportPole;
+        use crate::world::LEVEL_HEIGHT;
+        // RandomBase with a seed that centres level 1 but corner-stacks level 2, so
+        // level 2's origin corner overhangs level 1 and sits only over the base
+        // (overhang is a RandomBase-only case — RandomLevel always nests). Open
+        // everywhere (no solid walls / perimeter) so every upper corner is braced.
+        // The pole under that overhanging corner must drop PAST level 1, all the way
+        // to the base it visually sits over (two level-heights), not stop in mid-air.
+        let l0 = r#"{"grid":[["S"," "," "," ","F"],[" "," "," "," "," "],[" "," "," "," "," "],[" "," "," "," "," "],[" "," "," "," "," "]]}"#;
+        let l1 = r#"{"grid":[["S"," ","F"],[" "," "," "],[" "," "," "]]}"#;
+        let l2 = r#"{"grid":[["S"," ","F"],[" "," "," "],[" "," "," "]]}"#;
+        let cfg = GameConfig {
+            layered_alignment: LayeredAlignment::RandomBase,
+            seed: 30,
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&[l0, l1, l2], cfg);
+        let tallest = app
+            .world_mut()
+            .query::<(&SupportPole, &Transform)>()
+            .iter(app.world())
+            .map(|(_, t)| t.scale.y)
+            .fold(0.0_f32, f32::max);
+        assert!(
+            (tallest - 2.0 * LEVEL_HEIGHT).abs() < 0.05,
+            "an overhanging corner's pole spans two levels down to the base (got {tallest})",
+        );
+    }
+
+    #[test]
+    fn pool_rim_skirts_every_non_pool_edge() {
+        // A lone water cell ringed by four passable cells gets a rim skirt on each
+        // of its four edges (the recess wall up to floor level).
+        let json = r#"{"grid":[["S"," "," "],[" ",[{"type":"W","wallType":"water"}]," "],[" "," ","F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 4, "four non-pool edges → four rim skirts");
+    }
+
+    #[test]
+    fn lava_cell_spawns_bobbing_rocks() {
+        // A single lava cell is well under the global rock budget, so it seeds the
+        // full per-cell base of rocks that the lava animation system bobs through
+        // the surface.
+        let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rocks = app.world_mut().query::<&LavaRock>().iter(app.world()).count();
+        assert_eq!(rocks, 2, "one lava cell (under budget) seeds two rocks");
+    }
+
+    #[test]
+    fn pool_animation_systems_displace_the_surfaces() {
+        // After entering Playing, the water/lava animation systems have run, so
+        // each surface carries the position-phased wave's tilt rather than the
+        // identity rotation it was spawned with — a regression guard that the
+        // systems are wired into `build_app` and reach the pool surfaces.
+        let water = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"water"}],"W"]]}"#;
+        let mut app = make_playing_app_with(water);
+        let rot = app
+            .world_mut()
+            .query_filtered::<&Transform, With<WaterSurface>>()
+            .iter(app.world())
+            .next()
+            .expect("a water surface")
+            .rotation;
+        assert!(
+            rot.angle_between(Quat::IDENTITY) > 1e-5,
+            "water_animation_system should have tilted the surface",
+        );
+    }
+
+    #[test]
+    fn adjacent_pools_share_no_rim() {
+        // Two side-by-side water cells: each rims its three outward edges, but the
+        // shared edge between them is left open so they read as one continuous
+        // basin — six skirts, not eight.
+        let json = r#"{"grid":[["S"," "," "," "],[" ",[{"type":"W","wallType":"water"}],[{"type":"W","wallType":"water"}]," "],[" "," "," ","F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 6, "the shared same-type pool edge carries no rim");
+    }
+
+    #[test]
+    fn adjacent_different_pools_are_divided_by_a_rim() {
+        // A water cell beside a lava cell: the border between *different* pool
+        // types is walled (a skirt from each side) so they don't read as merged —
+        // so every edge is rimmed: four skirts each, eight in all.
+        let json = r#"{"grid":[["S"," "," "," "],[" ",[{"type":"W","wallType":"water"}],[{"type":"W","wallType":"lava"}]," "],[" "," "," ","F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 8, "a water↔lava border is walled on both sides");
     }
 }

@@ -15,7 +15,7 @@ namespace Maze.Maui.App.Tests.Models
         public void FromJson_ParsesWinPayloadWithAllFields()
         {
             const string json = """
-                {"outcome":"win","elapsedMs":12345,"difficulty":"easy","rows":8,"cols":8,"seed":8080808}
+                {"outcome":"win","elapsedMs":12345,"score":7,"difficulty":"easy","rows":8,"cols":8,"seed":8080808}
                 """;
 
             var result = GameResult.FromJson(json);
@@ -23,10 +23,26 @@ namespace Maze.Maui.App.Tests.Models
             Assert.NotNull(result);
             Assert.Equal(GameOutcome.Win, result!.Outcome);
             Assert.Equal(12345, result.ElapsedMs);
+            Assert.Equal(7ul, result.Score);
             Assert.Equal("easy", result.Difficulty);
             Assert.Equal(8u, result.Rows);
             Assert.Equal(8u, result.Cols);
             Assert.Equal(8080808ul, result.Seed);
+        }
+
+        [Fact]
+        public void FromJson_ParsesScore()
+        {
+            // The Bevy game-result payload carries the final score (the engine's
+            // live running total) as a camelCase number.
+            const string json = """
+                {"outcome":"win","elapsedMs":4200,"score":42,"rows":7,"cols":7}
+                """;
+
+            var result = GameResult.FromJson(json);
+
+            Assert.NotNull(result);
+            Assert.Equal(42ul, result!.Score);
         }
 
         [Fact]

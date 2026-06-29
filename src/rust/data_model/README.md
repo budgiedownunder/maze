@@ -4,15 +4,28 @@
 
 The `data_model` crate is written in `Rust` and defines the following data model objects:
 
+- `CellEntity` - one entity occupying a cell, with its (optional) override characteristics (an `EnemyOverride`, `HealthOverride`, `KeyOverride`, `DoorOverride`, `WallOverride` or `TreasureOverride`); a cell holds a list of these, capped at one for now
+- `DoorOverride` - non-default characteristics for a door cell (`door_style`)
+- `DoorStyle` - visual open-animation rig for a door cell (`swing` / `slide` / `portcullis` / `dissolve`)
+- `EnemyOverride` - non-default characteristics for an enemy cell (`enemy_type`, `damage`, `move_period_ms`)
+- `EnemyType` - visual rig for an enemy cell (`goblin` / `ghost`)
 - `Error` - represents a data model error
+- `HealthOverride` - non-default characteristics for a health-pickup cell (`health_style`, `heal_amount`)
+- `HealthStyle` - visual rig for a health-pickup cell (`heart` / `potion`)
+- `KeyHolderStyle` - visual rig for a key-holder cell (`pedestal` / `chest` / `floating_key`)
+- `KeyOverride` - non-default characteristics for a key-holder cell (`key_holder`)
 - `Maze` - represents a maze
 - `MazeCellState` - represents an individual maze cell state
-- `MazeDefinition` - represents a maze definition
+- `MazeDefinition` - represents a maze definition (a character grid plus an optional sparse map of per-cell overrides)
 - `MazePoint` - represents a point within a maze
 - `OAuthIdentity` - represents a link between a user and an external OAuth provider
+- `TreasureOverride` - non-default characteristics for a treasure cell (`style`, `value`)
+- `TreasureStyle` - treasure type for a treasure cell (`silver` / `gold` / `diamonds` / `jewels`); also the source of the default reward value
 - `User` - represents a user (with one or more associated `UserEmail`s)
 - `UserEmail` - represents an email address attached to a user, with primary and verification flags
 - `UserLogin` - represents a user login
+- `WallOverride` - non-default characteristics for a wall cell (`wall_type`)
+- `WallType` - visual type for a wall cell (`brick` / `dressed_stone` / `wood` / `cobblestone` solid textures, or `water` / `lava` / `iron_fence`); shares its vocabulary with the per-maze `wall_type` launch setting
 
 ## Getting Started
 

@@ -3,9 +3,13 @@ use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
 
-use data_model::{Maze, MazeDefinition, MazePoint};
+use std::collections::HashMap;
 
-use crate::{Error, GenerationAlgorithm, Solver};
+use data_model::{CellEntity, Maze, MazeDefinition, MazePoint, TreasureOverride, TreasureStyle};
+
+use crate::{
+    Error, GenerationAlgorithm, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT, Solver,
+};
 
 /// Options that control how a maze is generated.
 ///
@@ -80,7 +84,7 @@ pub struct GeneratorOptions {
     /// substrate. Each enemy lands on a cell that is currently `' '` (so
     /// never on `S` / `F` / `K` / `D` / another enemy / a health pickup) and
     /// at Manhattan distance > 1 from `S` (so the player has at least one
-    /// safe step away from start). Clamped to [`MAX_ENEMY_COUNT`] and to the
+    /// safe step away from start). Clamped to `MAX_ENEMY_COUNT` and to the
     /// available eligible cells. `None` or `Some(0)` (the default) places
     /// none.
     #[serde(default)]
@@ -88,11 +92,23 @@ pub struct GeneratorOptions {
     /// Number of **health pickups** (`'H'` cells) to auto-place on passable
     /// cells of the generated maze. Same placement rules and exclusions as
     /// [`Self::enemy_count`] — placed in a separate pass after enemies, so
-    /// the two never collide. Clamped to [`MAX_HEALTH_COUNT`] and to the
+    /// the two never collide. Clamped to `MAX_HEALTH_COUNT` and to the
     /// available eligible cells. `None` or `Some(0)` (the default) places
     /// none.
     #[serde(default)]
     pub health_count: Option<usize>,
+    /// Number of **treasure** (`'T'` cells) to auto-place on passable cells of
+    /// the generated maze. Treasure is placed **dead-end-first** (corridor ends
+    /// are claimed before other walkable cells) in a separate pass after
+    /// enemies / health, so it never collides with them; each placed treasure
+    /// is assigned a type by weight (cheaper types more frequent: Silver 40 /
+    /// Gold 30 / Jewels 20 / Diamonds 10 %), and non-Silver cells carry a
+    /// `TreasureOverride { style }` so the renderers and the engine's reward
+    /// value follow it (Silver stays a bare `'T'`).
+    /// Clamped to [`MAX_TREASURE_COUNT`] and to the available eligible cells.
+    /// `None` or `Some(0)` (the default) places none.
+    #[serde(default)]
+    pub treasure_count: Option<usize>,
 }
 
 /// Generates a maze from a set of [`GeneratorOptions`].
@@ -119,6 +135,7 @@ pub struct GeneratorOptions {
 ///         spare_keys: None,
 ///         enemy_count: None,
 ///         health_count: None,
+///         treasure_count: None,
 ///     },
 /// };
 /// let maze = gen.generate().expect("generation should succeed");
@@ -195,6 +212,7 @@ impl Generator {
         let spare_keys = opts.spare_keys.unwrap_or(0);
         let enemy_count = opts.enemy_count.unwrap_or(0).min(MAX_ENEMY_COUNT);
         let health_count = opts.health_count.unwrap_or(0).min(MAX_HEALTH_COUNT);
+        let treasure_count = opts.treasure_count.unwrap_or(0).min(MAX_TREASURE_COUNT);
 
         let total_features = 2 * door_count + spare_doors + spare_keys;
         if total_features > crate::MAX_TOTAL_FEATURES {
@@ -297,7 +315,16 @@ impl Generator {
                     // the health pass can't overlap them.
                     place_random_overlay_cells(&mut working, &start, enemy_count, 'E', &mut rng);
                     place_random_overlay_cells(&mut working, &start, health_count, 'H', &mut rng);
-                    return Ok(Maze::new(MazeDefinition::from_vec(working)));
+                    // Treasure is placed last, dead-end-first, writing its grid
+                    // cells and any non-Silver type overrides together.
+                    let mut definition = MazeDefinition::from_vec(working);
+                    place_treasure_cells(
+                        &mut definition.grid,
+                        &mut definition.cell_entities,
+                        treasure_count,
+                        &mut rng,
+                    );
+                    return Ok(Maze::new(definition));
                 }
                 Ok(solution) => {
                     last_err = format!(
@@ -410,17 +437,6 @@ fn carve(
 /// bound — so the placement-validation solve stays in true key-aware mode rather
 /// than falling back to the lock-blind solve.
 pub const MAX_AUTO_DOORS: usize = 8;
-
-/// Maximum number of enemies (`'E'` cells) auto-placed at generation. Caps
-/// difficulty at a level that stays playable on small grids and keeps the
-/// tick-time per-enemy cost bounded for renderers that update the visual
-/// each frame.
-pub const MAX_ENEMY_COUNT: usize = 8;
-
-/// Maximum number of health pickups (`'H'` cells) auto-placed at generation.
-/// Mirrors [`MAX_ENEMY_COUNT`] so the two knobs feel symmetric to authors
-/// configuring a difficulty preset.
-pub const MAX_HEALTH_COUNT: usize = 8;
 
 /// Count of non-wall 4-neighbours of `(r, c)`.
 fn open_degree(grid: &[Vec<char>], r: usize, c: usize) -> usize {
@@ -872,6 +888,65 @@ fn place_random_overlay_cells(
     }
 }
 
+/// Rolls a treasure type, weighted so commoner (cheaper) types appear more
+/// often (≈40% Silver, 30% Gold, 20% Jewels, 10% Diamonds).
+fn roll_treasure_style(rng: &mut StdRng) -> TreasureStyle {
+    match rng.gen_range(0..100) {
+        0..=39 => TreasureStyle::Silver,
+        40..=69 => TreasureStyle::Gold,
+        70..=89 => TreasureStyle::Jewels,
+        _ => TreasureStyle::Diamonds,
+    }
+}
+
+/// Scatters `count` treasure (`'T'`) cells onto the grid, **dead-end-first**:
+/// corridor-end cells (passable with a single open neighbour) are claimed
+/// before other walkable cells, then any remainder spills onto the rest. Only
+/// cells currently `' '` are eligible, so treasure never lands on
+/// `S` / `F` / `K` / `D` / `E` / `H`. Each placed treasure rolls a type
+/// ([`roll_treasure_style`]); non-Silver cells get a `TreasureOverride { style }`
+/// inserted into `cell_entities` (Silver is the default, so it stays a bare
+/// `'T'`). Mirrors [`place_random_overlay_cells`], but owns the per-cell
+/// override write too since treasure carries one.
+fn place_treasure_cells(
+    grid: &mut [Vec<char>],
+    cell_entities: &mut HashMap<(usize, usize), Vec<CellEntity>>,
+    count: usize,
+    rng: &mut StdRng,
+) {
+    if count == 0 {
+        return;
+    }
+    let mut dead_ends: Vec<(usize, usize)> = Vec::new();
+    let mut others: Vec<(usize, usize)> = Vec::new();
+    for (r, row) in grid.iter().enumerate() {
+        for (c, &cur) in row.iter().enumerate() {
+            if cur == ' ' {
+                if crate::is_dead_end(grid, r, c) {
+                    dead_ends.push((r, c));
+                } else {
+                    others.push((r, c));
+                }
+            }
+        }
+    }
+    dead_ends.shuffle(rng);
+    others.shuffle(rng);
+    for cell in dead_ends.into_iter().chain(others).take(count) {
+        grid[cell.0][cell.1] = 'T';
+        let style = roll_treasure_style(rng);
+        if style != TreasureStyle::Silver {
+            cell_entities.insert(
+                cell,
+                vec![CellEntity::Treasure(TreasureOverride {
+                    style: Some(style),
+                    ..Default::default()
+                })],
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -895,6 +970,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         }
     }
@@ -931,6 +1007,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -954,6 +1031,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -977,6 +1055,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -1094,6 +1173,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -1122,6 +1202,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -1154,6 +1235,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -1177,6 +1259,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -1202,6 +1285,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         let maze1 = make().generate().expect("should succeed");
@@ -1227,6 +1311,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         };
         let maze1 = make(1).generate().expect("should succeed");
@@ -1253,6 +1338,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         }
     }
@@ -1358,6 +1444,124 @@ mod tests {
         assert_eq!(a.definition.grid, b.definition.grid);
     }
 
+    // --- Treasure generation ---
+
+    fn make_with_treasure(rows: usize, cols: usize, seed: u64, treasure: usize) -> Generator {
+        Generator {
+            options: GeneratorOptions {
+                row_count: rows,
+                col_count: cols,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(seed),
+                door_count: None,
+                spare_doors: None,
+                spare_keys: None,
+                enemy_count: None,
+                health_count: None,
+                treasure_count: Some(treasure),
+            },
+        }
+    }
+
+    #[test]
+    fn treasure_count_zero_places_no_treasure() {
+        let maze = make_with_treasure(15, 15, 7, 0)
+            .generate()
+            .expect("should succeed");
+        assert_eq!(count_char(&maze.definition.grid, 'T'), 0);
+        assert!(maze.definition.cell_entities.is_empty());
+    }
+
+    #[test]
+    fn auto_placed_treasure_is_present_and_solvable() {
+        let maze = make_with_treasure(15, 15, 7, 5)
+            .generate()
+            .expect("should succeed");
+        assert_eq!(count_char(&maze.definition.grid, 'T'), 5);
+        assert_eq!(count_char(&maze.definition.grid, 'S'), 1);
+        assert_eq!(count_char(&maze.definition.grid, 'F'), 1);
+        // Treasure cells are passable terrain, so the maze stays solvable.
+        Solver { maze: &maze }.solve().expect("must stay solvable");
+    }
+
+    #[test]
+    fn treasure_generation_is_deterministic() {
+        let a = make_with_treasure(15, 15, 99, 8).generate().expect("ok");
+        let b = make_with_treasure(15, 15, 99, 8).generate().expect("ok");
+        assert_eq!(a.definition.grid, b.definition.grid);
+        assert_eq!(a.definition.cell_entities, b.definition.cell_entities);
+    }
+
+    #[test]
+    fn treasure_count_is_clamped_to_capacity_on_a_small_maze() {
+        let maze = make_with_treasure(5, 5, 3, MAX_TREASURE_COUNT)
+            .generate()
+            .expect("ok");
+        assert!(count_char(&maze.definition.grid, 'T') <= MAX_TREASURE_COUNT);
+        Solver { maze: &maze }.solve().expect("must stay solvable");
+    }
+
+    #[test]
+    fn generated_treasure_overrides_are_non_silver_on_t_cells() {
+        // Every override on a generated maze is a treasure carrying a non-Silver
+        // type and sits on a `'T'` cell; Silver treasure stays a bare `'T'`.
+        let maze = make_with_treasure(21, 21, 2024, MAX_TREASURE_COUNT)
+            .generate()
+            .expect("ok");
+        for (&(r, c), entities) in &maze.definition.cell_entities {
+            assert_eq!(maze.definition.grid[r][c], 'T');
+            match entities.first() {
+                Some(CellEntity::Treasure(o)) => assert!(matches!(
+                    o.style,
+                    Some(TreasureStyle::Gold)
+                        | Some(TreasureStyle::Jewels)
+                        | Some(TreasureStyle::Diamonds)
+                )),
+                other => panic!("expected a treasure override, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn place_treasure_prefers_dead_ends() {
+        // A plus shape: centre (1,1) has open-degree 4; the four arm tips are
+        // dead ends (open-degree 1). With count = 4 the four dead ends fill up
+        // first, so the junction never takes treasure.
+        let mut grid = vec![
+            vec!['W', ' ', 'W'],
+            vec![' ', ' ', ' '],
+            vec!['W', ' ', 'W'],
+        ];
+        let mut overrides = HashMap::new();
+        let mut rng = StdRng::seed_from_u64(1);
+        place_treasure_cells(&mut grid, &mut overrides, 4, &mut rng);
+        assert_eq!(count_char(&grid, 'T'), 4);
+        assert_ne!(grid[1][1], 'T', "the junction must not be chosen before the dead ends");
+        for tip in [(0, 1), (1, 0), (1, 2), (2, 1)] {
+            assert_eq!(grid[tip.0][tip.1], 'T');
+        }
+    }
+
+    #[test]
+    fn treasure_style_roll_is_weighted_toward_silver() {
+        let mut rng = StdRng::seed_from_u64(42);
+        let (mut silver, mut diamonds) = (0, 0);
+        for _ in 0..1000 {
+            match roll_treasure_style(&mut rng) {
+                TreasureStyle::Silver => silver += 1,
+                TreasureStyle::Diamonds => diamonds += 1,
+                TreasureStyle::Gold | TreasureStyle::Jewels => {}
+            }
+        }
+        assert!(silver > diamonds, "Silver ({silver}) should dominate Diamonds ({diamonds})");
+        assert!(diamonds > 0, "Diamonds should occur at least once over 1000 draws");
+    }
+
     // --- Spare-key / spare-door overlay (decoys + safety budget) ---
 
     fn make_with_doors_and_spares(
@@ -1384,6 +1588,7 @@ mod tests {
                 spare_keys,
                 enemy_count: None,
                 health_count: None,
+                treasure_count: None,
             },
         }
     }
@@ -1866,6 +2071,7 @@ mod tests {
                 spare_keys: None,
                 enemy_count,
                 health_count,
+                treasure_count: None,
             },
         }
     }

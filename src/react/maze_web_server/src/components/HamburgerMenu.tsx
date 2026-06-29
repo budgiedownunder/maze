@@ -57,6 +57,7 @@ export function HamburgerMenu() {
                 Home
               </button>
             </li>
+            <li role="separator" className="menu-separator" />
             <li role="none">
               <button role="menuitem" className="menu-item" onClick={handlePlay3d}>
                 Play 3D
@@ -64,7 +65,12 @@ export function HamburgerMenu() {
             </li>
             <li role="none">
               <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/mazes') }}>
-                Design &amp; Play
+                Mazes
+              </button>
+            </li>
+            <li role="none">
+              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/leaderboards') }}>
+                Leaderboards
               </button>
             </li>
             <li role="separator" className="menu-separator" />

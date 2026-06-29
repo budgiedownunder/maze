@@ -50,7 +50,7 @@ pub(crate) fn spawn_dome(
             ..default()
         })
     });
-    let mut entity = commands.spawn((SkyDome, Transform::default()));
+    let mut entity = commands.spawn((SkyDome, super::SkyEntity, Transform::default()));
     if let (Some(mesh), Some(material)) = (mesh, material) {
         entity.insert((Mesh3d(mesh), MeshMaterial3d(material)));
     }

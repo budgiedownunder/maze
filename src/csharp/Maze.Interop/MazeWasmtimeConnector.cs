@@ -284,6 +284,7 @@ namespace Maze.Interop
             mazeSetDoorCells = ResolveFunction("maze_wasm_set_door_cells");
             mazeSetEnemyCells = ResolveFunction("maze_wasm_set_enemy_cells");
             mazeSetHealthCells = ResolveFunction("maze_wasm_set_health_cells");
+            mazeSetTreasureCells = ResolveFunction("maze_wasm_set_treasure_cells");
             mazeClearCells = ResolveFunction("maze_wasm_clear_cells");
             mazeInsertRows = ResolveFunction("maze_wasm_insert_rows");
             mazeDeleteRows = ResolveFunction("maze_wasm_delete_rows");
@@ -291,6 +292,9 @@ namespace Maze.Interop
             mazeDeleteCols = ResolveFunction("maze_wasm_delete_cols");
             mazeFromJson = ResolveFunction("maze_wasm_from_json");
             mazeToJson = ResolveFunction("maze_wasm_to_json");
+            mazeGetCellEntity = ResolveFunction("maze_wasm_get_cell_entity");
+            mazeSetCellEntity = ResolveFunction("maze_wasm_set_cell_entity");
+            mazeClearCellEntity = ResolveFunction("maze_wasm_clear_cell_entity");
             mazeSolve = ResolveFunction("maze_wasm_solve");
             mazeSolutionGetPathPoints = ResolveFunction("maze_wasm_solution_get_path_points");
             freeMazeResult = ResolveFunction("free_maze_wasm_result");
@@ -311,6 +315,7 @@ namespace Maze.Interop
             generatorOptionsSetSpareKeys = ResolveFunction("generator_options_set_spare_keys");
             generatorOptionsSetEnemyCount = ResolveFunction("generator_options_set_enemy_count");
             generatorOptionsSetHealthCount = ResolveFunction("generator_options_set_health_count");
+            generatorOptionsSetTreasureCount = ResolveFunction("generator_options_set_treasure_count");
             mazeGenerate = ResolveFunction("maze_wasm_generate");
             freeGeneratorOptions = ResolveFunction("free_generator_options_wasm");
             newMazeGame = ResolveFunction("new_maze_game_wasm");
@@ -339,6 +344,10 @@ namespace Maze.Interop
             mazeGameGetEnemy = ResolveFunction("maze_game_wasm_get_enemy");
             mazeGameHealthPickupCount = ResolveFunction("maze_game_wasm_health_pickup_count");
             mazeGameGetHealthPickup = ResolveFunction("maze_game_wasm_get_health_pickup");
+            mazeGameTreasureCount = ResolveFunction("maze_game_wasm_treasure_count");
+            mazeGameGetTreasure = ResolveFunction("maze_game_wasm_get_treasure");
+            mazeGameCollectedTreasureCount = ResolveFunction("maze_game_wasm_collected_treasure_count");
+            mazeGameGetCollectedTreasure = ResolveFunction("maze_game_wasm_get_collected_treasure");
             mazeGameVisitedCellCount = ResolveFunction("maze_game_wasm_visited_cell_count");
             mazeGameGetVisitedCell = ResolveFunction("maze_game_wasm_get_visited_cell");
         }

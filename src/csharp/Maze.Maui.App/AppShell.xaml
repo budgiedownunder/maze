@@ -4,7 +4,47 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:views="clr-namespace:Maze.Maui.App.Views"
+    xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+    xmlns:controls="clr-namespace:Maze.Maui.App"
     FlyoutBehavior="Flyout">
+
+    <!-- Flyout header: the signed-in user's name; tapping it opens the Account
+         page. Its BindingContext (the AccountViewModel) and its accent
+         background are set in code-behind — the background is applied on the
+         Shell's Loaded event, because the App-level Colors.xaml resources
+         (Primary / PrimaryDark) are not yet merged when this Shell is parsed
+         (the Shell is constructed as a ctor argument to App, before App runs
+         its own InitializeComponent). The code-behind also loads the profile
+         when the flyout is opened. -->
+    <Shell.FlyoutHeader>
+        <Grid x:Name="FlyoutHeaderRoot"
+              x:DataType="viewmodel:AccountViewModel"
+              Padding="20,28,20,16">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnFlyoutHeaderTapped" />
+            </Grid.GestureRecognizers>
+            <HorizontalStackLayout Spacing="12">
+                <controls:AvatarView Bytes="{Binding AvatarBytes}"
+                                     Size="48"
+                                     VerticalOptions="Center" />
+                <VerticalStackLayout Spacing="2" VerticalOptions="Center">
+                    <!-- White text on the solid-blue header (matches the
+                         PrimaryButtonText colour key — hardcoded here because
+                         App-level Colors.xaml StaticResources aren't merged at
+                         Shell-parse time, see OnShellLoaded). -->
+                    <Label Text="Signed in as"
+                           FontSize="12"
+                           TextColor="White"
+                           Opacity="0.85" />
+                    <Label Text="{Binding Username}"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+            </HorizontalStackLayout>
+        </Grid>
+    </Shell.FlyoutHeader>
 
     <Shell.Resources>
         <!-- Per-item override for visual-only separator rows in the flyout.
@@ -40,12 +80,17 @@
          between groups. -->
     <MenuItem Text="Home"
               Clicked="OnHomeMenuItemClicked" />
+    <MenuItem IsEnabled="False"
+              Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
     <MenuItem Text="Play 3D"
               IconImageSource="{OnPlatform 'icon_play_3d.png', iOS='icon_play_3d_ios.png', MacCatalyst='icon_play_3d_ios.png'}"
               Clicked="OnPlay3dMenuItemClicked" />
-    <MenuItem Text="Design &amp; Play"
+    <MenuItem Text="Mazes"
               IconImageSource="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
-              Clicked="OnDesignAndPlayMenuItemClicked" />
+              Clicked="OnMazesMenuItemClicked" />
+    <MenuItem Text="Leaderboards"
+              IconImageSource="icon_leaderboards.png"
+              Clicked="OnLeaderboardsMenuItemClicked" />
     <MenuItem IsEnabled="False"
               Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
     <MenuItem Text="My Account"

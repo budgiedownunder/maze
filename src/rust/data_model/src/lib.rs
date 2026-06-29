@@ -18,7 +18,11 @@ pub use email_audit::{
     EmailAuditEntry, truncate_email_audit_error_message,
 };
 pub use error::{Error, UserValidationError};
-pub use maze_definition::MazeDefinition;
+pub use maze_definition::{
+    CellEntity, DoorOverride, DoorStyle, EnemyOverride, EnemyType, HealthOverride, HealthStyle,
+    KeyHolderStyle, KeyOverride, MazeDefinition, TreasureOverride, TreasureStyle,
+    WallOverride, WallType,
+};
 pub use maze::Maze;
 pub use maze_cell_state::MazeCellState;
 pub use maze_point::MazePoint;

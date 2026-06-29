@@ -1226,7 +1226,49 @@ function testMazeGameEnemies() {
 
 function testMazeGameEnemiesExpectedOutput() {
     return [
-        "enemies() =  [ { row: 0, col: 1, id: 0 } ]"
+        "enemies() =  [ { row: 0, col: 1, id: 0, damage: 1, movePeriodMs: 1500 } ]"
+    ];
+}
+
+// Test MazeGameWasm::grid() example
+function testMazeGameGrid() {
+    let game = null;
+    try {
+        game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+        console.log("grid() = ", game.grid());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameGridExpectedOutput() {
+    return [
+        "grid() =  [ [ 'S', ' ', 'F' ] ]"
+    ];
+}
+
+// Test MazeGameWasm::cell_overrides() example
+function testMazeGameCellOverrides() {
+    let game = null;
+    try {
+        game = MazeGameWasm.from_json('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+        console.log("cell_overrides() = ", game.cell_overrides());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameCellOverridesExpectedOutput() {
+    return [
+        "cell_overrides() =  [ { row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } } ]"
     ];
 }
 
@@ -1252,6 +1294,50 @@ function testMazeGameHealthPickupsExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::treasures() example
+function testMazeGameTreasures() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","T","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("treasures() = ", game.treasures());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameTreasuresExpectedOutput() {
+    return [
+        "treasures() =  [ { row: 0, col: 1, style: 'silver', value: 50 } ]"
+    ];
+}
+
+// Test MazeGameWasm::collected_treasure() example
+function testMazeGameCollectedTreasure() {
+    let game = null;
+    try {
+        game = MazeGameWasm.from_json('{"grid":[["S","T","F"]]}');
+        game.move_player(DirectionWasm.Right); // onto the treasure — auto-collected
+        console.log("collected_treasure() = ", game.collected_treasure());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameCollectedTreasureExpectedOutput() {
+    return [
+        "collected_treasure() =  [ { style: 'silver', count: 1 } ]"
+    ];
+}
+
 // Test MazeGameWasm::time_until_next_event_ms() example
 function testMazeGameTimeUntilNextEventMs() {
     let game = null;
@@ -1274,6 +1360,79 @@ function testMazeGameTimeUntilNextEventMsExpectedOutput() {
     ];
 }
 
+// Test MazeWasm::get_cell_entity() example
+function testMazeGetCellEntity() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(1, 3);
+        maze.set_enemy_cells(0, 1, 0, 1);
+        maze.set_cell_entity(0, 1, { type: "E", enemyType: "ghost", damage: 2 });
+        console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1));
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeGetCellEntityExpectedOutput() {
+    return [
+        "get_cell_entity(0, 1) =  { type: 'E', enemyType: 'ghost', damage: 2 }"
+    ];
+}
+
+// Test MazeWasm::set_cell_entity() example
+function testMazeSetCellEntity() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(1, 3);
+        maze.set_health_cells(0, 1, 0, 1);
+        maze.set_cell_entity(0, 1, { type: "H", healthStyle: "potion", healAmount: 2 });
+        console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1));
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeSetCellEntityExpectedOutput() {
+    return [
+        "get_cell_entity(0, 1) =  { type: 'H', healthStyle: 'potion', healAmount: 2 }"
+    ];
+}
+
+// Test MazeWasm::clear_cell_entity() example
+function testMazeClearCellEntity() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(1, 3);
+        maze.set_enemy_cells(0, 1, 0, 1);
+        maze.set_cell_entity(0, 1, { type: "E", damage: 2 });
+        maze.clear_cell_entity(0, 1);
+        console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1)); // null
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeClearCellEntityExpectedOutput() {
+    return [
+        "get_cell_entity(0, 1) =  null"
+    ];
+}
+
 // Tests
 const tests = [
     { name: "MazeWasm:new() example", testFunction: testMazeNew, expectedOutput: testMazeNewExpectedOutput },
@@ -1287,6 +1446,9 @@ const tests = [
     { name: "MazeWasm:get_row_count() example", testFunction: testMazeGetRowCount, expectedOutput: testMazeGetRowCountExpectedOutput },
     { name: "MazeWasm:get_col_count() example", testFunction: testMazeGetColCount, expectedOutput: testMazeGetColCountExpectedOutput },
     { name: "MazeWasm:get_cell() example", testFunction: testMazeGetCell, expectedOutput: testMazeGetCellExpectedOutput },
+    { name: "MazeWasm:get_cell_entity() example", testFunction: testMazeGetCellEntity, expectedOutput: testMazeGetCellEntityExpectedOutput },
+    { name: "MazeWasm:set_cell_entity() example", testFunction: testMazeSetCellEntity, expectedOutput: testMazeSetCellEntityExpectedOutput },
+    { name: "MazeWasm:clear_cell_entity() example", testFunction: testMazeClearCellEntity, expectedOutput: testMazeClearCellEntityExpectedOutput },
     { name: "MazeWasm:set_start_cell() example", testFunction: testMazeSetStartCell, expectedOutput: testMazeSetStartCellExpectedOutput },
     { name: "MazeWasm:get_start_cell() example", testFunction: testMazeGetStartCell, expectedOutput: testMazeGetStartCellExpectedOutput },
     { name: "MazeWasm:set_finish_cell() example", testFunction: testMazeSetFinishCell, expectedOutput: testMazeSetFinishCellExpectedOutput },
@@ -1320,7 +1482,11 @@ const tests = [
     { name: "MazeGameWasm:hp() example", testFunction: testMazeGameHp, expectedOutput: testMazeGameHpExpectedOutput },
     { name: "MazeGameWasm:max_hp() example", testFunction: testMazeGameMaxHp, expectedOutput: testMazeGameMaxHpExpectedOutput },
     { name: "MazeGameWasm:enemies() example", testFunction: testMazeGameEnemies, expectedOutput: testMazeGameEnemiesExpectedOutput },
+    { name: "MazeGameWasm:grid() example", testFunction: testMazeGameGrid, expectedOutput: testMazeGameGridExpectedOutput },
+    { name: "MazeGameWasm:cell_overrides() example", testFunction: testMazeGameCellOverrides, expectedOutput: testMazeGameCellOverridesExpectedOutput },
     { name: "MazeGameWasm:health_pickups() example", testFunction: testMazeGameHealthPickups, expectedOutput: testMazeGameHealthPickupsExpectedOutput },
+    { name: "MazeGameWasm:treasures() example", testFunction: testMazeGameTreasures, expectedOutput: testMazeGameTreasuresExpectedOutput },
+    { name: "MazeGameWasm:collected_treasure() example", testFunction: testMazeGameCollectedTreasure, expectedOutput: testMazeGameCollectedTreasureExpectedOutput },
     { name: "MazeGameWasm:time_until_next_event_ms() example", testFunction: testMazeGameTimeUntilNextEventMs, expectedOutput: testMazeGameTimeUntilNextEventMsExpectedOutput },
 ];
 

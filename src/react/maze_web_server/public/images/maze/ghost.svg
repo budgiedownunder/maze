@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Ghost">
+  <path d="M6 25 V14 C6 8.5 10.5 4 16 4 C21.5 4 26 8.5 26 14 V25 L22.7 22.2 L19.3 25 L16 22.2 L12.7 25 L9.3 22.2 Z" fill="#e8eefc" stroke="#5b6b8c" stroke-width="1.6" stroke-linejoin="round"/>
+  <ellipse cx="12.5" cy="14" rx="2.1" ry="2.6" fill="#2a3550"/>
+  <ellipse cx="19.5" cy="14" rx="2.1" ry="2.6" fill="#2a3550"/>
+</svg>

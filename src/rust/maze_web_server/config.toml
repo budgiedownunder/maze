@@ -119,10 +119,26 @@ minimap_radius = 5
 # and "chamber" caps it with a ceiling in the wall material, instead of an
 # open sky.
 sky_type = "night"
-# Wall texture kind for the per-cell tinted path (used when the
-# wall_material_variation landmark below is false). One of "brick" |
-# "dressed_stone" | "wood" | "cobblestone". Default "brick".
+# Per-maze wall type. The solid textures — "brick" | "dressed_stone" | "wood" |
+# "cobblestone" — apply on the per-cell tinted path (used when the
+# wall_material_variation landmark below is false). The non-occluding types —
+# "water" | "lava" | "iron_fence" — turn every wall cell into a floor-level pool
+# or see-through bars (not subject to material variation). "random" rolls one of
+# the seven types per level (seeded off the maze), so each level reads as one
+# coherent — but independently chosen — style. Default "brick".
 wall_type = "brick"
+#wall_type = "dressed_stone"
+#wall_type = "wood"
+#wall_type = "cobblestone"
+#wall_type = "water"
+#wall_type = "lava"
+#wall_type = "iron_fence"
+#wall_type = "random"
+# Whether the maze perimeter is walled at the grid edge under an open sky.
+# Enclosed skies ("dungeon" / "chamber") always wall it regardless. true =
+# walled (the traditional enclosed-maze look); false = the skybox shows past the
+# edge (a pool's low rim / a fence's bars still frame it). Default true.
+perimeter_walls = true
 # Door open-animation style — one of "swing" | "slide" | "portcullis" |
 # "dissolve". Default "swing". Applies to the doors auto-placed below (and to
 # doors in authored mazes).
@@ -131,10 +147,12 @@ wall_type = "brick"
 #door_style = "portcullis"
 #door_style = "dissolve"
 # Key-holder style for 'K' cells — one of "pedestal" | "chest" |
-# "floating_key". Default "pedestal".
+# "floating_key" | "random". "random" rolls a rig per cell (seeded off the
+# maze). Default "pedestal".
 #key_holder = "pedestal"
 #key_holder = "chest"
 #key_holder = "floating_key"
+#key_holder = "random"
 # Number of doors (each with one key) the generator auto-places into this
 # difficulty's maze. Doors gate the solution path and the maze stays solvable.
 # Clamped to what the maze can hold (max 8). Default 0 = a lock-free maze.
@@ -148,12 +166,17 @@ enemy_count = 1
 # Number of health pickups the generator auto-places. Clamped to
 # maze::MAX_HEALTH_COUNT (= 8). Default 0 = none.
 health_count = 2
-# Enemy rig kind to spawn at every 'E' cell. One of "goblin" | "ghost".
-# Default "goblin".
+# Number of treasure cells the generator auto-places, dead-end-first and
+# type-weighted. Clamped to maze::MAX_TREASURE_COUNT (= 12). Default 0 = none.
+treasure_count = 3
+# Enemy rig kind to spawn at every 'E' cell. One of "goblin" | "ghost" |
+# "random". "random" rolls a rig per cell (seeded off the maze). Default "goblin".
 enemy_type = "goblin"
-# Health-pickup rig kind to spawn at every 'H' cell. One of "heart" |
-# "potion". Default "heart".
+#enemy_type = "random"
+# Health-pickup rig kind to spawn at every 'H' cell. One of "heart" | "potion" |
+# "random". "random" rolls a rig per cell (seeded off the maze). Default "heart".
 health_style = "heart"
+#health_style = "random"
 # How often each enemy advances one cell, in milliseconds of real-game time.
 # Lower = harder. Default 1500.
 enemy_move_period_ms = 1800
@@ -184,6 +207,53 @@ floor_accents = true
 # when on. Default true.
 wall_material_variation = true
 
+[game.play3d.easy.levels]
+# Multi-level run settings. count = 1 is a single-level game (the default; no
+# transitions). Clamped to the renderer's maximum of 20.
+count = 1
+# Interim-finish transition rig — one of "ladder" | "portal" | "random".
+# "random" picks a concrete rig per interim finish cell, seeded. Default "ladder".
+finish_type = "ladder"
+#finish_type = "portal"
+#finish_type = "random"
+# How difficulty changes as the player climbs — "same" | "easier" | "harder".
+# "easier" = hardest at the bottom, easing as you ascend (enemy count is the
+# lever; footprint stays uniform). Default "easier".
+difficulty_change = "easier"
+# Whether the bag (keys etc.) resets at each level. true (default) = every level
+# is self-contained; false carries the whole bag forward.
+reset_bag = true
+# When true, upper levels get progressively smaller footprints (positioned per
+# `alignment` below) so the stack opens up and a climb eases as it rises. An
+# operator choice — independent of sky_type. Default false. Only meaningful when
+# count > 1.
+taper = false
+#taper = true
+# How a smaller upper (tapered) level sits over the level below —
+# "edge" (corner-aligned) | "centre" | "random_base" | "random_level". The random
+# modes pick edge/centre per level from the seed: "random_base" measures each level
+# from the ground layer (a corner-stacked level may overhang a centred one below
+# it), "random_level" measures each within the level below (every level nests).
+# Default "edge". Inert when taper is off.
+alignment = "edge"
+#alignment = "centre"
+#alignment = "random_base"
+#alignment = "random_level"
+# When true, each level randomises its perimeter walls on/off independently; when
+# false (default) every level uses the perimeter_walls setting above.
+perimeter_random = false
+# When true, a completed lower level's enemies are despawned once the player
+# climbs past it; when false (default) they idle in place. Only meaningful when
+# count > 1.
+hide_completed_enemies = false
+
+# Optional scene override for the final (top) level — its own sky_type /
+# perimeter_walls, inheriting the base difficulty where unset. Only meaningful
+# when count > 1 (e.g. climb from enclosed floors out to an open-sky summit).
+#[game.play3d.easy.levels.top]
+#sky_type = "day"
+#perimeter_walls = false
+
 [game.play3d.tricky]
 title = "TRICKY 3D"
 mode = "Tricky"
@@ -196,11 +266,13 @@ minimap_cell_px = 10
 minimap_radius = 5
 sky_type = "night"
 wall_type = "brick"
+perimeter_walls = true
 door_count = 3
 spare_doors = 2
 spare_keys = 1
 enemy_count = 3
 health_count = 3
+treasure_count = 5
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1500
@@ -212,6 +284,15 @@ dead_end_objects = true
 wall_decorations = true
 floor_accents = true
 wall_material_variation = true
+
+[game.play3d.tricky.levels]
+count = 2
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
+hide_completed_enemies = false
 
 [game.play3d.hard]
 title = "HARD 3D"
@@ -225,11 +306,13 @@ minimap_cell_px = 10
 minimap_radius = 5
 sky_type = "night"
 wall_type = "brick"
+perimeter_walls = true
 door_count = 4
 spare_doors = 3
 spare_keys = 1
 enemy_count = 5
 health_count = 4
+treasure_count = 8
 enemy_type = "goblin"
 health_style = "heart"
 enemy_move_period_ms = 1200
@@ -241,6 +324,15 @@ dead_end_objects = true
 wall_decorations = true
 floor_accents = true
 wall_material_variation = true
+
+[game.play3d.hard.levels]
+count = 3
+finish_type = "ladder"
+difficulty_change = "easier"
+reset_bag = true
+alignment = "edge"
+perimeter_random = false
+hide_completed_enemies = false
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in

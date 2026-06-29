@@ -1,3 +1,9 @@
+import type { CanonicalMazeDefinition } from './cellEntities'
+import type { MazeGameSettings } from '../utils/mazeGameSettings'
+// Re-export score metrics so consumers can pull the DTO types and
+// the query vocabulary from one place.
+export type { ScoreMetric, SortDirection } from '../utils/scores'
+
 export interface UserEmail {
   email: string
   is_primary: boolean
@@ -13,6 +19,7 @@ export interface UserProfile {
   emails: UserEmail[]
   is_admin: boolean
   has_password: boolean
+  avatar_updated_at?: string | null
 }
 
 export interface UserEmailsResponse {
@@ -52,11 +59,16 @@ export interface Maze {
   id: string
   name: string
   definition: MazeDefinition
+  game_settings?: MazeGameSettings
 }
 
 export interface SaveMazeRequest {
   name: string
-  definition: MazeDefinition
+  // The saved definition is the canonical char-or-array form (overridden cells carry
+  // an entity array), so it accepts overrides as well as a plain-char grid.
+  definition: CanonicalMazeDefinition
+  // Persisted per-maze 3D game settings; omitted when the maze has none.
+  game_settings?: MazeGameSettings
 }
 
 export interface OAuthProviderPublic {
@@ -84,4 +96,44 @@ export interface GenerateOptions {
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
   enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
   healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
+  treasureCount: number // number of treasure cells to auto-place dead-end-first, type-weighted; 0 = none
+}
+
+// A recorded run, as returned by the score endpoints. Mirrors the server's
+// `ScoreResponse` (snake_case keys; exactly one of `maze_id` / `challenge` is
+// set). `recorded_at` is an RFC 3339 timestamp string.
+export interface ScoreEntry {
+  id: string
+  user_id: string
+  maze_id: string | null
+  challenge: string | null
+  score: number
+  elapsed_ms: number
+  recorded_at: string
+  username?: string | null
+  avatar_updated_at?: string | null
+}
+
+// A page of a leaderboard or personal history. Mirrors the server's
+// `ScoreboardResponse`: `limit` is the effective (server-capped) page size and
+// `has_more` says whether a further page exists.
+export interface ScoreboardResponse {
+  scores: ScoreEntry[]
+  limit: number
+  offset: number
+  has_more: boolean
+}
+
+// Result of resetting a leaderboard (DELETE /scores): the number of score rows
+// removed.
+export interface ResetScoresResponse {
+  deleted: number
+}
+
+// The subset of the server's Play3dConfigResponse the client consumes: the
+// curated difficulty's fixed maze seed, used to key its leaderboard
+// (`challenge = "<difficulty>:<seed>"`).
+export interface Play3dConfig {
+  difficulty: string
+  seed: number
 }

@@ -10,7 +10,7 @@ namespace Maze.Maui.App
     /// <summary>
     /// The `MazeGrid` class represents an interactive maze grid
     /// </summary>
-    public class MazeGrid : Controls.InteractiveGrid.Grid, IMazeGridView
+    public class MazeGrid : Controls.InteractiveGrid.Grid, IMazeGridView, ICellOverrideEditor
     {
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;
@@ -20,6 +20,11 @@ namespace Maze.Maui.App
         // Logical cell state (independent of the visual tree — required for virtualization)
         private CellType[,] _cellTypes = new CellType[0, 0];
         private MazeCellContent.PathDirection[,] _solutionDirections = new MazeCellContent.PathDirection[0, 0];
+        // Per-cell editor overrides (non-default characteristics layered on a cell),
+        // held alongside _cellTypes and kept aligned with it: structural edits remap
+        // the keys, a rewritten cell drops its override, and the survivors are stamped
+        // onto the maze in ToMaze().
+        private readonly CellOverrides _overrides = new();
         // Game-mode runtime overrides for key/door cells (consulted by CreateCellContent /
         // UpdateCellContent so virtualized recycling re-applies the latest state).
         // _keyCollected[r,c] == true → the key at (r,c) has been picked up; hide its icon.
@@ -33,7 +38,15 @@ namespace Maze.Maui.App
         // _healthCollected[r,c] == true → the pickup was consumed; hide its icon.
         private bool _gameMode;
         private int[,] _enemyAt = new int[0, 0];
+        // The visual rigs (ghost vs the default goblin) of the enemies on each cell. A list
+        // (not a single value) so a cell shared by enemies of different types resolves each
+        // one's sprite correctly when they separate; the first entry is the rig shown for a
+        // stack. Seeded from spawn overrides; each enemy carries its own rig as it moves.
+        private List<EnemyType?>?[,] _enemyRigsAt = new List<EnemyType?>?[0, 0];
         private bool[,] _healthCollected = new bool[0, 0];
+        // _treasureCollected[r,c] == true → the treasure at (r,c) was auto-collected on
+        // walk-over; hide its icon.
+        private bool[,] _treasureCollected = new bool[0, 0];
         // 1-based positions of start/finish cells (-1 = not set)
         private int _startRow = -1, _startCol = -1;
         private int _finishRow = -1, _finishCol = -1;
@@ -135,7 +148,9 @@ namespace Maze.Maui.App
             _keyCollected = new bool[RowCount, ColumnCount];
             _doorRuntimeState = new DoorState[RowCount, ColumnCount];
             _enemyAt = new int[RowCount, ColumnCount];
+            _enemyRigsAt = new List<EnemyType?>?[RowCount, ColumnCount];
             _healthCollected = new bool[RowCount, ColumnCount];
+            _treasureCollected = new bool[RowCount, ColumnCount];
             _gameMode = false;
             _startRow = _startCol = _finishRow = _finishCol = -1;
 
@@ -146,6 +161,29 @@ namespace Maze.Maui.App
                     _cellTypes[r, c] = GetMazeItemCellType(r, c);
                     if (_cellTypes[r, c] == CellType.Start) { _startRow = r + 1; _startCol = c + 1; }
                     else if (_cellTypes[r, c] == CellType.Finish) { _finishRow = r + 1; _finishCol = c + 1; }
+                }
+            }
+
+            // Load any per-cell overrides off the source definition. Only overridable
+            // cell types can carry one, so the rest are skipped without an FFI hop.
+            _overrides.Clear();
+            Api.Maze? definition = this.mazeItem?.Definition;
+            if (definition is not null)
+            {
+                for (int r = 0; r < RowCount; r++)
+                {
+                    for (int c = 0; c < ColumnCount; c++)
+                    {
+                        if (!IsOverridableType(_cellTypes[r, c]))
+                        {
+                            continue;
+                        }
+                        CellEntityInfo? entity = definition.GetCellEntity((uint)r, (uint)c);
+                        if (entity is not null)
+                        {
+                            _overrides.Set(r, c, entity);
+                        }
+                    }
                 }
             }
 
@@ -170,7 +208,7 @@ namespace Maze.Maui.App
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
             bool containsKey = false, containsDoor = false;
-            bool containsEnemy = false, containsHealth = false;
+            bool containsEnemy = false, containsHealth = false, containsTreasure = false;
             int numWalls = 0;
             if (currentSelection is not null)
             {
@@ -205,6 +243,9 @@ namespace Maze.Maui.App
                             case CellType.Health:
                                 containsHealth = true;
                                 break;
+                            case CellType.Treasure:
+                                containsTreasure = true;
+                                break;
                         }
                     }
                 }
@@ -219,6 +260,7 @@ namespace Maze.Maui.App
                 ContainsDoor = containsDoor,
                 ContainsEnemy = containsEnemy,
                 ContainsHealth = containsHealth,
+                ContainsTreasure = containsTreasure,
                 IsAllWalls = containsWall && numWalls == cellCount
             };
         }
@@ -263,7 +305,8 @@ namespace Maze.Maui.App
         public override ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
         {
             // Logical model is already populated in Initialize() before InitializeContent() runs
-            var content = new MazeCellContent(gridInitializing ? _cellTypes[row, column] : CellType.Empty);
+            CellType type = gridInitializing ? _cellTypes[row, column] : CellType.Empty;
+            var content = new MazeCellContent(type, OverrideForRender(type, row, column), mazeItem?.GameSettings, showBadge: !_gameMode);
             ApplyGameRuntimeState(content, row, column);
             return content;
         }
@@ -300,20 +343,44 @@ namespace Maze.Maui.App
         {
             var type = _cellTypes[row, column];
             var direction = _solutionDirections[row, column];
+            CellEntityInfo? entity = OverrideForRender(type, row, column);
             MazeCellContent content;
             if (frame.Content is MazeCellContent existing)
             {
-                existing.Update(type, direction);
+                existing.Update(type, direction, entity, mazeItem?.GameSettings, showBadge: !_gameMode);
                 content = existing;
             }
             else
             {
-                content = new MazeCellContent(type);
+                content = new MazeCellContent(type, entity, mazeItem?.GameSettings, showBadge: !_gameMode);
                 if (direction != MazeCellContent.PathDirection.None)
                     content.SetSolutionPath(direction);
                 frame.Content = content;
             }
             ApplyGameRuntimeState(content, row, column);
+        }
+        /// <summary>
+        /// The override to render for a cell, or null. Overrides drive the variant sprite
+        /// (and, in the editor only, the authoring badge). In game mode the static wall
+        /// (water/lava/iron_fence), health (potion), and treasure (gold/diamonds/jewels)
+        /// variants are surfaced — enemies are live moving overlays and keys/doors have no
+        /// 2D variant — so their overrides are suppressed. Row and column are 0-based.
+        /// </summary>
+        /// <param name="type">The cell's type</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="column">Column index (zero-based)</param>
+        /// <returns>The cell's override, or null</returns>
+        private CellEntityInfo? OverrideForRender(CellType type, int row, int column)
+        {
+            if (!IsOverridableType(type))
+            {
+                return null;
+            }
+            if (_gameMode && type != CellType.Wall && type != CellType.Health && type != CellType.Treasure)
+            {
+                return null;
+            }
+            return GetCellOverride(row + 1, column + 1);
         }
         /// <summary>
         /// Re-applies any active game-mode runtime state (collected key, door
@@ -324,15 +391,10 @@ namespace Maze.Maui.App
         private void ApplyGameRuntimeState(MazeCellContent content, int row, int column)
         {
             if (_keyCollected.GetLength(0) <= row || _keyCollected.GetLength(1) <= column) return;
-            // A live enemy on the cell is rendered over whatever static content the
-            // cell holds. When the player shares the cell the walker is drawn on top
-            // and the enemy dimmed behind it; two or more enemies add a count chip.
-            if (_gameMode && _enemyAt[row, column] > 0)
-            {
-                bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
-                content.SetEnemyStack(_enemyAt[row, column], playerHere ? _walkerImage : null);
-                return;
-            }
+            // Resolve the static base first (collected key/health and spawn markers reduce
+            // to an empty passage; doors carry an opacity), then layer any live enemy and
+            // the player walker on top — so the underlying cell (e.g. a potion the enemy is
+            // standing on) still shows through and reappears once they leave.
             if (_cellTypes[row, column] == CellType.Key && _keyCollected[row, column])
             {
                 // Collected key renders as an empty passage so the visited-dot
@@ -364,6 +426,21 @@ namespace Maze.Maui.App
                 // auto-consumes the cell but the static grid char never changes.
                 content.Update(CellType.Empty, content.SolutionPathDirection);
             }
+            else if (_gameMode && _cellTypes[row, column] == CellType.Treasure && _treasureCollected[row, column])
+            {
+                // Collected treasure renders as an empty passage — auto-collected on
+                // walk-over while the static grid char stays 'T' (same as a key / pickup).
+                content.Update(CellType.Empty, content.SolutionPathDirection);
+            }
+
+            // The player walker overlay applies in BOTH the editor walk-solution
+            // animation and game mode; the live-enemy overlay is game-mode only.
+            bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
+            int enemyCount = _gameMode ? _enemyAt[row, column] : 0;
+            if (playerHere || enemyCount > 0)
+            {
+                content.SetEntityOverlay(enemyCount, playerHere ? _walkerImage : null, _gameMode ? StackEnemyRig(row, column) : null);
+            }
         }
         /// <summary>
         /// Enters game-runtime mode: enemy / health cells thereafter follow live
@@ -379,8 +456,19 @@ namespace Maze.Maui.App
                 for (int c = 0; c < ColumnCount; c++)
                 {
                     if (_cellTypes[r, c] == CellType.Enemy)
+                    {
                         _enemyAt[r, c] = 1;
+                        (_enemyRigsAt[r, c] ??= new List<EnemyType?>()).Add((GetCellOverride(r + 1, c + 1) as EnemyCellEntity)?.EnemyType);
+                    }
                 }
+            }
+            // Initialize rendered the cells in editor mode before the flag flipped, so
+            // re-render the ones already on screen to pick up game-mode rendering (variant
+            // walls/health without the authoring badge, suppressed spawn markers). Cells
+            // that scroll in later already render in game mode.
+            foreach (KeyValuePair<(int row, int col), CellFrame> entry in GetActiveCells())
+            {
+                UpdateCellContent(entry.Value, entry.Key.row, entry.Key.col);
             }
         }
         /// <summary>
@@ -395,21 +483,34 @@ namespace Maze.Maui.App
         /// <param name="newRow">New row (0-based).</param>
         /// <param name="newCol">New column (0-based).</param>
         /// <param name="id">Stable enemy id (unused by the count-based model; kept for caller clarity).</param>
-        public void SetEnemyCell(int oldRow, int oldCol, int newRow, int newCol, uint id)
+        /// <param name="enemyType">This enemy's own visual rig (ghost vs the default goblin), or null.</param>
+        public void SetEnemyCell(int oldRow, int oldCol, int newRow, int newCol, uint id, EnemyType? enemyType)
         {
             _ = id;
             if (!_gameMode) return;
             if (oldRow >= 0 && oldCol >= 0 && oldRow < RowCount && oldCol < ColumnCount && _enemyAt[oldRow, oldCol] > 0)
             {
+                // Remove this enemy's own rig from the old cell — so a cell shared by
+                // differing enemies keeps the remaining one's rig, and a swap with a
+                // neighbour can't carry the wrong rig.
                 _enemyAt[oldRow, oldCol]--;
+                _enemyRigsAt[oldRow, oldCol]?.Remove(enemyType);
                 RefreshCellRuntime(oldRow, oldCol);
             }
             if (newRow >= 0 && newCol >= 0 && newRow < RowCount && newCol < ColumnCount)
             {
                 _enemyAt[newRow, newCol]++;
+                (_enemyRigsAt[newRow, newCol] ??= new List<EnemyType?>()).Add(enemyType);
                 RefreshCellRuntime(newRow, newCol);
             }
         }
+        /// <summary>
+        /// The rig shown for a (possibly stacked) enemy cell — a distinctive rig (ghost)
+        /// takes priority over the default goblin so a mixed stack surfaces the special
+        /// enemy (see <see cref="CellSprite.DominantEnemyRig"/>).
+        /// </summary>
+        private EnemyType? StackEnemyRig(int row, int col) =>
+            _enemyRigsAt[row, col] is { Count: > 0 } list ? CellSprite.DominantEnemyRig(list) : null;
         /// <summary>
         /// Marks the health pickup at the given 0-based cell as consumed — the icon
         /// disappears (mirrors <see cref="MarkKeyCollected"/> for <c>'H'</c> cells).
@@ -421,29 +522,50 @@ namespace Maze.Maui.App
             RefreshCellRuntime(row, col);
         }
         /// <summary>
-        /// Rebuilds a cell's content from its static type plus the current game
-        /// runtime state. Skips cells the player walker currently occupies — its
-        /// content is the walker sprite, which must not be clobbered.
+        /// Marks the treasure at the given 0-based cell as collected — the icon
+        /// disappears (mirrors <see cref="MarkKeyCollected"/> for <c>'T'</c> cells).
+        /// </summary>
+        public void MarkTreasureCollected(int row, int col)
+        {
+            if (row < 0 || col < 0 || row >= _treasureCollected.GetLength(0) || col >= _treasureCollected.GetLength(1)) return;
+            _treasureCollected[row, col] = true;
+            RefreshCellRuntime(row, col);
+        }
+        /// <summary>
+        /// Rebuilds a cell's content from its static type (and per-cell override) plus the
+        /// current game runtime state — the base cell is restored, then any live enemy and
+        /// the player walker are layered back over it by <see cref="ApplyGameRuntimeState"/>.
         /// </summary>
         private void RefreshCellRuntime(int row, int col)
         {
             MazeCellContent? content = GetCellContent(row + 1, col + 1);
             if (content is null) return;
-            bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == col;
-            if (_gameMode && _enemyAt[row, col] > 0)
-            {
-                // Enemy occupancy (with the player layered on top when present).
-                content.SetEnemyStack(_enemyAt[row, col], playerHere ? _walkerImage : null);
-                return;
-            }
-            if (playerHere)
-            {
-                // Player owns the cell and no enemies remain — keep the walker.
-                content.SetWalker(_walkerImage);
-                return;
-            }
-            content.Update(_cellTypes[row, col], _solutionDirections[row, col]);
+            content.Update(_cellTypes[row, col], _solutionDirections[row, col],
+                OverrideForRender(_cellTypes[row, col], row, col), mazeItem?.GameSettings, showBadge: !_gameMode);
             ApplyGameRuntimeState(content, row, col);
+        }
+        /// <summary>
+        /// Re-renders the base sprite of every realized wall / enemy / health cell from the
+        /// maze's current game settings, so the editor grid reflects a changed wall / enemy /
+        /// health default. Off-screen (virtualized) cells are not realized; they pick up the
+        /// new settings when they scroll into view via <see cref="UpdateCellContent"/>.
+        /// </summary>
+        public void RefreshGameSettingsBaseSprites()
+        {
+            for (int row = 0; row < RowCount; row++)
+            {
+                for (int col = 0; col < ColumnCount; col++)
+                {
+                    CellType type = _cellTypes[row, col];
+                    if (type is not (CellType.Wall or CellType.Enemy or CellType.Health))
+                    {
+                        continue;
+                    }
+                    MazeCellContent? content = GetCellContent(row + 1, col + 1);
+                    content?.Update(type, _solutionDirections[row, col],
+                        OverrideForRender(type, row, col), mazeItem?.GameSettings, showBadge: !_gameMode);
+                }
+            }
         }
         /// <summary>
         /// Marks the key at the given 0-based cell as collected — the cell
@@ -454,15 +576,10 @@ namespace Maze.Maui.App
         {
             if (row < 0 || col < 0 || row >= _keyCollected.GetLength(0) || col >= _keyCollected.GetLength(1)) return;
             _keyCollected[row, col] = true;
-            // Skip the in-place mutation when the walker is currently rendered
-            // on this cell — its Content is the walker GIF, and replacing it
-            // would hide the player. The next SetWalkerCell call (when the
-            // player moves off) rebuilds this cell via Update +
-            // ApplyGameRuntimeState, which honours the now-true _keyCollected
-            // and renders the cell as an empty passage.
-            if (_walkerRow - 1 == row && _walkerCol - 1 == col) return;
-            MazeCellContent? content = GetCellContent(row + 1, col + 1);
-            content?.Update(CellType.Empty, content.SolutionPathDirection);
+            // Rebuild the cell now (as with a collected health pickup) so the key
+            // disappears immediately. The player walker is layered back over the empty
+            // passage by ApplyGameRuntimeState, so refreshing no longer hides the player.
+            RefreshCellRuntime(row, col);
         }
         /// <summary>
         /// Updates the runtime visual state for the door at the given 0-based cell.
@@ -541,6 +658,9 @@ namespace Maze.Maui.App
 
             _cellTypes = newTypes;
             _solutionDirections = newDirs;
+            // Keep overrides aligned with the same row shift the cells just took.
+            if (insert) { _overrides.InsertRows(insertIdx, count); }
+            else { _overrides.DeleteRows(insertIdx, count); }
             // Game-mode runtime arrays only matter for an active game session, which
             // never enters this editor-only resize path. Reset to fresh defaults so
             // the next Initialize() / game start sees a clean slate at the new size.
@@ -571,6 +691,9 @@ namespace Maze.Maui.App
 
             _cellTypes = newTypes;
             _solutionDirections = newDirs;
+            // Keep overrides aligned with the same column shift the cells just took.
+            if (insert) { _overrides.InsertCols(insertIdx, count); }
+            else { _overrides.DeleteCols(insertIdx, count); }
             // See ResizeLogicalArrayRows: game-mode arrays reset to defaults here.
             _keyCollected = new bool[RowCount, newColCount];
             _doorRuntimeState = new DoorState[RowCount, newColCount];
@@ -662,6 +785,7 @@ namespace Maze.Maui.App
                 case CellType.Door:
                 case CellType.Enemy:
                 case CellType.Health:
+                case CellType.Treasure:
                     SetSelectionContentToType(cellType);
                     break;
             }
@@ -728,6 +852,9 @@ namespace Maze.Maui.App
             if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
             {
                 _cellTypes[row - 1, column - 1] = cellType;
+                // A rewritten cell loses any override it carried (the new character may
+                // not even accept the old entity, e.g. an enemy override on a wall).
+                _overrides.Remove(row - 1, column - 1);
                 if (cellType == CellType.Start) { _startRow = row; _startCol = column; }
                 else if (cellType == CellType.Finish) { _finishRow = row; _finishCol = column; }
                 else if (_startRow == row && _startCol == column) _startRow = _startCol = -1;
@@ -735,9 +862,90 @@ namespace Maze.Maui.App
             }
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame is not null)
-                Controls.InteractiveGrid.Grid.SetCellContent(cellFrame, new MazeCellContent(cellType));
+                // Build the content the same way the load / refresh paths do — with the
+                // maze's game settings — so a freshly-placed wall / enemy / health cell
+                // adopts the maze-default 2D sprite (e.g. lava / ghost / potion) rather
+                // than the hardcoded base. Indices here are one-based; OverrideForRender
+                // takes zero-based.
+                Controls.InteractiveGrid.Grid.SetCellContent(cellFrame,
+                    new MazeCellContent(cellType, OverrideForRender(cellType, row - 1, column - 1), mazeItem?.GameSettings, showBadge: !_gameMode));
             return cellFrame;
         }
+        /// <summary>
+        /// The maze's game settings (the wall/enemy/health defaults the override panel
+        /// inherits for a non-overridden cell), or null when unset.
+        /// </summary>
+        public MazeGameSettings? GameSettings => mazeItem?.GameSettings;
+        /// <summary>
+        /// Gets the per-cell override on a cell (its non-default characteristics), or
+        /// null when the cell carries none.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        /// <returns>The cell's override, or null</returns>
+        public CellEntityInfo? GetCellOverride(int row, int column) => _overrides.Get(row - 1, column - 1);
+        /// <summary>
+        /// Sets the per-cell override on a cell. The caller is responsible for the
+        /// entity type matching the cell's current type.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        /// <param name="entity">The override to apply</param>
+        public void SetCellOverride(int row, int column, CellEntityInfo entity) => _overrides.Set(row - 1, column - 1, entity);
+        /// <summary>
+        /// Clears the per-cell override on a cell, if any.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        public void ClearCellOverride(int row, int column) => _overrides.Remove(row - 1, column - 1);
+        /// <summary>
+        /// Whether a cell carries a per-cell override.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        /// <returns>True when the cell has an override</returns>
+        public bool HasCellOverride(int row, int column) => _overrides.Has(row - 1, column - 1);
+        /// <summary>
+        /// Re-renders a cell from the current model (its type and override) so a change
+        /// to its override shows immediately. A no-op when the cell is off-screen — it
+        /// re-renders from the model when it next scrolls into view.
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        public void RefreshCellContent(int row, int column)
+        {
+            if (row < 1 || row > RowCount || column < 1 || column > ColumnCount)
+            {
+                return;
+            }
+            if (GetCell(row, column) is CellFrame frame)
+            {
+                UpdateCellContent(frame, row - 1, column - 1);
+            }
+        }
+        /// <summary>
+        /// Scrolls the grid so the given cell is within the visible viewport — used to
+        /// keep a selected cell visible after the override panel shrinks the grid. A
+        /// no-op until the grid is laid out (scrolling a zero-sized viewport mis-computes
+        /// the jump and can leave the busy cursor set).
+        /// </summary>
+        /// <param name="row">Row index (one-based)</param>
+        /// <param name="column">Column index (one-based)</param>
+        public void EnsureCellVisible(int row, int column)
+        {
+            if (Width > 0 && Height > 0)
+            {
+                ScrollCellIntoView(row, column);
+            }
+        }
+        /// <summary>
+        /// Whether a cell of the given type can carry a per-cell override (S/F and
+        /// empty cells cannot).
+        /// </summary>
+        /// <param name="type">Cell type</param>
+        /// <returns>True for overridable cell types</returns>
+        private static bool IsOverridableType(CellType type) =>
+            type is CellType.Wall or CellType.Key or CellType.Door or CellType.Enemy or CellType.Health or CellType.Treasure;
         /// <summary>
         /// Converts the maze grid content to a `Maze` object
         /// </summary>
@@ -759,8 +967,17 @@ namespace Maze.Maui.App
                         case CellType.Door: maze.SetDoorCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                         case CellType.Enemy: maze.SetEnemyCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                         case CellType.Health: maze.SetHealthCells((uint)row, (uint)column, (uint)row, (uint)column); break;
+                        case CellType.Treasure: maze.SetTreasureCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                     }
                 }
+            }
+
+            // Stamp the per-cell overrides on top of the now-populated characters.
+            // Every override sits on a cell whose character matches its entity type
+            // (rewriting a cell drops its override), so the maze accepts each one.
+            foreach (KeyValuePair<(int Row, int Col), CellEntityInfo> entry in _overrides.Entries)
+            {
+                maze.SetCellEntity((uint)entry.Key.Row, (uint)entry.Key.Col, entry.Value);
             }
 
             return maze;
@@ -1018,14 +1235,9 @@ namespace Maze.Maui.App
             if (prevRow > 0 && (prevRow != row || prevCol != col))
                 RefreshCellRuntime(prevRow - 1, prevCol - 1);
 
-            // Render the new cell: an enemy-occupied cell layers the walker over the
-            // dimmed enemy (plus a count chip for a stack); otherwise just the walker.
-            MazeCellContent? content = GetCellContent(row, col);
-            if (content is null) return;
-            if (_gameMode && _enemyAt[row - 1, col - 1] > 0)
-                content.SetEnemyStack(_enemyAt[row - 1, col - 1], walkerImage);
-            else
-                content.SetWalker(walkerImage);
+            // Render the new cell: the walker is layered over the cell's base content
+            // (and any live enemy already standing on it).
+            RefreshCellRuntime(row - 1, col - 1);
         }
         /// <summary>
         /// Clears the walker visual and restores the cell to its normal state
@@ -1034,14 +1246,12 @@ namespace Maze.Maui.App
         {
             if (_walkerRow > 0)
             {
-                MazeCellContent? content = GetCellContent(_walkerRow, _walkerCol);
-                if (content != null)
-                {
-                    content.Update(_cellTypes[_walkerRow - 1, _walkerCol - 1], _solutionDirections[_walkerRow - 1, _walkerCol - 1]);
-                    ApplyGameRuntimeState(content, _walkerRow - 1, _walkerCol - 1);
-                }
+                int row = _walkerRow, col = _walkerCol;
+                // Clear the player position first so the cell rebuilds as "player no longer
+                // here"; RefreshCellRuntime then restores its base content (and override).
                 _walkerRow = -1;
                 _walkerCol = -1;
+                RefreshCellRuntime(row - 1, col - 1);
             }
         }
         /// <summary>
@@ -1318,6 +1528,11 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool ContainsHealth { get; set; } = false;
         /// <summary>
+        /// Indicates whether the selection contains a treasure cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ContainsTreasure { get; set; } = false;
+        /// <summary>
         /// Indicates whether the selection is a single cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1338,13 +1553,13 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsFinish { get => IsSingleCell && ContainsFinish; }
         /// <summary>
-        /// Indicates whether the selection contains all empty cells. K, D, E
-        /// and H cells count as non-empty so that the Clear button enables on a
+        /// Indicates whether the selection contains all empty cells. K, D, E,
+        /// H and T cells count as non-empty so that the Clear button enables on a
         /// selection that contains them — mirrors the React editor's
         /// <c>selectionStatus.isEmpty</c> rule.
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor && !ContainsEnemy && !ContainsHealth; }
+        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor && !ContainsEnemy && !ContainsHealth && !ContainsTreasure; }
         /// <summary>
         /// Constructor
         /// </summary>
@@ -1435,9 +1650,23 @@ namespace Maze.Maui.App
         private static readonly Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         private static readonly Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
         private static readonly Color GAME_VISITED_CELL_HIGHLIGHT_COLOR = Colors.White;
+        // Corner dot marking an editor cell that carries a per-cell override, mirroring
+        // the web editor's override badge.
+        private static readonly Microsoft.Maui.Controls.Brush OVERRIDE_BADGE_BRUSH =
+            new Microsoft.Maui.Controls.SolidColorBrush(Color.FromArgb("#512BD4"));
 
         CellType cellType = CellType.Empty;
         PathDirection solutionPathDirection = PathDirection.None;
+        // The cell's per-cell override (drives the variant sprite + badge), or null.
+        CellEntityInfo? cellOverride = null;
+        // The maze's game settings, supplying the base sprite a non-overridden wall /
+        // enemy / health cell inherits (e.g. a lava maze's walls), or null for the
+        // hardcoded bases. Per-cell overrides still win.
+        MazeGameSettings? settings = null;
+        // Whether to overlay the authoring badge on an override cell. The variant sprite
+        // always renders from the override; the badge is an editor affordance only and is
+        // suppressed during play (matching the web editor, which hides it in-game).
+        bool showOverrideBadge = true;
 
         /// <summary>
         /// The solution path direction associated with the cell (if any)
@@ -1490,6 +1719,11 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsHealth { get => CellType == CellType.Health; }
         /// <summary>
+        /// Indicates whether the cell is a treasure cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool IsTreasure { get => CellType == CellType.Treasure; }
+        /// <summary>
         /// Indicates whether the cell is a start or finish cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1498,10 +1732,15 @@ namespace Maze.Maui.App
         /// Constructor
         /// </summary>
         /// <param name="cellType">Cell type</param>
-        /// <returns>Boolean</returns>
-        public MazeCellContent(CellType cellType)
+        /// <param name="cellOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
+        /// <param name="settings">The maze's game settings (supplies the non-overridden base sprite), or null</param>
+        /// <param name="showBadge">Whether to overlay the authoring badge on an override cell (editor only)</param>
+        public MazeCellContent(CellType cellType, CellEntityInfo? cellOverride = null, MazeGameSettings? settings = null, bool showBadge = true)
         {
             this.cellType = cellType;
+            this.cellOverride = cellOverride;
+            this.settings = settings;
+            this.showOverrideBadge = showBadge;
             switch (cellType)
             {
                 case CellType.Start:
@@ -1511,13 +1750,8 @@ namespace Maze.Maui.App
                 case CellType.Door:
                 case CellType.Enemy:
                 case CellType.Health:
-                    Content = new Image
-                    {
-                        Source = GetImageName(true),
-                        Aspect = Aspect.AspectFit,
-                        HorizontalOptions = LayoutOptions.Fill,
-                        VerticalOptions = LayoutOptions.Fill
-                    };
+                case CellType.Treasure:
+                    Content = BuildIconContent();
                     break;
                 case CellType.Empty:
                 default:
@@ -1526,12 +1760,60 @@ namespace Maze.Maui.App
             }
         }
         /// <summary>
-        /// Gets the name of the image to display for the cell
+        /// Builds the cell icon: a single image, or — when the cell carries an
+        /// override — that image with a small corner badge overlaid.
+        /// </summary>
+        /// <returns>The cell content view</returns>
+        private View BuildIconContent()
+        {
+            Image image = new()
+            {
+                Source = GetImageName(true),
+                Aspect = Aspect.AspectFit,
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill
+            };
+            if (cellOverride is null || !showOverrideBadge)
+            {
+                return image;
+            }
+            return new Microsoft.Maui.Controls.Grid { image, BuildOverrideBadge() };
+        }
+        /// <summary>
+        /// A small corner dot marking a cell that carries a per-cell override.
+        /// </summary>
+        /// <returns>The badge view</returns>
+        private static Microsoft.Maui.Controls.Shapes.Ellipse BuildOverrideBadge() => new Microsoft.Maui.Controls.Shapes.Ellipse
+        {
+            Fill = OVERRIDE_BADGE_BRUSH,
+            WidthRequest = 7,
+            HeightRequest = 7,
+            HorizontalOptions = LayoutOptions.End,
+            VerticalOptions = LayoutOptions.Start,
+            Margin = new Thickness(0, 1, 1, 0),
+            InputTransparent = true
+        };
+        /// <summary>
+        /// Gets the name of the image to display for the cell, preferring a variant
+        /// sprite when the cell's override selects one (ghost / potion / water / lava /
+        /// iron fence) and otherwise the base sprite for the cell type.
         /// </summary>
         /// <param name="preferFlag">If the cell is a start or finish cell, returned a flag image (otherwise return a sign image)</param>
         /// <returns>Image name</returns>
         private string GetImageName(bool preferFlag)
         {
+            string? variant = CellSprite.VariantImageName(cellOverride);
+            if (variant is not null)
+            {
+                return variant;
+            }
+            // A non-overridden wall / enemy / health cell inherits the maze's game-settings
+            // default base (e.g. lava walls); falls through to the hardcoded base otherwise.
+            string? mazeDefault = CellSprite.BaseImageName(cellType, cellOverride, settings);
+            if (mazeDefault is not null)
+            {
+                return mazeDefault;
+            }
             switch (cellType)
             {
                 case CellType.Start:
@@ -1548,6 +1830,10 @@ namespace Maze.Maui.App
                     return "enemy.png";
                 case CellType.Health:
                     return "health.png";
+                case CellType.Treasure:
+                    // Silver is the default treasure sprite; the richer styles are
+                    // variants resolved above via CellSprite.VariantImageName.
+                    return "silver.png";
             }
             return "";
         }
@@ -1557,18 +1843,37 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="newCellType">New cell type</param>
         /// <param name="newDirection">New solution path direction</param>
-        public void Update(CellType newCellType, PathDirection newDirection)
+        /// <param name="newOverride">The cell's per-cell override (drives the variant sprite + badge), or null</param>
+        /// <param name="newSettings">The maze's game settings (supplies the non-overridden base sprite), or null</param>
+        /// <param name="showBadge">Whether to overlay the authoring badge on an override cell (editor only)</param>
+        public void Update(CellType newCellType, PathDirection newDirection, CellEntityInfo? newOverride = null, MazeGameSettings? newSettings = null, bool showBadge = true)
         {
             cellType = newCellType;
             solutionPathDirection = newDirection;
+            cellOverride = newOverride;
+            settings = newSettings;
+            showOverrideBadge = showBadge;
 
             bool needsImage = cellType != CellType.Empty || solutionPathDirection != PathDirection.None;
-            string? source = needsImage
-                ? (cellType == CellType.Empty ? GetSolutionPathImage() : GetImageName(true))
-                : null;
 
-            if (needsImage)
+            if (!needsImage)
             {
+                if (Content is not Label)
+                    Content = new Label();
+                Content.BackgroundColor = Colors.Transparent;
+                return;
+            }
+
+            if (cellType != CellType.Empty && cellOverride is not null)
+            {
+                // Override cell: rebuild as the variant sprite plus the corner badge.
+                Content = BuildIconContent();
+            }
+            else
+            {
+                // Plain icon (or an empty cell's solution footstep) — reuse the Image
+                // to avoid a reload cycle on pool-recycled frames.
+                string source = cellType == CellType.Empty ? GetSolutionPathImage() : GetImageName(true);
                 if (Content is Image img)
                     img.Source = source;
                 else
@@ -1579,14 +1884,8 @@ namespace Maze.Maui.App
                         HorizontalOptions = LayoutOptions.Fill,
                         VerticalOptions = LayoutOptions.Fill
                     };
-                Content.BackgroundColor = GetSolutionPathHighlightColor();
             }
-            else
-            {
-                if (Content is not Label)
-                    Content = new Label();
-                Content.BackgroundColor = Colors.Transparent;
-            }
+            Content.BackgroundColor = GetSolutionPathHighlightColor();
         }
         /// <summary>
         /// Sets the opacity of this cell's icon image. Used by game mode to
@@ -1603,50 +1902,31 @@ namespace Maze.Maui.App
             }
         }
         /// <summary>
-        /// Displays a walker GIF in this cell, overriding the normal cell content
+        /// Renders the live game entities over the cell's static base content: the base
+        /// cell sprite (e.g. a potion the enemy is standing on) shows through underneath,
+        /// then the live enemy sprite, then the player walker when the player shares the
+        /// cell (enemy dimmed behind it), and a dark-green count chip in the top-right
+        /// corner when two or more enemies occupy the cell. Mirrors the React 2D game,
+        /// which overlays entities on the cell rather than replacing it. The current
+        /// <c>cellType</c>/override already reflect the resolved game-mode base (spawn
+        /// markers and collected pickups have been reduced to an empty passage).
         /// </summary>
-        /// <param name="source">Image filename (e.g. "walker_down.gif")</param>
-        public void SetWalker(string source)
-        {
-            if (Content is Image img)
-            {
-                img.Source = source;
-                // Walker is always rendered at full opacity even if the cell's
-                // game-mode runtime state had dimmed/hidden its prior icon
-                // (a collected key or an opening/open door). Without this, the
-                // walker inherits the hidden K / open D cell's Opacity=0 and
-                // becomes invisible.
-                img.Opacity = 1.0;
-                img.IsAnimationPlaying = true;
-            }
-            else
-                Content = new Image
-                {
-                    Source = source,
-                    Aspect = Aspect.AspectFit,
-                    HorizontalOptions = LayoutOptions.Fill,
-                    VerticalOptions = LayoutOptions.Fill,
-                    IsAnimationPlaying = true
-                };
-            Content.BackgroundColor = Colors.Transparent;
-        }
-        /// <summary>
-        /// Renders a stacked game cell: the live enemy sprite, the player walker on
-        /// top when the player shares the cell (enemy dimmed behind it), and a
-        /// dark-green count chip in the top-right corner when two or more enemies
-        /// occupy the cell. Mirrors the React 2D game's enemy-stack rendering.
-        /// </summary>
-        /// <param name="enemyCount">Number of enemies on the cell (assumed &gt;= 1).</param>
+        /// <param name="enemyCount">Number of enemies on the cell.</param>
         /// <param name="walkerImage">Player walker GIF source when the player is here; otherwise null.</param>
-        public void SetEnemyStack(int enemyCount, string? walkerImage)
+        /// <param name="enemyType">The enemy's visual rig (ghost vs the default goblin), or null.</param>
+        public void SetEntityOverlay(int enemyCount, string? walkerImage, EnemyType? enemyType = null)
         {
-            cellType = CellType.Enemy;
             var layers = new Microsoft.Maui.Controls.Grid { BackgroundColor = Colors.Transparent };
+            // Base cell sprite underneath the entities (an empty passage adds no layer).
+            if (cellType != CellType.Empty)
+            {
+                layers.Add(BuildIconContent());
+            }
             if (enemyCount > 0)
             {
                 layers.Add(new Image
                 {
-                    Source = "enemy.png",
+                    Source = CellSprite.LiveEnemyImageName(enemyType, settings),
                     Aspect = Aspect.AspectFit,
                     HorizontalOptions = LayoutOptions.Fill,
                     VerticalOptions = LayoutOptions.Fill,
@@ -1699,7 +1979,7 @@ namespace Maze.Maui.App
             // ship with transparent corners specifically so the highlight
             // is visible here.) Enemy and health cells are passable, so the
             // solution path can cross them and they highlight like any passage.
-            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor || IsEnemy || IsHealth)
+            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor || IsEnemy || IsHealth || IsTreasure)
             {
                 solutionPathDirection = pathDirection;
 

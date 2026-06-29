@@ -48,10 +48,18 @@ namespace Maze.Maui.App.ViewModels
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles a <see cref="MazesInvalidatedMessage"/> by invalidating the cached
+        /// maze list so it reloads on next view.
+        /// </summary>
+        /// <param name="message">The invalidation notification</param>
         public void Receive(MazesInvalidatedMessage message) => InvalidateData();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles a <see cref="NewMazeItemMessage"/> by adding the newly created maze
+        /// to the list.
+        /// </summary>
+        /// <param name="message">The new-maze notification</param>
         public void Receive(NewMazeItemMessage message) => AddNewItem(message.Item);
         /// <summary>
         /// Represents the load status
@@ -124,10 +132,13 @@ namespace Maze.Maui.App.ViewModels
             IsBusy = true;
             try
             {
+                // The maze-list summary omits game_settings; load the full maze so the editor
+                // seeds its Settings from the maze's saved values rather than defaults.
+                MazeItem full = await LoadFullMazeAsync(item);
                 await _navigationService.GoToAsync(nameof(MazePage),
                     new Dictionary<string, object>
                     {
-                        {"MazeItem", item }
+                        {"MazeItem", full }
                     });
                 // Hold IsBusy for a further 500ms after navigation completes to block any
                 // buffered second taps (e.g. double-click) that arrive after GoToAsync returns
@@ -166,14 +177,22 @@ namespace Maze.Maui.App.ViewModels
                 return;
             }
 
-            // For 3D launches, show the per-launch custom popup first so
-            // the user can pick sky / wall texture / landmark toggles /
-            // timer. Cancelling the popup aborts the launch.
-            Play3dCustomLaunchSettings? launchSettings = null;
+            // For 3D launches, show the Run / Custom Run… / Cancel chooser.
+            // Cancelling aborts the launch.
+            MazeGameSettings? launchSettings = null;
+            // The maze-list summary omits game_settings. 3D refetches by ID server-side, but
+            // 2D renders from the passed maze, so load the full maze for the wall/enemy/health
+            // base sprites (and, for 3D, the chooser's saved-settings seed).
+            MazeItem navItem = item;
             if (gameType == GameType.ThreeD)
             {
-                launchSettings = await _dialogService.ShowPlay3dCustomLaunchAsync(item.Name);
+                MazeItem full = await LoadFullMazeAsync(item);
+                launchSettings = await Play3dLaunchResolver.ResolveAsync(_dialogService, item.Name, full.GameSettings);
                 if (launchSettings is null) return;
+            }
+            else
+            {
+                navItem = await LoadFullMazeAsync(item);
             }
 
             IsBusy = true;
@@ -182,7 +201,7 @@ namespace Maze.Maui.App.ViewModels
                 var route = gameType == GameType.ThreeD
                     ? nameof(Views.Play3dGamePage)
                     : nameof(Views.MazeGamePage);
-                var navArgs = new Dictionary<string, object> { { "MazeItem", item } };
+                var navArgs = new Dictionary<string, object> { { "MazeItem", navItem } };
                 if (launchSettings is not null)
                 {
                     navArgs["LaunchSettings"] = launchSettings;
@@ -191,6 +210,23 @@ namespace Maze.Maui.App.ViewModels
                 await Task.Delay(500);
             }
             finally { IsBusy = false; }
+        }
+        /// <summary>
+        /// Loads the full maze for the given list item. The maze-list summary (<c>get_mazes</c>)
+        /// omits <c>game_settings</c>, so callers that need them (the editor, Play 3D) fetch the
+        /// whole maze via the single-maze GET, which carries them. Falls back to the list item if
+        /// the fetch fails or returns nothing.
+        /// </summary>
+        /// <param name="item">The maze-list item</param>
+        /// <returns>The full maze item (with game settings), or the original item on failure</returns>
+        private async Task<MazeItem> LoadFullMazeAsync(MazeItem item)
+        {
+            // A new, unsaved maze has no server record yet — its id is empty, and the
+            // single-maze GET rejects an empty id. There is nothing to fetch, so use the
+            // fresh item as-is (it already carries the editor's default game settings).
+            if (string.IsNullOrEmpty(item.ID))
+                return item;
+            return await _mazeService.GetMazeItem(item.ID) ?? item;
         }
         /// <summary>
         /// Activates the maze (design) page for a new maze item

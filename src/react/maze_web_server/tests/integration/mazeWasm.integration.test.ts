@@ -46,6 +46,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
   spareKeys: 0,
   enemyCount: 0,
   healthCount: 0,
+  treasureCount: 0,
 }
 
 // Trivially solvable 1×3 grid: S at (0,0), open at (0,1), F at (0,2).
@@ -116,6 +117,26 @@ describe('generateMaze (real WASM)', () => {
     expect(doors).toBeGreaterThan(0)
     expect(doors).toBeLessThanOrEqual(3)
     expect(keys).toBe(doors)
+  })
+
+  it('auto-places treasure as T cells and extracts per-cell style overrides', async () => {
+    const { grid, overrides } = await generateMaze({
+      ...GENERATE_OPTIONS,
+      rowCount: 15,
+      colCount: 15,
+      treasureCount: 6,
+    })
+    // Every treasure cell is the pure char 'T' (silver or not) — a broken codec
+    // would leak non-silver treasure as char-or-array object cells instead.
+    const flat = grid.flat()
+    expect(flat.filter(c => c === 'T').length).toBe(6)
+    const valid = new Set(['S', 'F', ' ', 'W', 'T'])
+    for (const cell of flat) expect(valid.has(cell)).toBe(true)
+    // Any extracted overrides are treasure-style overrides sitting on a 'T' cell.
+    for (const o of overrides) {
+      expect(o.entity.type).toBe('T')
+      expect(grid[o.row][o.col]).toBe('T')
+    }
   })
 })
 

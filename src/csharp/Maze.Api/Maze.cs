@@ -69,6 +69,10 @@ namespace Maze.Api
             /// A cell containing a health pickup that restores HP when walked over
             /// </summary>
             Health = 7,
+            /// <summary>
+            /// A cell containing collectible treasure that is auto-collected when walked over
+            /// </summary>
+            Treasure = 8,
         }
 
         /// <summary>
@@ -157,6 +161,12 @@ namespace Maze.Api
             /// <see cref="MaxHealthCount"/> and to the eligible-cell count.
             /// </summary>
             public UInt32? HealthCount { get; set; }
+            /// <summary>
+            /// Number of treasure cells to auto-place (dead-end cells first, then
+            /// other passable cells). When null, defaults to 0. Clamped by the
+            /// generator to <see cref="MaxTreasureCount"/> and to the eligible-cell count.
+            /// </summary>
+            public UInt32? TreasureCount { get; set; }
         }
         /// <summary>
         /// Maximum combined count of key and door cells any maze may carry.
@@ -187,6 +197,13 @@ namespace Maze.Api
         /// rejects above-cap requests up front.
         /// </summary>
         public const UInt32 MaxHealthCount = 8;
+        /// <summary>
+        /// Maximum value accepted by <see cref="GenerationOptions.TreasureCount"/>.
+        /// Mirrors <c>maze::MAX_TREASURE_COUNT</c> on the Rust side; the generator
+        /// clamps requests to this internally and per-field UI validation
+        /// rejects above-cap requests up front.
+        /// </summary>
+        public const UInt32 MaxTreasureCount = 12;
         /// <summary>
         /// Returns <c>true</c> when a Generate request's planned key + door cell
         /// count would exceed <see cref="MaxTotalFeatures"/>. Each real door
@@ -286,6 +303,8 @@ namespace Maze.Api
                         Interop.GeneratorOptionsSetEnemyCount(optionsPtr, options.EnemyCount.Value);
                     if (options.HealthCount.HasValue)
                         Interop.GeneratorOptionsSetHealthCount(optionsPtr, options.HealthCount.Value);
+                    if (options.TreasureCount.HasValue)
+                        Interop.GeneratorOptionsSetTreasureCount(optionsPtr, options.TreasureCount.Value);
                     Interop.MazeGenerate(maze._mazePtr, optionsPtr);
                 }
                 finally
@@ -518,6 +537,18 @@ namespace Maze.Api
             Interop.MazeSetHealthCells(_mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
+        /// Sets a range of cells to treasure within a maze, or will throw
+        /// an exception if the cells cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetTreasureCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetTreasureCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
         /// Inserts rows into the maze, or will throw an exception if the rows cannot be inserted
         /// </summary>
         /// <param name="startRow">Target start row</param>
@@ -586,6 +617,42 @@ namespace Maze.Api
             if (doc.RootElement.TryGetProperty("definition", out var defEl))
                 return defEl.GetRawText();
             return json;
+        }
+
+        /// <summary>
+        /// Returns the per-cell entity override at the given location, or <c>null</c> when the cell carries none.
+        /// </summary>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <returns>The cell's entity override, or <c>null</c> when it has none</returns>
+        public CellEntityInfo? GetCellEntity(uint row, uint col)
+        {
+            string? json = Interop.MazeGetCellEntity(_mazePtr, row, col);
+            return json == null
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize(json, CellEntityJsonContext.Default.CellEntityInfo);
+        }
+        /// <summary>
+        /// Sets the per-cell entity override at the given location, replacing any existing one.
+        /// The entity's type (its concrete subclass) must match the cell's current character — e.g. an
+        /// <see cref="EnemyCellEntity"/> on an <c>'E'</c> cell (set the cell to the matching kind first); throws otherwise.
+        /// </summary>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <param name="entity">The entity override to set</param>
+        public void SetCellEntity(uint row, uint col, CellEntityInfo entity)
+        {
+            string json = System.Text.Json.JsonSerializer.Serialize(entity, CellEntityJsonContext.Default.CellEntityInfo);
+            Interop.MazeSetCellEntity(_mazePtr, row, col, json);
+        }
+        /// <summary>
+        /// Clears any per-cell entity override at the given location. A cell with no override is unaffected.
+        /// </summary>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        public void ClearCellEntity(uint row, uint col)
+        {
+            Interop.MazeClearCellEntity(_mazePtr, row, col);
         }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails. 

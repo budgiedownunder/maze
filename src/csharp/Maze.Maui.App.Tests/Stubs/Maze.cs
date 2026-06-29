@@ -40,6 +40,7 @@ namespace Maze.Api
             Door = 5,
             Enemy = 6,
             Health = 7,
+            Treasure = 8,
         }
 
         public CellType GetCellType(UInt32 row, UInt32 col) =>
@@ -52,6 +53,7 @@ namespace Maze.Api
         public void SetDoorCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Door);
         public void SetEnemyCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Enemy);
         public void SetHealthCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Health);
+        public void SetTreasureCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Treasure);
 
         private void Set(UInt32 row, UInt32 col, CellType type)
         {
@@ -69,13 +71,34 @@ namespace Maze.Api
         public const UInt32 MaxDoorCount = 8;
         public const UInt32 MaxEnemyCount = 8;
         public const UInt32 MaxHealthCount = 8;
+        public const UInt32 MaxTreasureCount = 12;
         public static bool ExceedsGenerateFeatureCap(UInt32 doorCount, UInt32 spareDoors, UInt32 spareKeys)
             => 2 * doorCount + spareDoors + spareKeys > MaxTotalFeatures;
 
         public string ToJson() => Json;
         public void FromJson(string json) => Json = json;
         public string DefinitionToJson() => Json;
-        public void Solve() => Solved = true;
+
+        // Mirror production: Solve throws for an unsolvable maze. The view-model
+        // validation paths only need a maze with no Start / no Finish (an empty or
+        // cleared maze) to be rejected, so model exactly that.
+        public void Solve()
+        {
+            if (!HasCell(CellType.Start))
+                throw new InvalidOperationException("maze has no start cell");
+            if (!HasCell(CellType.Finish))
+                throw new InvalidOperationException("maze has no finish cell");
+            Solved = true;
+        }
+
+        private bool HasCell(CellType type)
+        {
+            for (UInt32 r = 0; r < RowCount; r++)
+                for (UInt32 c = 0; c < ColCount; c++)
+                    if (_cells[r, c] == type) return true;
+            return false;
+        }
+
         public void Dispose() { }
     }
 }

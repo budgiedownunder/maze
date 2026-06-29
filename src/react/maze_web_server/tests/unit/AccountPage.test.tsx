@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -27,6 +27,7 @@ vi.mock('../../src/context/AuthContext', async () => {
       profile: mockProfile,
       login: vi.fn(),
       logout: mockLogout,
+      refreshProfile: vi.fn(),
     }),
   }
 })
@@ -197,5 +198,66 @@ describe('AccountPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /delete account/i }))
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }))
+  })
+
+  // --- Avatar upload / change / remove -------------------------------------
+
+  function accountFileInput(container: HTMLElement): HTMLInputElement {
+    return container.querySelector('.account-avatar input[type="file"]') as HTMLInputElement
+  }
+
+  it('uploads an avatar, then shows Remove and renders the fetched image', async () => {
+    const { container } = renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    // Pre-upload: no avatar → placeholder, no Remove.
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+
+    const file = new File([new Uint8Array([1, 2, 3])], 'me.png', { type: 'image/png' })
+    await userEvent.upload(accountFileInput(container), file)
+
+    // The stateful mock now reports an avatar → Remove appears and the account
+    // avatar renders the fetched image (object URL), not the placeholder.
+    await waitFor(() => expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument())
+    const img = container.querySelector('.account-avatar img') as HTMLImageElement
+    await waitFor(() => expect(img.getAttribute('src')).toBe('blob:mock'))
+  })
+
+  it('rejects a non-image file client-side without uploading', async () => {
+    const { container } = renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    // Use fireEvent to bypass the input's `accept` filter (which userEvent
+    // honours) and exercise the handler's own defence-in-depth type guard.
+    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' })
+    fireEvent.change(accountFileInput(container), { target: { files: [file] } })
+    expect(await screen.findByText(/png or jpeg/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+  })
+
+  it('rejects an oversize file client-side', async () => {
+    const { container } = renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' })
+    await userEvent.upload(accountFileInput(container), big)
+    expect(await screen.findByText(/2 mb or smaller/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+  })
+
+  it('removes an existing avatar', async () => {
+    const { container } = renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    await userEvent.upload(accountFileInput(container), new File([new Uint8Array([1])], 'me.png', { type: 'image/png' }))
+    const removeBtn = await screen.findByRole('button', { name: /remove/i })
+    await userEvent.click(removeBtn)
+    await waitFor(() => expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument())
+    const img = container.querySelector('.account-avatar img') as HTMLImageElement
+    await waitFor(() => expect(img.getAttribute('src')).toBe('/images/avatar-placeholder.png'))
+  })
+
+  it('clicking the avatar image opens the file picker', async () => {
+    const { container } = renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    const clickSpy = vi.spyOn(accountFileInput(container), 'click').mockImplementation(() => {})
+    await userEvent.click(container.querySelector('.account-avatar-button') as HTMLElement)
+    expect(clickSpy).toHaveBeenCalled()
   })
 })

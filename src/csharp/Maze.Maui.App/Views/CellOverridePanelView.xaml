@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             x:Class="Maze.Maui.App.Views.CellOverridePanelView"
+             x:DataType="viewmodel:CellOverridePanelViewModel"
+             IsVisible="{Binding IsVisible, FallbackValue=False}">
+    <ScrollView x:Name="PanelScroll" VerticalOptions="Fill">
+        <Border Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+            StrokeShape="RoundRectangle 8"
+            Padding="12"
+            Margin="6"
+            HorizontalOptions="Fill"
+            VerticalOptions="Start">
+        <VerticalStackLayout Spacing="8">
+            <Label Text="{Binding Title}" FontAttributes="Bold" FontSize="15" />
+
+            <!-- Enemy -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsEnemy}">
+                <Label Text="Type" />
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="{Binding EnemyPreviewImage}" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" />
+                    <Picker ItemsSource="{Binding EnemyTypeOptions}" SelectedIndex="{Binding EnemyTypeIndex}" WidthRequest="180" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Label Text="Damage" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                    <Button Grid.Column="0" Text="&#8722;" Command="{Binding DecrementDamageCommand}" WidthRequest="40" Padding="0" />
+                    <Entry Grid.Column="1" Text="{Binding DamageText}" Placeholder="Default" Keyboard="Numeric" />
+                    <Button Grid.Column="2" Text="+" Command="{Binding IncrementDamageCommand}" WidthRequest="40" Padding="0" />
+                </Grid>
+                <Label Text="Move Interval (ms)" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                    <Button Grid.Column="0" Text="&#8722;" Command="{Binding DecrementMovePeriodCommand}" WidthRequest="40" Padding="0" />
+                    <Entry Grid.Column="1" Text="{Binding MovePeriodMsText}" Placeholder="Default" Keyboard="Numeric" />
+                    <Button Grid.Column="2" Text="+" Command="{Binding IncrementMovePeriodCommand}" WidthRequest="40" Padding="0" />
+                </Grid>
+            </VerticalStackLayout>
+
+            <!-- Health -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsHealth}">
+                <Label Text="Style" />
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="{Binding HealthPreviewImage}" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" />
+                    <Picker ItemsSource="{Binding HealthStyleOptions}" SelectedIndex="{Binding HealthStyleIndex}" WidthRequest="180" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Label Text="Heal Amount" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                    <Button Grid.Column="0" Text="&#8722;" Command="{Binding DecrementHealAmountCommand}" WidthRequest="40" Padding="0" />
+                    <Entry Grid.Column="1" Text="{Binding HealAmountText}" Placeholder="Default" Keyboard="Numeric" />
+                    <Button Grid.Column="2" Text="+" Command="{Binding IncrementHealAmountCommand}" WidthRequest="40" Padding="0" />
+                </Grid>
+            </VerticalStackLayout>
+
+            <!-- Treasure -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsTreasure}">
+                <Label Text="Style" />
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="{Binding TreasurePreviewImage}" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" />
+                    <Picker ItemsSource="{Binding TreasureStyleOptions}" SelectedIndex="{Binding TreasureStyleIndex}" WidthRequest="180" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Label Text="Value" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                    <Button Grid.Column="0" Text="&#8722;" Command="{Binding DecrementTreasureValueCommand}" WidthRequest="40" Padding="0" />
+                    <Entry Grid.Column="1" Text="{Binding TreasureValueText}" Placeholder="Default" Keyboard="Numeric" />
+                    <Button Grid.Column="2" Text="+" Command="{Binding IncrementTreasureValueCommand}" WidthRequest="40" Padding="0" />
+                </Grid>
+            </VerticalStackLayout>
+
+            <!-- Key -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsKey}">
+                <Label Text="Holder" />
+                <Picker ItemsSource="{Binding KeyHolderOptions}" SelectedIndex="{Binding KeyHolderIndex}" />
+            </VerticalStackLayout>
+
+            <!-- Door -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsDoor}">
+                <Label Text="Style" />
+                <Picker ItemsSource="{Binding DoorStyleOptions}" SelectedIndex="{Binding DoorStyleIndex}" />
+            </VerticalStackLayout>
+
+            <!-- Wall (two-tier: a special type, or "Wall" + a solid texture) -->
+            <VerticalStackLayout Spacing="6" IsVisible="{Binding IsWall}">
+                <Label Text="Type" />
+                <HorizontalStackLayout Spacing="8">
+                    <Image Source="{Binding WallPreviewImage}" WidthRequest="36" HeightRequest="36" Aspect="AspectFit" VerticalOptions="Center" />
+                    <Picker ItemsSource="{Binding WallTypeOptions}" SelectedIndex="{Binding WallTypeIndex}" WidthRequest="180" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+                <Label Text="Texture" IsVisible="{Binding IsWallTextureVisible}" />
+                <Picker ItemsSource="{Binding WallTextureOptions}" SelectedIndex="{Binding WallTextureIndex}" IsVisible="{Binding IsWallTextureVisible}" />
+            </VerticalStackLayout>
+
+            <Button Text="{Binding ApplyToAllText}" Command="{Binding ApplyToAllCommand}" IsVisible="{Binding IsMultiCell}" HorizontalOptions="Start" Margin="0,4,0,0" />
+            <Button Text="Reset to defaults" Command="{Binding ResetCommand}" HorizontalOptions="Start" Margin="0,4,0,0" />
+        </VerticalStackLayout>
+        </Border>
+    </ScrollView>
+</ContentView>

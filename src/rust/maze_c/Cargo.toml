@@ -10,6 +10,7 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 maze = { path = "../maze", features = ["generation"] }
 data_model = { path = "../data_model" }
+serde_json = "1"
 
 [dev-dependencies]
 pretty_assertions = "1"

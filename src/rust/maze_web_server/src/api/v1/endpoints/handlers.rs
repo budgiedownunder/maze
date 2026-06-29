@@ -243,6 +243,18 @@ fn get_maze_too_many_features_error(keys: usize, doors: usize, max: usize) -> Er
     ))
 }
 
+fn get_maze_definition_too_large_error(bytes: usize, max: usize) -> Error {
+    ErrorUnprocessableEntity(format!(
+        "Maze definition is too large to store: {bytes} bytes exceeds the {max}-byte limit"
+    ))
+}
+
+fn get_maze_too_many_objects_error(kind: &str, count: usize, max: usize) -> Error {
+    ErrorUnprocessableEntity(format!(
+        "Maze has too many {kind}: {count} exceeds the limit of {max}"
+    ))
+}
+
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
     format!("The maze could not be solved: {err}")
 }
@@ -308,6 +320,11 @@ pub struct UserItem {
     /// variants of the password popup. The hash itself is never exposed.
     #[serde(default)]
     pub has_password: bool,
+    /// Cache-buster + "has an avatar" marker. Present (an RFC 3339 timestamp)
+    /// when the user has an avatar; absent when they don't.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
+    pub avatar_updated_at: Option<DateTime<Utc>>,
 }
 
 impl UserItem {
@@ -320,6 +337,7 @@ impl UserItem {
             email: user.email().to_string(),
             emails: user.emails.clone(),
             has_password: !user.password_hash.is_empty(),
+            avatar_updated_at: user.avatar_updated_at,
         }
     }
 }
@@ -449,11 +467,15 @@ pub struct Play3dConfigResponse {
     pub landmarks: LandmarksResponse,
     /// Sky type. Safely degrades to `night` if unrecognised.
     pub sky_type: String,
-    /// Wall texture kind used by the per-cell tinted path (when
-    /// `landmarks.wallMaterialVariation` is off). One of `brick`,
-    /// `dressed_stone`, `wood`, `cobblestone`. Safely degrades to
-    /// `brick` if unrecognised.
+    /// Per-maze wall type. The solid textures (`brick`, `dressed_stone`, `wood`,
+    /// `cobblestone`) use the per-cell tinted path (when
+    /// `landmarks.wallMaterialVariation` is off); the non-occluding types
+    /// (`water`, `lava`, `iron_fence`) turn every wall cell into a pool / bars.
+    /// Safely degrades to `brick` if unrecognised.
     pub wall_type: String,
+    /// Whether the maze perimeter is walled at the grid edge under an open sky
+    /// (enclosed skies always wall it). Default `true`.
+    pub perimeter_walls: bool,
     /// Door open-animation style. One of `swing`, `slide`, `portcullis`,
     /// `dissolve`. Safely degrades to `swing` if unrecognised.
     pub door_style: String,
@@ -476,6 +498,9 @@ pub struct Play3dConfigResponse {
     /// Number of health pickups (`'H'` cells) the generator auto-places.
     /// Clamped to `maze::MAX_HEALTH_COUNT` (= 8). `0` = no pickups.
     pub health_count: u32,
+    /// Number of treasure cells (`'T'`) the generator auto-places, dead-end-first
+    /// and type-weighted. Clamped to `maze::MAX_TREASURE_COUNT` (= 12). `0` = none.
+    pub treasure_count: u32,
     /// Enemy rig kind to spawn at every `'E'` cell. One of `goblin`,
     /// `ghost`. Safely degrades to `goblin` if unrecognised.
     pub enemy_type: String,
@@ -488,6 +513,54 @@ pub struct Play3dConfigResponse {
     /// Player's HP cap for this difficulty. Starting HP is set to this
     /// value.
     pub max_hp: u32,
+    /// Multi-level run settings. `levels.count == 1` (the default) is a
+    /// single-level game and the rest of this group is inert.
+    pub levels: LevelsResponse,
+}
+
+/// JSON shape of the multi-level run settings in [`Play3dConfigResponse`].
+/// Mirrors `crate::config::game::LevelsConfig`, renamed to `camelCase`.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LevelsResponse {
+    /// Number of stacked maze levels in a run (clamped to the renderer's
+    /// `MAX_LEVEL_COUNT`). `1` = a single-level game.
+    pub count: u32,
+    /// Interim-finish transition rig: `ladder`, `portal`, or `random`. Safely
+    /// degrades to `ladder` if unrecognised.
+    pub finish_type: String,
+    /// How difficulty changes as the player ascends: `same`, `easier`, or
+    /// `harder`. Safely degrades to `easier` if unrecognised.
+    pub difficulty_change: String,
+    /// Whether the player's bag resets at each level (`false` carries it
+    /// forward).
+    pub reset_bag: bool,
+    /// How a reduced upper level is positioned over the level below: `edge`,
+    /// `centre`, or `random`. Safely degrades to `edge` if unrecognised.
+    pub alignment: String,
+    /// When `true`, upper levels get progressively smaller footprints so the
+    /// stack opens up (centred/edged per `alignment`); `false` keeps every level
+    /// full-size. Operator-chosen, independent of `skyType`.
+    pub taper: bool,
+    /// When `true`, each level's perimeter walls are randomised independently;
+    /// when `false`, every level uses the difficulty's `perimeterWalls`.
+    pub perimeter_random: bool,
+    /// When `true`, a completed lower level's enemies are despawned once the
+    /// player climbs past it; when `false` they idle in place.
+    pub hide_completed_enemies: bool,
+    /// Optional scene override for the final (top) level. `null` when unset.
+    pub top: Option<TopLevelResponse>,
+}
+
+/// JSON shape of the optional top-level scene override in [`LevelsResponse`].
+/// Each field is `null` when the operator left it to inherit the base.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TopLevelResponse {
+    /// Sky type for the top level, or `null` to inherit the base.
+    pub sky_type: Option<String>,
+    /// Perimeter-walls flag for the top level, or `null` to inherit the base.
+    pub perimeter_walls: Option<bool>,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -556,6 +629,7 @@ pub async fn get_play3d_config(
         },
         sky_type: preset.sky_type.as_wire_str().to_string(),
         wall_type: preset.wall_type.as_wire_str().to_string(),
+        perimeter_walls: preset.perimeter_walls,
         door_style: preset.door_style.as_wire_str().to_string(),
         key_holder: preset.key_holder.as_wire_str().to_string(),
         door_count: preset.door_count,
@@ -563,10 +637,27 @@ pub async fn get_play3d_config(
         spare_keys: preset.spare_keys,
         enemy_count: preset.enemy_count,
         health_count: preset.health_count,
+        treasure_count: preset.treasure_count,
         enemy_type: preset.enemy_type.as_wire_str().to_string(),
         health_style: preset.health_style.as_wire_str().to_string(),
         enemy_move_period_ms: preset.enemy_move_period_ms,
         max_hp: preset.max_hp,
+        levels: LevelsResponse {
+            // Clamp to what the Bevy game can render so a misconfigured
+            // `count` never asks the client for more levels than it supports.
+            count: preset.levels.count.min(crate::config::game::MAX_LEVEL_COUNT),
+            finish_type: preset.levels.finish_type.as_wire_str().to_string(),
+            difficulty_change: preset.levels.difficulty_change.as_wire_str().to_string(),
+            reset_bag: preset.levels.reset_bag,
+            alignment: preset.levels.alignment.as_wire_str().to_string(),
+            taper: preset.levels.taper,
+            perimeter_random: preset.levels.perimeter_random,
+            hide_completed_enemies: preset.levels.hide_completed_enemies,
+            top: preset.levels.top.as_ref().map(|t| TopLevelResponse {
+                sky_type: t.sky_type.map(|s| s.as_wire_str().to_string()),
+                perimeter_walls: t.perimeter_walls,
+            }),
+        },
     }))
 }
 
@@ -681,6 +772,7 @@ impl SignupRequest {
                 deleted_at: None,
                 created_at: chrono::Utc::now(),
                 last_sign_in_at: None,
+                avatar_updated_at: None,
             }
         )
     }
@@ -1778,6 +1870,7 @@ impl CreateUserRequest {
                 deleted_at: None,
                 created_at: chrono::Utc::now(),
                 last_sign_in_at: None,
+                avatar_updated_at: None,
             }
         )
     }
@@ -2086,6 +2179,10 @@ pub async fn create_maze(
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
                 StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
                     Err(get_maze_too_many_features_error(keys, doors, max)),
+                StoreError::MazeHasTooManyObjects { kind, count, max } =>
+                    Err(get_maze_too_many_objects_error(kind, count, max)),
+                StoreError::MazeDefinitionTooLarge { bytes, max } =>
+                    Err(get_maze_definition_too_large_error(bytes, max)),
                 _ => Err(get_maze_create_internal_error(&err))
             }
         }
@@ -2184,6 +2281,10 @@ pub async fn update_maze(
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
                StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
                     Err(get_maze_too_many_features_error(keys, doors, max)),
+               StoreError::MazeHasTooManyObjects { kind, count, max } =>
+                    Err(get_maze_too_many_objects_error(kind, count, max)),
+               StoreError::MazeDefinitionTooLarge { bytes, max } =>
+                    Err(get_maze_definition_too_large_error(bytes, max)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }
         }

@@ -353,8 +353,9 @@ function makeGameObj(overrides: Partial<{
   visited_cells: () => Array<{ row: number; col: number }>
   keys: () => Array<{ row: number; col: number; id: number }>
   doors: () => Array<{ row: number; col: number; state: string }>
-  enemies: () => Array<{ row: number; col: number; id: number }>
+  enemies: () => Array<{ row: number; col: number; id: number; enemyType?: string }>
   health_pickups: () => Array<{ row: number; col: number; id: number }>
+  treasures: () => Array<{ row: number; col: number; style: string; value: number }>
 }> = {}) {
   return {
     player_row:       vi.fn().mockReturnValue(0),
@@ -366,12 +367,17 @@ function makeGameObj(overrides: Partial<{
     doors:            vi.fn().mockReturnValue([]),
     enemies:          vi.fn().mockReturnValue([]),
     health_pickups:   vi.fn().mockReturnValue([]),
+    treasures:        vi.fn().mockReturnValue([]),
     free:             vi.fn(),
     ...overrides,
   }
 }
 
-function renderGameGrid(game: ReturnType<typeof makeGameObj>, version = 0) {
+function renderGameGrid(
+  game: ReturnType<typeof makeGameObj>,
+  version = 0,
+  cellOverrides?: Map<string, never>,
+) {
   return render(
     <MazeGrid
       grid={GAME_GRID}
@@ -380,6 +386,7 @@ function renderGameGrid(game: ReturnType<typeof makeGameObj>, version = 0) {
       anchorCell={null}
       game={game as never}
       version={version}
+      cellOverrides={cellOverrides as never}
     />,
   )
 }
@@ -557,6 +564,42 @@ describe('MazeGrid game mode', () => {
   })
 })
 
+describe('MazeGrid game-mode variant sprites', () => {
+  it('renders the ghost sprite for a live enemy with a ghost rig', () => {
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 0, id: 0, enemyType: 'ghost' }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/ghost.svg')
+  })
+
+  it('renders the generic enemy sprite when the live enemy has no rig override', () => {
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 0, id: 0 }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/enemy.svg')
+  })
+
+  it('renders the potion sprite for an uncollected health cell with a potion rig', () => {
+    const game = makeGameObj({
+      health_pickups: vi.fn().mockReturnValue([{ row: 0, col: 1, id: 0 }]),
+    })
+    render(
+      <MazeGrid
+        grid={[['S', 'H', 'F']]}
+        solution={null}
+        activeCell={null}
+        anchorCell={null}
+        game={game as never}
+        version={1}
+        cellOverrides={new Map([['0,1', { type: 'H', healthStyle: 'potion' }]]) as never}
+      />,
+    )
+    expect(screen.getByAltText('Health')).toHaveAttribute('src', '/images/maze/potion.svg')
+  })
+})
+
 describe('MazeGrid game mode — keys & doors', () => {
   const KD_GRID = [['S', 'K', 'D', 'F']]
 
@@ -588,5 +631,61 @@ describe('MazeGrid game mode — keys & doors', () => {
     const game = makeGameObj({ doors: () => [{ row: 0, col: 2, state: 'open' }] })
     renderKD(game)
     expect(screen.queryByAltText('Door')).not.toBeInTheDocument()
+  })
+})
+
+describe('MazeGrid game mode — treasure', () => {
+  const T_GRID = [['S', 'T', 'F']]
+
+  function renderT(game: ReturnType<typeof makeGameObj>) {
+    return render(
+      <MazeGrid grid={T_GRID} solution={null} activeCell={null} anchorCell={null} game={game as never} version={1} />,
+    )
+  }
+
+  it('renders the per-style sprite for an uncollected treasure cell', () => {
+    const game = makeGameObj({ treasures: () => [{ row: 0, col: 1, style: 'gold', value: 100 }] })
+    renderT(game)
+    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/gold.svg')
+  })
+
+  it('renders the silver sprite for a default-style treasure cell', () => {
+    const game = makeGameObj({ treasures: () => [{ row: 0, col: 1, style: 'silver', value: 50 }] })
+    renderT(game)
+    expect(screen.getByAltText('Treasure')).toHaveAttribute('src', '/images/maze/silver.svg')
+  })
+
+  it('does not render treasure once collected (omitted from treasures())', () => {
+    const game = makeGameObj({ treasures: () => [] })
+    renderT(game)
+    expect(screen.queryByAltText('Treasure')).not.toBeInTheDocument()
+  })
+})
+
+describe('MazeGrid override badge + variant sprite (editor mode)', () => {
+  it('marks only the cells present in cellOverrides', () => {
+    renderGrid({ cellOverrides: new Map([['0,1', { type: 'E' }]]) })
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(1)
+  })
+
+  it('renders no badges when cellOverrides is omitted', () => {
+    renderGrid()
+    expect(screen.queryByLabelText('Has override')).not.toBeInTheDocument()
+  })
+
+  it('renders the variant sprite for an overridden enemy cell', () => {
+    renderGrid({
+      grid: [['E', ' ', 'F']],
+      cellOverrides: new Map([['0,0', { type: 'E', enemyType: 'ghost' }]]),
+    })
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/ghost.svg')
+  })
+
+  it('renders the generic sprite for a feature cell with no visual override', () => {
+    renderGrid({
+      grid: [['E', ' ', 'F']],
+      cellOverrides: new Map([['0,0', { type: 'E', damage: 3 }]]),
+    })
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/enemy.svg')
   })
 })

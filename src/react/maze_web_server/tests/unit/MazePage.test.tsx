@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { mockMazeAlpha, resetMockMazes } from '../../src/mocks/handlers'
+import { mockMazeAlpha, mockMazeEnemyGauntlet, resetMockMazes } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { MazePage } from '../../src/pages/MazePage'
 
@@ -16,6 +16,13 @@ const { mockGenerateMaze, mockSolveMaze } = vi.hoisted(() => ({
 vi.mock('../../src/wasm/mazeWasm', () => ({
   generateMaze: mockGenerateMaze,
   solveMaze: mockSolveMaze,
+  // Lightweight JS stand-ins for the WASM codec: split parses the full maze JSON and
+  // reports no overrides (mock mazes are pure-char); build echoes back the grid.
+  splitDefinition: vi.fn(async (json: string) => {
+    const parsed = JSON.parse(json) as { definition: { grid: string[][] } }
+    return { grid: parsed.definition.grid, overrides: [] }
+  }),
+  buildDefinitionWithOverrides: vi.fn(async (grid: string[][]) => ({ grid })),
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
   MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
 }))
@@ -42,6 +49,7 @@ const generatedDefinition = {
     [' ', ' ', ' ', ' '],
     [' ', ' ', ' ', 'F'],
   ],
+  overrides: [],
 }
 
 const solvePath = [{ row: 0, col: 0 }, { row: 1, col: 0 }, { row: 2, col: 0 }, { row: 2, col: 2 }]
@@ -1029,6 +1037,18 @@ describe('MazePage play', () => {
     expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toHaveTextContent('Save and play?')
   })
 
+  it('settings-only change prompts to save before playing (grid unchanged)', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Edit the game settings (not the grid) via the Settings toolbar button.
+    await userEvent.click(screen.getByRole('button', { name: 'Game settings' }))
+    const settings = await screen.findByRole('dialog', { name: /game settings/i })
+    await userEvent.selectOptions(within(settings).getByLabelText(/sky/i), 'day')
+    await userEvent.click(within(settings).getByRole('button', { name: 'Apply' }))
+    // The grid is unchanged, but the settings edit is unsaved → Play prompts.
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument()
+  })
+
   it('dirty maze: Cancel on confirm modal closes it without navigating', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByLabelText('Cell 1,1'))
@@ -1062,7 +1082,7 @@ describe('MazePage play', () => {
     expect(screen.getByRole('button', { name: 'Play in 3D' })).toBeInTheDocument()
   })
 
-  it('clean maze: Play in 3D opens the custom-launch modal, then Play navigates to /game/?id=...', async () => {
+  it('clean maze: Play in 3D opens the launch chooser, then Run navigates to /game/?id=...', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
 
     const locationStub = { href: '' }
@@ -1070,19 +1090,45 @@ describe('MazePage play', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
 
-    // Modal opens after the solvability check; no navigation yet.
+    // The launch chooser opens after the solvability check; no navigation yet.
     await waitFor(() =>
-      expect(screen.getByRole('dialog', { name: /Play 3D — customise launch/i })).toBeInTheDocument(),
+      expect(screen.getByRole('dialog', { name: /Play 3D —/i })).toBeInTheDocument(),
     )
     expect(mockSolveMaze).toHaveBeenCalled()
     expect(locationStub.href).toBe('')
 
-    // Clicking Play inside the modal triggers the navigation. Scope
-    // the query to the dialog so "Play" doesn't collide with the
-    // toolbar's "Play in 2D" / "Play in 3D" buttons.
-    const dialog = screen.getByRole('dialog', { name: /Play 3D — customise launch/i })
+    // Run launches with the maze's saved settings.
+    await userEvent.click(screen.getByRole('button', { name: /^Run$/ }))
+    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+  })
+
+  it('clean maze: Custom Run opens the settings modal, then Play navigates', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
+    await userEvent.click(await screen.findByRole('button', { name: /custom run/i }))
+
+    // The settings modal opens (play mode); clicking Play launches a one-off.
+    const dialog = await screen.findByRole('dialog', { name: /customise launch/i })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Play' }))
     await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+  })
+
+  it('Custom Run then Cancel returns to the launch chooser', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
+    await userEvent.click(await screen.findByRole('button', { name: /custom run/i }))
+
+    // Cancelling the settings modal returns to the chooser (Run is back),
+    // not to the editor.
+    const dialog = await screen.findByRole('dialog', { name: /customise launch/i })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('button', { name: /^Run$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: /customise launch/i })).toBeNull()
   })
 
   it('dirty maze: Play in 3D opens Unsaved Changes confirm modal', async () => {
@@ -1092,5 +1138,78 @@ describe('MazePage play', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
     expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toHaveTextContent('Save and play?')
+  })
+})
+
+describe('MazePage per-cell override panel', () => {
+  it('shows the override panel when a single feature cell is selected', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2') // grid ['S','E','E','E','F'] — (0,1) is 'E'
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    expect(screen.getByText('Enemy [1,2]')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Type' })).toBeInTheDocument()
+  })
+
+  it('hides the panel when a non-feature cell is selected', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,1') // (0,0) is 'S'
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument()
+  })
+
+  it('shows the two-tier wall panel for a single wall cell', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2') // (0,1) is 'E' — stamp it a wall, which keeps it selected
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    expect(screen.getByText('Wall [1,2]')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Type' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toBeInTheDocument()
+  })
+
+  // The gauntlet grid is ['S','E','E','E','F'] — cells 1,2 / 1,3 / 1,4 are all 'E'.
+  it('shows the panel + an Apply-to-all link for a uniform-type range', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2')) // anchor on (0,1) 'E'
+    fireEvent.click(screen.getByLabelText('Cell 1,4'), { shiftKey: true }) // extend to (0,3) — all 'E'
+    // Panel seeds from the top-left cell and flags the wider selection.
+    expect(screen.getByRole('heading', { name: /Enemy \[1,2\] \+2 more/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply to all 3 cells' })).toBeInTheDocument()
+  })
+
+  it('Apply to all stamps every cell in the selection', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    fireEvent.click(screen.getByLabelText('Cell 1,4'), { shiftKey: true })
+    // The live edit overrides only the top-left cell so far.
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'ghost')
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(1)
+    // Apply-to-all propagates it across the whole 3-cell block.
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to all 3 cells' }))
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(3)
+  })
+
+  it('Reset clears the override on every cell in the selection', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    fireEvent.click(screen.getByLabelText('Cell 1,4'), { shiftKey: true })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'ghost')
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to all 3 cells' }))
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(3)
+    // Reset clears the override across the whole selection, not just the top-left.
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }))
+    expect(screen.queryAllByLabelText('Has override')).toHaveLength(0)
+  })
+
+  it('hides the panel for a mixed-type selection', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2')) // (0,1) 'E'
+    fireEvent.click(screen.getByLabelText('Cell 1,5'), { shiftKey: true }) // extend to (0,4) 'F' — mixed
+    expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /apply to all/i })).not.toBeInTheDocument()
   })
 })

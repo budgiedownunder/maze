@@ -194,6 +194,30 @@ test.describe('MazeGamePage', () => {
     await expect(grid.getByAltText('Health')).toHaveCount(0)
   })
 
+  test('walking onto treasure auto-collects it and shows the style in the bag', async ({ page }) => {
+    // Treasure maze grid ['S','T','F']: the treasure cell shows the in-grid
+    // sprite and the bag starts empty. Walking onto it auto-collects (no button),
+    // the in-grid symbol disappears (rendered from the runtime's live treasure
+    // list, not the static grid char), and a silver bag chip appears.
+    await page.goto('/play/maze-treasure')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const grid = page.locator('.maze-grid-container')
+    const bag = page.locator('.maze-bag')
+
+    await expect(grid.getByAltText('Treasure')).toBeVisible()
+    await expect(bag).toContainText('empty')
+
+    // Step onto the treasure — auto-collected on walk-over.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+
+    // The in-grid treasure sprite is consumed and the bag shows a silver chip.
+    await expect(grid.getByAltText('Treasure')).toHaveCount(0)
+    await expect(bag.getByAltText('Silver treasure')).toBeVisible()
+    await expect(bag).toContainText('1')
+  })
+
   test('collecting a key opens a door and completes the maze', async ({ page }) => {
     // KeyDoor maze grid: ['S', 'K', 'D', 'F']
     await page.goto('/play/maze-keydoor')
@@ -285,16 +309,16 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByRole('button', { name: 'Play in 3D' })).toBeVisible()
   })
 
-  test('3D play button on Mazes list opens the custom-launch modal, then Play navigates to /game/?id=...', async ({ page }) => {
+  test('3D play button on Mazes list opens the launch chooser, then Run navigates to /game/?id=...', async ({ page }) => {
     await page.route(/\/game\//, route => route.fulfill({
       contentType: 'text/html',
       body: '<html><body>stub</body></html>',
     }))
     await page.goto('/mazes')
     await page.getByRole('button', { name: 'Play in 3D Alpha', exact: true }).click()
-    const modal = page.getByRole('dialog', { name: /Play 3D — customise launch/i })
-    await expect(modal).toBeVisible()
-    await modal.getByRole('button', { name: 'Play', exact: true }).click()
+    const chooser = page.getByRole('dialog', { name: /Play 3D —/i })
+    await expect(chooser).toBeVisible()
+    await chooser.getByRole('button', { name: 'Run', exact: true }).click()
     await page.waitForURL(/\/game\/\?id=/)
   })
 })
@@ -333,5 +357,38 @@ test.describe('MazeGamePage — mobile (Pixel 7)', () => {
     await page.getByRole('button', { name: 'Move right' }).click()
     await page.waitForTimeout(150)
     await expect(page.getByAltText('Player')).toBeVisible()
+  })
+})
+
+test.describe('MazeGamePage — per-cell variants', () => {
+  test('a ghost enemy override renders the ghost sprite in the 2D game', async ({ page }) => {
+    await login(page)
+    await page.goto('/play/maze-override')
+    await expect(page.getByAltText('Player')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('img[src*="ghost.svg"]').first()).toBeVisible({ timeout: 15000 })
+  })
+
+  test('static overrides (potion health, key, door) render in the 2D game', async ({ page }) => {
+    await login(page)
+    // maze-override-static stores potion-health / pedestal-key / swing-door cells.
+    await page.goto('/play/maze-override-static')
+    await expect(page.getByAltText('Player')).toBeVisible({ timeout: 15000 })
+    const grid = page.locator('.maze-grid-container')
+    // Health shows the potion variant (HUD uses health.svg, so match the grid by src).
+    await expect(grid.locator('img[src*="potion.svg"]')).toBeVisible({ timeout: 15000 })
+    // Key and door render their generic sprites (no 2D rig variants) — not empty.
+    await expect(grid.getByAltText('Key')).toBeVisible()
+    await expect(grid.getByAltText('Door')).toBeVisible()
+  })
+
+  test('maze game_settings drive the 2D base sprites (ghost enemy, lava wall) with no per-cell override', async ({ page }) => {
+    await login(page)
+    // maze-settings-display has game_settings enemyType=ghost / wallType=lava and NO
+    // per-cell overrides — the maze defaults alone must drive the 2D bases.
+    await page.goto('/play/maze-settings-display')
+    await expect(page.getByAltText('Player')).toBeVisible({ timeout: 15000 })
+    const grid = page.locator('.maze-grid-container')
+    await expect(grid.locator('img[src*="ghost.svg"]').first()).toBeVisible({ timeout: 15000 })
+    await expect(grid.locator('img[src*="lava.svg"]').first()).toBeVisible({ timeout: 15000 })
   })
 })

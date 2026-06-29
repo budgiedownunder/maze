@@ -48,7 +48,7 @@ x:DataType="viewmodel:MazeGameViewModel"
 
         <!-- Status block: LIFE heart row above the BAG row, mirroring React's
              paired status strip between the grid and the d-pad. -->
-        <VerticalStackLayout Grid.Row="1" Spacing="2" HorizontalOptions="Center" VerticalOptions="Center">
+        <VerticalStackLayout Grid.Row="1" Spacing="2" HorizontalOptions="Fill" VerticalOptions="Center">
 
         <!-- Centred LIFE heart row — one heart per MaxHp, dimmed when spent. -->
         <HorizontalStackLayout x:Name="HpStack"
@@ -68,30 +68,47 @@ x:DataType="viewmodel:MazeGameViewModel"
             </HorizontalStackLayout>
         </HorizontalStackLayout>
 
-        <!-- Centred bag row — no background; mirrors React's `.maze-bag`. -->
-        <HorizontalStackLayout x:Name="BagStack"
-                               HorizontalOptions="Center"
-                               VerticalOptions="Center"
-                               Padding="0,4"
-                               Spacing="6"
-                               IsVisible="False">
-            <Label Text="BAG" VerticalOptions="Center" FontSize="14" Opacity="0.8"/>
+        <!-- Bag row: the BAG label + all chips sit inline on one centred row; the outer
+             FlexLayout fills the width and wraps the (single-row) chip block onto the next
+             line only when the window is too narrow to fit it inline. The chips themselves
+             live in a non-wrapping HorizontalStackLayout so they never split per-item.
+             Mirrors the React bag. -->
+        <FlexLayout x:Name="BagStack"
+                    HorizontalOptions="Fill"
+                    VerticalOptions="Center"
+                    Wrap="Wrap"
+                    Direction="Row"
+                    JustifyContent="Center"
+                    AlignItems="Center"
+                    AlignContent="Center"
+                    Padding="0,4"
+                    IsVisible="False">
+            <Label Text="BAG" VerticalOptions="Center" FontSize="14" Opacity="0.8" Margin="0,0,6,0"/>
             <Label Text="empty"
                    VerticalOptions="Center"
                    FontSize="14"
                    FontAttributes="Italic"
                    Opacity="0.6"
+                   Margin="0,0,6,0"
                    IsVisible="{Binding IsBagEmpty}"/>
-            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Bag}"
-                                   Spacing="2"
+            <!-- Grouped [icon] × N chips, one per held item type (key + each collected
+                 treasure style), all on one row. -->
+            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding BagChips}"
+                                   Spacing="10"
                                    VerticalOptions="Center">
                 <BindableLayout.ItemTemplate>
-                    <DataTemplate>
-                        <Image Source="key.png" HeightRequest="24" WidthRequest="24" Aspect="AspectFit"/>
+                    <DataTemplate x:DataType="viewmodel:BagChip">
+                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                            <Image Source="{Binding IconSource}"
+                                   AutomationProperties.Name="{Binding AltText}"
+                                   HeightRequest="24" WidthRequest="24" Aspect="AspectFit"/>
+                            <Label Text="{Binding Count, StringFormat='×{0}'}"
+                                   VerticalOptions="Center" FontSize="14" Opacity="0.9"/>
+                        </HorizontalStackLayout>
                     </DataTemplate>
                 </BindableLayout.ItemTemplate>
             </HorizontalStackLayout>
-        </HorizontalStackLayout>
+        </FlexLayout>
 
         </VerticalStackLayout>
 

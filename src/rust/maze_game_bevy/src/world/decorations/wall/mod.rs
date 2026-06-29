@@ -4,9 +4,11 @@ pub(crate) mod rune;
 pub(crate) mod vent;
 
 use crate::state::GameConfig;
-use crate::world::walls::WALL_THICKNESS;
-use crate::world::{CELL_SIZE, HALF_CELL};
+use crate::world::walls::{is_non_occluding_wall, WALL_THICKNESS};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
+use maze::CellEntity;
+use std::collections::HashMap;
 
 #[derive(Component)]
 pub(crate) struct WallDecoration;
@@ -108,25 +110,41 @@ fn spawn_decoration(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_wall_decorations_for_cell(
     commands: &mut Commands,
     assets: &WallDecorationAssets,
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     r: usize,
     c: usize,
     config: &GameConfig,
+    placement: LevelPlacement,
 ) {
     if !config.landmarks.wall_decorations {
         return;
     }
     let rows = grid.len();
     let cols = grid[r].len();
-    let x = c as f32 * CELL_SIZE + 1.0;
-    let z = r as f32 * CELL_SIZE + 1.0;
+    let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
+    let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
+    let dec_y = placement.world_y(DECORATION_Y);
     let seed = config.seed;
 
+    // A decoration sits on a panel, so it's drawn only where a solid panel is —
+    // against a solid `'W'` wall, or at the grid edge when the perimeter is walled.
+    // A non-occluding neighbour (water / lava / iron fence) has its panel
+    // suppressed; so does an open-sky grid edge with perimeter walls off — either
+    // way no panel, so no decoration (otherwise it would float in mid-air).
+    let solid_wall = |nr: usize, nc: usize| {
+        grid[nr][nc] == 'W' && !is_non_occluding_wall(grid, cell_entities, config, nr, nc)
+    };
+    // The grid edge carries a panel only when the maze is walled in there:
+    // always under an enclosed sky, otherwise per `GameConfig::perimeter_walls`.
+    let walled_edge = config.sky_type.is_enclosed() || config.perimeter_walls;
+
     // North face
-    if r == 0 || grid[r - 1][c] == 'W' {
+    if (r == 0 && walled_edge) || (r > 0 && solid_wall(r - 1, c)) {
         spawn_decoration(
             commands,
             assets,
@@ -135,11 +153,11 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             0,
             seed,
             assets.ns_mesh.clone(),
-            Vec3::new(x, DECORATION_Y, z - HALF_CELL + DECORATION_OFFSET),
+            Vec3::new(x, dec_y, z - HALF_CELL + DECORATION_OFFSET),
         );
     }
     // South face
-    if r + 1 >= rows || grid[r + 1][c] == 'W' {
+    if (r + 1 >= rows && walled_edge) || (r + 1 < rows && solid_wall(r + 1, c)) {
         spawn_decoration(
             commands,
             assets,
@@ -148,11 +166,11 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             1,
             seed,
             assets.ns_mesh.clone(),
-            Vec3::new(x, DECORATION_Y, z + HALF_CELL - DECORATION_OFFSET),
+            Vec3::new(x, dec_y, z + HALF_CELL - DECORATION_OFFSET),
         );
     }
     // East face
-    if c + 1 >= cols || grid[r][c + 1] == 'W' {
+    if (c + 1 >= cols && walled_edge) || (c + 1 < cols && solid_wall(r, c + 1)) {
         spawn_decoration(
             commands,
             assets,
@@ -161,11 +179,11 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             2,
             seed,
             assets.ew_mesh.clone(),
-            Vec3::new(x + HALF_CELL - DECORATION_OFFSET, DECORATION_Y, z),
+            Vec3::new(x + HALF_CELL - DECORATION_OFFSET, dec_y, z),
         );
     }
     // West face
-    if c == 0 || grid[r][c - 1] == 'W' {
+    if (c == 0 && walled_edge) || (c > 0 && solid_wall(r, c - 1)) {
         spawn_decoration(
             commands,
             assets,
@@ -174,7 +192,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
             3,
             seed,
             assets.ew_mesh.clone(),
-            Vec3::new(x - HALF_CELL + DECORATION_OFFSET, DECORATION_Y, z),
+            Vec3::new(x - HALF_CELL + DECORATION_OFFSET, dec_y, z),
         );
     }
 }

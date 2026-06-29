@@ -85,6 +85,10 @@ namespace Maze.Maui.App
                 builder.Services.AddSingleton<IMazeService, MockMazeService>();
             else
                 builder.Services.AddSingleton<IMazeService, MazeHttpClientService>();
+            builder.Services.AddSingleton<IScoresService, ScoresHttpClientService>();
+            builder.Services.AddSingleton<IAvatarService, AvatarHttpClientService>();
+            builder.Services.AddSingleton<IImagePickerService, ImagePickerService>();
+            builder.Services.AddSingleton<IGameConfigService, GameConfigHttpClientService>();
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
             builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
@@ -96,6 +100,7 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<ForgotPasswordViewModel>();
             builder.Services.AddSingleton<HomeViewModel>();
             builder.Services.AddSingleton<MazesViewModel>();
+            builder.Services.AddTransient<LeaderboardsViewModel>();
             builder.Services.AddTransient<MazeViewModel>();
             builder.Services.AddTransient<MazeGameViewModel>();
             builder.Services.AddSingleton<AccountViewModel>();
@@ -108,6 +113,7 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<AppShell>();
             builder.Services.AddSingleton<HomePage>();
             builder.Services.AddSingleton<MazesPage>();
+            builder.Services.AddTransient<LeaderboardsPage>();
             builder.Services.AddTransient<MazePage>();
             builder.Services.AddTransient<MazeGamePage>();
             builder.Services.AddTransient<Play3dGamePage>();

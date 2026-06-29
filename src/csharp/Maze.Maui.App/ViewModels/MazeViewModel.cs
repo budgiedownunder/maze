@@ -90,6 +90,11 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Event handler</returns>
         public event EventHandler? SetHealthRequested;
         /// <summary>
+        /// Represents a set treasure cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetTreasureRequested;
+        /// <summary>
         /// Represents a clear cells requested event handler
         /// </summary>
         /// <returns>Event handler</returns>
@@ -134,6 +139,14 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <returns>Boolean value</returns>
         public bool IsDirty { get; set; }
+        /// <summary>
+        /// Indicates whether the maze's 3D game settings have unsaved edits. Tracked
+        /// separately from <see cref="IsDirty"/> (the grid/definition dirty flag) so a
+        /// settings-only change still enables Save and triggers the save-on-play prompt —
+        /// mirroring the React client's separate <c>gameSettingsDirty</c> flag.
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool GameSettingsDirty { get; set; }
         /// <summary>
         /// The maze item currently being displayed
         /// </summary>
@@ -218,6 +231,12 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Boolean value</returns>
         [ObservableProperty]
         protected bool canSetHealth = false;
+        /// <summary>
+        /// Indicates whether treasure cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetTreasure = false;
         /// <summary>
         /// Indicates whether the currently selected cells can be cleared
         /// </summary>
@@ -415,6 +434,16 @@ namespace Maze.Maui.App.ViewModels
             UpdateCanSaveRefresh(true);
         }
         /// <summary>
+        /// Set treasure cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetTreasureAsync()
+        {
+            await RunRequest(SetTreasureRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
         /// Clear selected cell content command
         /// </summary>
         /// <returns>Task</returns>
@@ -479,19 +508,19 @@ namespace Maze.Maui.App.ViewModels
             await RunRequest(WalkSolutionRequested);
         }
         /// <summary>
-        /// Saves the given maze definition. Refuses the save up-front when the
-        /// grid carries more key + door cells than the key-aware
-        /// solver can handle (<see cref="Api.Maze.MaxTotalFeatures"/>)
+        /// Saves the given maze definition. Refuses the save up-front when the grid
+        /// exceeds a cap: more key + door cells than the key-aware solver can handle
+        /// (<see cref="Api.Maze.MaxTotalFeatures"/>), or more enemy / health /
+        /// treasure cells than their per-type limits
+        /// (<see cref="Api.Maze.MaxEnemyCount"/>, <see cref="Api.Maze.MaxHealthCount"/>,
+        /// <see cref="Api.Maze.MaxTreasureCount"/>).
         /// </summary>
         /// <param name="definition">Maze definition</param>
         /// <returns>Task containing a boolean result</returns>
         public async Task<bool> SaveMaze(Api.Maze definition)
         {
-            // Only key + door cells are capped here: they drive the key-aware
-            // solver's feature budget. Enemy and health cells map to empty
-            // passages for the solver and carry no such budget, so there is
-            // deliberately no per-maze enemy/health cap — the editor allows any
-            // number of them.
+            // Keys + doors share one budget: together they drive the key-aware
+            // solver's feature mask (Api.Maze.MaxTotalFeatures).
             (uint keys, uint doors) = Utils.MazeCellCounter.CountKeysAndDoors(definition);
             if (keys + doors > Api.Maze.MaxTotalFeatures)
             {
@@ -502,6 +531,31 @@ namespace Maze.Maui.App.ViewModels
                     "Remove some key or door cells before saving.",
                     "OK");
                 return false;
+            }
+
+            // Enemy, health and treasure cells are each capped to the same
+            // per-type limit the generator places and the server enforces on save,
+            // so a hand-authored maze cannot (for example) stack hundreds of
+            // treasure chests and overwhelm the 3D renderer. Refuse over-cap
+            // up-front with a clear message rather than letting the save fail with
+            // a raw server error.
+            foreach ((Api.Maze.CellType type, uint max, string label) in new[]
+            {
+                (Api.Maze.CellType.Enemy, Api.Maze.MaxEnemyCount, "enemies"),
+                (Api.Maze.CellType.Health, Api.Maze.MaxHealthCount, "health pickups"),
+                (Api.Maze.CellType.Treasure, Api.Maze.MaxTreasureCount, "treasure items"),
+            })
+            {
+                uint count = Utils.MazeCellCounter.CountCellsOfType(definition, type);
+                if (count > max)
+                {
+                    await _dialogService.ShowAlert(
+                        "Cannot save",
+                        $"This maze has {count} {label}, over the limit of {max}. " +
+                        $"Remove some {label} before saving.",
+                        "OK");
+                    return false;
+                }
             }
 
             bool saved = false;
@@ -541,7 +595,8 @@ namespace Maze.Maui.App.ViewModels
                 MazeItem item = new MazeItem
                 {
                     Name = name,
-                    Definition = definition
+                    Definition = definition,
+                    GameSettings = MazeItem.GameSettings
                 };
 
                 await _mazeService.CreateMazeItem(item);
@@ -564,7 +619,8 @@ namespace Maze.Maui.App.ViewModels
             {
                 ID = MazeItem.ID,
                 Name = MazeItem.Name,
-                Definition = definition
+                Definition = definition,
+                GameSettings = MazeItem.GameSettings
             };
             await _mazeService.UpdateMazeItem(item);
             MazeItem.Definition = definition;
@@ -594,6 +650,7 @@ namespace Maze.Maui.App.ViewModels
                     {
                         MazeItem.Name = item?.Name ?? "";
                         MazeItem.Definition = item?.Definition ?? new Api.Maze(1, 1);
+                        MazeItem.GameSettings = item?.GameSettings;
                         UpdateCanSaveRefresh(false);
                         refreshed = true;
                     }
@@ -614,15 +671,57 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         public void NotifyMazeChanged() => UpdateCanSaveRefresh(true);
         /// <summary>
-        /// Updates the `CanSave`/`CanRefresh` property states for the given dirty state
+        /// Applies edited 3D game settings to the current maze and marks it dirty,
+        /// so the change is persisted on the next Save (the settings ride the maze).
+        /// </summary>
+        /// <param name="settings">The chosen game settings</param>
+        public void ApplyGameSettings(MazeGameSettings settings)
+        {
+            MazeItem.GameSettings = settings;
+            GameSettingsDirty = true;
+            RefreshSaveState();
+        }
+        /// <summary>
+        /// Updates the grid/definition dirty state and recomputes the `CanSave`/`CanRefresh`
+        /// states. A save/refresh (<paramref name="dirty"/> == false) persists or reloads the
+        /// whole maze — including its game settings — so it also clears the separate
+        /// game-settings dirty flag.
         /// </summary>
         /// <returns>Nothing</returns>
         private void UpdateCanSaveRefresh(bool dirty)
         {
             IsDirty = dirty;
+            if (!dirty)
+                GameSettingsDirty = false;
+            RefreshSaveState();
+        }
+        /// <summary>
+        /// Recomputes the `CanSave`/`CanRefresh` states from the current dirty flags. Save is
+        /// enabled when either the grid/definition or the game settings have unsaved edits
+        /// (and the view model is not busy).
+        /// </summary>
+        /// <returns>Nothing</returns>
+        private void RefreshSaveState()
+        {
+            bool hasUnsavedWork = (IsDirty || GameSettingsDirty) && !IsBusy;
             if (IsStored)
-                CanRefresh = IsDirty && !IsBusy;
-            CanSave = IsDirty && !IsBusy;
+                CanRefresh = hasUnsavedWork;
+            CanSave = hasUnsavedWork;
+        }
+        /// <summary>
+        /// Reacts to <see cref="BaseViewModel.IsBusy"/> changes. Because save-state is gated on
+        /// <c>!IsBusy</c>, a transient busy blip would otherwise strand <c>CanSave</c> at the
+        /// value computed while busy. (The game-settings popup closes via a Shell navigation,
+        /// which fires <c>MazePage.OnNavigatedTo</c> and flips <c>IsBusy</c> on for ~300ms; a
+        /// settings edit applied inside that window would not enable Save.) Recomputing the
+        /// save-state whenever <c>IsBusy</c> changes keeps it consistent once busy clears.
+        /// </summary>
+        /// <param name="e">The changed-property arguments</param>
+        protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            base.OnPropertyChanged(e);
+            if (e.PropertyName == nameof(IsBusy))
+                RefreshSaveState();
         }
         /// <summary>
         /// Runs the given event handler request

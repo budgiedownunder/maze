@@ -2,7 +2,10 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
-import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
+import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups, getTreasures } from '../wasm/mazeWasm'
+import { cellSprite, enemyRigHasSprite } from '../utils/cellSprite'
+import type { CellEntity, EnemyType, TreasureStyle } from '../types/cellEntities'
+import type { MazeGameSettings } from '../utils/mazeGameSettings'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -23,17 +26,15 @@ interface MazeGridProps {
   game?: MazeGameWasm | null
   version?: number
   cellSize?: number
-}
-
-function cellImage(cell: string): { src: string; alt: string } | null {
-  if (cell === 'W') return { src: '/images/maze/wall.png', alt: 'Wall' }
-  if (cell === 'S') return { src: '/images/maze/start_flag.png', alt: 'Start' }
-  if (cell === 'F') return { src: '/images/maze/finish_flag.png', alt: 'Finish' }
-  if (cell === 'K') return { src: '/images/maze/key.svg', alt: 'Key' }
-  if (cell === 'D') return { src: '/images/maze/door.svg', alt: 'Door' }
-  if (cell === 'E') return { src: '/images/maze/enemy.svg', alt: 'Enemy' }
-  if (cell === 'H') return { src: '/images/maze/health.svg', alt: 'Health' }
-  return null
+  // Editor mode only: per-cell overrides keyed by "row,col". Drives the variant sprite
+  // (e.g. ghost/potion) and a small corner badge so authored overrides — including
+  // numeric-only ones with no distinct sprite — are visible at a glance. Omitted in
+  // game mode (the game resolves its own live variants).
+  cellOverrides?: Map<string, CellEntity>
+  // The maze's persisted game settings. Supplies the base sprite for a cell with no
+  // per-cell visual override (wall / enemy / health default), so the grid reflects the
+  // maze's authored 2D look. Omitted ⇒ the generic base sprites.
+  gameSettings?: MazeGameSettings
 }
 
 const FOOTSTEP_IMAGES: Record<string, string> = {
@@ -125,7 +126,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE, cellOverrides, gameSettings },
     ref,
   ) {
     const rows = grid.length
@@ -165,6 +166,18 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       return new Set(getHealthPickups(game).map(h => `${h.row},${h.col}`))
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Live (uncollected) treasure cells, keyed by "row,col" → style. Treasure is
+    // auto-collected on walk-over, clearing the engine cell, but the static grid
+    // char never changes — so in game mode a `'T'` cell renders only while it is
+    // still in the runtime's treasure list, and its sprite follows the live style.
+    // Once collected, the cell drops from the list and the symbol disappears.
+    const treasureStyleByCell = useMemo(() => {
+      if (!game) return null
+      const map = new Map<string, TreasureStyle>()
+      for (const t of getTreasures(game)) map.set(`${t.row},${t.col}`, t.style)
+      return map
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
     // Live enemy positions, counted per cell. The static grid char `'E'` is
     // the spawn marker only — the maze runtime never rewrites it as the
     // enemy walks — so in game mode the spawn-cell `'E'` is suppressed and
@@ -179,6 +192,23 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         counts.set(key, (counts.get(key) ?? 0) + 1)
       }
       return counts
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Per-cell live enemy rig, so the overlay sprite reflects a `enemyType` override
+    // (e.g. ghost). On a cell shared by differing rigs, a distinctive rig (ghost) takes
+    // priority over the default goblin so the special enemy is surfaced; otherwise the
+    // first enemy wins. `undefined` = default rig. The override rides the live enemy (it
+    // moves), not the static spawn cell.
+    const enemyTypeByCell = useMemo(() => {
+      if (!game) return null
+      const types = new Map<string, EnemyType | undefined>()
+      for (const e of getEnemies(game)) {
+        const key = `${e.row},${e.col}`
+        if (!types.has(key) || (enemyRigHasSprite(e.enemyType) && !enemyRigHasSprite(types.get(key)))) {
+          types.set(key, e.enemyType)
+        }
+      }
+      return types
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const solutionMap = useMemo(
@@ -460,9 +490,15 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const isWalker = walkInfo?.walkerKey === key
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
-                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H'
+                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H' || cell === 'T'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
-                  let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
+                  // Per-cell variant sprite (ghost/potion) in both editor and game
+                  // mode. The static cells (health/key/door) read their rig from
+                  // `cellOverrides`; the moving enemy's rig is handled by the overlay
+                  // below (its spawn `'E'` is suppressed in game mode).
+                  let img = (isWalker || isGamePlayer)
+                    ? null
+                    : cellSprite(cell, cellOverrides?.get(key), gameSettings)
                   let imgStyle: React.CSSProperties | undefined
                   // Game mode: a collected key disappears, an open door disappears, and
                   // a door that is opening is dimmed. A consumed health pickup
@@ -481,10 +517,19 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       img = null
                     } else if (cell === 'H') {
                       if (!healthCells?.has(key)) img = null
+                    } else if (cell === 'T') {
+                      // Collected treasure drops from the live list → hide it;
+                      // otherwise render the live style's sprite.
+                      const style = treasureStyleByCell?.get(key)
+                      img = style ? cellSprite('T', { type: 'T', style }, gameSettings) : null
                     }
                   }
                   const enemyCount = game !== null && game !== undefined ? (enemyCountByCell?.get(key) ?? 0) : 0
                   const hasEnemy = enemyCount > 0
+                  // Live enemy overlay sprite, honouring a per-cell `enemyType` rig.
+                  const enemyType = enemyTypeByCell?.get(key)
+                  const enemySrc = cellSprite('E', enemyType ? { type: 'E', enemyType } : undefined, gameSettings)?.src
+                    ?? '/images/maze/enemy.svg'
                   return (
                     <td
                       key={`cell-${r}-${c}`}
@@ -522,7 +567,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                           top-right corner surfaces stacks of 2+ enemies. */}
                       {hasEnemy && !isGamePlayer && (
                         <>
-                          <img src="/images/maze/enemy.svg" alt="Enemy"
+                          <img src={enemySrc} alt="Enemy"
                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                           {enemyCount > 1 && (
                             <span className="maze-cell-enemy-stack-count" aria-label={`${enemyCount} enemies`}>
@@ -538,7 +583,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                           count chip in the top-right corner surfaces the
                           count when more than one enemy is piled up. */}
                       {isGamePlayer && hasEnemy && (
-                        <img src="/images/maze/enemy.svg" alt={enemyCount === 1 ? 'Enemy on player cell' : `${enemyCount} enemies on player cell`}
+                        <img src={enemySrc} alt={enemyCount === 1 ? 'Enemy on player cell' : `${enemyCount} enemies on player cell`}
                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.5, pointerEvents: 'none' }} />
                       )}
                       {isGamePlayer && (
@@ -553,6 +598,10 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                         >
                           {enemyCount}
                         </span>
+                      )}
+                      {/* Editor mode: mark cells that carry a per-cell override. */}
+                      {!game && cellOverrides?.has(key) && (
+                        <span className="maze-cell-override-badge" aria-label="Has override" title="Has override" />
                       )}
                     </td>
                   )

@@ -1,4 +1,5 @@
 import init, { MazeWasm, GenerationAlgorithmWasm, MazeGameWasm, DirectionWasm } from 'maze_wasm'
+import type { CellEntity, CellOverride, CanonicalMazeDefinition, EnemyType, TreasureStyle } from '../types/cellEntities'
 
 export interface MazeDefinition {
   grid: string[][]
@@ -17,6 +18,7 @@ export interface GenerateOptions {
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
   enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
   healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
+  treasureCount: number // number of treasure cells to auto-place dead-end-first, type-weighted; 0 = none
 }
 
 let initialized = false
@@ -37,7 +39,9 @@ function toError(ex: unknown): Error {
   return new Error(typeof ex === 'string' ? ex : 'Unknown error.')
 }
 
-export async function generateMaze(options: GenerateOptions): Promise<MazeDefinition> {
+export async function generateMaze(
+  options: GenerateOptions,
+): Promise<{ grid: string[][]; overrides: CellOverride[] }> {
   await ensureInit()
   const maze = new MazeWasm()
   try {
@@ -59,10 +63,12 @@ export async function generateMaze(options: GenerateOptions): Promise<MazeDefini
         options.spareKeys,
         options.enemyCount,
         options.healthCount,
+        options.treasureCount,
       )
     } catch (ex) { throw toError(ex) }
-    const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }
-    return parsed.definition
+    // The generator emits per-cell overrides (e.g. a treasure's style), so read
+    // the result through the same codec as load — not the raw char-or-array grid.
+    return readGridAndOverrides(maze)
   } finally {
     maze.free()
   }
@@ -85,6 +91,91 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
       } finally {
         solution.free()
       }
+    } catch (ex) { throw toError(ex) }
+  } finally {
+    maze.free()
+  }
+}
+
+// ── Per-cell override (cell-entity) codec ───────────────────────────────────────
+//
+// A maze cell carries an optional override that layers non-default characteristics
+// on a feature cell (enemy / health / key / door). On the wire a cell is either a
+// bare char (default characteristics) or an array-of-one entity object; that
+// char-or-array form is known only to the Rust serializer. JavaScript never parses
+// or builds it — it works with a pure-char grid plus a sparse list of single-entity
+// override objects (the `CellEntity` / `CellOverride` types in `utils/cellEntities`),
+// translating between the two through the MazeWasm methods below.
+
+// MazeCellTypeWasm ordinal → char. Order matches the enum in wasm_common.rs
+// (Empty, Start, Finish, Wall, Key, Door, Enemy, Health, Treasure).
+const CELL_TYPE_CHARS = [' ', 'S', 'F', 'W', 'K', 'D', 'E', 'H', 'T'] as const
+
+/**
+ * Reads a live `MazeWasm` into a pure-char grid plus a sparse list of per-cell
+ * overrides. The cell type comes from the typed accessor `get_cell().cell_type`
+ * and the override from `get_cell_entity()`, so JavaScript never inspects the
+ * char-or-array grid form. Shared by `splitDefinition` (load) and `generateMaze`
+ * (generation) — the generator emits overrides too (e.g. a treasure's style).
+ */
+function readGridAndOverrides(maze: MazeWasm): { grid: string[][]; overrides: CellOverride[] } {
+  const rows = maze.get_row_count()
+  const cols = maze.get_col_count()
+  const grid: string[][] = []
+  const overrides: CellOverride[] = []
+  for (let r = 0; r < rows; r++) {
+    const row: string[] = []
+    for (let c = 0; c < cols; c++) {
+      const cellType = (maze.get_cell(r, c) as { cell_type: number }).cell_type
+      row.push(CELL_TYPE_CHARS[cellType] ?? ' ')
+      const entity = maze.get_cell_entity(r, c) as CellEntity | null
+      if (entity !== null) overrides.push({ row: r, col: c, entity })
+    }
+    grid.push(row)
+  }
+  return { grid, overrides }
+}
+
+/**
+ * Splits a full maze JSON string (`{id, name, definition: {grid}}`) into a pure-char
+ * grid plus a sparse list of per-cell overrides.
+ */
+export async function splitDefinition(
+  fullMazeJson: string,
+): Promise<{ grid: string[][]; overrides: CellOverride[] }> {
+  await ensureInit()
+  const maze = new MazeWasm()
+  try {
+    try {
+      maze.from_json(fullMazeJson)
+      return readGridAndOverrides(maze)
+    } catch (ex) { throw toError(ex) }
+  } finally {
+    maze.free()
+  }
+}
+
+/**
+ * Builds the canonical maze definition (bare char unless overridden) from a pure-char
+ * grid plus a list of per-cell overrides. The char-or-array cell form is emitted by
+ * Rust's serializer via `to_json()`; JavaScript only ever supplies a plain-char grid
+ * and single-entity objects. Each override's `type` must match its grid cell's char.
+ * A field-less override (no fields beyond `type`) serialises back to a bare char —
+ * the data-model layer normalises it away — so callers needn't pre-filter them.
+ */
+export async function buildDefinitionWithOverrides(
+  grid: string[][],
+  overrides: CellOverride[],
+): Promise<CanonicalMazeDefinition> {
+  await ensureInit()
+  const maze = new MazeWasm()
+  try {
+    try {
+      maze.from_json(JSON.stringify({ id: '', name: '', definition: { grid } }))
+      for (const { row, col, entity } of overrides) {
+        maze.set_cell_entity(row, col, entity)
+      }
+      return (JSON.parse(maze.to_json()) as { definition: CanonicalMazeDefinition }).definition
     } catch (ex) { throw toError(ex) }
   } finally {
     maze.free()
@@ -138,8 +229,9 @@ export const MazeGameEventType = {
   EnemyMoved:      'enemyMoved',
   PlayerDamaged:   'playerDamaged',
   PlayerHealed:    'playerHealed',
-  PlayerNotHealed: 'playerNotHealed',
-  KeyCollected:    'keyCollected',
+  PlayerNotHealed:   'playerNotHealed',
+  KeyCollected:      'keyCollected',
+  TreasureCollected: 'treasureCollected',
 } as const
 export type MazeGameEventType = typeof MazeGameEventType[keyof typeof MazeGameEventType]
 
@@ -159,16 +251,22 @@ export type MazeBagItemType = typeof MazeBagItemType[keyof typeof MazeBagItemTyp
 // Object shapes returned by the MazeGameWasm accessors.
 export interface MazeDoor { row: number; col: number; state: MazeDoorState }
 export interface MazeKeyCell { row: number; col: number; id: number }
-export interface MazeEnemy { row: number; col: number; id: number }
+export interface MazeEnemy { row: number; col: number; id: number; enemyType?: EnemyType }
 export interface MazeHealthPickup { row: number; col: number; id: number }
+// An uncollected treasure cell: `style` drives the rendered sprite, `value` is the
+// resolved score reward (the per-cell override else the style's default).
+export interface MazeTreasureCell { row: number; col: number; style: TreasureStyle; value: number }
+// A per-style tally of treasure collected over the run, for the bag display.
+export interface MazeCollectedTreasure { style: TreasureStyle; count: number }
 export type MazeBagItem = { type: typeof MazeBagItemType.Key; id: number }
 export type MazeGameEvent =
-  | { type: typeof MazeGameEventType.DoorOpened;      row: number; col: number }
-  | { type: typeof MazeGameEventType.EnemyMoved;      id:  number; row: number; col: number }
-  | { type: typeof MazeGameEventType.PlayerDamaged;   hpAfter: number }
-  | { type: typeof MazeGameEventType.PlayerHealed;    hpAfter: number; row: number; col: number }
-  | { type: typeof MazeGameEventType.PlayerNotHealed; row: number; col: number; reason: MazePlayerNotHealedReason; message: string }
-  | { type: typeof MazeGameEventType.KeyCollected;    id:  number; row: number; col: number }
+  | { type: typeof MazeGameEventType.DoorOpened;        row: number; col: number }
+  | { type: typeof MazeGameEventType.EnemyMoved;        id:  number; row: number; col: number }
+  | { type: typeof MazeGameEventType.PlayerDamaged;     hpAfter: number }
+  | { type: typeof MazeGameEventType.PlayerHealed;      hpAfter: number; row: number; col: number }
+  | { type: typeof MazeGameEventType.PlayerNotHealed;   row: number; col: number; reason: MazePlayerNotHealedReason; message: string }
+  | { type: typeof MazeGameEventType.KeyCollected;      id:  number; row: number; col: number }
+  | { type: typeof MazeGameEventType.TreasureCollected; style: TreasureStyle; value: number; row: number; col: number }
 
 export type { MazeGameWasm }
 
@@ -219,6 +317,16 @@ export function getHealthPickups(game: MazeGameWasm): MazeHealthPickup[] {
   return game.health_pickups() as unknown as MazeHealthPickup[]
 }
 
+/** Returns the uncollected treasure cells in row-major order, each with its style + reward value. */
+export function getTreasures(game: MazeGameWasm): MazeTreasureCell[] {
+  return game.treasures() as unknown as MazeTreasureCell[]
+}
+
+/** Returns the treasure collected so far, grouped per style (ascending value; zero-count omitted). */
+export function getCollectedTreasure(game: MazeGameWasm): MazeCollectedTreasure[] {
+  return game.collected_treasure() as unknown as MazeCollectedTreasure[]
+}
+
 /** Returns the player's current HP. */
 export function getHp(game: MazeGameWasm): number {
   return game.hp()
@@ -227,6 +335,24 @@ export function getHp(game: MazeGameWasm): number {
 /** Returns the player's maximum HP. */
 export function getMaxHp(game: MazeGameWasm): number {
   return game.max_hp()
+}
+
+/**
+ * Returns the static maze grid as a pure-char `string[][]` (overridden cells come back
+ * as their bare char). Read from the live game object so the page never needs a second
+ * WASM instance or to parse the char-or-array wire form.
+ */
+export function getGameGrid(game: MazeGameWasm): string[][] {
+  return game.grid() as unknown as string[][]
+}
+
+/**
+ * Returns the game's per-cell overrides as `{ row, col, entity }[]`. The renderer uses
+ * these for static visual rigs (e.g. potion health); the moving enemy's rig rides the
+ * live enemy from `getEnemies()`.
+ */
+export function getGameCellOverrides(game: MazeGameWasm): CellOverride[] {
+  return game.cell_overrides() as unknown as CellOverride[]
 }
 
 /**

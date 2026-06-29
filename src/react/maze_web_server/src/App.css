@@ -167,7 +167,9 @@
 :root[data-theme="dark"] .btn-icon img,
 :root:not([data-theme="light"]) .btn-icon img,
 :root[data-theme="dark"] .maze-item-action img,
-:root:not([data-theme="light"]) .maze-item-action img {
+:root:not([data-theme="light"]) .maze-item-action img,
+:root[data-theme="dark"] .leaderboard-reset img,
+:root:not([data-theme="light"]) .leaderboard-reset img {
   filter: invert(1);
 }
 
@@ -670,6 +672,18 @@
   font-size: 1.1rem;
 }
 
+.app-header-title--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.app-header-title-icon {
+  height: 1.5em;
+  width: auto;
+  display: block;
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -689,6 +703,79 @@
 
 .theme-toggle:hover {
   background: var(--surface-hover);
+}
+
+/* Signed-in user's avatar in the header — a quiet link to the account page.
+   The username is surfaced as the hover tooltip (and the avatar's accessible
+   name), not as visible text. */
+.header-avatar-link {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 0;
+}
+
+.header-avatar-link:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Circular user avatar (header, leaderboard rows, account page). The image is
+   square; the round frame + cover keep any aspect ratio looking right. */
+.avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-hover);
+  border: 1px solid #000;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Player cell on a leaderboard: avatar + name on one line. */
+.leaderboard-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Account page avatar section: an "Avatar" title above the row, with the large
+   avatar on the left and its action buttons stacked vertically to its right. */
+/* Section heading ("Profile"), matching the Email Addresses panel's title. */
+.account-section-title {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.account-avatar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.account-avatar-button {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.account-avatar-button:disabled {
+  cursor: default;
+}
+
+.account-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .auth-theme-toggle {
@@ -842,10 +929,19 @@
 .home-tile-img {
   width: 140px;
   height: 140px;
+  box-sizing: border-box;
   object-fit: cover;
   flex-shrink: 0;
   border: 1px solid var(--border);
   border-radius: 0.375rem;
+}
+
+/* Raster tile art (Play 3D, Mazes) fills its square edge-to-edge; inset it so
+   it floats within the framed box, matching the trophy icon's whitespace.
+   (Fixed px, not %: padding percentages resolve against the parent's width.) */
+.home-tile-img--photo {
+  padding: 1.75rem;
+  object-fit: contain;
 }
 
 .home-tile-text {
@@ -871,6 +967,9 @@
   .home-tile-img {
     width: 96px;
     height: 96px;
+  }
+  .home-tile-img--photo {
+    padding: 1.125rem;
   }
   .home-tile-title {
     font-size: 1.2rem;
@@ -1122,20 +1221,33 @@
   }
 }
 
-/* Bag HUD — collected items, shown under the maze in the game */
+/* Bag HUD — collected items, shown under the maze in the game. Items are grouped
+   into per-type `[icon] × N` chips that wrap onto further lines as needed and stay
+   centred horizontally. */
 .maze-bag {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   align-items: center;
   justify-content: center;
   min-height: 28px;
 }
-.maze-bag span {
+.maze-bag > span {
   font-size: 0.85rem;
   opacity: 0.8;
 }
 .maze-bag .maze-bag-empty {
   opacity: 0.6;
+}
+.maze-bag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.maze-bag-chip-count {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
 }
 .maze-bag img {
   width: 24px;
@@ -1210,6 +1322,114 @@
 }
 
 /* ──────────────────────────────────────────────────────────
+   Editor body: grid + per-cell override inspector panel
+────────────────────────────────────────────────────────── */
+
+.maze-editor-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.maze-editor-body .maze-grid-container {
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-override-panel {
+  flex: 0 0 220px;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-input);
+  border-radius: 0.375rem;
+}
+
+.cell-override-title {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.cell-override-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.cell-override-input {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--border-input);
+  border-radius: 0.25rem;
+}
+
+/* A dropdown paired with a live sprite preview of the selected variant. */
+.cell-override-select-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cell-override-select-row .cell-override-input {
+  flex: 1;
+  width: auto;
+}
+
+.cell-override-preview {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.cell-override-reset {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The multi-cell "Apply to all" link — same link styling as Reset, weighted to
+   read as the primary action when a block of cells is selected. */
+.cell-override-apply-all {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* On narrow screens there is no room for a side panel — reflow it below the grid. */
+@media (max-width: 700px) {
+  .maze-editor-body {
+    flex-direction: column;
+  }
+  .cell-override-panel {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────
    MazeGrid component
 ────────────────────────────────────────────────────────── */
 
@@ -1220,6 +1440,18 @@
   overflow: auto;
   border: 1px solid #d1d5db;
   border-radius: 0.375rem;
+}
+
+/* Corner marker on editor cells that carry a per-cell override. */
+.maze-cell-override-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
 }
 
 .maze-grid-container:focus {
@@ -1429,4 +1661,142 @@
   background-size:     100% 2px, 100% 2px, 2px 100%, 2px 100%;
   background-repeat:   no-repeat;
   background-position: 0 0, 0 100%, 0 0, 100% 0;
+}
+
+/* Scores / leaderboard */
+.leaderboards-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.leaderboards-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Safety scroll for very short viewports; normally the table region below
+     flex-fills and scrolls internally so the page itself doesn't scroll. */
+  overflow: auto;
+  padding: 16px;
+}
+/* Board view + list flex-fill the space under the selector so the table region
+   reaches the bottom of the page (Load more, when present, sits below it). */
+.leaderboard-board-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.leaderboard-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.subject-selector {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+/* Match the leaderboard table-header font combination (.leaderboard-table th). */
+.subject-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.subject-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-input);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--text, inherit);
+  font-size: 0.95rem;
+}
+.subject-arrow {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+.leaderboard-metric-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+/* The Play button sits at the right edge of the subject-selector row, recoloured
+   to match the in-game "Play Again" button (green bg, white text) rather than the
+   purple accent — keeping the .btn-primary shape/padding. */
+.leaderboard-play {
+  margin-left: auto;
+  background: #2f9e44;
+  border-color: #2f9e44;
+  color: #fff;
+}
+.leaderboard-play:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.leaderboard-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--border-input);
+  border-radius: 999px;
+  background: var(--button-bg);
+  color: var(--text, inherit);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.leaderboard-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+/* Dedicated scroll region for the table: a clean, padding-free sticky context
+   (the page-level scroll container's padding made the sticky header leak rows
+   above it). Scrolls vertically for tall boards + horizontally for wide ones. */
+.leaderboard-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.leaderboard-table {
+  width: 100%;
+  /* `separate` (not `collapse`) so the sticky header doesn't let body rows
+     bleed over it as they scroll under. */
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.95rem;
+}
+.leaderboard-table th,
+.leaderboard-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #ccc);
+  white-space: nowrap;
+}
+.leaderboard-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+/* Header row stays put while the data scrolls under it (within .leaderboards-main).
+   box-shadow draws the divider so it survives border-collapse during scroll. */
+.leaderboard-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.leaderboard-col-rank { width: 3ch; color: var(--text-muted); }
+.leaderboard-col-time, .leaderboard-col-score { font-variant-numeric: tabular-nums; }
+/* The signed-in player's own rows, softly tinted lime-green. */
+.leaderboard-row--me td {
+  background: rgba(50, 205, 50, 0.18);
+}
+.leaderboard-load-more {
+  margin-top: 12px;
+}
+.leaderboard-empty {
+  color: var(--text-muted);
 }

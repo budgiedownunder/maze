@@ -8,15 +8,18 @@ At the moment, it allows the user to:
 
 - Sign in/up using `email`+`password` or via `OAuth` (Google, GitHub, Facebook - when enabled server-side) 
 - View and edit their account profile (username, full name)
+- Set a profile avatar (shown in the flyout header and on leaderboards)
 - Manage their email addresses (add, set primary, remove)
 - Change or set their password (set-initial flow for OAuth-only users)
 - Delete their account
 - Load, edit, delete, rename and duplicate mazes
-- Construct mazes containing start, finish and wall cells
+- Construct mazes containing start, finish, wall, enemy, health, treasure, door and key cells
+- Tune individual cell characteristics via a per-cell override panel — an enemy's type/damage/move interval, a health pickup's style/heal amount, a treasure's style/value, a key holder or door style, or a wall's type (Default — inherit the maze's wall default — a forced solid texture, or a water / lava / iron-fence skin)
+- Edit per-maze 3D game settings (sky, wall / enemy / health styles, timer, …) via a **Settings** toolbar button, saved with the maze; a cell with no per-cell override inherits the maze's wall / enemy / health default as its 2D base sprite
 - Generate mazes automatically using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly, with configurable dimensions, start/finish positions and minimum spine length
 - Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
-- Play mazes and animate walk throughs (2D)
-- Play mazes in first-person **3D**, powered by a [`Bevy`](https://bevyengine.org/) WebAssembly game ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md)) embedded in a `WebView`
+- Play mazes and animate walk throughs (2D), with variant sprites for overridden cells (ghost enemies, potion pickups, water/lava/iron-fence walls) and the maze's wall / enemy / health defaults for non-overridden cells; treasure cells render per style and are auto-collected on walk-over, tallied into the bag as grouped `[icon] × N` chips
+- Play mazes in first-person **3D**, powered by a [`Bevy`](https://bevyengine.org/) WebAssembly game ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md)) embedded in a `WebView`; **Play 3D** opens a **Run / Custom Run** chooser (Run uses the maze's saved settings, Custom Run a one-off tweak)
 
 It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  
 
