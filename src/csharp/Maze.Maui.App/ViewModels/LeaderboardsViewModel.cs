@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Maze.Maui.App.Extensions;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
@@ -271,6 +272,19 @@ namespace Maze.Maui.App.ViewModels
                 // them to the /game/?id= URL (the MAUI WebView can't read the SPA's
                 // localStorage, so settings ride the query string).
                 MazeItem full = await _mazeService.GetMazeItem(game.MazeId) ?? new MazeItem { ID = game.MazeId };
+
+                // Reject an empty / cleared maze before launching, using the same
+                // validation the Mazes page Play-3D button and the Maze Editor's
+                // Play-3D toolbar use (Definition.Solve() throws when unsolvable).
+                // Curated Play-3D difficulties are server-generated and always valid,
+                // so they skip this (handled in the difficulty branch above).
+                try { full.Definition?.Solve(); }
+                catch (Exception ex)
+                {
+                    await _dialogService.ShowAlert("MAZE", $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
+                    return;
+                }
+
                 await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
                 {
                     { "MazeItem", full },

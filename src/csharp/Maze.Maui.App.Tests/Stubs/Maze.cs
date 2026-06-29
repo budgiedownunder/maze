@@ -78,7 +78,27 @@ namespace Maze.Api
         public string ToJson() => Json;
         public void FromJson(string json) => Json = json;
         public string DefinitionToJson() => Json;
-        public void Solve() => Solved = true;
+
+        // Mirror production: Solve throws for an unsolvable maze. The view-model
+        // validation paths only need a maze with no Start / no Finish (an empty or
+        // cleared maze) to be rejected, so model exactly that.
+        public void Solve()
+        {
+            if (!HasCell(CellType.Start))
+                throw new InvalidOperationException("maze has no start cell");
+            if (!HasCell(CellType.Finish))
+                throw new InvalidOperationException("maze has no finish cell");
+            Solved = true;
+        }
+
+        private bool HasCell(CellType type)
+        {
+            for (UInt32 r = 0; r < RowCount; r++)
+                for (UInt32 c = 0; c < ColCount; c++)
+                    if (_cells[r, c] == type) return true;
+            return false;
+        }
+
         public void Dispose() { }
     }
 }

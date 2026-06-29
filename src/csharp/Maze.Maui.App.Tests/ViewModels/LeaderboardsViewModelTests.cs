@@ -381,6 +381,43 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public async Task Play_MyMazes_UnplayableMaze_ShowsAlertAndDoesNotNavigate()
+        {
+            Mocks m = CreateMocks();
+            m.Mazes.Setup(x => x.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "One") });
+            // A cleared maze: a grid with no Start / Finish → Definition.Solve() throws.
+            var unplayable = new MazeItem { ID = "m1", Name = "One", Definition = new Api.Maze(3, 3) };
+            m.Mazes.Setup(x => x.GetMazeItem("m1")).ReturnsAsync(unplayable);
+            var vm = NewVm(m);
+            await vm.InitializeCommand.ExecuteAsync(null);   // my-mazes m1 (first maze)
+
+            await vm.PlayCommand.ExecuteAsync(null);
+
+            m.Dialog.Verify(d => d.ShowAlert("MAZE", It.Is<string>(s => s.Contains("Cannot play maze")), "OK"), Times.Once);
+            m.Nav.Verify(n => n.GoToAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>?>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Play_MyMazes_PlayableMaze_NavigatesWithoutAlert()
+        {
+            Mocks m = CreateMocks();
+            m.Mazes.Setup(x => x.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "One") });
+            var maze = new Api.Maze(3, 3);
+            maze.SetStartCell(0, 0);
+            maze.SetFinishCell(2, 2);
+            var playable = new MazeItem { ID = "m1", Name = "One", Definition = maze };
+            m.Mazes.Setup(x => x.GetMazeItem("m1")).ReturnsAsync(playable);
+            var vm = NewVm(m);
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            await vm.PlayCommand.ExecuteAsync(null);
+
+            m.Dialog.Verify(d => d.ShowAlert(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            m.Nav.Verify(n => n.GoToAsync("Play3dGamePage",
+                It.Is<IDictionary<string, object>?>(d => d != null && ReferenceEquals(d["MazeItem"], playable))), Times.Once);
+        }
+
+        [Fact]
         public async Task CanPlay_FalseWhenMazesSelectedButNone()
         {
             var (vm, _, _, _, _, _) = BuildVm();
