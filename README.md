@@ -116,6 +116,7 @@ The Maze MAUI application running on Windows, iOS, and Android.
 
 | | Windows | iOS | Android |
 |---|---------|-----|---------|
+| **Home Page** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-home.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-home.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-home.png" width="250"> |
 | **Solved** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
 | **Walk Solution** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-walk.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-walk.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-walk.png" width="250"> |
 | **Game** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-game.png" width="250"> |
@@ -125,6 +126,12 @@ The Maze MAUI application running on Windows, iOS, and Android.
 
 The React SPA running in a desktop browser.
 
+**Home Page**
+
+The home page, allowing the user to choose to play a 3D challenge game, create their own mazes or view the current game leaderboards.
+
+<img src="./src/react/maze_web_server/screenshots/web-home.png" width="600">
+
 **Maze List**
 
 The mazes list page, showing the user's mazes. 
@@ -133,7 +140,11 @@ The mazes list page, showing the user's mazes.
 
 **Maze Editor**
 
-The maze editor page, showing a solved maze.
+The maze editor, defining a health cell:
+
+<img src="./src/react/maze_web_server/screenshots/web-editing.png" width="600">
+
+The same maze solved:
 
 <img src="./src/react/maze_web_server/screenshots/web-solved.png" width="600">
 
@@ -157,7 +168,11 @@ Playing a maze in first-person 3D — chasing enemies, collectible keys & doors,
 
 A run can also span **multiple stacked levels**: each interim level's finish is a ladder or portal up to the next, carrying your score, health, and collected items forward, until the final level's gold finish orb completes the run. Upper levels can taper to smaller, see-through footprints so the stack reads as a tower from below.
 
+A multi-level game at sunset, with lava as walls:
+
 <img src="./src/react/maze_web_server/screenshots/web-3d-multilevel.png" width="600">
+
+A night game, but this time with water as walls:
 
 <img src="./src/react/maze_web_server/screenshots/web-3d-multilevel-2.png" width="600">
 
