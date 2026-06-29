@@ -361,10 +361,10 @@ namespace Maze.Maui.App
         }
         /// <summary>
         /// The override to render for a cell, or null. Overrides drive the variant sprite
-        /// (and, in the editor only, the authoring badge). In game mode only the static
-        /// wall (water/lava/iron_fence) and health (potion) variants are surfaced — enemies
-        /// are live moving overlays and keys/doors have no 2D variant — so their overrides
-        /// are suppressed. Row and column are 0-based.
+        /// (and, in the editor only, the authoring badge). In game mode the static wall
+        /// (water/lava/iron_fence), health (potion), and treasure (gold/diamonds/jewels)
+        /// variants are surfaced — enemies are live moving overlays and keys/doors have no
+        /// 2D variant — so their overrides are suppressed. Row and column are 0-based.
         /// </summary>
         /// <param name="type">The cell's type</param>
         /// <param name="row">Row index (zero-based)</param>
@@ -376,7 +376,7 @@ namespace Maze.Maui.App
             {
                 return null;
             }
-            if (_gameMode && type != CellType.Wall && type != CellType.Health)
+            if (_gameMode && type != CellType.Wall && type != CellType.Health && type != CellType.Treasure)
             {
                 return null;
             }
@@ -433,10 +433,13 @@ namespace Maze.Maui.App
                 content.Update(CellType.Empty, content.SolutionPathDirection);
             }
 
+            // The player walker overlay applies in BOTH the editor walk-solution
+            // animation and game mode; the live-enemy overlay is game-mode only.
             bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
-            if (_gameMode && (_enemyAt[row, column] > 0 || playerHere))
+            int enemyCount = _gameMode ? _enemyAt[row, column] : 0;
+            if (playerHere || enemyCount > 0)
             {
-                content.SetEntityOverlay(_enemyAt[row, column], playerHere ? _walkerImage : null, StackEnemyRig(row, column));
+                content.SetEntityOverlay(enemyCount, playerHere ? _walkerImage : null, _gameMode ? StackEnemyRig(row, column) : null);
             }
         }
         /// <summary>
