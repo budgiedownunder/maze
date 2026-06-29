@@ -55,7 +55,7 @@ At this stage, the following areas are covered:
 - Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot password, delete account); OAuth sign-in (Google, GitHub, Facebook) when enabled; maze management (create, save, delete, rename, edit, generate, solve, walk solution, play — with keys & doors, real-time enemies, player HP + health pickups, collectible treasure, leaderboards and a pause menu)
 - Automating `C#` API documentation generation with `DocFX`
 
-- Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, wall decorations,  minimap, camera tilt, gold-leaf rain on win, rain + lightning on lose, dead-end artifacts, auto-collected keys & doors, real-time chasing enemies, a heart-based HP HUD with health pickups, collectible treasure, and touch support + D-pad for mobile
+- Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, wall decorations,  minimap, camera tilt, gold-leaf rain on win, rain + lightning on lose, dead-end artifacts, auto-collected keys & doors, real-time chasing enemies, a heart-based HP HUD with health pickups, collectible treasure, multi-level stacked runs with ladder / portal level transitions, and touch support + D-pad for mobile
 - Compiling the `Bevy` game to WebAssembly ([`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md)) so the same game runs cross-platform — served at `/game/` by the Rust web server, launched from the React SPA, and embedded in the MAUI app via a `WebView`
 
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Interop.Tests`](./src/csharp/Maze.Interop.Tests/README.md))
@@ -154,6 +154,18 @@ Playing a maze — the player navigates using keyboard or D-pad, collecting keys
 Playing a maze in first-person 3D — chasing enemies, collectible keys & doors, and a heart-based HP HUD with health pickups — the Bevy engine runs entirely in-browser via WebAssembly.
 
 <img src="./src/react/maze_web_server/screenshots/web-3d-game.gif" width="600">
+
+A run can also span **multiple stacked levels**: each interim level's finish is a ladder or portal up to the next, carrying your score, health, and collected items forward, until the final level's gold finish orb completes the run. Upper levels can taper to smaller, see-through footprints so the stack reads as a tower from below.
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-multilevel.png" width="600">
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-multilevel-2.png" width="600">
+
+**Leaderboards**
+
+Per-maze and global (Play 3D) leaderboards rank completed runs by fastest time or highest score, showing each player's name and highlighting your own runs. A maze's owner — and an administrator, for a Play 3D board — can reset a board to empty.
+
+<img src="./src/react/maze_web_server/screenshots/web-leaderboards.png" width="600">
 
 ## API
 
