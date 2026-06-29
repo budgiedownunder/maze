@@ -107,7 +107,12 @@ namespace Maze.Maui.App.ViewModels
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles a <see cref="PasswordSetMessage"/> by flagging the account as now
+        /// having a password (e.g. after an OAuth-only user sets one), so the UI offers
+        /// "Change" rather than "Set" password.
+        /// </summary>
+        /// <param name="message">The password-set notification</param>
         public void Receive(PasswordSetMessage message) => HasPassword = true;
 
         /// <summary>

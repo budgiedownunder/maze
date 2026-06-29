@@ -48,10 +48,18 @@ namespace Maze.Maui.App.ViewModels
             WeakReferenceMessenger.Default.RegisterAll(this);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles a <see cref="MazesInvalidatedMessage"/> by invalidating the cached
+        /// maze list so it reloads on next view.
+        /// </summary>
+        /// <param name="message">The invalidation notification</param>
         public void Receive(MazesInvalidatedMessage message) => InvalidateData();
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Handles a <see cref="NewMazeItemMessage"/> by adding the newly created maze
+        /// to the list.
+        /// </summary>
+        /// <param name="message">The new-maze notification</param>
         public void Receive(NewMazeItemMessage message) => AddNewItem(message.Item);
         /// <summary>
         /// Represents the load status
