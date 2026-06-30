@@ -1118,12 +1118,16 @@ test('Clear Solution after Walk Solution resets to normal editing state', async 
   await login(page)
   await openFirstMaze(page)
   await page.getByRole('button', { name: 'Walk Solution' }).click()
-  // The walk is timer-driven and normally finishes in ~2s; under parallel-worker
-  // CPU contention the timers lag, so allow generous headroom for the walker to
-  // finish and disappear rather than flaking on a starved animation.
-  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 30000 })
+  // The walk holds the celebrate frame at the finish until Clear Solution is
+  // pressed — it does NOT auto-clear. Wait for that stable end state by its src
+  // rather than racing the walker's disappearance (which never happens on its
+  // own and would flake depending on whether the poll samples the brief
+  // pre-walk window). The walk is timer-driven (~2s) but a loaded CI runner can
+  // lag, so allow generous headroom.
+  await expect(page.locator('img[alt="Walker"]')).toHaveAttribute('src', /walker_celebrate/, { timeout: 30000 })
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await page.getByRole('button', { name: 'Clear Solution' }).click()
+  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible()
   await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Clear Solution' })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeEnabled()
