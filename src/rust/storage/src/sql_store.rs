@@ -13,7 +13,8 @@
 
 use crate::store::{
     EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
-    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore,
+    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_item_order,
+    reordered_items,
 };
 use crate::{
     validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
@@ -22,8 +23,8 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, EmailAuditEntry, GameCollection, GameDefinition, Maze, OAuthIdentity,
-    OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin, Visibility,
+    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, Maze,
+    OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin, Visibility,
     truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
@@ -906,6 +907,45 @@ fn game_definition_from_row(row: &AnyRow) -> Result<GameDefinition, Error> {
     })
 }
 
+/// Deserialises a `game_collections` row into a [`GameCollection`] with **empty**
+/// `items` — the caller hydrates them from `game_collection_items`.
+fn game_collection_from_row(row: &AnyRow) -> Result<GameCollection, Error> {
+    let id = parse_uuid(
+        "game collection id",
+        &row.try_get::<String, _>("id").map_err(map_sqlx_err)?,
+    )?;
+    let owner_id = parse_uuid(
+        "game collection owner_id",
+        &row.try_get::<String, _>("owner_id").map_err(map_sqlx_err)?,
+    )?;
+    let name: String = row.try_get("name").map_err(map_sqlx_err)?;
+    let description: Option<String> = row.try_get("description").map_err(map_sqlx_err)?;
+    let image_updated_at = match row
+        .try_get::<Option<String>, _>("image_updated_at")
+        .map_err(map_sqlx_err)?
+    {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
+    let visibility =
+        Visibility::from_wire_str(&row.try_get::<String, _>("visibility").map_err(map_sqlx_err)?);
+    let created_at =
+        datetime_from_sql(&row.try_get::<String, _>("created_at").map_err(map_sqlx_err)?)?;
+    let updated_at =
+        datetime_from_sql(&row.try_get::<String, _>("updated_at").map_err(map_sqlx_err)?)?;
+    Ok(GameCollection {
+        id,
+        owner_id,
+        name,
+        visibility,
+        description,
+        image_updated_at,
+        items: Vec::new(),
+        created_at,
+        updated_at,
+    })
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // User-row helpers (write)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1350,6 +1390,36 @@ impl UserStore for SqlStore {
         .await
         .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM game_definitions WHERE owner_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        // Strip the user from every remaining collection's grantee list, then
+        // delete the user's own collections + their items/shares (collections
+        // have no board — leaderboards are per-definition). FK cascades are a
+        // backstop; we delete explicitly for uniform cross-backend behaviour.
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_shares WHERE grantee_user_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        for table in ["game_collection_shares", "game_collection_items"] {
+            sqlx::query(&q(
+                self.kind,
+                &format!(
+                    "DELETE FROM {table} \
+                     WHERE collection_id IN (SELECT id FROM game_collections WHERE owner_id = ?)"
+                ),
+            ))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        sqlx::query(&q(self.kind, "DELETE FROM game_collections WHERE owner_id = ?"))
             .bind(id.to_string())
             .execute(&self.pool)
             .await
@@ -4559,6 +4629,117 @@ impl SqlStore {
         let rows = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
         rows.iter().map(game_definition_from_row).collect()
     }
+
+    /// The `owner_id` of a collection, or [`Error::GameCollectionIdNotFound`].
+    /// Used to enforce owner-scoping on collection mutations.
+    async fn collection_owner_id(&self, id: Uuid) -> Result<Uuid, Error> {
+        let row = sqlx::query(&q(self.kind, "SELECT owner_id FROM game_collections WHERE id = ?"))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => parse_uuid(
+                "game collection owner_id",
+                &row.try_get::<String, _>("owner_id").map_err(map_sqlx_err)?,
+            ),
+            None => Err(Error::GameCollectionIdNotFound(id.to_string())),
+        }
+    }
+
+    /// Loads a collection's items, ordered by `sort_order`.
+    async fn load_collection_items(&self, collection_id: Uuid) -> Result<Vec<CollectionItem>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT definition_id, sort_order FROM game_collection_items \
+             WHERE collection_id = ? ORDER BY sort_order ASC",
+        ))
+        .bind(collection_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| {
+                let definition_id = parse_uuid(
+                    "collection item definition_id",
+                    &row.try_get::<String, _>("definition_id").map_err(map_sqlx_err)?,
+                )?;
+                let sort_order: i32 = row.try_get("sort_order").map_err(map_sqlx_err)?;
+                Ok(CollectionItem {
+                    definition_id,
+                    sort_order: sort_order as u32,
+                })
+            })
+            .collect()
+    }
+
+    /// Replaces a collection's item rows with `items` (delete-all + reinsert) —
+    /// mirrors the FileStore "rewrite the whole list" behaviour so the two
+    /// backends produce identical membership/order after any item mutation.
+    async fn replace_collection_items(
+        &self,
+        collection_id: Uuid,
+        items: &[CollectionItem],
+    ) -> Result<(), Error> {
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_items WHERE collection_id = ?",
+        ))
+        .bind(collection_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        for item in items {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO game_collection_items (collection_id, definition_id, sort_order) \
+                 VALUES (?, ?, ?)",
+            ))
+            .bind(collection_id.to_string())
+            .bind(item.definition_id.to_string())
+            .bind(item.sort_order as i32)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        Ok(())
+    }
+
+    /// Stamps a collection's `updated_at` to now (called after item mutations,
+    /// matching FileStore's whole-collection rewrite).
+    async fn touch_collection(&self, collection_id: Uuid) -> Result<(), Error> {
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE game_collections SET updated_at = ? WHERE id = ?",
+        ))
+        .bind(datetime_to_sql(Utc::now().trunc_subsecs(3)))
+        .bind(collection_id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// Runs a `SELECT … FROM game_collections …` query and hydrates each row's
+    /// `items`. Shared by the owner / curated / public / shared-with list reads.
+    async fn query_game_collections(
+        &self,
+        sql: &str,
+        binds: &[String],
+    ) -> Result<Vec<GameCollection>, Error> {
+        let translated = q(self.kind, sql);
+        let mut query = sqlx::query(&translated);
+        for bind in binds {
+            query = query.bind(bind.as_str());
+        }
+        let rows = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+        let mut collections: Vec<GameCollection> =
+            rows.iter().map(game_collection_from_row).collect::<Result<_, _>>()?;
+        for collection in &mut collections {
+            collection.items = self.load_collection_items(collection.id).await?;
+        }
+        Ok(collections)
+    }
 }
 
 #[async_trait]
@@ -4817,98 +4998,309 @@ impl GameStore for SqlStore {
             .collect()
     }
 
-    // ── Collections ── Stubbed until the collection tables are added; these
-    // let SqlStore satisfy `GameStore` in the meantime. No path reaches them
-    // (there are no SqlStore collection tests, and `GameStore` is not yet part
-    // of the `Store` supertrait), so returning an error rather than panicking
-    // keeps them inert.
+    // ── Collections ──
+
     async fn create_game_collection(
         &mut self,
-        _owner: &User,
-        _collection: &mut GameCollection,
+        owner: &User,
+        collection: &mut GameCollection,
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        if collection.name.trim().is_empty() {
+            return Err(Error::GameCollectionNameMissing());
+        }
+        let existing = sqlx::query(&q(
+            self.kind,
+            "SELECT id FROM game_collections WHERE owner_id = ? AND LOWER(name) = LOWER(?)",
+        ))
+        .bind(owner.id.to_string())
+        .bind(&collection.name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if existing.is_some() {
+            return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+        }
+
+        collection.owner_id = owner.id;
+        if collection.id.is_nil() {
+            collection.id = Uuid::new_v4();
+        }
+        let now = Utc::now().trunc_subsecs(3);
+        collection.created_at = now;
+        collection.updated_at = now;
+        normalize_item_order(&mut collection.items);
+
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO game_collections \
+             (id, owner_id, name, description, image_updated_at, visibility, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(collection.id.to_string())
+        .bind(collection.owner_id.to_string())
+        .bind(&collection.name)
+        .bind(collection.description.clone())
+        .bind(collection.image_updated_at.map(datetime_to_sql))
+        .bind(collection.visibility.as_wire_str())
+        .bind(datetime_to_sql(collection.created_at))
+        .bind(datetime_to_sql(collection.updated_at))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        self.replace_collection_items(collection.id, &collection.items).await?;
+        Ok(())
     }
-    async fn get_game_collection(&self, _id: Uuid) -> Result<GameCollection, Error> {
-        Err(collections_unimplemented())
+
+    async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, Error> {
+        let row = sqlx::query(&q(self.kind, "SELECT * FROM game_collections WHERE id = ?"))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => {
+                let mut collection = game_collection_from_row(&row)?;
+                collection.items = self.load_collection_items(id).await?;
+                Ok(collection)
+            }
+            None => Err(Error::GameCollectionIdNotFound(id.to_string())),
+        }
     }
+
     async fn update_game_collection(
         &mut self,
-        _owner: &User,
-        _collection: &mut GameCollection,
+        owner: &User,
+        collection: &mut GameCollection,
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        let existing = self.get_game_collection(collection.id).await?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection.id.to_string()));
+        }
+        if collection.name.trim().is_empty() {
+            return Err(Error::GameCollectionNameMissing());
+        }
+        let clash = sqlx::query(&q(
+            self.kind,
+            "SELECT id FROM game_collections WHERE owner_id = ? AND LOWER(name) = LOWER(?) AND id <> ?",
+        ))
+        .bind(owner.id.to_string())
+        .bind(&collection.name)
+        .bind(collection.id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if clash.is_some() {
+            return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+        }
+
+        // Metadata-only: preserve the persisted membership + created_at, leave
+        // the item rows untouched.
+        collection.owner_id = owner.id;
+        collection.created_at = existing.created_at;
+        collection.items = existing.items;
+        collection.updated_at = Utc::now().trunc_subsecs(3);
+
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE game_collections SET name = ?, description = ?, image_updated_at = ?, \
+             visibility = ?, updated_at = ? WHERE id = ?",
+        ))
+        .bind(&collection.name)
+        .bind(collection.description.clone())
+        .bind(collection.image_updated_at.map(datetime_to_sql))
+        .bind(collection.visibility.as_wire_str())
+        .bind(datetime_to_sql(collection.updated_at))
+        .bind(collection.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
     }
-    async fn delete_game_collection(&mut self, _owner: &User, _id: Uuid) -> Result<(), Error> {
-        Err(collections_unimplemented())
+
+    async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        if self.collection_owner_id(id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        // Items + shares cascade via FK, but delete explicitly for uniform
+        // cross-backend behaviour.
+        for table in ["game_collection_shares", "game_collection_items"] {
+            sqlx::query(&q(self.kind, &format!("DELETE FROM {table} WHERE collection_id = ?")))
+                .bind(id.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        }
+        sqlx::query(&q(self.kind, "DELETE FROM game_collections WHERE id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(())
     }
+
     async fn add_collection_item(
         &mut self,
-        _owner: &User,
-        _collection_id: Uuid,
-        _definition_id: Uuid,
+        owner: &User,
+        collection_id: Uuid,
+        definition_id: Uuid,
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        if self.collection_owner_id(collection_id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
+        }
+        let mut items = self.load_collection_items(collection_id).await?;
+        if items.iter().any(|i| i.definition_id == definition_id) {
+            return Ok(());
+        }
+        items.push(CollectionItem {
+            definition_id,
+            sort_order: items.len() as u32,
+        });
+        self.replace_collection_items(collection_id, &items).await?;
+        self.touch_collection(collection_id).await?;
+        Ok(())
     }
+
     async fn remove_collection_item(
         &mut self,
-        _owner: &User,
-        _collection_id: Uuid,
-        _definition_id: Uuid,
+        owner: &User,
+        collection_id: Uuid,
+        definition_id: Uuid,
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        if self.collection_owner_id(collection_id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
+        }
+        let mut items = self.load_collection_items(collection_id).await?;
+        let before = items.len();
+        items.retain(|i| i.definition_id != definition_id);
+        if items.len() != before {
+            normalize_item_order(&mut items);
+            self.replace_collection_items(collection_id, &items).await?;
+            self.touch_collection(collection_id).await?;
+        }
+        Ok(())
     }
+
     async fn reorder_collection_items(
         &mut self,
-        _owner: &User,
-        _collection_id: Uuid,
-        _ordered: &[Uuid],
+        owner: &User,
+        collection_id: Uuid,
+        ordered: &[Uuid],
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        if self.collection_owner_id(collection_id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
+        }
+        let items = reordered_items(self.load_collection_items(collection_id).await?, ordered);
+        self.replace_collection_items(collection_id, &items).await?;
+        self.touch_collection(collection_id).await?;
+        Ok(())
     }
+
     async fn grant_collection_access(
         &mut self,
-        _owner: &User,
-        _id: Uuid,
-        _grantee: Uuid,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        if self.collection_owner_id(id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        let present = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 AS present FROM game_collection_shares WHERE collection_id = ? AND grantee_user_id = ?",
+        ))
+        .bind(id.to_string())
+        .bind(grantee.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if present.is_none() {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO game_collection_shares (collection_id, grantee_user_id) VALUES (?, ?)",
+            ))
+            .bind(id.to_string())
+            .bind(grantee.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        Ok(())
     }
+
     async fn revoke_collection_access(
         &mut self,
-        _owner: &User,
-        _id: Uuid,
-        _grantee: Uuid,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
     ) -> Result<(), Error> {
-        Err(collections_unimplemented())
+        if self.collection_owner_id(id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_shares WHERE collection_id = ? AND grantee_user_id = ?",
+        ))
+        .bind(id.to_string())
+        .bind(grantee.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
     }
-    async fn get_collections_for_owner(
-        &self,
-        _owner: &User,
-    ) -> Result<Vec<GameCollection>, Error> {
-        Err(collections_unimplemented())
+
+    async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error> {
+        self.query_game_collections(
+            "SELECT * FROM game_collections WHERE owner_id = ? ORDER BY LOWER(name) ASC",
+            &[owner.id.to_string()],
+        )
+        .await
     }
+
     async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error> {
-        Err(collections_unimplemented())
+        self.query_game_collections(
+            "SELECT * FROM game_collections WHERE visibility = ? ORDER BY LOWER(name) ASC",
+            &[Visibility::Curated.as_wire_str().to_string()],
+        )
+        .await
     }
+
     async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error> {
-        Err(collections_unimplemented())
+        self.query_game_collections(
+            "SELECT * FROM game_collections WHERE visibility = ? ORDER BY LOWER(name) ASC",
+            &[Visibility::Public.as_wire_str().to_string()],
+        )
+        .await
     }
+
     async fn get_collections_shared_with(
         &self,
-        _user: Uuid,
+        user: Uuid,
     ) -> Result<Vec<GameCollection>, Error> {
-        Err(collections_unimplemented())
+        self.query_game_collections(
+            "SELECT gc.* FROM game_collections gc \
+             JOIN game_collection_shares s ON s.collection_id = gc.id \
+             WHERE s.grantee_user_id = ? ORDER BY LOWER(gc.name) ASC",
+            &[user.to_string()],
+        )
+        .await
     }
-    async fn get_collection_grantees(&self, _id: Uuid) -> Result<Vec<Uuid>, Error> {
-        Err(collections_unimplemented())
-    }
-}
 
-/// The error every SqlStore game-collection stub returns until the real
-/// implementations (backed by the collection tables) replace them.
-fn collections_unimplemented() -> Error {
-    Error::Other("SqlStore does not yet implement game collections".to_string())
+    async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT grantee_user_id FROM game_collection_shares WHERE collection_id = ? ORDER BY grantee_user_id ASC",
+        ))
+        .bind(id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| {
+                let s: String = row.try_get("grantee_user_id").map_err(map_sqlx_err)?;
+                parse_uuid("grantee_user_id", &s)
+            })
+            .collect()
+    }
 }
 
 impl Store for SqlStore {}

@@ -235,6 +235,10 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// sub-folder, created lazily on write). Version 10 is skipped — the SQL
 /// `0010_user_avatars` migration has no FileStore directory counterpart
 /// (avatars ride each user's dir as `avatar.png`). Idempotent.
+///
+/// **Version 12** creates the `<data_dir>/game_collections/` parent directory
+/// used by the FileStore `GameStore` collection impl (each collection owns an
+/// `<id>/` sub-folder, created lazily on write). Idempotent.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -246,6 +250,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (8, migrate_0008_user_timestamps),
     (9, migrate_0009_create_score_history_dir),
     (11, migrate_0011_create_game_definitions_dir),
+    (12, migrate_0012_create_game_collections_dir),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -306,6 +311,17 @@ fn migrate_0009_create_score_history_dir(data_dir: &Path) -> Result<(), Error> {
 /// dir as `avatar.png`). Idempotent.
 fn migrate_0011_create_game_definitions_dir(data_dir: &Path) -> Result<(), Error> {
     fs::create_dir_all(data_dir.join("game_definitions"))?;
+    Ok(())
+}
+
+/// FileStore migration 0012 — counterpart to
+/// `migrations/0012_game_collections.sql`. The SQL side creates the
+/// `game_collections` + `game_collection_items` + `game_collection_shares`
+/// tables; the FileStore side creates the `game_collections/` parent directory.
+/// Each collection owns an `<id>/` sub-folder (`collection.json` + optional
+/// `shares.json` / `image.png`), created lazily on write. Idempotent.
+fn migrate_0012_create_game_collections_dir(data_dir: &Path) -> Result<(), Error> {
+    fs::create_dir_all(data_dir.join("game_collections"))?;
     Ok(())
 }
 
