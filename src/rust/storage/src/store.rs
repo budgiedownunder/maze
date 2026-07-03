@@ -408,6 +408,11 @@ pub trait ScoreStore {
     /// (admin) is the caller's responsibility — this clears unconditionally by
     /// subject.
     async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error>;
+    /// Deletes every score whose `challenge` equals `prefix` **or** starts with
+    /// `prefix` + `":"` — i.e. all board(s) of one game definition: its static
+    /// `"def:<id>"` board plus every daily `"def:<id>:<date>"` board. Returns the
+    /// number of rows removed. Authorization is the caller's responsibility.
+    async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, Error>;
 }
 
 /// Enforces the dual-keyed subject invariant for a [`ScoreEntry`]: exactly one
@@ -424,11 +429,15 @@ pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
 }
 
 /// Byte cap on a stored game-definition `config`, enforced by every
-/// [`GameStore`] backend on create/update — mirrors the maze definition-size
-/// cap. A game definition stores no per-cell grid (the maze is regenerated from
-/// `seed`), so its config is tiny and never approaches this today; the cap is
-/// forward-compat headroom against a future expansion of the config's content.
-pub const MAX_GAME_DEFINITION_CONFIG_BYTES: usize = 16_000;
+/// [`GameStore`] backend on create/update and matching the
+/// `game_definitions.config VARCHAR` column width. A game definition stores no
+/// per-cell grid (the maze is regenerated from `seed`), so its config is a
+/// small fixed set of scalar knobs (~1–2 KB); 4,000 bytes is generous headroom
+/// while keeping the table's row comfortably under MySQL's 65,535-byte per-row
+/// limit — a `VARCHAR(N)` counts its full `N × 4` (utf8mb4) width toward that
+/// sum, and `game_definitions` has many columns (unlike the lean `mazes` table,
+/// whose 16,000-byte `definition` only just fits).
+pub const MAX_GAME_DEFINITION_CONFIG_BYTES: usize = 4_000;
 
 /// Represents a store for holding parametric 3D game definitions (and, later,
 /// game collections — one trait keeps all game facts together). Mutations are

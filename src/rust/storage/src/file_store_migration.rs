@@ -225,6 +225,16 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// any file that lacks them — mirrors the Rust-side
 /// `backfill_user_timestamps_if_null` on the SQL side. Idempotent —
 /// files already carrying both fields are left alone.
+///
+/// **Version 9** creates the `<data_dir>/score_history/` directory used
+/// by the FileStore `ScoreStore` impl (one file per completed run).
+/// Idempotent.
+///
+/// **Version 11** creates the `<data_dir>/game_definitions/` and
+/// `<data_dir>/game_definition_shares/` directories used by the FileStore
+/// `GameStore` impl. Version 10 is skipped — the SQL `0010_user_avatars`
+/// migration has no FileStore directory counterpart (avatars ride each
+/// user's dir as `avatar.png`). Idempotent.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -235,6 +245,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (7, no_op_migration),
     (8, migrate_0008_user_timestamps),
     (9, migrate_0009_create_score_history_dir),
+    (11, migrate_0011_create_game_definitions_dirs),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -282,6 +293,20 @@ fn migrate_0006_create_email_audit_log_dir(data_dir: &Path) -> Result<(), Error>
 fn migrate_0009_create_score_history_dir(data_dir: &Path) -> Result<(), Error> {
     let dir = data_dir.join("score_history");
     fs::create_dir_all(&dir)?;
+    Ok(())
+}
+
+/// FileStore migration 0011 — counterpart to
+/// `migrations/0011_game_definitions.sql`. The SQL side creates the
+/// `game_definitions` + `game_definition_shares` tables; the FileStore side
+/// creates the matching per-record directories used by the `GameStore` impl
+/// (one file per definition, one grantee-list file per definition). Version 10
+/// is skipped — the SQL `0010_user_avatars` migration has no FileStore
+/// directory counterpart (avatars ride each user's dir as `avatar.png`).
+/// Idempotent.
+fn migrate_0011_create_game_definitions_dirs(data_dir: &Path) -> Result<(), Error> {
+    fs::create_dir_all(data_dir.join("game_definitions"))?;
+    fs::create_dir_all(data_dir.join("game_definition_shares"))?;
     Ok(())
 }
 

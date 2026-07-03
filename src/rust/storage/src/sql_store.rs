@@ -12,18 +12,18 @@
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
 use crate::store::{
-    EmailAuditLog, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore,
-    ScoreboardEntry, SortDirection, TokenStore, UserStore,
+    EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
+    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore,
 };
 use crate::{
-    validation::{validate_email_format, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
-    Error, MazeItem, Store,
+    validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
+    Error, MazeItem, Store, MAX_GAME_DEFINITION_CONFIG_BYTES,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, EmailAuditEntry, Maze, OAuthIdentity, OneTimeToken, TokenPurpose, User,
-    UserEmail, UserLogin, truncate_email_audit_error_message,
+    AuditOutcome, EmailAuditEntry, GameDefinition, Maze, OAuthIdentity, OneTimeToken, Rotation,
+    TokenPurpose, User, UserEmail, UserLogin, Visibility, truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
@@ -865,6 +865,46 @@ async fn maze_from_row(row: &AnyRow) -> Result<Maze, Error> {
     Ok(maze)
 }
 
+/// Deserialises a `game_definitions` row into a [`GameDefinition`]. `seed` comes
+/// back as `i64` (BIGINT) and widens to the struct's `u64` via the bit pattern;
+/// the enum columns parse leniently; timestamps go through [`datetime_from_sql`].
+fn game_definition_from_row(row: &AnyRow) -> Result<GameDefinition, Error> {
+    let id = parse_uuid("game definition id", &row.try_get::<String, _>("id").map_err(map_sqlx_err)?)?;
+    let owner_id = parse_uuid(
+        "game definition owner_id",
+        &row.try_get::<String, _>("owner_id").map_err(map_sqlx_err)?,
+    )?;
+    let name: String = row.try_get("name").map_err(map_sqlx_err)?;
+    let description: Option<String> = row.try_get("description").map_err(map_sqlx_err)?;
+    let image_updated_at = match row
+        .try_get::<Option<String>, _>("image_updated_at")
+        .map_err(map_sqlx_err)?
+    {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
+    let visibility = Visibility::from_wire_str(&row.try_get::<String, _>("visibility").map_err(map_sqlx_err)?);
+    let seed: i64 = row.try_get("seed").map_err(map_sqlx_err)?;
+    let rotation = Rotation::from_wire_str(&row.try_get::<String, _>("rotation").map_err(map_sqlx_err)?);
+    let config: serde_json::Value =
+        serde_json::from_str(&row.try_get::<String, _>("config").map_err(map_sqlx_err)?)?;
+    let created_at = datetime_from_sql(&row.try_get::<String, _>("created_at").map_err(map_sqlx_err)?)?;
+    let updated_at = datetime_from_sql(&row.try_get::<String, _>("updated_at").map_err(map_sqlx_err)?)?;
+    Ok(GameDefinition {
+        id,
+        owner_id,
+        name,
+        description,
+        image_updated_at,
+        visibility,
+        seed: seed as u64,
+        rotation,
+        config,
+        created_at,
+        updated_at,
+    })
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // User-row helpers (write)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1270,6 +1310,45 @@ impl UserStore for SqlStore {
         .await
         .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM mazes WHERE owner_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        // Clear the boards of the user's game definitions (other players' runs
+        // on them), keyed by the `def:<id>` challenge subject. The challenge is
+        // a string, not a FK column, so it can't be swept with a subquery —
+        // gather the owned ids and prefix-clear each.
+        let owned_def_rows =
+            sqlx::query(&q(self.kind, "SELECT id FROM game_definitions WHERE owner_id = ?"))
+                .bind(id.to_string())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        for row in &owned_def_rows {
+            let def_id: String = row.try_get("id").map_err(map_sqlx_err)?;
+            self.clear_challenge_scores_prefix(&format!("def:{def_id}")).await?;
+        }
+        // Strip the user from every remaining definition's grantee list, then
+        // delete the user's own definitions + their shares. FK cascades are a
+        // backstop; we delete explicitly for uniform cross-backend behaviour.
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_shares WHERE grantee_user_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_shares \
+             WHERE definition_id IN (SELECT id FROM game_definitions WHERE owner_id = ?)",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM game_definitions WHERE owner_id = ?"))
             .bind(id.to_string())
             .execute(&self.pool)
             .await
@@ -4443,6 +4522,298 @@ impl ScoreStore for SqlStore {
             .await
             .map_err(map_sqlx_err)?;
         Ok(result.rows_affected())
+    }
+
+    async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, Error> {
+        // `prefix` is always `def:<uuid>` (no LIKE metacharacters), so the
+        // `prefix:%` pattern is safe without escaping. Matches the static
+        // `"def:<id>"` board and every daily `"def:<id>:<date>"` board.
+        let result = sqlx::query(&q(
+            self.kind,
+            "DELETE FROM score_history WHERE challenge = ? OR challenge LIKE ?",
+        ))
+        .bind(prefix)
+        .bind(format!("{prefix}:%"))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
+    }
+}
+
+impl SqlStore {
+    /// Runs a `SELECT … FROM game_definitions …` query with the given ordered
+    /// string binds and maps each row to a [`GameDefinition`]. Shared by the
+    /// owner / curated / public / shared-with list reads.
+    async fn query_game_definitions(
+        &self,
+        sql: &str,
+        binds: &[String],
+    ) -> Result<Vec<GameDefinition>, Error> {
+        let translated = q(self.kind, sql);
+        let mut query = sqlx::query(&translated);
+        for bind in binds {
+            query = query.bind(bind.as_str());
+        }
+        let rows = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+        rows.iter().map(game_definition_from_row).collect()
+    }
+}
+
+#[async_trait]
+impl GameStore for SqlStore {
+    async fn create_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error> {
+        if definition.name.trim().is_empty() {
+            return Err(Error::GameDefinitionNameMissing());
+        }
+        let config_json = serde_json::to_string(&definition.config)?;
+        validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
+
+        let existing = sqlx::query(&q(
+            self.kind,
+            "SELECT id FROM game_definitions WHERE owner_id = ? AND LOWER(name) = LOWER(?)",
+        ))
+        .bind(owner.id.to_string())
+        .bind(&definition.name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if existing.is_some() {
+            return Err(Error::GameDefinitionNameAlreadyExists(definition.name.clone()));
+        }
+
+        definition.owner_id = owner.id;
+        if definition.id.is_nil() {
+            definition.id = Uuid::new_v4();
+        }
+        let now = Utc::now().trunc_subsecs(3);
+        definition.created_at = now;
+        definition.updated_at = now;
+
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO game_definitions \
+             (id, owner_id, name, description, image_updated_at, visibility, seed, rotation, config, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(definition.id.to_string())
+        .bind(definition.owner_id.to_string())
+        .bind(&definition.name)
+        .bind(definition.description.clone())
+        .bind(definition.image_updated_at.map(datetime_to_sql))
+        .bind(definition.visibility.as_wire_str())
+        .bind(definition.seed as i64)
+        .bind(definition.rotation.as_wire_str())
+        .bind(&config_json)
+        .bind(datetime_to_sql(definition.created_at))
+        .bind(datetime_to_sql(definition.updated_at))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn get_game_definition(&self, id: Uuid) -> Result<GameDefinition, Error> {
+        let row = sqlx::query(&q(self.kind, "SELECT * FROM game_definitions WHERE id = ?"))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => game_definition_from_row(&row),
+            None => Err(Error::GameDefinitionIdNotFound(id.to_string())),
+        }
+    }
+
+    async fn update_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error> {
+        let existing = self.get_game_definition(definition.id).await?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(definition.id.to_string()));
+        }
+        if definition.name.trim().is_empty() {
+            return Err(Error::GameDefinitionNameMissing());
+        }
+        let config_json = serde_json::to_string(&definition.config)?;
+        validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
+
+        let clash = sqlx::query(&q(
+            self.kind,
+            "SELECT id FROM game_definitions WHERE owner_id = ? AND LOWER(name) = LOWER(?) AND id <> ?",
+        ))
+        .bind(owner.id.to_string())
+        .bind(&definition.name)
+        .bind(definition.id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if clash.is_some() {
+            return Err(Error::GameDefinitionNameAlreadyExists(definition.name.clone()));
+        }
+
+        definition.owner_id = owner.id;
+        definition.created_at = existing.created_at;
+        definition.updated_at = Utc::now().trunc_subsecs(3);
+
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE game_definitions SET name = ?, description = ?, image_updated_at = ?, \
+             visibility = ?, seed = ?, rotation = ?, config = ?, updated_at = ? WHERE id = ?",
+        ))
+        .bind(&definition.name)
+        .bind(definition.description.clone())
+        .bind(definition.image_updated_at.map(datetime_to_sql))
+        .bind(definition.visibility.as_wire_str())
+        .bind(definition.seed as i64)
+        .bind(definition.rotation.as_wire_str())
+        .bind(&config_json)
+        .bind(datetime_to_sql(definition.updated_at))
+        .bind(definition.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        let existing = self.get_game_definition(id).await?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        // Shares cascade via the FK, but delete explicitly for uniform
+        // behaviour across backends (SQLite FK enforcement is pragma-gated).
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_shares WHERE definition_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM game_definitions WHERE id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn grant_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error> {
+        let existing = self.get_game_definition(id).await?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        // Idempotent: skip when already present (the composite PK would reject a
+        // duplicate insert).
+        let present = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 AS present FROM game_definition_shares WHERE definition_id = ? AND grantee_user_id = ?",
+        ))
+        .bind(id.to_string())
+        .bind(grantee.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if present.is_none() {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO game_definition_shares (definition_id, grantee_user_id) VALUES (?, ?)",
+            ))
+            .bind(id.to_string())
+            .bind(grantee.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        Ok(())
+    }
+
+    async fn revoke_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error> {
+        let existing = self.get_game_definition(id).await?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_shares WHERE definition_id = ? AND grantee_user_id = ?",
+        ))
+        .bind(id.to_string())
+        .bind(grantee.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error> {
+        self.query_game_definitions(
+            "SELECT * FROM game_definitions WHERE owner_id = ? ORDER BY LOWER(name) ASC",
+            &[owner.id.to_string()],
+        )
+        .await
+    }
+
+    async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
+        self.query_game_definitions(
+            "SELECT * FROM game_definitions WHERE visibility = ? ORDER BY LOWER(name) ASC",
+            &[Visibility::Curated.as_wire_str().to_string()],
+        )
+        .await
+    }
+
+    async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
+        self.query_game_definitions(
+            "SELECT * FROM game_definitions WHERE visibility = ? ORDER BY LOWER(name) ASC",
+            &[Visibility::Public.as_wire_str().to_string()],
+        )
+        .await
+    }
+
+    async fn get_definitions_shared_with(
+        &self,
+        user: Uuid,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        self.query_game_definitions(
+            "SELECT gd.* FROM game_definitions gd \
+             JOIN game_definition_shares s ON s.definition_id = gd.id \
+             WHERE s.grantee_user_id = ? ORDER BY LOWER(gd.name) ASC",
+            &[user.to_string()],
+        )
+        .await
+    }
+
+    async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT grantee_user_id FROM game_definition_shares WHERE definition_id = ? ORDER BY grantee_user_id ASC",
+        ))
+        .bind(id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| {
+                let s: String = row.try_get("grantee_user_id").map_err(map_sqlx_err)?;
+                parse_uuid("grantee_user_id", &s)
+            })
+            .collect()
     }
 }
 

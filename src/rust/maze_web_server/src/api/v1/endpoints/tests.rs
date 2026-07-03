@@ -843,6 +843,16 @@ mod test_definitions {
             self.scores.retain(|e| e.challenge.as_deref() != Some(challenge));
             Ok((before - self.scores.len()) as u64)
         }
+        async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, StoreError> {
+            let dated = format!("{prefix}:");
+            let before = self.scores.len();
+            self.scores.retain(|e| {
+                !e.challenge
+                    .as_deref()
+                    .is_some_and(|c| c == prefix || c.starts_with(&dated))
+            });
+            Ok((before - self.scores.len()) as u64)
+        }
     }
 
     /// Orders two score entries by `ordering`, mirroring the FileStore /

@@ -2388,6 +2388,59 @@ pub async fn score_leaderboard_includes_avatar_updated_at_when_requested(
     assert!(anon.iter().all(|e| e.avatar_updated_at.is_none()));
 }
 
+/// `clear_challenge_scores_prefix("def:<id>")` removes a definition's static
+/// `"def:<id>"` board and every daily `"def:<id>:<date>"` board, leaving an
+/// unrelated definition's board untouched.
+pub async fn score_clear_prefix_removes_a_definitions_boards(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let def_id = "11111111-1111-1111-1111-111111111111";
+    let static_ch = format!("def:{def_id}");
+    let daily_ch = format!("def:{def_id}:2026-07-04");
+    let other_ch = "def:22222222-2222-2222-2222-222222222222".to_string();
+    for ch in [&static_ch, &daily_ch, &other_ch] {
+        store
+            .record_score(&score_entry(alice.id, None, Some(ch), 1, 100))
+            .await
+            .expect("record_score");
+    }
+
+    let removed = store
+        .clear_challenge_scores_prefix(&format!("def:{def_id}"))
+        .await
+        .expect("clear prefix");
+    assert_eq!(removed, 2, "the static + daily boards of this def are cleared");
+
+    let ordering = ScoreOrdering {
+        metric: ScoreMetric::Score,
+        direction: SortDirection::Descending,
+    };
+    assert!(
+        store
+            .challenge_leaderboard(&static_ch, ordering, 100, 0, false)
+            .await
+            .expect("static board")
+            .is_empty(),
+        "static board cleared"
+    );
+    assert!(
+        store
+            .challenge_leaderboard(&daily_ch, ordering, 100, 0, false)
+            .await
+            .expect("daily board")
+            .is_empty(),
+        "daily board cleared"
+    );
+    assert_eq!(
+        store
+            .challenge_leaderboard(&other_ch, ordering, 100, 0, false)
+            .await
+            .expect("other board")
+            .len(),
+        1,
+        "an unrelated definition's board survives the prefix sweep"
+    );
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // GameStore — game definitions
 //

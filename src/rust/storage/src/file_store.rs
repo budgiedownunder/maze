@@ -3729,6 +3729,15 @@ impl ScoreStore for FileStore {
     async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error> {
         self.delete_scores_matching(|e| e.challenge.as_deref() == Some(challenge))
     }
+
+    async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, Error> {
+        let dated = format!("{prefix}:");
+        self.delete_scores_matching(|e| {
+            e.challenge
+                .as_deref()
+                .is_some_and(|c| c == prefix || c.starts_with(&dated))
+        })
+    }
 }
 
 #[async_trait]

@@ -172,12 +172,12 @@ pub fn validate_maze_definition_size(bytes: usize, max: usize) -> Result<(), Err
 ///
 /// # Examples
 ///
-/// Probe a small and an over-cap serialised config against a 16 KB cap
+/// Probe a small and an over-cap serialised config against a 4 KB cap
 /// ```
 /// use storage::validation::validate_game_definition_config_size;
 ///
-/// assert!(validate_game_definition_config_size(500, 16_000).is_ok());
-/// assert!(validate_game_definition_config_size(16_001, 16_000).is_err());
+/// assert!(validate_game_definition_config_size(500, 4_000).is_ok());
+/// assert!(validate_game_definition_config_size(4_001, 4_000).is_err());
 /// ```
 pub fn validate_game_definition_config_size(bytes: usize, max: usize) -> Result<(), Error> {
     if bytes > max {
@@ -398,17 +398,17 @@ mod tests {
 
     #[test]
     fn validate_game_definition_config_size_accepts_at_cap() {
-        validate_game_definition_config_size(16_000, 16_000).expect("at-cap should pass");
+        validate_game_definition_config_size(4_000, 4_000).expect("at-cap should pass");
     }
 
     #[test]
     fn validate_game_definition_config_size_rejects_over_cap() {
-        let err = validate_game_definition_config_size(16_001, 16_000)
+        let err = validate_game_definition_config_size(4_001, 4_000)
             .expect_err("over-cap should fail");
         match err {
             Error::GameDefinitionConfigTooLarge { bytes, max } => {
-                assert_eq!(bytes, 16_001);
-                assert_eq!(max, 16_000);
+                assert_eq!(bytes, 4_001);
+                assert_eq!(max, 4_000);
             }
             other => panic!("expected GameDefinitionConfigTooLarge, got {other:?}"),
         }

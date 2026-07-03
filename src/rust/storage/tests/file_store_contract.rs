@@ -874,6 +874,12 @@ async fn score_leaderboard_includes_usernames_when_requested() {
     contract::score_leaderboard_includes_usernames_when_requested(&mut s).await;
 }
 
+#[tokio::test]
+async fn score_clear_prefix_removes_a_definitions_boards() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::score_clear_prefix_removes_a_definitions_boards(&mut s).await;
+}
+
 // ─── GameStore — game definitions ─────────────────────────────────────────
 //
 // `GameStore` is not yet part of the `Store` supertrait (it joins once

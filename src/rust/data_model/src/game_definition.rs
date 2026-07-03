@@ -42,6 +42,27 @@ impl Visibility {
             Self::Curated => "curated",
         }
     }
+
+    /// Parses a lenient wire string into a visibility tier — case-insensitive,
+    /// with any unrecognised value falling back to the most restrictive tier
+    /// `Private`. The single source of truth for both `Deserialize` and callers
+    /// that read the tier from a plain string column.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::Visibility;
+    /// assert_eq!(Visibility::from_wire_str("Public"), Visibility::Public);
+    /// assert_eq!(Visibility::from_wire_str("nonsense"), Visibility::Private);
+    /// ```
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "shared" => Self::Shared,
+            "public" => Self::Public,
+            "curated" => Self::Curated,
+            _ => Self::Private,
+        }
+    }
 }
 
 impl Serialize for Visibility {
@@ -52,13 +73,7 @@ impl Serialize for Visibility {
 
 impl<'de> Deserialize<'de> for Visibility {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        Ok(match s.to_ascii_lowercase().as_str() {
-            "shared" => Self::Shared,
-            "public" => Self::Public,
-            "curated" => Self::Curated,
-            _ => Self::Private,
-        })
+        Ok(Self::from_wire_str(&String::deserialize(deserializer)?))
     }
 }
 
@@ -94,6 +109,25 @@ impl Rotation {
             Self::Daily => "daily",
         }
     }
+
+    /// Parses a lenient wire string into a rotation policy — case-insensitive,
+    /// unrecognised values falling back to `Static`. The single source of truth
+    /// for both `Deserialize` and callers reading the policy from a plain string
+    /// column.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::Rotation;
+    /// assert_eq!(Rotation::from_wire_str("Daily"), Rotation::Daily);
+    /// assert_eq!(Rotation::from_wire_str("weekly"), Rotation::Static);
+    /// ```
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "daily" => Self::Daily,
+            _ => Self::Static,
+        }
+    }
 }
 
 impl Serialize for Rotation {
@@ -104,11 +138,7 @@ impl Serialize for Rotation {
 
 impl<'de> Deserialize<'de> for Rotation {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        Ok(match s.to_ascii_lowercase().as_str() {
-            "daily" => Self::Daily,
-            _ => Self::Static,
-        })
+        Ok(Self::from_wire_str(&String::deserialize(deserializer)?))
     }
 }
 
