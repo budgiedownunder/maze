@@ -9,14 +9,15 @@ use unicase::UniCase;
 use uuid::Uuid;
 
 use data_model::{
-    AuditOutcome, EmailAuditEntry, GameDefinition, Maze, OneTimeToken, User, UserEmail, Visibility,
-    truncate_email_audit_error_message,
+    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, Maze,
+    OneTimeToken, User, UserEmail, Visibility, truncate_email_audit_error_message,
 };
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{
     EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
-    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore,
+    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_item_order,
+    reordered_items,
 };
 use crate::{
     file_store_migration,
@@ -77,11 +78,14 @@ pub struct FileStore {
     audit_log_dir: String,
     /// Full path to the score history directory (one file per completed run).
     score_history_dir: String,
-    /// Full path to the game definitions directory (one file per definition).
+    /// Full path to the game definitions directory. Each definition owns a
+    /// `<id>/` sub-folder holding `definition.json`, its optional `shares.json`
+    /// (grantee-uuid list), and — later — its `image.png`.
     game_definitions_dir: String,
-    /// Full path to the game-definition shares directory (one file per
-    /// definition, holding its grantee-uuid list).
-    game_definition_shares_dir: String,
+    /// Full path to the game collections directory. Each collection owns an
+    /// `<id>/` sub-folder holding `collection.json` (with its ordered items),
+    /// its optional `shares.json`, and — later — its `image.png`.
+    game_collections_dir: String,
 }
 
 // Private trait used for accessing struct fields
@@ -168,7 +172,7 @@ impl FileStore {
             audit_log_dir: "".to_string(),
             score_history_dir: "".to_string(),
             game_definitions_dir: "".to_string(),
-            game_definition_shares_dir: "".to_string(),
+            game_collections_dir: "".to_string(),
         };
 
         match store.init() {
@@ -208,8 +212,8 @@ impl FileStore {
             .join("game_definitions")
             .to_string_lossy()
             .to_string();
-        self.game_definition_shares_dir = Path::new(&self.data_dir)
-            .join("game_definition_shares")
+        self.game_collections_dir = Path::new(&self.data_dir)
+            .join("game_collections")
             .to_string_lossy()
             .to_string();
         Ok(())
@@ -464,12 +468,21 @@ impl FileStore {
         Ok(())
     }
 
-    // ── game definition JSON helpers (flat, one file per definition) ─────────
+    // ── game definition helpers (one `<id>/` folder per definition) ──────────
 
-    // Returns the file path for a given game definition id.
-    fn game_definition_file_path(&self, id: Uuid) -> String {
+    // The folder holding one definition's files (definition.json / shares.json /
+    // — later — image.png).
+    fn game_definition_dir_path(&self, id: Uuid) -> String {
         Path::new(&self.game_definitions_dir)
-            .join(format!("{id}.json"))
+            .join(id.to_string())
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Path to a definition's `definition.json`.
+    fn game_definition_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.game_definition_dir_path(id))
+            .join("definition.json")
             .to_string_lossy()
             .to_string()
     }
@@ -486,16 +499,17 @@ impl FileStore {
         serde_json::from_reader::<BufReader<File>, GameDefinition>(reader).map_err(Error::from)
     }
 
-    // Atomically writes a definition JSON via tempfile + rename. With
-    // `overwrite = false` a pre-existing id is a programmer error (ids are fresh
-    // UUIDs), reported as `Error::Other`.
+    // Atomically writes a definition's `definition.json` via tempfile + rename,
+    // creating its `<id>/` folder. With `overwrite = false` a pre-existing id is
+    // a programmer error (ids are fresh UUIDs), reported as `Error::Other`.
     fn write_game_definition_file(
         &self,
         definition: &GameDefinition,
         overwrite: bool,
     ) -> Result<(), Error> {
-        if !dir_exists(&self.game_definitions_dir) {
-            fs::create_dir_all(&self.game_definitions_dir)?;
+        let dir = self.game_definition_dir_path(definition.id);
+        if !dir_exists(&dir) {
+            fs::create_dir_all(&dir)?;
         }
         let target = self.game_definition_file_path(definition.id);
         if !overwrite && file_exists(&target) {
@@ -514,7 +528,7 @@ impl FileStore {
         Ok(())
     }
 
-    // Enumerates definition ids in the game_definitions directory.
+    // Enumerates definition ids (the `<id>/` sub-folders of game_definitions).
     fn get_game_definition_ids(&self) -> Result<Vec<Uuid>, Error> {
         if !dir_exists(&self.game_definitions_dir) {
             return Ok(Vec::new());
@@ -523,10 +537,10 @@ impl FileStore {
             .filter_map(|entry| {
                 entry.ok().and_then(|e| {
                     let path = e.path();
-                    if !path.is_file() {
+                    if !path.is_dir() {
                         return None;
                     }
-                    let name = path.file_stem()?.to_str()?;
+                    let name = path.file_name()?.to_str()?;
                     Uuid::parse_str(name).ok()
                 })
             })
@@ -569,10 +583,10 @@ impl FileStore {
         Ok(None)
     }
 
-    // Returns the file path holding a definition's grantee list.
+    // Path to a definition's `shares.json` (inside its `<id>/` folder).
     fn game_definition_shares_file_path(&self, def_id: Uuid) -> String {
-        Path::new(&self.game_definition_shares_dir)
-            .join(format!("{def_id}.json"))
+        Path::new(&self.game_definition_dir_path(def_id))
+            .join("shares.json")
             .to_string_lossy()
             .to_string()
     }
@@ -588,7 +602,7 @@ impl FileStore {
         serde_json::from_reader::<BufReader<File>, Vec<Uuid>>(reader).map_err(Error::from)
     }
 
-    // Writes a definition's grantee list; an empty list removes the file so no
+    // Writes a definition's `shares.json`; an empty list removes the file so no
     // empty share record lingers.
     fn write_game_definition_grantees(
         &self,
@@ -600,8 +614,170 @@ impl FileStore {
             delete_file(&target);
             return Ok(());
         }
-        if !dir_exists(&self.game_definition_shares_dir) {
-            fs::create_dir_all(&self.game_definition_shares_dir)?;
+        let dir = self.game_definition_dir_path(def_id);
+        if !dir_exists(&dir) {
+            fs::create_dir_all(&dir)?;
+        }
+        let json = serde_json::to_string(grantees)?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // ── game collection helpers (one `<id>/` folder per collection) ──────────
+
+    // The folder holding one collection's files (collection.json / shares.json /
+    // — later — image.png).
+    fn game_collection_dir_path(&self, id: Uuid) -> String {
+        Path::new(&self.game_collections_dir)
+            .join(id.to_string())
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Path to a collection's `collection.json`.
+    fn game_collection_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.game_collection_dir_path(id))
+            .join("collection.json")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads a collection's JSON file, with its items ordered by `sort_order`.
+    // Returns `GameCollectionIdNotFound` if the file does not exist.
+    fn read_game_collection_raw(&self, id: Uuid) -> Result<GameCollection, Error> {
+        let path = self.game_collection_file_path(id);
+        if !file_exists(&path) {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        let mut collection: GameCollection = serde_json::from_reader(reader).map_err(Error::from)?;
+        collection.items.sort_by_key(|i| i.sort_order);
+        Ok(collection)
+    }
+
+    // Atomically writes a collection's `collection.json` via tempfile + rename,
+    // creating its `<id>/` folder.
+    fn write_game_collection_file(
+        &self,
+        collection: &GameCollection,
+        overwrite: bool,
+    ) -> Result<(), Error> {
+        let dir = self.game_collection_dir_path(collection.id);
+        if !dir_exists(&dir) {
+            fs::create_dir_all(&dir)?;
+        }
+        let target = self.game_collection_file_path(collection.id);
+        if !overwrite && file_exists(&target) {
+            return Err(Error::Other(format!(
+                "game collection {} already exists",
+                collection.id
+            )));
+        }
+        let json = serde_json::to_string(collection)?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // Enumerates collection ids (the `<id>/` sub-folders of game_collections).
+    fn get_game_collection_ids(&self) -> Result<Vec<Uuid>, Error> {
+        if !dir_exists(&self.game_collections_dir) {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<Uuid> = fs::read_dir(&self.game_collections_dir)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    let path = e.path();
+                    if !path.is_dir() {
+                        return None;
+                    }
+                    let name = path.file_name()?.to_str()?;
+                    Uuid::parse_str(name).ok()
+                })
+            })
+            .collect();
+        Ok(ids)
+    }
+
+    // Loads every collection, skipping any unreadable file.
+    fn read_all_game_collections(&self) -> Result<Vec<GameCollection>, Error> {
+        let mut collections = Vec::new();
+        for id in self.get_game_collection_ids()? {
+            match self.read_game_collection_raw(id) {
+                Ok(collection) => collections.push(collection),
+                Err(error) => {
+                    log::warn!("FileStore game collection read: skipping unreadable '{id}' - {error}");
+                }
+            }
+        }
+        Ok(collections)
+    }
+
+    // Sorts collections case-insensitively by name (the list-read ordering).
+    fn sort_collections_by_name(collections: &mut [GameCollection]) {
+        collections
+            .sort_by(|a, b| UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())));
+    }
+
+    // Returns the id of `owner`'s collection named `name` (case-insensitive), or
+    // `None`. Enforces the per-owner unique-name rule on create/update.
+    fn find_owner_collection_id_by_name(
+        &self,
+        owner_id: Uuid,
+        name: &str,
+    ) -> Result<Option<Uuid>, Error> {
+        let target = UniCase::new(name);
+        for collection in self.read_all_game_collections()? {
+            if collection.owner_id == owner_id && UniCase::new(collection.name.as_str()) == target {
+                return Ok(Some(collection.id));
+            }
+        }
+        Ok(None)
+    }
+
+    // Path to a collection's `shares.json` (inside its `<id>/` folder).
+    fn game_collection_shares_file_path(&self, collection_id: Uuid) -> String {
+        Path::new(&self.game_collection_dir_path(collection_id))
+            .join("shares.json")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads a collection's grantee-uuid list (empty when no share file exists).
+    fn read_game_collection_grantees(&self, collection_id: Uuid) -> Result<Vec<Uuid>, Error> {
+        let path = self.game_collection_shares_file_path(collection_id);
+        if !file_exists(&path) {
+            return Ok(Vec::new());
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, Vec<Uuid>>(reader).map_err(Error::from)
+    }
+
+    // Writes a collection's `shares.json`; an empty list removes the file.
+    fn write_game_collection_grantees(
+        &self,
+        collection_id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error> {
+        let target = self.game_collection_shares_file_path(collection_id);
+        if grantees.is_empty() {
+            delete_file(&target);
+            return Ok(());
+        }
+        let dir = self.game_collection_dir_path(collection_id);
+        if !dir_exists(&dir) {
+            fs::create_dir_all(&dir)?;
         }
         let json = serde_json::to_string(grantees)?;
         let tmp = format!("{target}.tmp");
@@ -1313,8 +1489,7 @@ impl UserStore for FileStore {
             match self.read_game_definition_raw(def_id) {
                 Ok(def) if def.owner_id == id => {
                     owned_definition_ids.push(def_id);
-                    delete_file(&self.game_definition_file_path(def_id));
-                    delete_file(&self.game_definition_shares_file_path(def_id));
+                    delete_dir(&self.game_definition_dir_path(def_id));
                 }
                 Ok(_) => {
                     let mut grantees = self.read_game_definition_grantees(def_id)?;
@@ -1336,6 +1511,25 @@ impl UserStore for FileStore {
                         .any(|d| c == format!("def:{d}") || c.starts_with(&format!("def:{d}:")))
                 })
             })?;
+        }
+        // Hard-delete the user's game collections + their share grants, and strip
+        // the user from every remaining collection's grantee list. Mirrors the
+        // SqlStore FK cascade on `game_collections.owner_id` and
+        // `game_collection_shares.grantee_user_id`.
+        for collection_id in self.get_game_collection_ids()? {
+            match self.read_game_collection_raw(collection_id) {
+                Ok(collection) if collection.owner_id == id => {
+                    delete_dir(&self.game_collection_dir_path(collection_id));
+                }
+                Ok(_) => {
+                    let mut grantees = self.read_game_collection_grantees(collection_id)?;
+                    if grantees.contains(&id) {
+                        grantees.retain(|g| *g != id);
+                        self.write_game_collection_grantees(collection_id, &grantees)?;
+                    }
+                }
+                Err(_) => {}
+            }
         }
         Ok(())
     }
@@ -3806,8 +4000,7 @@ impl GameStore for FileStore {
         if existing.owner_id != owner.id {
             return Err(Error::GameDefinitionIdNotFound(id.to_string()));
         }
-        delete_file(&self.game_definition_file_path(id));
-        delete_file(&self.game_definition_shares_file_path(id));
+        delete_dir(&self.game_definition_dir_path(id));
         Ok(())
     }
 
@@ -3894,6 +4087,220 @@ impl GameStore for FileStore {
 
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         self.read_game_definition_grantees(id)
+    }
+
+    // ── Collections ──
+
+    async fn create_game_collection(
+        &mut self,
+        owner: &User,
+        collection: &mut GameCollection,
+    ) -> Result<(), Error> {
+        if collection.name.trim().is_empty() {
+            return Err(Error::GameCollectionNameMissing());
+        }
+        if self
+            .find_owner_collection_id_by_name(owner.id, &collection.name)?
+            .is_some()
+        {
+            return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+        }
+        collection.owner_id = owner.id;
+        if collection.id.is_nil() {
+            collection.id = Uuid::new_v4();
+        }
+        let now = generate_now_millis();
+        collection.created_at = now;
+        collection.updated_at = now;
+        normalize_item_order(&mut collection.items);
+        self.write_game_collection_file(collection, false)?;
+        Ok(())
+    }
+
+    async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, Error> {
+        self.read_game_collection_raw(id)
+    }
+
+    async fn update_game_collection(
+        &mut self,
+        owner: &User,
+        collection: &mut GameCollection,
+    ) -> Result<(), Error> {
+        let existing = self.read_game_collection_raw(collection.id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection.id.to_string()));
+        }
+        if collection.name.trim().is_empty() {
+            return Err(Error::GameCollectionNameMissing());
+        }
+        if let Some(other) = self.find_owner_collection_id_by_name(owner.id, &collection.name)?
+            && other != collection.id
+        {
+            return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+        }
+        // Metadata-only update: items are managed by the item methods, so keep
+        // the persisted membership regardless of what the caller passed.
+        collection.owner_id = owner.id;
+        collection.created_at = existing.created_at;
+        collection.updated_at = generate_now_millis();
+        collection.items = existing.items;
+        self.write_game_collection_file(collection, true)?;
+        Ok(())
+    }
+
+    async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        let existing = self.read_game_collection_raw(id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        // Removes the whole `<id>/` folder (collection.json + shares.json + any
+        // image.png).
+        delete_dir(&self.game_collection_dir_path(id));
+        Ok(())
+    }
+
+    async fn add_collection_item(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        definition_id: Uuid,
+    ) -> Result<(), Error> {
+        let mut collection = self.read_game_collection_raw(collection_id)?;
+        if collection.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
+        }
+        if collection.items.iter().any(|i| i.definition_id == definition_id) {
+            return Ok(());
+        }
+        let sort_order = collection.items.len() as u32;
+        collection.items.push(CollectionItem {
+            definition_id,
+            sort_order,
+        });
+        collection.updated_at = generate_now_millis();
+        self.write_game_collection_file(&collection, true)?;
+        Ok(())
+    }
+
+    async fn remove_collection_item(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        definition_id: Uuid,
+    ) -> Result<(), Error> {
+        let mut collection = self.read_game_collection_raw(collection_id)?;
+        if collection.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
+        }
+        let before = collection.items.len();
+        collection.items.retain(|i| i.definition_id != definition_id);
+        if collection.items.len() != before {
+            normalize_item_order(&mut collection.items);
+            collection.updated_at = generate_now_millis();
+            self.write_game_collection_file(&collection, true)?;
+        }
+        Ok(())
+    }
+
+    async fn reorder_collection_items(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        ordered: &[Uuid],
+    ) -> Result<(), Error> {
+        let mut collection = self.read_game_collection_raw(collection_id)?;
+        if collection.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
+        }
+        collection.items = reordered_items(std::mem::take(&mut collection.items), ordered);
+        collection.updated_at = generate_now_millis();
+        self.write_game_collection_file(&collection, true)?;
+        Ok(())
+    }
+
+    async fn grant_collection_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error> {
+        let existing = self.read_game_collection_raw(id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        let mut grantees = self.read_game_collection_grantees(id)?;
+        if !grantees.contains(&grantee) {
+            grantees.push(grantee);
+            self.write_game_collection_grantees(id, &grantees)?;
+        }
+        Ok(())
+    }
+
+    async fn revoke_collection_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error> {
+        let existing = self.read_game_collection_raw(id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        let mut grantees = self.read_game_collection_grantees(id)?;
+        let before = grantees.len();
+        grantees.retain(|g| *g != grantee);
+        if grantees.len() != before {
+            self.write_game_collection_grantees(id, &grantees)?;
+        }
+        Ok(())
+    }
+
+    async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error> {
+        let mut collections: Vec<GameCollection> = self
+            .read_all_game_collections()?
+            .into_iter()
+            .filter(|c| c.owner_id == owner.id)
+            .collect();
+        Self::sort_collections_by_name(&mut collections);
+        Ok(collections)
+    }
+
+    async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error> {
+        let mut collections: Vec<GameCollection> = self
+            .read_all_game_collections()?
+            .into_iter()
+            .filter(|c| c.visibility == Visibility::Curated)
+            .collect();
+        Self::sort_collections_by_name(&mut collections);
+        Ok(collections)
+    }
+
+    async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error> {
+        let mut collections: Vec<GameCollection> = self
+            .read_all_game_collections()?
+            .into_iter()
+            .filter(|c| c.visibility == Visibility::Public)
+            .collect();
+        Self::sort_collections_by_name(&mut collections);
+        Ok(collections)
+    }
+
+    async fn get_collections_shared_with(
+        &self,
+        user: Uuid,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let mut collections: Vec<GameCollection> = Vec::new();
+        for collection in self.read_all_game_collections()? {
+            if self.read_game_collection_grantees(collection.id)?.contains(&user) {
+                collections.push(collection);
+            }
+        }
+        Self::sort_collections_by_name(&mut collections);
+        Ok(collections)
+    }
+
+    async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
+        self.read_game_collection_grantees(id)
     }
 }
 

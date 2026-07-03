@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `storage` crate is written in `Rust` and exposes structs, traits and functions for storing data objects (users, mazes, game definitions, OAuth identities, login tokens).
+The `storage` crate is written in `Rust` and exposes structs, traits and functions for storing data objects (users, mazes, game definitions, game collections, OAuth identities, login tokens).
 
 Two backends are available, both implementing the same `Store` trait:
 
@@ -116,10 +116,14 @@ data_dir/
   .schema_version            single integer, written atomically (tempfile + rename)
   email_audit_log/
     <entry-id>.json          one row per email send attempt (intent + outcome)
+  game_collections/
+    <collection-id>/         one folder per collection
+      collection.json        the collection (name / visibility + ordered items)
+      shares.json            grantee-uuid list (present only when shared)
   game_definitions/
-    <definition-id>.json     one parametric 3D game definition (opaque config + seed)
-  game_definition_shares/
-    <definition-id>.json     that definition's grantee-uuid list (present only when shared)
+    <definition-id>/         one folder per definition
+      definition.json        the game definition (name / visibility + opaque config + seed)
+      shares.json            grantee-uuid list (present only when shared)
   one_time_tokens/
     <token-id>.json          single-use, time-bounded token (password reset / invite / email verification)
   score_history/
@@ -150,7 +154,7 @@ The migration registry lives in `src/file_store_migration.rs`:
 | 7       | No-op. The matching SQL migration adds an `error_message VARCHAR(2000)` column to `email_audit_log` for verbose upstream-error capture. The FileStore data shape is updated by `#[serde(default, skip_serializing_if = "Option::is_none")]` on the new `EmailAuditEntry.error_message` field — existing audit-row JSON files round-trip without rewriting; new files written after version-7-applied include the field only when populated. Both stores truncate oversize values at write time via `data_model::truncate_email_audit_error_message` so a verbose upstream body never fails the audit write. |
 | 8       | `migrate_0008_user_timestamps` — walks every `users/<uuid>/user.json` and writes the migration-run timestamp (captured once at the top of the migration function) into `created_at` for any file that lacks it. `last_sign_in_at` is backfilled to the most recent `logins[*].created_at` (the most accurate evidence of the user's last sign-in); files with no logins keep `last_sign_in_at` absent so the welcome-banner trigger `User::is_first_sign_in()` fires correctly on their first actual sign-in. `User.created_at` is non-nullable in the application struct so callers never have to handle the absent case. New users created from this migration onwards carry the real `Utc::now()` set at user creation. |
 | 9       | `migrate_0009_create_score_history_dir` — creates `<data_dir>/score_history/`. One file per completed run keyed by id; the FileStore `ScoreStore` impl reads/writes via tempfile + rename and serves the leaderboards / personal history by scanning the directory. The SQL `ON DELETE CASCADE` on `score_history` is mirrored here as explicit deletes: `delete_user` / `purge_user` remove the user's own rows plus the boards of the user's deleted mazes, and `delete_maze` removes that maze's board. |
-| 11      | `migrate_0011_create_game_definitions_dirs` — creates `<data_dir>/game_definitions/` (one file per definition) and `<data_dir>/game_definition_shares/` (one grantee-uuid-list file per definition) used by the FileStore `GameStore` impl. **Version 10 is skipped** — the SQL `0010_user_avatars` migration has no FileStore directory counterpart (avatars ride each user's dir as `avatar.png`). `delete_user` removes the user's own definitions + their shares, strips the user from every remaining definition's grantee list, and clears the `def:<id>` board(s) of the removed definitions. |
+| 11      | `migrate_0011_create_game_definitions_dir` — creates the `<data_dir>/game_definitions/` parent directory used by the FileStore `GameStore` impl. Each definition owns an `<id>/` sub-folder (`definition.json` + optional `shares.json` / `image.png`), created lazily on write. **Version 10 is skipped** — the SQL `0010_user_avatars` migration has no FileStore directory counterpart (avatars ride each user's dir as `avatar.png`). `delete_user` removes the user's own definition folders, strips the user from every remaining definition's grantee list, and clears the `def:<id>` board(s) of the removed definitions. |
 
 Behaviour properties:
 

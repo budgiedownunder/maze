@@ -22,8 +22,9 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, EmailAuditEntry, GameDefinition, Maze, OAuthIdentity, OneTimeToken, Rotation,
-    TokenPurpose, User, UserEmail, UserLogin, Visibility, truncate_email_audit_error_message,
+    AuditOutcome, EmailAuditEntry, GameCollection, GameDefinition, Maze, OAuthIdentity,
+    OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin, Visibility,
+    truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
@@ -4815,6 +4816,99 @@ impl GameStore for SqlStore {
             })
             .collect()
     }
+
+    // ── Collections ── Stubbed until the collection tables are added; these
+    // let SqlStore satisfy `GameStore` in the meantime. No path reaches them
+    // (there are no SqlStore collection tests, and `GameStore` is not yet part
+    // of the `Store` supertrait), so returning an error rather than panicking
+    // keeps them inert.
+    async fn create_game_collection(
+        &mut self,
+        _owner: &User,
+        _collection: &mut GameCollection,
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn get_game_collection(&self, _id: Uuid) -> Result<GameCollection, Error> {
+        Err(collections_unimplemented())
+    }
+    async fn update_game_collection(
+        &mut self,
+        _owner: &User,
+        _collection: &mut GameCollection,
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn delete_game_collection(&mut self, _owner: &User, _id: Uuid) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn add_collection_item(
+        &mut self,
+        _owner: &User,
+        _collection_id: Uuid,
+        _definition_id: Uuid,
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn remove_collection_item(
+        &mut self,
+        _owner: &User,
+        _collection_id: Uuid,
+        _definition_id: Uuid,
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn reorder_collection_items(
+        &mut self,
+        _owner: &User,
+        _collection_id: Uuid,
+        _ordered: &[Uuid],
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn grant_collection_access(
+        &mut self,
+        _owner: &User,
+        _id: Uuid,
+        _grantee: Uuid,
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn revoke_collection_access(
+        &mut self,
+        _owner: &User,
+        _id: Uuid,
+        _grantee: Uuid,
+    ) -> Result<(), Error> {
+        Err(collections_unimplemented())
+    }
+    async fn get_collections_for_owner(
+        &self,
+        _owner: &User,
+    ) -> Result<Vec<GameCollection>, Error> {
+        Err(collections_unimplemented())
+    }
+    async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error> {
+        Err(collections_unimplemented())
+    }
+    async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error> {
+        Err(collections_unimplemented())
+    }
+    async fn get_collections_shared_with(
+        &self,
+        _user: Uuid,
+    ) -> Result<Vec<GameCollection>, Error> {
+        Err(collections_unimplemented())
+    }
+    async fn get_collection_grantees(&self, _id: Uuid) -> Result<Vec<Uuid>, Error> {
+        Err(collections_unimplemented())
+    }
+}
+
+/// The error every SqlStore game-collection stub returns until the real
+/// implementations (backed by the collection tables) replace them.
+fn collections_unimplemented() -> Error {
+    Error::Other("SqlStore does not yet implement game collections".to_string())
 }
 
 impl Store for SqlStore {}

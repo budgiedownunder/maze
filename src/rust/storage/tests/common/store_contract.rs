@@ -12,9 +12,10 @@
 
 use chrono::{Duration, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS, ERROR_MESSAGE_TRUNCATION_MARKER,
-    EmailAuditEntry, GameDefinition, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, Rotation,
-    TokenPurpose, User, UserEmail, UserLogin, Visibility,
+    AuditOutcome, CollectionItem, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS,
+    ERROR_MESSAGE_TRUNCATION_MARKER, EmailAuditEntry, GameCollection, GameDefinition, Maze,
+    MazeDefinition, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin,
+    Visibility,
 };
 use storage::{
     Error, GameStore, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
@@ -2700,4 +2701,265 @@ pub async fn delete_user_cascades_to_game_definitions<S: GameStore + UserStore>(
     store.get_game_definition(bob_def.id).await.expect("bob def remains");
     let bob_grantees = store.get_definition_grantees(bob_def.id).await.expect("bob grantees");
     assert!(!bob_grantees.contains(&alice.id), "deleted user must be removed from grantee lists");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// GameStore — game collections
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Builds an empty collection. `id`/`owner_id`/timestamps are set by
+/// `create_game_collection`; items are managed via the item methods.
+pub fn make_game_collection(name: &str, visibility: Visibility) -> GameCollection {
+    GameCollection {
+        id: Uuid::nil(),
+        owner_id: Uuid::nil(),
+        name: name.to_string(),
+        visibility,
+        description: None,
+        image_updated_at: None,
+        items: vec![],
+        created_at: Utc::now().trunc_subsecs(3),
+        updated_at: Utc::now().trunc_subsecs(3),
+    }
+}
+
+pub async fn create_game_collection_assigns_ids_and_round_trips<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let mut collection = make_game_collection("Nightfall Bundle", Visibility::Public);
+    collection.description = Some("A themed set".to_string());
+    collection.items = vec![
+        CollectionItem { definition_id: Uuid::new_v4(), sort_order: 0 },
+        CollectionItem { definition_id: Uuid::new_v4(), sort_order: 1 },
+    ];
+    store
+        .create_game_collection(&owner, &mut collection)
+        .await
+        .expect("create");
+    assert_ne!(collection.id, Uuid::nil(), "create must assign a non-nil id");
+    assert_eq!(collection.owner_id, owner.id, "create must set owner_id");
+    let loaded = store.get_game_collection(collection.id).await.expect("get");
+    assert_eq!(loaded, collection, "collection must round-trip (items included)");
+}
+
+pub async fn create_game_collection_rejects_empty_name<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let mut collection = make_game_collection("  ", Visibility::Private);
+    let err = store
+        .create_game_collection(&owner, &mut collection)
+        .await
+        .expect_err("empty name must be rejected");
+    assert!(matches!(err, Error::GameCollectionNameMissing()), "got {err:?}");
+}
+
+pub async fn create_game_collection_rejects_duplicate_name_ci<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let mut first = make_game_collection("Difficulty", Visibility::Curated);
+    store.create_game_collection(&owner, &mut first).await.expect("first");
+    let mut clash = make_game_collection("DIFFICULTY", Visibility::Public);
+    let err = store
+        .create_game_collection(&owner, &mut clash)
+        .await
+        .expect_err("case-insensitive per-owner name collision must be rejected");
+    assert!(matches!(err, Error::GameCollectionNameAlreadyExists(_)), "got {err:?}");
+}
+
+pub async fn get_game_collection_returns_not_found_for_unknown_id<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let err = store
+        .get_game_collection(Uuid::new_v4())
+        .await
+        .expect_err("unknown id must be not-found");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn update_game_collection_is_metadata_only_and_scoped_to_owner<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let other = seed_user(store, "col_other", "col_other@example.com").await;
+    let mut collection = make_game_collection("Original", Visibility::Private);
+    store.create_game_collection(&owner, &mut collection).await.expect("create");
+    // Add an item so we can prove update leaves membership untouched.
+    let member = Uuid::new_v4();
+    store.add_collection_item(&owner, collection.id, member).await.expect("add");
+
+    // Owner updates metadata — and even if the caller passes empty items, the
+    // persisted membership is preserved.
+    let mut edit = store.get_game_collection(collection.id).await.expect("reload");
+    edit.name = "Renamed".to_string();
+    edit.visibility = Visibility::Public;
+    edit.items = vec![];
+    store.update_game_collection(&owner, &mut edit).await.expect("owner update");
+    let loaded = store.get_game_collection(collection.id).await.expect("reload2");
+    assert_eq!(loaded.name, "Renamed");
+    assert_eq!(loaded.visibility, Visibility::Public);
+    assert_eq!(
+        loaded.items.iter().map(|i| i.definition_id).collect::<Vec<_>>(),
+        vec![member],
+        "update must not touch membership",
+    );
+
+    // A non-owner cannot update it.
+    let mut hijack = loaded.clone();
+    hijack.name = "Hijacked".to_string();
+    let err = store
+        .update_game_collection(&other, &mut hijack)
+        .await
+        .expect_err("non-owner update must be rejected");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn delete_game_collection_is_owner_scoped<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let other = seed_user(store, "col_other", "col_other@example.com").await;
+    let mut collection = make_game_collection("Doomed", Visibility::Private);
+    store.create_game_collection(&owner, &mut collection).await.expect("create");
+
+    let err = store
+        .delete_game_collection(&other, collection.id)
+        .await
+        .expect_err("non-owner delete must be rejected");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+
+    store.delete_game_collection(&owner, collection.id).await.expect("owner delete");
+    let err = store
+        .get_game_collection(collection.id)
+        .await
+        .expect_err("deleted collection must be gone");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn collection_items_add_remove_and_reorder<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let other = seed_user(store, "col_other", "col_other@example.com").await;
+    let mut collection = make_game_collection("Bundle", Visibility::Private);
+    store.create_game_collection(&owner, &mut collection).await.expect("create");
+    let (a, b, c) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+
+    for id in [a, b, c] {
+        store.add_collection_item(&owner, collection.id, id).await.expect("add");
+    }
+    // Idempotent re-add.
+    store.add_collection_item(&owner, collection.id, a).await.expect("re-add");
+    let loaded = store.get_game_collection(collection.id).await.expect("get");
+    assert_eq!(item_ids(&loaded), vec![a, b, c], "insertion order, no duplicate");
+    assert_eq!(item_orders(&loaded), vec![0, 1, 2]);
+
+    // Reorder to c, a, b.
+    store.reorder_collection_items(&owner, collection.id, &[c, a, b]).await.expect("reorder");
+    let loaded = store.get_game_collection(collection.id).await.expect("get2");
+    assert_eq!(item_ids(&loaded), vec![c, a, b]);
+    assert_eq!(item_orders(&loaded), vec![0, 1, 2], "sort_order re-normalised");
+
+    // Remove a → the rest re-normalise.
+    store.remove_collection_item(&owner, collection.id, a).await.expect("remove");
+    let loaded = store.get_game_collection(collection.id).await.expect("get3");
+    assert_eq!(item_ids(&loaded), vec![c, b]);
+    assert_eq!(item_orders(&loaded), vec![0, 1]);
+
+    // A non-owner cannot mutate membership.
+    let err = store
+        .add_collection_item(&other, collection.id, Uuid::new_v4())
+        .await
+        .expect_err("non-owner add must be rejected");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn collection_list_reads_scope_by_owner_and_visibility<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let alice = seed_user(store, "col_alice", "col_alice@example.com").await;
+    let bob = seed_user(store, "col_bob", "col_bob@example.com").await;
+    for (name, vis) in [
+        ("Alpha", Visibility::Private),
+        ("Bravo", Visibility::Public),
+        ("Charlie", Visibility::Curated),
+    ] {
+        let mut c = make_game_collection(name, vis);
+        store.create_game_collection(&alice, &mut c).await.expect("alice collection");
+    }
+    let mut b = make_game_collection("Bravo", Visibility::Public); // same name, other owner is fine
+    store.create_game_collection(&bob, &mut b).await.expect("bob collection");
+
+    let alice_own = store.get_collections_for_owner(&alice).await.expect("owner list");
+    assert_eq!(
+        alice_own.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        ["Alpha", "Bravo", "Charlie"],
+        "owner list, sorted by name",
+    );
+
+    let public = store.get_public_collections().await.expect("public list");
+    assert!(public.iter().all(|c| c.visibility == Visibility::Public));
+    let public_owners: Vec<Uuid> = public.iter().map(|c| c.owner_id).collect();
+    assert!(
+        public_owners.contains(&alice.id) && public_owners.contains(&bob.id),
+        "public list spans owners",
+    );
+
+    let curated = store.get_curated_collections().await.expect("curated list");
+    assert_eq!(curated.len(), 1);
+    assert_eq!(curated[0].name, "Charlie");
+}
+
+pub async fn collection_grants_control_shared_with<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let friend = seed_user(store, "col_friend", "col_friend@example.com").await;
+    let mut collection = make_game_collection("Shared", Visibility::Shared);
+    store.create_game_collection(&owner, &mut collection).await.expect("create");
+
+    assert!(store.get_collection_grantees(collection.id).await.expect("grantees").is_empty());
+    assert!(store.get_collections_shared_with(friend.id).await.expect("shared").is_empty());
+
+    // Non-owner cannot grant.
+    let err = store
+        .grant_collection_access(&friend, collection.id, friend.id)
+        .await
+        .expect_err("non-owner grant must be rejected");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+
+    store.grant_collection_access(&owner, collection.id, friend.id).await.expect("grant");
+    store.grant_collection_access(&owner, collection.id, friend.id).await.expect("grant again");
+    assert_eq!(
+        store.get_collection_grantees(collection.id).await.expect("grantees"),
+        vec![friend.id],
+    );
+    let shared = store.get_collections_shared_with(friend.id).await.expect("shared");
+    assert_eq!(shared.len(), 1);
+    assert_eq!(shared[0].id, collection.id);
+
+    store.revoke_collection_access(&owner, collection.id, friend.id).await.expect("revoke");
+    assert!(store.get_collection_grantees(collection.id).await.expect("grantees").is_empty());
+    assert!(store.get_collections_shared_with(friend.id).await.expect("shared").is_empty());
+}
+
+pub async fn delete_user_cascades_to_game_collections<S: GameStore + UserStore>(store: &mut S) {
+    let alice = seed_user(store, "col_alice", "col_alice@example.com").await;
+    let bob = seed_user(store, "col_bob", "col_bob@example.com").await;
+    let mut alice_col = make_game_collection("AliceCol", Visibility::Shared);
+    store.create_game_collection(&alice, &mut alice_col).await.expect("alice col");
+    let mut bob_col = make_game_collection("BobCol", Visibility::Shared);
+    store.create_game_collection(&bob, &mut bob_col).await.expect("bob col");
+    store.grant_collection_access(&alice, alice_col.id, bob.id).await.expect("grant bob");
+    store.grant_collection_access(&bob, bob_col.id, alice.id).await.expect("grant alice");
+
+    store.delete_user(alice.id).await.expect("delete alice");
+
+    let err = store.get_game_collection(alice_col.id).await.expect_err("alice col gone");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+    store.get_game_collection(bob_col.id).await.expect("bob col remains");
+    let bob_grantees = store.get_collection_grantees(bob_col.id).await.expect("bob grantees");
+    assert!(!bob_grantees.contains(&alice.id), "deleted user removed from grantee lists");
+}
+
+fn item_ids(collection: &GameCollection) -> Vec<Uuid> {
+    collection.items.iter().map(|i| i.definition_id).collect()
+}
+
+fn item_orders(collection: &GameCollection) -> Vec<u32> {
+    collection.items.iter().map(|i| i.sort_order).collect()
 }

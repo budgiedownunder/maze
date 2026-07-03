@@ -953,3 +953,65 @@ async fn game_definition_delete_user_cascades() {
     let (mut s, _temp) = fresh_game_store().await;
     contract::delete_user_cascades_to_game_definitions(&mut s).await;
 }
+
+// ─── GameStore — game collections ─────────────────────────────────────────
+
+#[tokio::test]
+async fn game_collection_assigns_ids_and_round_trips() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_collection_assigns_ids_and_round_trips(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_rejects_empty_name() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_collection_rejects_empty_name(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_rejects_duplicate_name_ci() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_collection_rejects_duplicate_name_ci(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_get_returns_not_found_for_unknown_id() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::get_game_collection_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_update_is_metadata_only_and_scoped_to_owner() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::update_game_collection_is_metadata_only_and_scoped_to_owner(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_delete_is_owner_scoped() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::delete_game_collection_is_owner_scoped(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_items_add_remove_and_reorder() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::collection_items_add_remove_and_reorder(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_list_reads_scope_by_owner_and_visibility() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::collection_list_reads_scope_by_owner_and_visibility(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_grants_control_shared_with() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::collection_grants_control_shared_with(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_delete_user_cascades() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::delete_user_cascades_to_game_collections(&mut s).await;
+}

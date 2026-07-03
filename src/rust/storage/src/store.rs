@@ -1,7 +1,10 @@
 use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use data_model::{AuditOutcome, EmailAuditEntry, GameDefinition, Maze, OneTimeToken, User, UserEmail};
+use data_model::{
+    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, Maze,
+    OneTimeToken, User, UserEmail,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -505,6 +508,115 @@ pub trait GameStore {
     /// the server uses for the owner's manage-shares view and for composing the
     /// access decision. Returns an empty list for an unknown/ungranted id.
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+
+    // ── Collections (an ordered, presentation-only grouping of definitions) ──
+
+    /// Adds a new collection, assigning `id`/`owner_id`/timestamps and persisting
+    /// its initial `items`. Rejects an empty name or a per-owner name collision.
+    async fn create_game_collection(
+        &mut self,
+        owner: &User,
+        collection: &mut GameCollection,
+    ) -> Result<(), Error>;
+    /// Loads a collection (with its `items` ordered by `sort_order`) by id — an
+    /// unconditional primitive the server composes access from. Rejects with
+    /// [`Error::GameCollectionIdNotFound`] when absent.
+    async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, Error>;
+    /// Updates a collection's **own metadata** (name / description /
+    /// image_updated_at / visibility) owned by `owner`, refreshing `updated_at`.
+    /// Its `items` are left unchanged — membership is managed by the item
+    /// methods below.
+    async fn update_game_collection(
+        &mut self,
+        owner: &User,
+        collection: &mut GameCollection,
+    ) -> Result<(), Error>;
+    /// Deletes a collection owned by `owner`, removing it, its items, and its
+    /// share grants.
+    async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+    /// Appends `definition_id` to the owner's collection (after the current last
+    /// item). Idempotent — re-adding an existing member is a no-op. Stores only
+    /// the reference; the definition's existence/accessibility is the server's
+    /// concern (a dangling ref to a since-deleted definition is filtered at
+    /// display).
+    async fn add_collection_item(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        definition_id: Uuid,
+    ) -> Result<(), Error>;
+    /// Removes `definition_id` from the owner's collection. Idempotent.
+    async fn remove_collection_item(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        definition_id: Uuid,
+    ) -> Result<(), Error>;
+    /// Re-orders the owner's collection so its members appear in `ordered`
+    /// (`sort_order` becomes each id's index). Ids in `ordered` that aren't
+    /// members are ignored; members omitted from `ordered` keep their prior
+    /// relative order after the listed ones.
+    async fn reorder_collection_items(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        ordered: &[Uuid],
+    ) -> Result<(), Error>;
+    /// Grants `grantee` access to the owner's collection. Idempotent.
+    async fn grant_collection_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Revokes `grantee`'s access to the owner's collection. Idempotent.
+    async fn revoke_collection_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// All of `owner`'s own collections, sorted alphabetically by name.
+    async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error>;
+    /// Every `Curated` collection, across all owners, sorted by name.
+    async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error>;
+    /// Every `Public` collection, across all owners, sorted by name.
+    async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error>;
+    /// Every collection explicitly granted to `user`, sorted by name.
+    async fn get_collections_shared_with(&self, user: Uuid)
+        -> Result<Vec<GameCollection>, Error>;
+    /// The user ids granted access to a collection — an unconditional primitive.
+    /// Returns an empty list for an unknown/ungranted id.
+    async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+}
+
+/// Normalises a collection's item ordering: rewrites `sort_order = index` in the
+/// current `Vec` order, so it stays a dense `0..n` sequence matching the display
+/// order after any membership mutation. Shared by every [`GameStore`] backend.
+pub(crate) fn normalize_item_order(items: &mut [CollectionItem]) {
+    for (index, item) in items.iter_mut().enumerate() {
+        item.sort_order = index as u32;
+    }
+}
+
+/// Reorders `items` so members whose `definition_id` appears in `ordered` lead,
+/// in that order, followed by any members not listed (keeping their prior
+/// relative order), then re-normalises `sort_order`. Ids in `ordered` that are
+/// not members are ignored.
+pub(crate) fn reordered_items(
+    items: Vec<CollectionItem>,
+    ordered: &[Uuid],
+) -> Vec<CollectionItem> {
+    let mut remaining = items;
+    let mut result: Vec<CollectionItem> = Vec::with_capacity(remaining.len());
+    for id in ordered {
+        if let Some(pos) = remaining.iter().position(|i| i.definition_id == *id) {
+            result.push(remaining.remove(pos));
+        }
+    }
+    result.extend(remaining);
+    normalize_item_order(&mut result);
+    result
 }
 
 // Store management
