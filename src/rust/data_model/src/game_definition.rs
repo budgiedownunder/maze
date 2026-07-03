@@ -133,6 +133,10 @@ pub struct GameDefinition {
     pub owner_id: Uuid,
     /// Display name.
     pub name: String,
+    /// Optional description, shown wherever the game appears (intrinsic to the
+    /// game, not per-collection). `None` when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     #[schema(value_type = String)]
     /// Access tier — who may see and play this definition.
     pub visibility: Visibility,
@@ -146,6 +150,11 @@ pub struct GameDefinition {
     /// Opaque, client-owned generation + render parameters. The server stores
     /// and forwards this verbatim; only its byte size is validated.
     pub config: serde_json::Value,
+    /// Cache-key for the game's optional thumbnail image, shown everywhere the
+    /// game appears; `None` when unset. The image bytes live in the storage
+    /// layer, not here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_updated_at: Option<DateTime<Utc>>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last-update timestamp.
@@ -163,10 +172,12 @@ mod tests {
             id: Uuid::nil(),
             owner_id: Uuid::nil(),
             name: "Nightfall".to_string(),
+            description: Some("A three-level night climb".to_string()),
             visibility: Visibility::Public,
             seed: 9_007_199_254_740_991,
             rotation: Rotation::Daily,
             config: serde_json::json!({ "rows": 5, "cols": 5, "levels": { "count": 3 } }),
+            image_updated_at: Some(ts),
             created_at: ts,
             updated_at: ts,
         }
@@ -194,12 +205,30 @@ mod tests {
     fn serialises_camel_case_wire_names() {
         let value = serde_json::to_value(sample()).expect("serialize");
         let object = value.as_object().expect("object");
-        for key in ["ownerId", "createdAt", "updatedAt", "visibility", "rotation", "seed", "config"]
+        for key in
+            ["ownerId", "createdAt", "updatedAt", "imageUpdatedAt", "visibility", "rotation", "seed", "config"]
         {
             assert!(object.contains_key(key), "missing camelCase key `{key}`: {value}");
         }
         assert_eq!(object["visibility"], serde_json::json!("public"));
         assert_eq!(object["rotation"], serde_json::json!("daily"));
+    }
+
+    #[test]
+    fn omits_optional_presentation_when_absent() {
+        let mut def = sample();
+        def.description = None;
+        def.image_updated_at = None;
+        let value = serde_json::to_value(&def).expect("serialize");
+        let object = value.as_object().expect("object");
+        assert!(
+            !object.contains_key("description"),
+            "an absent description must be omitted: {value}"
+        );
+        assert!(
+            !object.contains_key("imageUpdatedAt"),
+            "an image-less definition must serialise without the key: {value}"
+        );
     }
 
     #[test]

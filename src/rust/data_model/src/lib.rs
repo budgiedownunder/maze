@@ -1,6 +1,7 @@
 // Re-export modules
 mod email_audit;
 mod error;
+mod game_collection;
 mod game_definition;
 mod maze;
 mod maze_cell_state;
@@ -19,6 +20,7 @@ pub use email_audit::{
     EmailAuditEntry, truncate_email_audit_error_message,
 };
 pub use error::{Error, UserValidationError};
+pub use game_collection::{CollectionItem, GameCollection};
 pub use game_definition::{GameDefinition, Rotation, Visibility};
 pub use maze_definition::{
     CellEntity, DoorOverride, DoorStyle, EnemyOverride, EnemyType, HealthOverride, HealthStyle,
