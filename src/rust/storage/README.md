@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `storage` crate is written in `Rust` and exposes structs, traits and functions for storing data objects (users, mazes, OAuth identities, login tokens).
+The `storage` crate is written in `Rust` and exposes structs, traits and functions for storing data objects (users, mazes, game definitions, OAuth identities, login tokens).
 
 Two backends are available, both implementing the same `Store` trait:
 
@@ -114,18 +114,22 @@ cargo doc --features sql-store --open
 ```
 data_dir/
   .schema_version            single integer, written atomically (tempfile + rename)
+  email_audit_log/
+    <entry-id>.json          one row per email send attempt (intent + outcome)
+  game_definitions/
+    <definition-id>.json     one parametric 3D game definition (opaque config + seed)
+  game_definition_shares/
+    <definition-id>.json     that definition's grantee-uuid list (present only when shared)
+  one_time_tokens/
+    <token-id>.json          single-use, time-bounded token (password reset / invite / email verification)
+  score_history/
+    <entry-id>.json          one row per completed 3D run (score + elapsed time)
   users/
     <uuid>/
-      user.json              user record (multi-email shape)
       avatar.png             avatar image (present only when set)
       mazes/
         <maze-id>.json
-  one_time_tokens/
-    <token-id>.json          single-use, time-bounded token (password reset / invite / email verification)
-  email_audit_log/
-    <entry-id>.json          one row per email send attempt (intent + outcome)
-  score_history/
-    <entry-id>.json          one row per completed 3D run (score + elapsed time)
+      user.json              user record (multi-email shape)
 ```
 
 `FileStore::new` runs two startup passes against `data_dir` in order:

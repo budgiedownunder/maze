@@ -1,7 +1,7 @@
 use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
+use data_model::{AuditOutcome, EmailAuditEntry, GameDefinition, Maze, OneTimeToken, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -421,6 +421,81 @@ pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
         ));
     }
     Ok(())
+}
+
+/// Byte cap on a stored game-definition `config`, enforced by every
+/// [`GameStore`] backend on create/update — mirrors the maze definition-size
+/// cap. A game definition stores no per-cell grid (the maze is regenerated from
+/// `seed`), so its config is tiny and never approaches this today; the cap is
+/// forward-compat headroom against a future expansion of the config's content.
+pub const MAX_GAME_DEFINITION_CONFIG_BYTES: usize = 16_000;
+
+/// Represents a store for holding parametric 3D game definitions (and, later,
+/// game collections — one trait keeps all game facts together). Mutations are
+/// owner-scoped exactly like [`MazeStore`]; reads come in owner / curated /
+/// public / shared-with flavours plus two unconditional primitives
+/// (`get_game_definition`, `get_definition_grantees`). The store enforces **no
+/// view-access policy** — it is a set of owner-scoped mutations and by-subject
+/// reads, and the `owner ∨ curated ∨ public ∨ granted` decision is composed by
+/// the server layer (mirroring how [`ScoreStore`] leaves authorization to the
+/// caller).
+#[async_trait]
+pub trait GameStore {
+    /// Adds a new game definition, assigning `id` (if unset), `owner_id`, and
+    /// the create/update timestamps within the object. Rejects an empty name,
+    /// a per-owner name collision, or an over-cap `config`.
+    async fn create_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error>;
+    /// Loads a game definition by id, regardless of owner or visibility — an
+    /// unconditional primitive the server composes access decisions from.
+    /// Rejects with [`Error::GameDefinitionIdNotFound`] when absent.
+    async fn get_game_definition(&self, id: Uuid) -> Result<GameDefinition, Error>;
+    /// Updates an existing game definition owned by `owner`, refreshing
+    /// `updated_at` (and preserving `id`/`owner_id`/`created_at`). Rejects if no
+    /// such definition is owned by `owner`, on a name collision with another of
+    /// the owner's definitions, or an over-cap config.
+    async fn update_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error>;
+    /// Deletes a game definition owned by `owner`, removing it and its share
+    /// grants. Resetting the definition's leaderboard is the caller's
+    /// responsibility (see [`ScoreStore`]).
+    async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+    /// Grants `grantee` access to a definition owned by `owner`. Idempotent —
+    /// re-granting an existing grantee is a no-op.
+    async fn grant_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Revokes `grantee`'s access to a definition owned by `owner`. Idempotent.
+    async fn revoke_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// All of `owner`'s own definitions (every visibility, drafts included),
+    /// sorted alphabetically by name.
+    async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error>;
+    /// Every `Curated` definition, across all owners, sorted by name.
+    async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, Error>;
+    /// Every `Public` definition, across all owners, sorted by name.
+    async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, Error>;
+    /// Every definition explicitly granted to `user`, across all owners, sorted
+    /// by name.
+    async fn get_definitions_shared_with(&self, user: Uuid)
+        -> Result<Vec<GameDefinition>, Error>;
+    /// The user ids granted access to a definition — an unconditional primitive
+    /// the server uses for the owner's manage-shares view and for composing the
+    /// access decision. Returns an empty list for an unknown/ungranted id.
+    async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
 }
 
 // Store management

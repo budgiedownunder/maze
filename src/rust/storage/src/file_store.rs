@@ -9,19 +9,19 @@ use unicase::UniCase;
 use uuid::Uuid;
 
 use data_model::{
-    AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail,
+    AuditOutcome, EmailAuditEntry, GameDefinition, Maze, OneTimeToken, User, UserEmail, Visibility,
     truncate_email_audit_error_message,
 };
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{
-    EmailAuditLog, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore,
-    ScoreboardEntry, SortDirection, TokenStore, UserStore,
+    EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
+    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore,
 };
 use crate::{
     file_store_migration,
-    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
-    Error, MazeItem, Store,
+    validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
+    Error, MazeItem, Store, MAX_GAME_DEFINITION_CONFIG_BYTES,
 };
 
 /// Cell-count ceiling enforced by [`FileStore`] on `create_maze` and
@@ -77,6 +77,11 @@ pub struct FileStore {
     audit_log_dir: String,
     /// Full path to the score history directory (one file per completed run).
     score_history_dir: String,
+    /// Full path to the game definitions directory (one file per definition).
+    game_definitions_dir: String,
+    /// Full path to the game-definition shares directory (one file per
+    /// definition, holding its grantee-uuid list).
+    game_definition_shares_dir: String,
 }
 
 // Private trait used for accessing struct fields
@@ -162,6 +167,8 @@ impl FileStore {
             tokens_dir: "".to_string(),
             audit_log_dir: "".to_string(),
             score_history_dir: "".to_string(),
+            game_definitions_dir: "".to_string(),
+            game_definition_shares_dir: "".to_string(),
         };
 
         match store.init() {
@@ -195,6 +202,14 @@ impl FileStore {
             .to_string();
         self.score_history_dir = Path::new(&self.data_dir)
             .join("score_history")
+            .to_string_lossy()
+            .to_string();
+        self.game_definitions_dir = Path::new(&self.data_dir)
+            .join("game_definitions")
+            .to_string_lossy()
+            .to_string();
+        self.game_definition_shares_dir = Path::new(&self.data_dir)
+            .join("game_definition_shares")
             .to_string_lossy()
             .to_string();
         Ok(())
@@ -446,6 +461,155 @@ impl FileStore {
                 delete_file(&self.score_entry_file_path(id));
             }
         }
+        Ok(())
+    }
+
+    // ── game definition JSON helpers (flat, one file per definition) ─────────
+
+    // Returns the file path for a given game definition id.
+    fn game_definition_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.game_definitions_dir)
+            .join(format!("{id}.json"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads a definition's JSON file. Returns `GameDefinitionIdNotFound` if the
+    // file does not exist (the canonical missing signal).
+    fn read_game_definition_raw(&self, id: Uuid) -> Result<GameDefinition, Error> {
+        let path = self.game_definition_file_path(id);
+        if !file_exists(&path) {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, GameDefinition>(reader).map_err(Error::from)
+    }
+
+    // Atomically writes a definition JSON via tempfile + rename. With
+    // `overwrite = false` a pre-existing id is a programmer error (ids are fresh
+    // UUIDs), reported as `Error::Other`.
+    fn write_game_definition_file(
+        &self,
+        definition: &GameDefinition,
+        overwrite: bool,
+    ) -> Result<(), Error> {
+        if !dir_exists(&self.game_definitions_dir) {
+            fs::create_dir_all(&self.game_definitions_dir)?;
+        }
+        let target = self.game_definition_file_path(definition.id);
+        if !overwrite && file_exists(&target) {
+            return Err(Error::Other(format!(
+                "game definition {} already exists",
+                definition.id
+            )));
+        }
+        let json = serde_json::to_string(definition)?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // Enumerates definition ids in the game_definitions directory.
+    fn get_game_definition_ids(&self) -> Result<Vec<Uuid>, Error> {
+        if !dir_exists(&self.game_definitions_dir) {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<Uuid> = fs::read_dir(&self.game_definitions_dir)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    let path = e.path();
+                    if !path.is_file() {
+                        return None;
+                    }
+                    let name = path.file_stem()?.to_str()?;
+                    Uuid::parse_str(name).ok()
+                })
+            })
+            .collect();
+        Ok(ids)
+    }
+
+    // Loads every definition, skipping any unreadable file.
+    fn read_all_game_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
+        let mut defs = Vec::new();
+        for id in self.get_game_definition_ids()? {
+            match self.read_game_definition_raw(id) {
+                Ok(def) => defs.push(def),
+                Err(error) => {
+                    log::warn!("FileStore game definition read: skipping unreadable '{id}' - {error}");
+                }
+            }
+        }
+        Ok(defs)
+    }
+
+    // Sorts definitions case-insensitively by name (the list-read ordering).
+    fn sort_definitions_by_name(defs: &mut [GameDefinition]) {
+        defs.sort_by(|a, b| UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())));
+    }
+
+    // Returns the id of `owner`'s definition named `name` (case-insensitive), or
+    // `None`. Used to enforce the per-owner unique-name rule on create/update.
+    fn find_owner_definition_id_by_name(
+        &self,
+        owner_id: Uuid,
+        name: &str,
+    ) -> Result<Option<Uuid>, Error> {
+        let target = UniCase::new(name);
+        for def in self.read_all_game_definitions()? {
+            if def.owner_id == owner_id && UniCase::new(def.name.as_str()) == target {
+                return Ok(Some(def.id));
+            }
+        }
+        Ok(None)
+    }
+
+    // Returns the file path holding a definition's grantee list.
+    fn game_definition_shares_file_path(&self, def_id: Uuid) -> String {
+        Path::new(&self.game_definition_shares_dir)
+            .join(format!("{def_id}.json"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads a definition's grantee-uuid list (empty when no share file exists).
+    fn read_game_definition_grantees(&self, def_id: Uuid) -> Result<Vec<Uuid>, Error> {
+        let path = self.game_definition_shares_file_path(def_id);
+        if !file_exists(&path) {
+            return Ok(Vec::new());
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, Vec<Uuid>>(reader).map_err(Error::from)
+    }
+
+    // Writes a definition's grantee list; an empty list removes the file so no
+    // empty share record lingers.
+    fn write_game_definition_grantees(
+        &self,
+        def_id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error> {
+        let target = self.game_definition_shares_file_path(def_id);
+        if grantees.is_empty() {
+            delete_file(&target);
+            return Ok(());
+        }
+        if !dir_exists(&self.game_definition_shares_dir) {
+            fs::create_dir_all(&self.game_definition_shares_dir)?;
+        }
+        let json = serde_json::to_string(grantees)?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
         Ok(())
     }
 
@@ -1139,6 +1303,39 @@ impl UserStore for FileStore {
                     );
                 }
             }
+        }
+        // Hard-delete the user's game definitions + their share grants, and
+        // strip the user from every remaining definition's grantee list. Mirrors
+        // the SqlStore FK cascade on `game_definitions.owner_id` and
+        // `game_definition_shares.grantee_user_id`.
+        let mut owned_definition_ids: Vec<Uuid> = Vec::new();
+        for def_id in self.get_game_definition_ids()? {
+            match self.read_game_definition_raw(def_id) {
+                Ok(def) if def.owner_id == id => {
+                    owned_definition_ids.push(def_id);
+                    delete_file(&self.game_definition_file_path(def_id));
+                    delete_file(&self.game_definition_shares_file_path(def_id));
+                }
+                Ok(_) => {
+                    let mut grantees = self.read_game_definition_grantees(def_id)?;
+                    if grantees.contains(&id) {
+                        grantees.retain(|g| *g != id);
+                        self.write_game_definition_grantees(def_id, &grantees)?;
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        // Clear the boards of the removed definitions (other players' runs on
+        // them), keyed by the `def:<id>` challenge subject (Static + Daily).
+        if !owned_definition_ids.is_empty() {
+            self.delete_scores_matching(|e| {
+                e.challenge.as_deref().is_some_and(|c| {
+                    owned_definition_ids
+                        .iter()
+                        .any(|d| c == format!("def:{d}") || c.starts_with(&format!("def:{d}:")))
+                })
+            })?;
         }
         Ok(())
     }
@@ -3531,6 +3728,163 @@ impl ScoreStore for FileStore {
 
     async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error> {
         self.delete_scores_matching(|e| e.challenge.as_deref() == Some(challenge))
+    }
+}
+
+#[async_trait]
+impl GameStore for FileStore {
+    async fn create_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error> {
+        if definition.name.trim().is_empty() {
+            return Err(Error::GameDefinitionNameMissing());
+        }
+        let config_json = serde_json::to_string(&definition.config)?;
+        validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
+        if self
+            .find_owner_definition_id_by_name(owner.id, &definition.name)?
+            .is_some()
+        {
+            return Err(Error::GameDefinitionNameAlreadyExists(definition.name.clone()));
+        }
+        definition.owner_id = owner.id;
+        if definition.id.is_nil() {
+            definition.id = Uuid::new_v4();
+        }
+        let now = generate_now_millis();
+        definition.created_at = now;
+        definition.updated_at = now;
+        self.write_game_definition_file(definition, false)?;
+        Ok(())
+    }
+
+    async fn get_game_definition(&self, id: Uuid) -> Result<GameDefinition, Error> {
+        self.read_game_definition_raw(id)
+    }
+
+    async fn update_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error> {
+        let existing = self.read_game_definition_raw(definition.id)?;
+        if existing.owner_id != owner.id {
+            // Not the owner's definition — indistinguishable from absent.
+            return Err(Error::GameDefinitionIdNotFound(definition.id.to_string()));
+        }
+        if definition.name.trim().is_empty() {
+            return Err(Error::GameDefinitionNameMissing());
+        }
+        let config_json = serde_json::to_string(&definition.config)?;
+        validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
+        if let Some(other) = self.find_owner_definition_id_by_name(owner.id, &definition.name)?
+            && other != definition.id
+        {
+            return Err(Error::GameDefinitionNameAlreadyExists(definition.name.clone()));
+        }
+        // Preserve the immutable identity/creation fields; refresh updated_at.
+        definition.owner_id = owner.id;
+        definition.created_at = existing.created_at;
+        definition.updated_at = generate_now_millis();
+        self.write_game_definition_file(definition, true)?;
+        Ok(())
+    }
+
+    async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        let existing = self.read_game_definition_raw(id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        delete_file(&self.game_definition_file_path(id));
+        delete_file(&self.game_definition_shares_file_path(id));
+        Ok(())
+    }
+
+    async fn grant_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error> {
+        let existing = self.read_game_definition_raw(id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        let mut grantees = self.read_game_definition_grantees(id)?;
+        if !grantees.contains(&grantee) {
+            grantees.push(grantee);
+            self.write_game_definition_grantees(id, &grantees)?;
+        }
+        Ok(())
+    }
+
+    async fn revoke_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error> {
+        let existing = self.read_game_definition_raw(id)?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        let mut grantees = self.read_game_definition_grantees(id)?;
+        let before = grantees.len();
+        grantees.retain(|g| *g != grantee);
+        if grantees.len() != before {
+            self.write_game_definition_grantees(id, &grantees)?;
+        }
+        Ok(())
+    }
+
+    async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error> {
+        let mut defs: Vec<GameDefinition> = self
+            .read_all_game_definitions()?
+            .into_iter()
+            .filter(|d| d.owner_id == owner.id)
+            .collect();
+        Self::sort_definitions_by_name(&mut defs);
+        Ok(defs)
+    }
+
+    async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
+        let mut defs: Vec<GameDefinition> = self
+            .read_all_game_definitions()?
+            .into_iter()
+            .filter(|d| d.visibility == Visibility::Curated)
+            .collect();
+        Self::sort_definitions_by_name(&mut defs);
+        Ok(defs)
+    }
+
+    async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
+        let mut defs: Vec<GameDefinition> = self
+            .read_all_game_definitions()?
+            .into_iter()
+            .filter(|d| d.visibility == Visibility::Public)
+            .collect();
+        Self::sort_definitions_by_name(&mut defs);
+        Ok(defs)
+    }
+
+    async fn get_definitions_shared_with(
+        &self,
+        user: Uuid,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        let mut defs: Vec<GameDefinition> = Vec::new();
+        for def in self.read_all_game_definitions()? {
+            if self.read_game_definition_grantees(def.id)?.contains(&user) {
+                defs.push(def);
+            }
+        }
+        Self::sort_definitions_by_name(&mut defs);
+        Ok(defs)
+    }
+
+    async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
+        self.read_game_definition_grantees(id)
     }
 }
 

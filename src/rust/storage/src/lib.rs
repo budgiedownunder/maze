@@ -13,7 +13,9 @@ pub use file_store::{FileStore, FileStoreConfig, MAX_MAZE_CELLS};
 #[cfg(feature = "sql-store")]
 pub use sql_store::{SqlStore, SqlStoreConfig};
 pub use store::EmailAuditLog;
+pub use store::GameStore;
 pub use store::Manage;
+pub use store::MAX_GAME_DEFINITION_CONFIG_BYTES;
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::ScoreEntry;

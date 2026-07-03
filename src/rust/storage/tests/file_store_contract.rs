@@ -873,3 +873,77 @@ async fn score_leaderboard_includes_usernames_when_requested() {
     let (mut s, _temp) = fresh_store().await;
     contract::score_leaderboard_includes_usernames_when_requested(&mut s).await;
 }
+
+// ─── GameStore — game definitions ─────────────────────────────────────────
+//
+// `GameStore` is not yet part of the `Store` supertrait (it joins once
+// collections are also implemented), so these run against a concrete
+// `FileStore` rather than the boxed `Store` used above.
+
+async fn fresh_game_store() -> (FileStore, tempfile::TempDir) {
+    let temp = tempfile::tempdir().expect("fresh_game_store: tempdir");
+    let store = FileStore::new(&FileStoreConfig {
+        data_dir: temp.path().to_string_lossy().to_string(),
+    });
+    (store, temp)
+}
+
+#[tokio::test]
+async fn game_definition_assigns_ids_and_round_trips() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_definition_assigns_ids_and_round_trips(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_rejects_empty_name() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_definition_rejects_empty_name(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_rejects_duplicate_name_ci() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_definition_rejects_duplicate_name_ci(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_rejects_oversize_config() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::create_game_definition_rejects_oversize_config(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_get_returns_not_found_for_unknown_id() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::get_game_definition_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_update_persists_and_scopes_to_owner() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::update_game_definition_persists_and_scopes_to_owner(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_delete_is_owner_scoped() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::delete_game_definition_is_owner_scoped(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_list_reads_scope_by_owner_and_visibility() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::definition_list_reads_scope_by_owner_and_visibility(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_grants_control_shared_with() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::definition_grants_control_shared_with(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_delete_user_cascades() {
+    let (mut s, _temp) = fresh_game_store().await;
+    contract::delete_user_cascades_to_game_definitions(&mut s).await;
+}

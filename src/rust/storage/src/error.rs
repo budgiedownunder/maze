@@ -36,6 +36,10 @@ pub enum Error {
     MazeHasTooManyFeatures { keys: usize, doors: usize, max: usize },
     MazeHasTooManyObjects { kind: &'static str, count: usize, max: usize },
     MazeDefinitionTooLarge { bytes: usize, max: usize },
+    GameDefinitionIdNotFound(String),
+    GameDefinitionNameMissing(),
+    GameDefinitionNameAlreadyExists(String),
+    GameDefinitionConfigTooLarge { bytes: usize, max: usize },
     DataModelError(DataModelError),
     Io(std::io::Error),
     SerdeJson(serde_json::Error),
@@ -91,6 +95,19 @@ impl std::fmt::Display for Error {
             Error::MazeDefinitionTooLarge { bytes, max } => write!(
                 f,
                 "Maze definition is too large to store: {bytes} bytes exceeds the {max}-byte limit"
+            ),
+            Error::GameDefinitionIdNotFound(id) => {
+                write!(f, "A game definition with id '{id}' was not found")
+            }
+            Error::GameDefinitionNameMissing() => {
+                write!(f, "No name provided for the game definition")
+            }
+            Error::GameDefinitionNameAlreadyExists(name) => {
+                write!(f, "A game definition with the name '{name}' already exists")
+            }
+            Error::GameDefinitionConfigTooLarge { bytes, max } => write!(
+                f,
+                "Game definition config is too large to store: {bytes} bytes exceeds the {max}-byte limit"
             ),
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),

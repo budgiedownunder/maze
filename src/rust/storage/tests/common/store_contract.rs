@@ -13,10 +13,13 @@
 use chrono::{Duration, SubsecRound, Utc};
 use data_model::{
     AuditOutcome, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS, ERROR_MESSAGE_TRUNCATION_MARKER,
-    EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User,
-    UserEmail, UserLogin,
+    EmailAuditEntry, GameDefinition, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, Rotation,
+    TokenPurpose, User, UserEmail, UserLogin, Visibility,
 };
-use storage::{Error, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreboardEntry, SortDirection, Store};
+use storage::{
+    Error, GameStore, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
+    ScoreboardEntry, SortDirection, Store, UserStore,
+};
 use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2383,4 +2386,265 @@ pub async fn score_leaderboard_includes_avatar_updated_at_when_requested(
         .await
         .expect("anon board");
     assert!(anon.iter().all(|e| e.avatar_updated_at.is_none()));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// GameStore — game definitions
+//
+// These scenarios are generic over `S: GameStore + UserStore` rather than
+// `&mut Box<dyn Store>`: `GameStore` only joins the `Store` supertrait once both
+// backends implement its collection methods too, so until then the runners hand
+// in a concrete store.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Builds a game definition with a small valid config. `id`/`owner_id`/
+/// timestamps are set by `create_game_definition`.
+pub fn make_game_definition(name: &str, visibility: Visibility) -> GameDefinition {
+    GameDefinition {
+        id: Uuid::nil(),
+        owner_id: Uuid::nil(),
+        name: name.to_string(),
+        description: None,
+        image_updated_at: None,
+        visibility,
+        seed: 8_675_309,
+        rotation: Rotation::Static,
+        config: serde_json::json!({ "rows": 5, "cols": 5, "levels": { "count": 1 } }),
+        created_at: Utc::now().trunc_subsecs(3),
+        updated_at: Utc::now().trunc_subsecs(3),
+    }
+}
+
+async fn seed_user<S: UserStore>(store: &mut S, username: &str, email: &str) -> User {
+    let mut user = make_user(username, email);
+    store.create_user(&mut user).await.expect("seed_user");
+    user
+}
+
+pub async fn create_game_definition_assigns_ids_and_round_trips<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let mut def = make_game_definition("Nightfall", Visibility::Private);
+    store
+        .create_game_definition(&owner, &mut def)
+        .await
+        .expect("create");
+    assert_ne!(def.id, Uuid::nil(), "create must assign a non-nil id");
+    assert_eq!(def.owner_id, owner.id, "create must set owner_id");
+    assert_ne!(def.created_at, Utc::now(), "created_at is stamped, not left default");
+    let loaded = store.get_game_definition(def.id).await.expect("get");
+    assert_eq!(loaded, def, "definition must round-trip byte-for-byte");
+}
+
+pub async fn create_game_definition_rejects_empty_name<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let mut def = make_game_definition("   ", Visibility::Private);
+    let err = store
+        .create_game_definition(&owner, &mut def)
+        .await
+        .expect_err("empty name must be rejected");
+    assert!(matches!(err, Error::GameDefinitionNameMissing()), "got {err:?}");
+}
+
+pub async fn create_game_definition_rejects_duplicate_name_ci<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let mut first = make_game_definition("Dungeon", Visibility::Private);
+    store
+        .create_game_definition(&owner, &mut first)
+        .await
+        .expect("first create");
+    let mut clash = make_game_definition("DUNGEON", Visibility::Public);
+    let err = store
+        .create_game_definition(&owner, &mut clash)
+        .await
+        .expect_err("case-insensitive per-owner name collision must be rejected");
+    assert!(
+        matches!(err, Error::GameDefinitionNameAlreadyExists(_)),
+        "got {err:?}"
+    );
+}
+
+/// The dedicated storage-level config-size guard test (mirrors the maze
+/// definition-size guard). A config just over the cap is refused on create.
+pub async fn create_game_definition_rejects_oversize_config<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let mut def = make_game_definition("TooBig", Visibility::Private);
+    let filler = "x".repeat(MAX_GAME_DEFINITION_CONFIG_BYTES + 1);
+    def.config = serde_json::json!({ "blob": filler });
+    let err = store
+        .create_game_definition(&owner, &mut def)
+        .await
+        .expect_err("over-cap config must be rejected");
+    assert!(
+        matches!(err, Error::GameDefinitionConfigTooLarge { .. }),
+        "got {err:?}"
+    );
+}
+
+pub async fn get_game_definition_returns_not_found_for_unknown_id<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let err = store
+        .get_game_definition(Uuid::new_v4())
+        .await
+        .expect_err("unknown id must be not-found");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn update_game_definition_persists_and_scopes_to_owner<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let other = seed_user(store, "gd_other", "gd_other@example.com").await;
+    let mut def = make_game_definition("Original", Visibility::Private);
+    store
+        .create_game_definition(&owner, &mut def)
+        .await
+        .expect("create");
+    let created_at = def.created_at;
+
+    def.name = "Renamed".to_string();
+    def.visibility = Visibility::Public;
+    store
+        .update_game_definition(&owner, &mut def)
+        .await
+        .expect("owner update");
+    assert_eq!(def.created_at, created_at, "created_at must be preserved");
+    assert!(def.updated_at >= created_at, "updated_at must advance");
+    let loaded = store.get_game_definition(def.id).await.expect("reload");
+    assert_eq!(loaded.name, "Renamed");
+    assert_eq!(loaded.visibility, Visibility::Public);
+
+    // A non-owner cannot update it — indistinguishable from absent.
+    let mut hijack = loaded.clone();
+    hijack.name = "Hijacked".to_string();
+    let err = store
+        .update_game_definition(&other, &mut hijack)
+        .await
+        .expect_err("non-owner update must be rejected");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn delete_game_definition_is_owner_scoped<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let other = seed_user(store, "gd_other", "gd_other@example.com").await;
+    let mut def = make_game_definition("Doomed", Visibility::Private);
+    store
+        .create_game_definition(&owner, &mut def)
+        .await
+        .expect("create");
+
+    let err = store
+        .delete_game_definition(&other, def.id)
+        .await
+        .expect_err("non-owner delete must be rejected");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+
+    store
+        .delete_game_definition(&owner, def.id)
+        .await
+        .expect("owner delete");
+    let err = store
+        .get_game_definition(def.id)
+        .await
+        .expect_err("deleted definition must be gone");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn definition_list_reads_scope_by_owner_and_visibility<S: GameStore + UserStore>(
+    store: &mut S,
+) {
+    let alice = seed_user(store, "gd_alice", "gd_alice@example.com").await;
+    let bob = seed_user(store, "gd_bob", "gd_bob@example.com").await;
+    for (name, vis) in [
+        ("Alpha", Visibility::Private),
+        ("Bravo", Visibility::Public),
+        ("Charlie", Visibility::Curated),
+    ] {
+        let mut d = make_game_definition(name, vis);
+        store.create_game_definition(&alice, &mut d).await.expect("alice def");
+    }
+    let mut b = make_game_definition("Bravo", Visibility::Public); // same name, different owner is fine
+    store.create_game_definition(&bob, &mut b).await.expect("bob def");
+
+    let alice_own = store.get_definitions_for_owner(&alice).await.expect("owner list");
+    let alice_names: Vec<&str> = alice_own.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(alice_names, ["Alpha", "Bravo", "Charlie"], "owner list, sorted by name");
+    assert!(alice_own.iter().all(|d| d.owner_id == alice.id));
+
+    let public = store.get_public_definitions().await.expect("public list");
+    let public_owners: Vec<Uuid> = public.iter().map(|d| d.owner_id).collect();
+    assert!(public.iter().all(|d| d.visibility == Visibility::Public));
+    assert!(public_owners.contains(&alice.id) && public_owners.contains(&bob.id),
+        "public list spans owners");
+
+    let curated = store.get_curated_definitions().await.expect("curated list");
+    assert_eq!(curated.len(), 1);
+    assert_eq!(curated[0].name, "Charlie");
+    assert_eq!(curated[0].visibility, Visibility::Curated);
+}
+
+pub async fn definition_grants_control_shared_with<S: GameStore + UserStore>(store: &mut S) {
+    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let friend = seed_user(store, "gd_friend", "gd_friend@example.com").await;
+    let mut def = make_game_definition("Shared", Visibility::Shared);
+    store.create_game_definition(&owner, &mut def).await.expect("create");
+
+    assert!(store.get_definition_grantees(def.id).await.expect("grantees").is_empty());
+    assert!(store.get_definitions_shared_with(friend.id).await.expect("shared").is_empty());
+
+    // A non-owner cannot grant.
+    let err = store
+        .grant_definition_access(&friend, def.id, friend.id)
+        .await
+        .expect_err("non-owner grant must be rejected");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+
+    store
+        .grant_definition_access(&owner, def.id, friend.id)
+        .await
+        .expect("grant");
+    // Idempotent.
+    store
+        .grant_definition_access(&owner, def.id, friend.id)
+        .await
+        .expect("grant again");
+    assert_eq!(store.get_definition_grantees(def.id).await.expect("grantees"), vec![friend.id]);
+    let shared = store.get_definitions_shared_with(friend.id).await.expect("shared");
+    assert_eq!(shared.len(), 1);
+    assert_eq!(shared[0].id, def.id);
+
+    store
+        .revoke_definition_access(&owner, def.id, friend.id)
+        .await
+        .expect("revoke");
+    assert!(store.get_definition_grantees(def.id).await.expect("grantees").is_empty());
+    assert!(store.get_definitions_shared_with(friend.id).await.expect("shared").is_empty());
+}
+
+pub async fn delete_user_cascades_to_game_definitions<S: GameStore + UserStore>(store: &mut S) {
+    let alice = seed_user(store, "gd_alice", "gd_alice@example.com").await;
+    let bob = seed_user(store, "gd_bob", "gd_bob@example.com").await;
+    let mut alice_def = make_game_definition("AliceDef", Visibility::Shared);
+    store.create_game_definition(&alice, &mut alice_def).await.expect("alice def");
+    let mut bob_def = make_game_definition("BobDef", Visibility::Shared);
+    store.create_game_definition(&bob, &mut bob_def).await.expect("bob def");
+    // Each grants the other access.
+    store.grant_definition_access(&alice, alice_def.id, bob.id).await.expect("grant bob");
+    store.grant_definition_access(&bob, bob_def.id, alice.id).await.expect("grant alice");
+
+    store.delete_user(alice.id).await.expect("delete alice");
+
+    // Alice's own definition is gone…
+    let err = store.get_game_definition(alice_def.id).await.expect_err("alice def gone");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+    // …Bob's remains, but Alice is stripped from its grantees.
+    store.get_game_definition(bob_def.id).await.expect("bob def remains");
+    let bob_grantees = store.get_definition_grantees(bob_def.id).await.expect("bob grantees");
+    assert!(!bob_grantees.contains(&alice.id), "deleted user must be removed from grantee lists");
 }
