@@ -1,4 +1,4 @@
-use data_model::{Maze, MazeDefinition, UserEmail};
+use data_model::{GameDefinition, Maze, MazeDefinition, UserEmail};
 use maze::{GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution};
 use storage::MazeItem;
 use utoipa::{
@@ -16,6 +16,10 @@ use crate::api::v1::endpoints::handlers::{
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
 use crate::api::v1::endpoints::avatar::AvatarUpdatedResponse;
+use crate::api::v1::endpoints::game_definitions::{
+    DefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
+    GrantShareRequest,
+};
 use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
@@ -109,6 +113,15 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::get_maze_solution,
         crate::api::v1::endpoints::handlers::generate_maze,
         crate::api::v1::endpoints::handlers::solve_maze,
+        // Game definitions
+        crate::api::v1::endpoints::game_definitions::create_game_definition,
+        crate::api::v1::endpoints::game_definitions::list_game_definitions,
+        crate::api::v1::endpoints::game_definitions::get_game_definition,
+        crate::api::v1::endpoints::game_definitions::update_game_definition,
+        crate::api::v1::endpoints::game_definitions::delete_game_definition,
+        crate::api::v1::endpoints::game_definitions::list_definition_shares,
+        crate::api::v1::endpoints::game_definitions::grant_definition_share,
+        crate::api::v1::endpoints::game_definitions::revoke_definition_share,
         // Scores
         crate::api::v1::endpoints::scores::record_score,
         crate::api::v1::endpoints::scores::get_leaderboard,
@@ -134,6 +147,8 @@ impl utoipa::Modify for LoginTokenAuth {
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm,
             RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
+            GameDefinition, GameDefinitionRequest, GameDefinitionListResponse, GamePlayResponse,
+            GrantShareRequest, DefinitionSharesResponse,
             AvatarUpdatedResponse),
 
     ),

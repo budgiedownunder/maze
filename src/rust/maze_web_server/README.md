@@ -675,6 +675,23 @@ Completed 3D runs are recorded per player and surfaced as leaderboards (per maze
 - The two canonical orderings are **fastest time** (`elapsed_ms` ascending) and **highest score** (`score` descending); `direction` flips the primary metric, with the secondary metric and record time held as fixed tie-breaks for stable paging.
 - `score` is the engine's running total at completion (currently the count of keys collected during the run); `elapsed_ms` is the run duration measured by the game, excluding paused time.
 
+## Game definitions
+
+A **game definition** is a stored, parametric 3D game: it holds no maze grid, only an opaque client-owned `config` blob plus a server-minted `seed` from which the client regenerates the whole game. Any user creates `Private` definitions; admins additionally publish `Curated` ones.
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `POST`   | `/api/v1/game-definitions` | Either | Create a definition. The server mints the `seed` and sets id/owner/timestamps; the body carries `name`, `description`, `visibility`, `rotation`, `config`. Setting `visibility = "curated"` requires an admin. |
+| `GET`    | `/api/v1/game-definitions` | Either | List every definition the caller may see — their own (all visibilities), those shared with them, and all public + curated — de-duplicated, ordered by name. |
+| `GET`    | `/api/v1/game-definitions/{id}` | Either | **Play-fetch** for one accessible definition (owner ∨ curated ∨ public ∨ granted; otherwise `404`). Returns the definition with the *effective* seed spliced into `config`, plus the computed `challengeKey` and `leaderboardTracked`. |
+| `PUT`    | `/api/v1/game-definitions/{id}` | Either | Update a definition the caller owns. `seed` and image are server-owned and preserved. Publishing (a `private` → published transition) starts a fresh leaderboard; unpublishing back to `private` freezes it. |
+| `DELETE` | `/api/v1/game-definitions/{id}` | Either | Delete a definition the caller owns, removing its shares and resetting its leaderboard(s). |
+| `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view). |
+| `PUT`    | `/api/v1/game-definitions/{id}/shares` | Either | Grant a user access (body `{ "userId": … }`); returns the updated grantee list. Idempotent. |
+| `DELETE` | `/api/v1/game-definitions/{id}/shares/{grantee}` | Either | Revoke a user's access; returns the updated grantee list. Idempotent. |
+
+- **Leaderboard subject** is per-definition: a `static` game uses its fixed seed and the key `def:<id>`; a `daily` game folds today's UTC date into both the seed and the key (`def:<id>:<yyyy-mm-dd>`), so each day gets a fresh, comparable board. `leaderboardTracked` is `true` once the definition is published (`public`, `curated`, or `shared` with at least one grantee).
+
 ## Game
 
 The 3D maze game (Bevy / WASM, served from `/game/`) fetches its session config at startup from the server, so a single edit to `config.toml` propagates to every client without a rebuild:

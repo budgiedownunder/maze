@@ -1,6 +1,6 @@
 use actix_web::web;
 use actix_web::middleware::from_fn;
-use crate::api::v1::endpoints::{auth_reset, avatar, email_verification, handlers, scores, user_emails};
+use crate::api::v1::endpoints::{auth_reset, avatar, email_verification, game_definitions, handlers, scores, user_emails};
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -33,6 +33,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::solve_maze)
                 .service(handlers::generate_maze)
                 .service(handlers::update_maze)
+                // Game definitions (stored 3D games)
+                .service(game_definitions::create_game_definition)
+                .service(game_definitions::list_game_definitions)
+                .service(game_definitions::list_definition_shares)
+                .service(game_definitions::grant_definition_share)
+                .service(game_definitions::revoke_definition_share)
+                .service(game_definitions::get_game_definition)
+                .service(game_definitions::update_game_definition)
+                .service(game_definitions::delete_game_definition)
                 // Scores
                 .service(scores::record_score)
                 .service(scores::get_my_history)

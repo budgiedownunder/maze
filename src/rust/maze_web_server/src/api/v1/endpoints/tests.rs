@@ -17,7 +17,8 @@ mod test_definitions {
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
-    use data_model::{CollectionItem, GameCollection, GameDefinition, Maze, MazeDefinition, MazePoint, User, UserLogin, Visibility};
+    use data_model::{CollectionItem, GameCollection, GameDefinition, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
+    use crate::api::v1::endpoints::game_definitions::{DefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GrantShareRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
@@ -8108,5 +8109,311 @@ mod test_definitions {
             .uri(&format!("/api/v1/users/{}/avatar", Uuid::new_v4()))
             .to_request();
         let _ = test::call_service(&app, req).await;
+    }
+
+    // ****************************************************************************
+    // Game-definition endpoint tests (POST/GET/PUT/DELETE + shares + publish)
+    // ****************************************************************************
+
+    fn user_by_name(mock_users: &HashMap<Uuid, MockUser>, username: &str) -> User {
+        MockStore::find_user_by_name_in_map(mock_users, username, Uuid::nil())
+            .expect("mock user exists")
+    }
+
+    fn sample_game_config() -> serde_json::Value {
+        serde_json::json!({ "rows": 6, "cols": 6, "seed": 0, "levels": { "count": 2 } })
+    }
+
+    fn definition_request(name: &str, visibility: Visibility, rotation: Rotation) -> GameDefinitionRequest {
+        GameDefinitionRequest {
+            name: name.to_string(),
+            description: None,
+            visibility,
+            rotation,
+            config: sample_game_config(),
+        }
+    }
+
+    /// Seeds a definition straight into the store (storage does no access policy),
+    /// returning it with its minted id — the fixture for the read/publish tests.
+    async fn seed_game_definition(
+        store: &SharedStore,
+        owner: &User,
+        name: &str,
+        visibility: Visibility,
+        rotation: Rotation,
+    ) -> GameDefinition {
+        let now = Utc::now();
+        let mut def = GameDefinition {
+            id: Uuid::nil(),
+            owner_id: Uuid::nil(),
+            name: name.to_string(),
+            description: None,
+            visibility,
+            seed: 12_345,
+            rotation,
+            config: sample_game_config(),
+            image_updated_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        store.write().await.create_game_definition(owner, &mut def).await.expect("seed definition");
+        def
+    }
+
+    async fn record_challenge_score(store: &SharedStore, user: &User, challenge: &str) {
+        let entry = ScoreEntry {
+            id: Uuid::new_v4(),
+            user_id: user.id,
+            maze_id: None,
+            challenge: Some(challenge.to_string()),
+            score: 1,
+            elapsed_ms: 1000,
+            recorded_at: Utc::now(),
+        };
+        store.write().await.record_score(&entry).await.expect("record score");
+    }
+
+    async fn challenge_board_len(store: &SharedStore, challenge: &str) -> usize {
+        store
+            .read()
+            .await
+            .challenge_leaderboard(
+                challenge,
+                ScoreOrdering { metric: ScoreMetric::Time, direction: SortDirection::Ascending },
+                100,
+                0,
+                false,
+            )
+            .await
+            .expect("read board")
+            .len()
+    }
+
+    #[actix_web::test]
+    async fn game_definition_get_one_enforces_access_matrix() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _api_key, _login) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let private = seed_game_definition(&store, &owner, "Private", Visibility::Private, Rotation::Static).await;
+        let shared = seed_game_definition(&store, &owner, "Shared", Visibility::Shared, Rotation::Static).await;
+        let public = seed_game_definition(&store, &owner, "Public", Visibility::Public, Rotation::Static).await;
+        let curated = seed_game_definition(&store, &owner, "Curated", Visibility::Curated, Rotation::Static).await;
+        store.write().await.grant_definition_access(&owner, shared.id, other.id).await.expect("grant");
+
+        // (definition id, viewer, expected status) — owner sees all; a shared def
+        // only its grantee; curated/public anyone; an admin gets no special view.
+        let cases = [
+            (private.id, VALID_USERNAME_1, StatusCode::OK),
+            (private.id, VALID_USERNAME_2, StatusCode::NOT_FOUND),
+            (private.id, VALID_ADMIN_USERNAME_1, StatusCode::NOT_FOUND),
+            (shared.id, VALID_USERNAME_1, StatusCode::OK),
+            (shared.id, VALID_USERNAME_2, StatusCode::OK),
+            (shared.id, VALID_ADMIN_USERNAME_1, StatusCode::NOT_FOUND),
+            (public.id, VALID_USERNAME_2, StatusCode::OK),
+            (curated.id, VALID_USERNAME_2, StatusCode::OK),
+        ];
+        for (id, viewer, expected) in cases {
+            let key = api_key_for(&mock_users, viewer);
+            let req = create_test_get_request(&format!("/api/v1/game-definitions/{id}"), Some(key), None);
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), expected, "definition {id} viewed by {viewer}");
+        }
+
+        // An unknown id is a 404 (indistinguishable from inaccessible).
+        let key = api_key_for(&mock_users, VALID_USERNAME_1);
+        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}", Uuid::new_v4()), Some(key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn game_definition_play_fetch_computes_subject_and_tracking() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let static_def = seed_game_definition(&store, &owner, "Static", Visibility::Public, Rotation::Static).await;
+        let daily_def = seed_game_definition(&store, &owner, "Daily", Visibility::Public, Rotation::Daily).await;
+
+        // Static: date-less subject, config.seed == the stored seed, tracked.
+        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}", static_def.id), Some(key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(body["challengeKey"], serde_json::json!(format!("def:{}", static_def.id)));
+        assert_eq!(body["leaderboardTracked"], serde_json::json!(true));
+        assert_eq!(body["config"]["seed"], serde_json::json!(12_345u64));
+
+        // Daily: subject carries today's UTC date and config.seed is date-mixed.
+        let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}", daily_def.id), Some(key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(body["challengeKey"], serde_json::json!(format!("def:{}:{}", daily_def.id, today)));
+        assert_ne!(body["config"]["seed"], serde_json::json!(12_345u64));
+    }
+
+    #[actix_web::test]
+    async fn create_game_definition_mints_seed_and_rejects_duplicate_name() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let body = definition_request("My Game", Visibility::Private, Rotation::Static);
+        let req = create_test_post_request("/api/v1/game-definitions", Some(key), None, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let created: GameDefinition = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert!(!created.id.is_nil());
+        assert_eq!(created.owner_id, owner.id);
+        assert_eq!(created.visibility, Visibility::Private);
+
+        // Same name for the same owner → 409.
+        let req = create_test_post_request("/api/v1/game-definitions", Some(key), None, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn create_curated_definition_requires_admin() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let body = definition_request("Featured", Visibility::Curated, Rotation::Static);
+
+        // Non-admin cannot set curated.
+        let user_key = api_key_for(&mock_users, VALID_USERNAME_1);
+        let req = create_test_post_request("/api/v1/game-definitions", Some(user_key), None, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+
+        // Admin can.
+        let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let req = create_test_post_request("/api/v1/game-definitions", Some(admin_key), None, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+    }
+
+    #[actix_web::test]
+    async fn publishing_a_definition_resets_its_board() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
+        let challenge = format!("def:{}", def.id);
+        record_challenge_score(&store, &owner, &challenge).await;
+        record_challenge_score(&store, &owner, &challenge).await;
+        assert_eq!(challenge_board_len(&store, &challenge).await, 2);
+
+        // Private → public is a publish, which starts a fresh board.
+        let body = definition_request("Draft", Visibility::Public, Rotation::Static);
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        assert_eq!(challenge_board_len(&store, &challenge).await, 0);
+    }
+
+    #[actix_web::test]
+    async fn deleting_a_definition_resets_its_board_and_removes_it() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let def = seed_game_definition(&store, &owner, "Doomed", Visibility::Public, Rotation::Static).await;
+        let challenge = format!("def:{}", def.id);
+        record_challenge_score(&store, &owner, &challenge).await;
+        assert_eq!(challenge_board_len(&store, &challenge).await, 1);
+
+        let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}", def.id), Some(key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        assert_eq!(challenge_board_len(&store, &challenge).await, 0);
+
+        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}", def.id), Some(key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn list_game_definitions_merges_visible_sources() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let admin = user_by_name(&mock_users, VALID_ADMIN_USERNAME_1);
+
+        let my_private = seed_game_definition(&store, &me, "A my private", Visibility::Private, Rotation::Static).await;
+        let my_public = seed_game_definition(&store, &me, "B my public", Visibility::Public, Rotation::Static).await;
+        let others_public = seed_game_definition(&store, &other, "C others public", Visibility::Public, Rotation::Static).await;
+        let shared_to_me = seed_game_definition(&store, &other, "D shared to me", Visibility::Shared, Rotation::Static).await;
+        store.write().await.grant_definition_access(&other, shared_to_me.id, me.id).await.expect("grant");
+        let others_private = seed_game_definition(&store, &other, "E others private", Visibility::Private, Rotation::Static).await;
+        let curated = seed_game_definition(&store, &admin, "F curated", Visibility::Curated, Rotation::Static).await;
+
+        let req = create_test_get_request("/api/v1/game-definitions", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let ids: Vec<Uuid> = list.definitions.iter().map(|d| d.id).collect();
+        assert!(ids.contains(&my_private.id));
+        assert!(ids.contains(&my_public.id));
+        assert!(ids.contains(&others_public.id));
+        assert!(ids.contains(&shared_to_me.id));
+        assert!(ids.contains(&curated.id));
+        assert!(!ids.contains(&others_private.id), "another user's private draft must not appear");
+
+        // De-duplicated and ordered by name (case-insensitive).
+        assert_eq!(ids.len(), 5);
+        let names: Vec<String> = list.definitions.iter().map(|d| d.name.clone()).collect();
+        let mut sorted = names.clone();
+        sorted.sort_by_key(|n| n.to_lowercase());
+        assert_eq!(names, sorted);
+    }
+
+    #[actix_web::test]
+    async fn definition_share_grant_revoke_and_owner_only_read() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let def = seed_game_definition(&store, &owner, "Shared", Visibility::Shared, Rotation::Static).await;
+        let grant = GrantShareRequest { user_id: other.id };
+
+        // Grant → grantees include the target.
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(shares.grantees, vec![other.id]);
+
+        // Only the owner may read the grantee list.
+        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(shares.grantees, vec![other.id]);
+
+        // Revoke → empty.
+        let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, other.id), Some(owner.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert!(shares.grantees.is_empty());
+
+        // A non-owner cannot grant on someone else's definition.
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None, &grant);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 }
