@@ -682,7 +682,7 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|
 | `POST`   | `/api/v1/game-definitions` | Either | Create a definition. The server mints the `seed` and sets id/owner/timestamps; the body carries `name`, `description`, `visibility`, `rotation`, `config`. Setting `visibility = "curated"` requires an admin. |
-| `GET`    | `/api/v1/game-definitions` | Either | List every definition the caller may see — their own (all visibilities), those shared with them, and all public + curated — de-duplicated, ordered by name. |
+| `GET`    | `/api/v1/game-definitions` | Either | List the definitions the caller may see — their own (all visibilities), those shared with them, and all public + curated — de-duplicated, ordered by name. Paged via `limit` (default 20, capped at 100) / `offset`; the response echoes the effective `limit`/`offset` and a `hasMore` flag. |
 | `GET`    | `/api/v1/game-definitions/{id}` | Either | **Play-fetch** for one accessible definition (owner ∨ curated ∨ public ∨ granted; otherwise `404`). Returns the definition with the *effective* seed spliced into `config`, plus the computed `challengeKey` and `leaderboardTracked`. |
 | `PUT`    | `/api/v1/game-definitions/{id}` | Either | Update a definition the caller owns. `seed` and image are server-owned and preserved. Publishing (a `private` → published transition) starts a fresh leaderboard; unpublishing back to `private` freezes it. |
 | `DELETE` | `/api/v1/game-definitions/{id}` | Either | Delete a definition the caller owns, removing its shares and resetting its leaderboard(s). |

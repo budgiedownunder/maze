@@ -6,10 +6,12 @@
 //! module owns the definition CRUD, the share grants, and the **publish
 //! lifecycle**:
 //!
-//!   * **Access policy lives here, not in storage.** Storage exposes owner-scoped
-//!     mutations, scoped reads, and two unconditional primitives
-//!     (`get_game_definition`, `get_definition_grantees`); the server composes
-//!     the `owner ∨ curated ∨ public ∨ granted` view decision at the handler.
+//!   * **Access control is enforced here, not in storage.** Storage holds the
+//!     access facts (a definition's `visibility`, its grantee list) but performs
+//!     no access checks — it exposes owner-scoped mutations, scoped reads, and
+//!     two unconditional primitives (`get_game_definition`,
+//!     `get_definition_grantees`). The server reads those facts and composes the
+//!     `owner ∨ curated ∨ public ∨ granted` view decision at the handler.
 //!   * **Seed is server-owned.** It is minted on create and preserved verbatim
 //!     across updates — never taken from the client — so a definition's layout
 //!     stays stable and its leaderboard fair.
@@ -70,13 +72,29 @@ pub struct GameDefinitionRequest {
     pub config: serde_json::Value,
 }
 
-/// A list of game definitions the caller may see — the merge of their own, those
-/// shared with them, and every public / curated definition.
+/// Query parameters for the list endpoint — a page of the merged result.
+#[derive(Deserialize, Debug)]
+pub struct ListGameDefinitionsQuery {
+    /// Page size (defaults to [`DEFAULT_PAGE_SIZE`], capped at [`MAX_PAGE_SIZE`]).
+    pub limit: Option<u32>,
+    /// Zero-based page offset (defaults to 0).
+    pub offset: Option<u32>,
+}
+
+/// A page of the game definitions the caller may see — the merge of their own,
+/// those shared with them, and every public / curated definition.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDefinitionListResponse {
-    /// The visible definitions, de-duplicated and ordered by name.
+    /// The page of visible definitions, de-duplicated and ordered by name.
     pub definitions: Vec<GameDefinition>,
+    /// The effective page size applied (the request's `limit` capped at the
+    /// server maximum).
+    pub limit: u32,
+    /// The zero-based offset this page started at.
+    pub offset: u32,
+    /// Whether at least one further definition exists beyond this page.
+    pub has_more: bool,
 }
 
 /// The play-fetch response for a single definition: the stored definition with
@@ -119,6 +137,18 @@ pub struct DefinitionSharesResponse {
 // ---------------------------------------------------------------------------
 // Local helpers
 // ---------------------------------------------------------------------------
+
+/// Page size used when the caller omits `limit` (mirrors the scores endpoint).
+const DEFAULT_PAGE_SIZE: u32 = 20;
+/// Hard server cap on `limit` — a caller asking for more is silently capped to
+/// this, and the effective value is echoed back so the client can page correctly.
+const MAX_PAGE_SIZE: u32 = 100;
+
+/// Resolves the effective page size: the caller's `limit` (or the default when
+/// omitted), capped at [`MAX_PAGE_SIZE`].
+fn effective_limit(requested: Option<u32>) -> u32 {
+    requested.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE)
+}
 
 /// The `challenge` prefix under which a definition's leaderboard rows live —
 /// `def:<id>` for the `Static` board, and the parent of every `def:<id>:<date>`
@@ -284,13 +314,18 @@ pub async fn create_game_definition(
 
 #[utoipa::path(
     summary = "List visible game definitions",
-    description = "Returns every game definition the caller may see — the merge of their own \
-                   (all visibilities, drafts included), those shared with them, and all public and \
-                   curated definitions — de-duplicated and ordered by name.",
+    description = "Returns a page of the game definitions the caller may see — the merge of their \
+                   own (all visibilities, drafts included), those shared with them, and all public \
+                   and curated definitions — de-duplicated and ordered by name. Paging is via limit \
+                   (server-capped) and offset, applied after the merge.",
     get,
     path = "/api/v1/game-definitions",
+    params(
+        ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+    ),
     responses(
-        (status = 200, description = "The visible definitions", body = GameDefinitionListResponse),
+        (status = 200, description = "A page of visible definitions", body = GameDefinitionListResponse),
         (status = 401, description = "Unauthorized request")
     ),
     security(("api_key" = []), ("login_token" = [])),
@@ -298,10 +333,14 @@ pub async fn create_game_definition(
 )]
 #[get("/game-definitions")]
 pub async fn list_game_definitions(
+    query: web::Query<ListGameDefinitionsQuery>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
+    let q = query.into_inner();
+    let limit = effective_limit(q.limit);
+    let offset = q.offset.unwrap_or(0);
     let store_lock = store.read().await;
 
     let mut merged: Vec<GameDefinition> = Vec::new();
@@ -326,7 +365,20 @@ pub async fn list_game_definitions(
     merged.retain(|def| seen.insert(def.id));
     merged.sort_by_key(|def| def.name.to_lowercase());
 
-    Ok(HttpResponse::Ok().json(GameDefinitionListResponse { definitions: merged }))
+    // The four scoped reads have no cross-source paging primitive, so the merge
+    // is assembled in memory and the page sliced from it. Definition sets are
+    // small (a user's own plus the public/curated sets), so this is cheap.
+    let total = merged.len();
+    let definitions: Vec<GameDefinition> =
+        merged.into_iter().skip(offset as usize).take(limit as usize).collect();
+    let has_more = total > offset as usize + definitions.len();
+
+    Ok(HttpResponse::Ok().json(GameDefinitionListResponse {
+        definitions,
+        limit,
+        offset,
+        has_more,
+    }))
 }
 
 // ---------------------------------------------------------------------------

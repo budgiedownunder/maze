@@ -8380,6 +8380,44 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn list_game_definitions_pages_the_merged_result() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+
+        // Three visible definitions, which sort P1 < P2 < P3 by name.
+        seed_game_definition(&store, &me, "P1", Visibility::Public, Rotation::Static).await;
+        seed_game_definition(&store, &me, "P2", Visibility::Public, Rotation::Static).await;
+        seed_game_definition(&store, &me, "P3", Visibility::Public, Rotation::Static).await;
+
+        // First page of two → P1, P2, more to come.
+        let req = create_test_get_request("/api/v1/game-definitions?limit=2&offset=0", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let page: GameDefinitionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["P1", "P2"]);
+        assert_eq!(page.limit, 2);
+        assert_eq!(page.offset, 0);
+        assert!(page.has_more);
+
+        // Last page → the remaining P3, nothing beyond.
+        let req = create_test_get_request("/api/v1/game-definitions?limit=2&offset=2", Some(me.api_key), None);
+        let page: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["P3"]);
+        assert!(!page.has_more);
+
+        // An over-cap limit is silently capped and echoed back.
+        let req = create_test_get_request("/api/v1/game-definitions?limit=1000", Some(me.api_key), None);
+        let page: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.limit, 100);
+        assert_eq!(page.definitions.len(), 3);
+        assert!(!page.has_more);
+    }
+
+    #[actix_web::test]
     async fn definition_share_grant_revoke_and_owner_only_read() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
