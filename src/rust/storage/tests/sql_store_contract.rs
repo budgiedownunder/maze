@@ -18,7 +18,7 @@
 mod common;
 
 use common::store_contract as contract;
-use storage::{Manage, SqlStore, SqlStoreConfig, Store};
+use storage::{SqlStore, SqlStoreConfig, Store};
 
 async fn fresh_store() -> Box<dyn Store> {
     let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
@@ -903,82 +903,64 @@ async fn score_clear_prefix_removes_a_definitions_boards() {
 }
 
 // ─── GameStore — game definitions ─────────────────────────────────────────
-//
-// `GameStore` is not yet part of the `Store` supertrait, so these run against a
-// concrete `SqlStore` rather than the boxed `Store` used above.
-
-async fn fresh_game_store() -> SqlStore {
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite::memory:".to_string());
-    let max_connections = if url.contains(":memory:") { 1 } else { 5 };
-    let mut store = SqlStore::new(SqlStoreConfig {
-        url,
-        max_connections,
-        auto_create_database: true,
-        ..SqlStoreConfig::default()
-    })
-    .await
-    .expect("fresh_game_store: SqlStore::new");
-    store.empty().await.expect("fresh_game_store: empty");
-    store
-}
 
 #[tokio::test]
 async fn game_definition_assigns_ids_and_round_trips() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_definition_assigns_ids_and_round_trips(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_rejects_empty_name() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_definition_rejects_empty_name(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_rejects_duplicate_name_ci() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_definition_rejects_duplicate_name_ci(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_rejects_oversize_config() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_definition_rejects_oversize_config(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_get_returns_not_found_for_unknown_id() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::get_game_definition_returns_not_found_for_unknown_id(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_update_persists_and_scopes_to_owner() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::update_game_definition_persists_and_scopes_to_owner(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_delete_is_owner_scoped() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::delete_game_definition_is_owner_scoped(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_list_reads_scope_by_owner_and_visibility() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::definition_list_reads_scope_by_owner_and_visibility(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_grants_control_shared_with() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::definition_grants_control_shared_with(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_delete_user_cascades() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::delete_user_cascades_to_game_definitions(&mut s).await;
 }
 
@@ -986,60 +968,60 @@ async fn game_definition_delete_user_cascades() {
 
 #[tokio::test]
 async fn game_collection_assigns_ids_and_round_trips() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_collection_assigns_ids_and_round_trips(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_rejects_empty_name() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_collection_rejects_empty_name(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_rejects_duplicate_name_ci() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::create_game_collection_rejects_duplicate_name_ci(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_get_returns_not_found_for_unknown_id() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::get_game_collection_returns_not_found_for_unknown_id(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_update_is_metadata_only_and_scoped_to_owner() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::update_game_collection_is_metadata_only_and_scoped_to_owner(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_delete_is_owner_scoped() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::delete_game_collection_is_owner_scoped(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_items_add_remove_and_reorder() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::collection_items_add_remove_and_reorder(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_list_reads_scope_by_owner_and_visibility() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::collection_list_reads_scope_by_owner_and_visibility(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_grants_control_shared_with() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::collection_grants_control_shared_with(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_delete_user_cascades() {
-    let mut s = fresh_game_store().await;
+    let mut s = fresh_store().await;
     contract::delete_user_cascades_to_game_collections(&mut s).await;
 }

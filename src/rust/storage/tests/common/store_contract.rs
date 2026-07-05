@@ -18,8 +18,8 @@ use data_model::{
     Visibility,
 };
 use storage::{
-    Error, GameStore, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
-    ScoreboardEntry, SortDirection, Store, UserStore,
+    Error, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
+    ScoreboardEntry, SortDirection, Store,
 };
 use uuid::Uuid;
 
@@ -2469,16 +2469,10 @@ pub fn make_game_definition(name: &str, visibility: Visibility) -> GameDefinitio
     }
 }
 
-async fn seed_user<S: UserStore>(store: &mut S, username: &str, email: &str) -> User {
-    let mut user = make_user(username, email);
-    store.create_user(&mut user).await.expect("seed_user");
-    user
-}
-
-pub async fn create_game_definition_assigns_ids_and_round_trips<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn create_game_definition_assigns_ids_and_round_trips(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
     let mut def = make_game_definition("Nightfall", Visibility::Private);
     store
         .create_game_definition(&owner, &mut def)
@@ -2491,8 +2485,8 @@ pub async fn create_game_definition_assigns_ids_and_round_trips<S: GameStore + U
     assert_eq!(loaded, def, "definition must round-trip byte-for-byte");
 }
 
-pub async fn create_game_definition_rejects_empty_name<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+pub async fn create_game_definition_rejects_empty_name(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
     let mut def = make_game_definition("   ", Visibility::Private);
     let err = store
         .create_game_definition(&owner, &mut def)
@@ -2501,10 +2495,10 @@ pub async fn create_game_definition_rejects_empty_name<S: GameStore + UserStore>
     assert!(matches!(err, Error::GameDefinitionNameMissing()), "got {err:?}");
 }
 
-pub async fn create_game_definition_rejects_duplicate_name_ci<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn create_game_definition_rejects_duplicate_name_ci(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
     let mut first = make_game_definition("Dungeon", Visibility::Private);
     store
         .create_game_definition(&owner, &mut first)
@@ -2523,10 +2517,10 @@ pub async fn create_game_definition_rejects_duplicate_name_ci<S: GameStore + Use
 
 /// The dedicated storage-level config-size guard test (mirrors the maze
 /// definition-size guard). A config just over the cap is refused on create.
-pub async fn create_game_definition_rejects_oversize_config<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn create_game_definition_rejects_oversize_config(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
     let mut def = make_game_definition("TooBig", Visibility::Private);
     let filler = "x".repeat(MAX_GAME_DEFINITION_CONFIG_BYTES + 1);
     def.config = serde_json::json!({ "blob": filler });
@@ -2540,8 +2534,8 @@ pub async fn create_game_definition_rejects_oversize_config<S: GameStore + UserS
     );
 }
 
-pub async fn get_game_definition_returns_not_found_for_unknown_id<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn get_game_definition_returns_not_found_for_unknown_id(
+    store: &mut Box<dyn Store>,
 ) {
     let err = store
         .get_game_definition(Uuid::new_v4())
@@ -2550,11 +2544,11 @@ pub async fn get_game_definition_returns_not_found_for_unknown_id<S: GameStore +
     assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn update_game_definition_persists_and_scopes_to_owner<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn update_game_definition_persists_and_scopes_to_owner(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
-    let other = seed_user(store, "gd_other", "gd_other@example.com").await;
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
+    let other = fixture_user(store, "gd_other", "gd_other@example.com").await;
     let mut def = make_game_definition("Original", Visibility::Private);
     store
         .create_game_definition(&owner, &mut def)
@@ -2584,9 +2578,9 @@ pub async fn update_game_definition_persists_and_scopes_to_owner<S: GameStore + 
     assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn delete_game_definition_is_owner_scoped<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
-    let other = seed_user(store, "gd_other", "gd_other@example.com").await;
+pub async fn delete_game_definition_is_owner_scoped(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
+    let other = fixture_user(store, "gd_other", "gd_other@example.com").await;
     let mut def = make_game_definition("Doomed", Visibility::Private);
     store
         .create_game_definition(&owner, &mut def)
@@ -2610,11 +2604,11 @@ pub async fn delete_game_definition_is_owner_scoped<S: GameStore + UserStore>(st
     assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn definition_list_reads_scope_by_owner_and_visibility<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn definition_list_reads_scope_by_owner_and_visibility(
+    store: &mut Box<dyn Store>,
 ) {
-    let alice = seed_user(store, "gd_alice", "gd_alice@example.com").await;
-    let bob = seed_user(store, "gd_bob", "gd_bob@example.com").await;
+    let alice = fixture_user(store, "gd_alice", "gd_alice@example.com").await;
+    let bob = fixture_user(store, "gd_bob", "gd_bob@example.com").await;
     for (name, vis) in [
         ("Alpha", Visibility::Private),
         ("Bravo", Visibility::Public),
@@ -2643,9 +2637,9 @@ pub async fn definition_list_reads_scope_by_owner_and_visibility<S: GameStore + 
     assert_eq!(curated[0].visibility, Visibility::Curated);
 }
 
-pub async fn definition_grants_control_shared_with<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "gd_owner", "gd_owner@example.com").await;
-    let friend = seed_user(store, "gd_friend", "gd_friend@example.com").await;
+pub async fn definition_grants_control_shared_with(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
+    let friend = fixture_user(store, "gd_friend", "gd_friend@example.com").await;
     let mut def = make_game_definition("Shared", Visibility::Shared);
     store.create_game_definition(&owner, &mut def).await.expect("create");
 
@@ -2681,9 +2675,9 @@ pub async fn definition_grants_control_shared_with<S: GameStore + UserStore>(sto
     assert!(store.get_definitions_shared_with(friend.id).await.expect("shared").is_empty());
 }
 
-pub async fn delete_user_cascades_to_game_definitions<S: GameStore + UserStore>(store: &mut S) {
-    let alice = seed_user(store, "gd_alice", "gd_alice@example.com").await;
-    let bob = seed_user(store, "gd_bob", "gd_bob@example.com").await;
+pub async fn delete_user_cascades_to_game_definitions(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "gd_alice", "gd_alice@example.com").await;
+    let bob = fixture_user(store, "gd_bob", "gd_bob@example.com").await;
     let mut alice_def = make_game_definition("AliceDef", Visibility::Shared);
     store.create_game_definition(&alice, &mut alice_def).await.expect("alice def");
     let mut bob_def = make_game_definition("BobDef", Visibility::Shared);
@@ -2723,10 +2717,10 @@ pub fn make_game_collection(name: &str, visibility: Visibility) -> GameCollectio
     }
 }
 
-pub async fn create_game_collection_assigns_ids_and_round_trips<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn create_game_collection_assigns_ids_and_round_trips(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
     let mut collection = make_game_collection("Nightfall Bundle", Visibility::Public);
     collection.description = Some("A themed set".to_string());
     collection.items = vec![
@@ -2743,8 +2737,8 @@ pub async fn create_game_collection_assigns_ids_and_round_trips<S: GameStore + U
     assert_eq!(loaded, collection, "collection must round-trip (items included)");
 }
 
-pub async fn create_game_collection_rejects_empty_name<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+pub async fn create_game_collection_rejects_empty_name(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
     let mut collection = make_game_collection("  ", Visibility::Private);
     let err = store
         .create_game_collection(&owner, &mut collection)
@@ -2753,10 +2747,10 @@ pub async fn create_game_collection_rejects_empty_name<S: GameStore + UserStore>
     assert!(matches!(err, Error::GameCollectionNameMissing()), "got {err:?}");
 }
 
-pub async fn create_game_collection_rejects_duplicate_name_ci<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn create_game_collection_rejects_duplicate_name_ci(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
     let mut first = make_game_collection("Difficulty", Visibility::Curated);
     store.create_game_collection(&owner, &mut first).await.expect("first");
     let mut clash = make_game_collection("DIFFICULTY", Visibility::Public);
@@ -2767,8 +2761,8 @@ pub async fn create_game_collection_rejects_duplicate_name_ci<S: GameStore + Use
     assert!(matches!(err, Error::GameCollectionNameAlreadyExists(_)), "got {err:?}");
 }
 
-pub async fn get_game_collection_returns_not_found_for_unknown_id<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn get_game_collection_returns_not_found_for_unknown_id(
+    store: &mut Box<dyn Store>,
 ) {
     let err = store
         .get_game_collection(Uuid::new_v4())
@@ -2777,11 +2771,11 @@ pub async fn get_game_collection_returns_not_found_for_unknown_id<S: GameStore +
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn update_game_collection_is_metadata_only_and_scoped_to_owner<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn update_game_collection_is_metadata_only_and_scoped_to_owner(
+    store: &mut Box<dyn Store>,
 ) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
-    let other = seed_user(store, "col_other", "col_other@example.com").await;
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
+    let other = fixture_user(store, "col_other", "col_other@example.com").await;
     let mut collection = make_game_collection("Original", Visibility::Private);
     store.create_game_collection(&owner, &mut collection).await.expect("create");
     // Add an item so we can prove update leaves membership untouched.
@@ -2814,9 +2808,9 @@ pub async fn update_game_collection_is_metadata_only_and_scoped_to_owner<S: Game
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn delete_game_collection_is_owner_scoped<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
-    let other = seed_user(store, "col_other", "col_other@example.com").await;
+pub async fn delete_game_collection_is_owner_scoped(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
+    let other = fixture_user(store, "col_other", "col_other@example.com").await;
     let mut collection = make_game_collection("Doomed", Visibility::Private);
     store.create_game_collection(&owner, &mut collection).await.expect("create");
 
@@ -2834,9 +2828,9 @@ pub async fn delete_game_collection_is_owner_scoped<S: GameStore + UserStore>(st
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn collection_items_add_remove_and_reorder<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
-    let other = seed_user(store, "col_other", "col_other@example.com").await;
+pub async fn collection_items_add_remove_and_reorder(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
+    let other = fixture_user(store, "col_other", "col_other@example.com").await;
     let mut collection = make_game_collection("Bundle", Visibility::Private);
     store.create_game_collection(&owner, &mut collection).await.expect("create");
     let (a, b, c) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
@@ -2870,11 +2864,11 @@ pub async fn collection_items_add_remove_and_reorder<S: GameStore + UserStore>(s
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn collection_list_reads_scope_by_owner_and_visibility<S: GameStore + UserStore>(
-    store: &mut S,
+pub async fn collection_list_reads_scope_by_owner_and_visibility(
+    store: &mut Box<dyn Store>,
 ) {
-    let alice = seed_user(store, "col_alice", "col_alice@example.com").await;
-    let bob = seed_user(store, "col_bob", "col_bob@example.com").await;
+    let alice = fixture_user(store, "col_alice", "col_alice@example.com").await;
+    let bob = fixture_user(store, "col_bob", "col_bob@example.com").await;
     for (name, vis) in [
         ("Alpha", Visibility::Private),
         ("Bravo", Visibility::Public),
@@ -2906,9 +2900,9 @@ pub async fn collection_list_reads_scope_by_owner_and_visibility<S: GameStore + 
     assert_eq!(curated[0].name, "Charlie");
 }
 
-pub async fn collection_grants_control_shared_with<S: GameStore + UserStore>(store: &mut S) {
-    let owner = seed_user(store, "col_owner", "col_owner@example.com").await;
-    let friend = seed_user(store, "col_friend", "col_friend@example.com").await;
+pub async fn collection_grants_control_shared_with(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
+    let friend = fixture_user(store, "col_friend", "col_friend@example.com").await;
     let mut collection = make_game_collection("Shared", Visibility::Shared);
     store.create_game_collection(&owner, &mut collection).await.expect("create");
 
@@ -2937,9 +2931,9 @@ pub async fn collection_grants_control_shared_with<S: GameStore + UserStore>(sto
     assert!(store.get_collections_shared_with(friend.id).await.expect("shared").is_empty());
 }
 
-pub async fn delete_user_cascades_to_game_collections<S: GameStore + UserStore>(store: &mut S) {
-    let alice = seed_user(store, "col_alice", "col_alice@example.com").await;
-    let bob = seed_user(store, "col_bob", "col_bob@example.com").await;
+pub async fn delete_user_cascades_to_game_collections(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "col_alice", "col_alice@example.com").await;
+    let bob = fixture_user(store, "col_bob", "col_bob@example.com").await;
     let mut alice_col = make_game_collection("AliceCol", Visibility::Shared);
     store.create_game_collection(&alice, &mut alice_col).await.expect("alice col");
     let mut bob_col = make_game_collection("BobCol", Visibility::Shared);

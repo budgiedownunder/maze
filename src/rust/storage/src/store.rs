@@ -627,7 +627,7 @@ pub trait Manage {
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + ScoreStore + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + ScoreStore + GameStore + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

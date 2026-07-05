@@ -17,14 +17,14 @@ mod test_definitions {
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
-    use data_model::{Maze, MazeDefinition, MazePoint, User, UserLogin};
+    use data_model::{CollectionItem, GameCollection, GameDefinition, Maze, MazeDefinition, MazePoint, User, UserLogin, Visibility};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreboardEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::GameStore, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreboardEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -124,6 +124,10 @@ mod test_definitions {
         tokens: HashMap<Uuid, OneTimeToken>,
         audit_entries: HashMap<Uuid, EmailAuditEntry>,
         scores: Vec<ScoreEntry>,
+        game_definitions: Vec<GameDefinition>,
+        game_collections: Vec<GameCollection>,
+        def_grantees: HashMap<Uuid, Vec<Uuid>>,
+        col_grantees: HashMap<Uuid, Vec<Uuid>>,
     }
 
     impl MockStore {
@@ -133,6 +137,10 @@ mod test_definitions {
                 tokens: HashMap::new(),
                 audit_entries: HashMap::new(),
                 scores: Vec::new(),
+                game_definitions: Vec::new(),
+                game_collections: Vec::new(),
+                def_grantees: HashMap::new(),
+                col_grantees: HashMap::new(),
             }
         }
 
@@ -148,6 +156,27 @@ mod test_definitions {
                 return Ok(mock_user);
             }
             Err(StoreError::UserIdNotFound(id.to_string()))
+        }
+
+        /// Owner-scoping check for a game definition: a definition not owned by
+        /// `owner` is indistinguishable from absent.
+        fn owned_def_or_not_found(&self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+            match self.game_definitions.iter().find(|d| d.id == id) {
+                Some(d) if d.owner_id == owner.id => Ok(()),
+                _ => Err(StoreError::GameDefinitionIdNotFound(id.to_string())),
+            }
+        }
+
+        /// Owner-scoping check for a game collection.
+        fn owned_collection_or_not_found(&self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+            match self.game_collections.iter().find(|c| c.id == id) {
+                Some(c) if c.owner_id == owner.id => Ok(()),
+                _ => Err(StoreError::GameCollectionIdNotFound(id.to_string())),
+            }
+        }
+
+        fn game_collection_mut(&mut self, id: Uuid) -> Option<&mut GameCollection> {
+            self.game_collections.iter_mut().find(|c| c.id == id)
         }
 
         /// Wraps a board page into `ScoreboardEntry`s, resolving each row's
@@ -888,6 +917,267 @@ mod test_definitions {
         let mut matched: Vec<ScoreEntry> = entries.iter().filter(|e| keep(e)).cloned().collect();
         matched.sort_by(|a, b| mock_score_cmp(ordering, a, b));
         matched.into_iter().skip(offset as usize).take(limit as usize).collect()
+    }
+
+    /// Sorts a list of definitions/collections case-insensitively by name.
+    fn sort_by_name_ci<T>(items: &mut [T], name: impl Fn(&T) -> &str) {
+        items.sort_by_key(|item| name(item).to_lowercase());
+    }
+
+    /// Rewrites each item's `sort_order` to its index (dense `0..n`).
+    fn renumber_items(items: &mut [CollectionItem]) {
+        for (index, item) in items.iter_mut().enumerate() {
+            item.sort_order = index as u32;
+        }
+    }
+
+    #[async_trait]
+    impl GameStore for MockStore {
+        // ── Definitions ──
+
+        async fn create_game_definition(&mut self, owner: &User, definition: &mut GameDefinition) -> Result<(), StoreError> {
+            if definition.name.trim().is_empty() {
+                return Err(StoreError::GameDefinitionNameMissing());
+            }
+            if self.game_definitions.iter().any(|d| d.owner_id == owner.id && d.name.eq_ignore_ascii_case(&definition.name)) {
+                return Err(StoreError::GameDefinitionNameAlreadyExists(definition.name.clone()));
+            }
+            definition.owner_id = owner.id;
+            if definition.id.is_nil() {
+                definition.id = Uuid::new_v4();
+            }
+            let now = Utc::now();
+            definition.created_at = now;
+            definition.updated_at = now;
+            self.game_definitions.push(definition.clone());
+            Ok(())
+        }
+
+        async fn get_game_definition(&self, id: Uuid) -> Result<GameDefinition, StoreError> {
+            self.game_definitions.iter().find(|d| d.id == id).cloned()
+                .ok_or_else(|| StoreError::GameDefinitionIdNotFound(id.to_string()))
+        }
+
+        async fn update_game_definition(&mut self, owner: &User, definition: &mut GameDefinition) -> Result<(), StoreError> {
+            let existing = self.game_definitions.iter().find(|d| d.id == definition.id).cloned()
+                .ok_or_else(|| StoreError::GameDefinitionIdNotFound(definition.id.to_string()))?;
+            if existing.owner_id != owner.id {
+                return Err(StoreError::GameDefinitionIdNotFound(definition.id.to_string()));
+            }
+            if definition.name.trim().is_empty() {
+                return Err(StoreError::GameDefinitionNameMissing());
+            }
+            if self.game_definitions.iter().any(|d| d.id != definition.id && d.owner_id == owner.id && d.name.eq_ignore_ascii_case(&definition.name)) {
+                return Err(StoreError::GameDefinitionNameAlreadyExists(definition.name.clone()));
+            }
+            definition.owner_id = owner.id;
+            definition.created_at = existing.created_at;
+            definition.updated_at = Utc::now();
+            if let Some(slot) = self.game_definitions.iter_mut().find(|d| d.id == definition.id) {
+                *slot = definition.clone();
+            }
+            Ok(())
+        }
+
+        async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+            self.owned_def_or_not_found(owner, id)?;
+            self.game_definitions.retain(|d| d.id != id);
+            self.def_grantees.remove(&id);
+            Ok(())
+        }
+
+        async fn grant_definition_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+            self.owned_def_or_not_found(owner, id)?;
+            let grantees = self.def_grantees.entry(id).or_default();
+            if !grantees.contains(&grantee) {
+                grantees.push(grantee);
+            }
+            Ok(())
+        }
+
+        async fn revoke_definition_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+            self.owned_def_or_not_found(owner, id)?;
+            if let Some(grantees) = self.def_grantees.get_mut(&id) {
+                grantees.retain(|g| *g != grantee);
+            }
+            Ok(())
+        }
+
+        async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, StoreError> {
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.owner_id == owner.id).cloned().collect();
+            sort_by_name_ci(&mut defs, |d| &d.name);
+            Ok(defs)
+        }
+
+        async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, StoreError> {
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.visibility == Visibility::Curated).cloned().collect();
+            sort_by_name_ci(&mut defs, |d| &d.name);
+            Ok(defs)
+        }
+
+        async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, StoreError> {
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.visibility == Visibility::Public).cloned().collect();
+            sort_by_name_ci(&mut defs, |d| &d.name);
+            Ok(defs)
+        }
+
+        async fn get_definitions_shared_with(&self, user: Uuid) -> Result<Vec<GameDefinition>, StoreError> {
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
+                .filter(|d| self.def_grantees.get(&d.id).is_some_and(|g| g.contains(&user)))
+                .cloned().collect();
+            sort_by_name_ci(&mut defs, |d| &d.name);
+            Ok(defs)
+        }
+
+        async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
+            Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
+        }
+
+        // ── Collections ──
+
+        async fn create_game_collection(&mut self, owner: &User, collection: &mut GameCollection) -> Result<(), StoreError> {
+            if collection.name.trim().is_empty() {
+                return Err(StoreError::GameCollectionNameMissing());
+            }
+            if self.game_collections.iter().any(|c| c.owner_id == owner.id && c.name.eq_ignore_ascii_case(&collection.name)) {
+                return Err(StoreError::GameCollectionNameAlreadyExists(collection.name.clone()));
+            }
+            collection.owner_id = owner.id;
+            if collection.id.is_nil() {
+                collection.id = Uuid::new_v4();
+            }
+            let now = Utc::now();
+            collection.created_at = now;
+            collection.updated_at = now;
+            renumber_items(&mut collection.items);
+            self.game_collections.push(collection.clone());
+            Ok(())
+        }
+
+        async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, StoreError> {
+            let mut collection = self.game_collections.iter().find(|c| c.id == id).cloned()
+                .ok_or_else(|| StoreError::GameCollectionIdNotFound(id.to_string()))?;
+            collection.items.sort_by_key(|i| i.sort_order);
+            Ok(collection)
+        }
+
+        async fn update_game_collection(&mut self, owner: &User, collection: &mut GameCollection) -> Result<(), StoreError> {
+            let existing = self.game_collections.iter().find(|c| c.id == collection.id).cloned()
+                .ok_or_else(|| StoreError::GameCollectionIdNotFound(collection.id.to_string()))?;
+            if existing.owner_id != owner.id {
+                return Err(StoreError::GameCollectionIdNotFound(collection.id.to_string()));
+            }
+            if collection.name.trim().is_empty() {
+                return Err(StoreError::GameCollectionNameMissing());
+            }
+            if self.game_collections.iter().any(|c| c.id != collection.id && c.owner_id == owner.id && c.name.eq_ignore_ascii_case(&collection.name)) {
+                return Err(StoreError::GameCollectionNameAlreadyExists(collection.name.clone()));
+            }
+            // Metadata-only: preserve membership + created_at.
+            collection.owner_id = owner.id;
+            collection.created_at = existing.created_at;
+            collection.items = existing.items;
+            collection.updated_at = Utc::now();
+            if let Some(slot) = self.game_collection_mut(collection.id) {
+                *slot = collection.clone();
+            }
+            Ok(())
+        }
+
+        async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, id)?;
+            self.game_collections.retain(|c| c.id != id);
+            self.col_grantees.remove(&id);
+            Ok(())
+        }
+
+        async fn add_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, collection_id)?;
+            let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
+            if collection.items.iter().any(|i| i.definition_id == definition_id) {
+                return Ok(());
+            }
+            let sort_order = collection.items.len() as u32;
+            collection.items.push(CollectionItem { definition_id, sort_order });
+            collection.updated_at = Utc::now();
+            Ok(())
+        }
+
+        async fn remove_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, collection_id)?;
+            let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
+            let before = collection.items.len();
+            collection.items.retain(|i| i.definition_id != definition_id);
+            if collection.items.len() != before {
+                renumber_items(&mut collection.items);
+                collection.updated_at = Utc::now();
+            }
+            Ok(())
+        }
+
+        async fn reorder_collection_items(&mut self, owner: &User, collection_id: Uuid, ordered: &[Uuid]) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, collection_id)?;
+            let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
+            let mut remaining = std::mem::take(&mut collection.items);
+            let mut reordered: Vec<CollectionItem> = Vec::with_capacity(remaining.len());
+            for id in ordered {
+                if let Some(pos) = remaining.iter().position(|i| i.definition_id == *id) {
+                    reordered.push(remaining.remove(pos));
+                }
+            }
+            reordered.extend(remaining);
+            renumber_items(&mut reordered);
+            collection.items = reordered;
+            collection.updated_at = Utc::now();
+            Ok(())
+        }
+
+        async fn grant_collection_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, id)?;
+            let grantees = self.col_grantees.entry(id).or_default();
+            if !grantees.contains(&grantee) {
+                grantees.push(grantee);
+            }
+            Ok(())
+        }
+
+        async fn revoke_collection_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, id)?;
+            if let Some(grantees) = self.col_grantees.get_mut(&id) {
+                grantees.retain(|g| *g != grantee);
+            }
+            Ok(())
+        }
+
+        async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, StoreError> {
+            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.owner_id == owner.id).cloned().collect();
+            sort_by_name_ci(&mut cols, |c| &c.name);
+            Ok(cols)
+        }
+
+        async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, StoreError> {
+            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.visibility == Visibility::Curated).cloned().collect();
+            sort_by_name_ci(&mut cols, |c| &c.name);
+            Ok(cols)
+        }
+
+        async fn get_public_collections(&self) -> Result<Vec<GameCollection>, StoreError> {
+            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.visibility == Visibility::Public).cloned().collect();
+            sort_by_name_ci(&mut cols, |c| &c.name);
+            Ok(cols)
+        }
+
+        async fn get_collections_shared_with(&self, user: Uuid) -> Result<Vec<GameCollection>, StoreError> {
+            let mut cols: Vec<GameCollection> = self.game_collections.iter()
+                .filter(|c| self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&user)))
+                .cloned().collect();
+            sort_by_name_ci(&mut cols, |c| &c.name);
+            Ok(cols)
+        }
+
+        async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
+            Ok(self.col_grantees.get(&id).cloned().unwrap_or_default())
+        }
     }
 
     impl Store for MockStore {}
