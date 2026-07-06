@@ -2950,6 +2950,99 @@ pub async fn delete_user_cascades_to_game_collections(store: &mut Box<dyn Store>
     assert!(!bob_grantees.contains(&alice.id), "deleted user removed from grantee lists");
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// GameStore — images (definitions + collections)
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn definition_image_round_trips_and_moves_marker(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "img_owner", "img_owner@example.com").await;
+    let mut def = make_game_definition("Framed", Visibility::Public);
+    store.create_game_definition(&owner, &mut def).await.expect("create");
+
+    // No image initially.
+    assert_eq!(store.get_definition_image(def.id).await.expect("get"), None);
+    assert!(store.get_game_definition(def.id).await.expect("load").image_updated_at.is_none());
+
+    // Set stores the bytes and stamps the marker.
+    store.set_definition_image(&owner, def.id, vec![1, 2, 3, 4]).await.expect("set");
+    assert_eq!(store.get_definition_image(def.id).await.expect("get"), Some(vec![1, 2, 3, 4]));
+    assert!(store.get_game_definition(def.id).await.expect("load").image_updated_at.is_some());
+
+    // Replace swaps the bytes.
+    store.set_definition_image(&owner, def.id, vec![9, 9]).await.expect("replace");
+    assert_eq!(store.get_definition_image(def.id).await.expect("get"), Some(vec![9, 9]));
+
+    // Clear removes the bytes and the marker.
+    store.clear_definition_image(&owner, def.id).await.expect("clear");
+    assert_eq!(store.get_definition_image(def.id).await.expect("get"), None);
+    assert!(store.get_game_definition(def.id).await.expect("load").image_updated_at.is_none());
+    // Clearing again is a no-op.
+    store.clear_definition_image(&owner, def.id).await.expect("clear idempotent");
+}
+
+pub async fn definition_image_is_owner_scoped(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "img_a", "img_a@example.com").await;
+    let other = fixture_user(store, "img_b", "img_b@example.com").await;
+    let mut def = make_game_definition("Owned", Visibility::Public);
+    store.create_game_definition(&owner, &mut def).await.expect("create");
+    store.set_definition_image(&owner, def.id, vec![7, 7]).await.expect("owner set");
+
+    // A non-owner cannot set the image…
+    let err = store.set_definition_image(&other, def.id, vec![0]).await.expect_err("non-owner set");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+    // …and their clear is a no-op that leaves the owner's image intact.
+    store.clear_definition_image(&other, def.id).await.expect("non-owner clear no-op");
+    assert_eq!(store.get_definition_image(def.id).await.expect("get"), Some(vec![7, 7]));
+}
+
+pub async fn delete_game_definition_removes_its_image(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "img_del", "img_del@example.com").await;
+    let mut def = make_game_definition("Doomed", Visibility::Public);
+    store.create_game_definition(&owner, &mut def).await.expect("create");
+    store.set_definition_image(&owner, def.id, vec![5, 5, 5]).await.expect("set");
+
+    store.delete_game_definition(&owner, def.id).await.expect("delete");
+    assert_eq!(store.get_definition_image(def.id).await.expect("get"), None, "image gone with the definition");
+}
+
+pub async fn collection_image_round_trips_and_moves_marker(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "cimg_owner", "cimg_owner@example.com").await;
+    let mut col = make_game_collection("Framed", Visibility::Public);
+    store.create_game_collection(&owner, &mut col).await.expect("create");
+
+    assert_eq!(store.get_collection_image(col.id).await.expect("get"), None);
+    store.set_collection_image(&owner, col.id, vec![1, 2, 3]).await.expect("set");
+    assert_eq!(store.get_collection_image(col.id).await.expect("get"), Some(vec![1, 2, 3]));
+    assert!(store.get_game_collection(col.id).await.expect("load").image_updated_at.is_some());
+
+    store.clear_collection_image(&owner, col.id).await.expect("clear");
+    assert_eq!(store.get_collection_image(col.id).await.expect("get"), None);
+    assert!(store.get_game_collection(col.id).await.expect("load").image_updated_at.is_none());
+}
+
+pub async fn collection_image_is_owner_scoped(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "cimg_a", "cimg_a@example.com").await;
+    let other = fixture_user(store, "cimg_b", "cimg_b@example.com").await;
+    let mut col = make_game_collection("Owned", Visibility::Public);
+    store.create_game_collection(&owner, &mut col).await.expect("create");
+    store.set_collection_image(&owner, col.id, vec![7]).await.expect("owner set");
+
+    let err = store.set_collection_image(&other, col.id, vec![0]).await.expect_err("non-owner set");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+    store.clear_collection_image(&other, col.id).await.expect("non-owner clear no-op");
+    assert_eq!(store.get_collection_image(col.id).await.expect("get"), Some(vec![7]));
+}
+
+pub async fn delete_game_collection_removes_its_image(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "cimg_del", "cimg_del@example.com").await;
+    let mut col = make_game_collection("Doomed", Visibility::Public);
+    store.create_game_collection(&owner, &mut col).await.expect("create");
+    store.set_collection_image(&owner, col.id, vec![5, 5]).await.expect("set");
+
+    store.delete_game_collection(&owner, col.id).await.expect("delete");
+    assert_eq!(store.get_collection_image(col.id).await.expect("get"), None, "image gone with the collection");
+}
+
 fn item_ids(collection: &GameCollection) -> Vec<Uuid> {
     collection.items.iter().map(|i| i.definition_id).collect()
 }

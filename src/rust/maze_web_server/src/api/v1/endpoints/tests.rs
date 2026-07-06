@@ -130,6 +130,8 @@ mod test_definitions {
         game_collections: Vec<GameCollection>,
         def_grantees: HashMap<Uuid, Vec<Uuid>>,
         col_grantees: HashMap<Uuid, Vec<Uuid>>,
+        def_images: HashMap<Uuid, Vec<u8>>,
+        col_images: HashMap<Uuid, Vec<u8>>,
     }
 
     impl MockStore {
@@ -143,6 +145,8 @@ mod test_definitions {
                 game_collections: Vec::new(),
                 def_grantees: HashMap::new(),
                 col_grantees: HashMap::new(),
+                def_images: HashMap::new(),
+                col_images: HashMap::new(),
             }
         }
 
@@ -1035,6 +1039,26 @@ mod test_definitions {
             Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
         }
 
+        async fn set_definition_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
+            let def = self.game_definitions.iter_mut().find(|d| d.id == id && d.owner_id == owner.id)
+                .ok_or_else(|| StoreError::GameDefinitionIdNotFound(id.to_string()))?;
+            def.image_updated_at = Some(Utc::now());
+            self.def_images.insert(id, png_bytes);
+            Ok(())
+        }
+
+        async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+            Ok(self.def_images.get(&id).cloned())
+        }
+
+        async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+            if let Some(def) = self.game_definitions.iter_mut().find(|d| d.id == id && d.owner_id == owner.id) {
+                def.image_updated_at = None;
+                self.def_images.remove(&id);
+            }
+            Ok(())
+        }
+
         // ── Collections ──
 
         async fn create_game_collection(&mut self, owner: &User, collection: &mut GameCollection) -> Result<(), StoreError> {
@@ -1179,6 +1203,26 @@ mod test_definitions {
 
         async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.col_grantees.get(&id).cloned().unwrap_or_default())
+        }
+
+        async fn set_collection_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
+            let collection = self.game_collections.iter_mut().find(|c| c.id == id && c.owner_id == owner.id)
+                .ok_or_else(|| StoreError::GameCollectionIdNotFound(id.to_string()))?;
+            collection.image_updated_at = Some(Utc::now());
+            self.col_images.insert(id, png_bytes);
+            Ok(())
+        }
+
+        async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+            Ok(self.col_images.get(&id).cloned())
+        }
+
+        async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+            if let Some(collection) = self.game_collections.iter_mut().find(|c| c.id == id && c.owner_id == owner.id) {
+                collection.image_updated_at = None;
+                self.col_images.remove(&id);
+            }
+            Ok(())
         }
     }
 

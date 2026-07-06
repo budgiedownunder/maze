@@ -487,6 +487,14 @@ impl FileStore {
             .to_string()
     }
 
+    // Path to a definition's `image.png` (inside its `<id>/` folder).
+    fn game_definition_image_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.game_definition_dir_path(id))
+            .join("image.png")
+            .to_string_lossy()
+            .to_string()
+    }
+
     // Reads a definition's JSON file. Returns `GameDefinitionIdNotFound` if the
     // file does not exist (the canonical missing signal).
     fn read_game_definition_raw(&self, id: Uuid) -> Result<GameDefinition, Error> {
@@ -643,6 +651,14 @@ impl FileStore {
     fn game_collection_file_path(&self, id: Uuid) -> String {
         Path::new(&self.game_collection_dir_path(id))
             .join("collection.json")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Path to a collection's `image.png` (inside its `<id>/` folder).
+    fn game_collection_image_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.game_collection_dir_path(id))
+            .join("image.png")
             .to_string_lossy()
             .to_string()
     }
@@ -2787,6 +2803,39 @@ fn generate_now_millis() -> chrono::DateTime<chrono::Utc> {
     chrono::Utc::now().trunc_subsecs(3)
 }
 
+/// Atomically writes image bytes to `path` (tempfile + rename), creating the
+/// parent folder if missing. Shared by the definition + collection image writers.
+fn write_image_atomically(path: &str, bytes: &[u8]) -> Result<(), Error> {
+    if let Some(parent) = Path::new(path).parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = format!("{path}.tmp");
+    {
+        let mut file = File::create(&tmp)?;
+        file.write_all(bytes)?;
+    }
+    fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+/// Reads image bytes from `path`, or `None` when no image file is present.
+fn read_image_if_present(path: &str) -> Result<Option<Vec<u8>>, Error> {
+    if !file_exists(path) {
+        return Ok(None);
+    }
+    Ok(Some(fs::read(path)?))
+}
+
+/// Removes the image file at `path` if present. Idempotent.
+fn remove_image_if_present(path: &str) -> Result<(), Error> {
+    if file_exists(path) {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl MazeStore for FileStore {
     /// Returns the cell-count ceiling enforced by this file store on
@@ -4089,6 +4138,42 @@ impl GameStore for FileStore {
         self.read_game_definition_grantees(id)
     }
 
+    async fn set_definition_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error> {
+        let mut def = self.read_game_definition_raw(id)?;
+        if def.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        write_image_atomically(&self.game_definition_image_file_path(id), &png_bytes)?;
+        def.image_updated_at = Some(generate_now_millis());
+        self.write_game_definition_file(&def, true)?;
+        Ok(())
+    }
+
+    async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+        read_image_if_present(&self.game_definition_image_file_path(id))
+    }
+
+    async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        // Idempotent + owner-scoped: an unknown or not-owned definition has
+        // nothing for this owner to clear, so it is a successful no-op.
+        let mut def = match self.read_game_definition_raw(id) {
+            Ok(def) if def.owner_id == owner.id => def,
+            Ok(_) | Err(Error::GameDefinitionIdNotFound(_)) => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        remove_image_if_present(&self.game_definition_image_file_path(id))?;
+        if def.image_updated_at.is_some() {
+            def.image_updated_at = None;
+            self.write_game_definition_file(&def, true)?;
+        }
+        Ok(())
+    }
+
     // ── Collections ──
 
     async fn create_game_collection(
@@ -4153,8 +4238,6 @@ impl GameStore for FileStore {
         if existing.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
-        // Removes the whole `<id>/` folder (collection.json + shares.json + any
-        // image.png).
         delete_dir(&self.game_collection_dir_path(id));
         Ok(())
     }
@@ -4301,6 +4384,40 @@ impl GameStore for FileStore {
 
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         self.read_game_collection_grantees(id)
+    }
+
+    async fn set_collection_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error> {
+        let mut collection = self.read_game_collection_raw(id)?;
+        if collection.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        write_image_atomically(&self.game_collection_image_file_path(id), &png_bytes)?;
+        collection.image_updated_at = Some(generate_now_millis());
+        self.write_game_collection_file(&collection, true)?;
+        Ok(())
+    }
+
+    async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+        read_image_if_present(&self.game_collection_image_file_path(id))
+    }
+
+    async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        let mut collection = match self.read_game_collection_raw(id) {
+            Ok(collection) if collection.owner_id == owner.id => collection,
+            Ok(_) | Err(Error::GameCollectionIdNotFound(_)) => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        remove_image_if_present(&self.game_collection_image_file_path(id))?;
+        if collection.image_updated_at.is_some() {
+            collection.image_updated_at = None;
+            self.write_game_collection_file(&collection, true)?;
+        }
+        Ok(())
     }
 }
 

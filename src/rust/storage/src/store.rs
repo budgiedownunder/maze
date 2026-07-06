@@ -508,6 +508,24 @@ pub trait GameStore {
     /// the server uses for the owner's manage-shares view and for composing the
     /// access decision. Returns an empty list for an unknown/ungranted id.
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    /// Stores (or replaces) the image for a definition owned by `owner`,
+    /// stamping its `image_updated_at` marker. `png_bytes` is the canonical
+    /// image the caller has produced; the store keeps it verbatim. Owner-scoped:
+    /// a definition not owned by `owner` is [`Error::GameDefinitionIdNotFound`].
+    async fn set_definition_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error>;
+    /// Loads a definition's image bytes, or `None` when it has none (never set,
+    /// since cleared, or no such definition) — an unconditional primitive; the
+    /// server composes the view-access decision.
+    async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    /// Removes a definition's image if present and clears its `image_updated_at`,
+    /// for a definition owned by `owner`. Idempotent — clearing an image-less
+    /// (or not-owned/unknown) definition is a successful no-op.
+    async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
 
     // ── Collections (an ordered, presentation-only grouping of definitions) ──
 
@@ -588,6 +606,21 @@ pub trait GameStore {
     /// The user ids granted access to a collection — an unconditional primitive.
     /// Returns an empty list for an unknown/ungranted id.
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    /// Stores (or replaces) the image for a collection owned by `owner`, stamping
+    /// its `image_updated_at` marker. Owner-scoped: a collection not owned by
+    /// `owner` is [`Error::GameCollectionIdNotFound`].
+    async fn set_collection_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error>;
+    /// Loads a collection's image bytes, or `None` when it has none — an
+    /// unconditional primitive; the server composes the view-access decision.
+    async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    /// Removes a collection's image if present and clears its `image_updated_at`,
+    /// for a collection owned by `owner`. Idempotent.
+    async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
 }
 
 /// Normalises a collection's item ordering: rewrites `sort_order = index` in the

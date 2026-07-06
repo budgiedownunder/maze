@@ -1003,3 +1003,41 @@ async fn game_collection_delete_user_cascades() {
     let (mut s, _temp) = fresh_store().await;
     contract::delete_user_cascades_to_game_collections(&mut s).await;
 }
+
+// ─── GameStore — images ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn game_definition_image_round_trips_and_moves_marker() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::definition_image_round_trips_and_moves_marker(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_image_is_owner_scoped() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::definition_image_is_owner_scoped(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_definition_delete_removes_its_image() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::delete_game_definition_removes_its_image(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_image_round_trips_and_moves_marker() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::collection_image_round_trips_and_moves_marker(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_image_is_owner_scoped() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::collection_image_is_owner_scoped(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_delete_removes_its_image() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::delete_game_collection_removes_its_image(&mut s).await;
+}

@@ -341,6 +341,12 @@ impl SqlStore {
         // piece of the schema with no portable spelling across all three
         // backends — see `create_user_avatars_table`.
         create_user_avatars_table(&pool, kind).await?;
+        // The game definition / collection image BLOB tables share that
+        // per-backend rationale (the binary column has no portable spelling);
+        // the `image_updated_at` markers they pair with already exist from the
+        // portable `game_definitions` / `game_collections` migrations.
+        create_game_image_table(&pool, kind, "game_definition_images", "definition_id", "game_definitions").await?;
+        create_game_image_table(&pool, kind, "game_collection_images", "collection_id", "game_collections").await?;
 
         Ok(Self { pool, kind })
     }
@@ -383,6 +389,39 @@ async fn create_user_avatars_table(pool: &AnyPool, kind: SqlBackend) -> Result<(
         .execute(pool)
         .await
         .map_err(|e| Error::Other(format!("create_user_avatars_table failed: sqlx: {e}")))?;
+    Ok(())
+}
+
+/// Creates a game image BLOB table (`game_definition_images` /
+/// `game_collection_images`) if it does not already exist. Shares the
+/// per-backend rationale of [`create_user_avatars_table`]: one blob row keyed by
+/// the owning entity's id, `ON DELETE CASCADE` from the parent so deleting a
+/// definition / collection drops its image. Idempotent via
+/// `CREATE TABLE IF NOT EXISTS`; the read/write code is backend-shared.
+async fn create_game_image_table(
+    pool: &AnyPool,
+    kind: SqlBackend,
+    table: &str,
+    fk_column: &str,
+    parent_table: &str,
+) -> Result<(), Error> {
+    let blob_type = match kind {
+        SqlBackend::Postgres => "BYTEA",
+        SqlBackend::MySql => "LONGBLOB",
+        SqlBackend::Sqlite => "BLOB",
+    };
+    let sql = format!(
+        "CREATE TABLE IF NOT EXISTS {table} (\
+             {fk_column} VARCHAR(36) NOT NULL PRIMARY KEY, \
+             image_data {blob_type} NOT NULL, \
+             CONSTRAINT fk_{table}_{fk_column} \
+                 FOREIGN KEY ({fk_column}) REFERENCES {parent_table}(id) ON DELETE CASCADE\
+         )"
+    );
+    sqlx::query(&sql)
+        .execute(pool)
+        .await
+        .map_err(|e| Error::Other(format!("create_game_image_table {table} failed: sqlx: {e}")))?;
     Ok(())
 }
 
@@ -3612,6 +3651,8 @@ impl Manage for SqlStore {
             "DELETE FROM one_time_tokens",
             "DELETE FROM mazes",
             "DELETE FROM user_avatars",
+            "DELETE FROM game_definition_images",
+            "DELETE FROM game_collection_images",
             "DELETE FROM users",
         ] {
             sqlx::query(sql)
@@ -4998,6 +5039,153 @@ impl GameStore for SqlStore {
             .collect()
     }
 
+    /// Stores (or replaces) a definition's image and stamps its
+    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_definition_image`].
+    ///
+    /// # Examples
+    ///
+    /// Set, read back, then clear a definition's image
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "framer".to_string(),
+    ///     full_name: "Framer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("framer@example.com")],
+    ///     password_hash: "hash".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    ///
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(),
+    ///     owner_id: Uuid::nil(),
+    ///     name: "Framed".to_string(),
+    ///     description: None,
+    ///     image_updated_at: None,
+    ///     visibility: Visibility::Public,
+    ///     seed: 1,
+    ///     rotation: Rotation::Static,
+    ///     config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(),
+    ///     updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
+    /// assert!(store.get_game_definition(def.id).await.unwrap().image_updated_at.is_some());
+    ///
+    /// store.clear_definition_image(&owner, def.id).await.unwrap();
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
+    /// # });
+    /// ```
+    async fn set_definition_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error> {
+        // Stamp the marker on the owned row first. A fresh timestamp always
+        // changes the stored value, so `rows_affected` is a reliable
+        // existence + ownership check on every backend (incl. MySQL, which
+        // counts changed rather than matched rows).
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE game_definitions SET image_updated_at = ? WHERE id = ? AND owner_id = ?",
+        ))
+        .bind(datetime_to_sql(canonical_now_millis()))
+        .bind(id.to_string())
+        .bind(owner.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        // Replace any existing image wholesale (DELETE + INSERT — portable, no
+        // per-backend upsert syntax).
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_images WHERE definition_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO game_definition_images (definition_id, image_data) VALUES (?, ?)",
+        ))
+        .bind(id.to_string())
+        .bind(png_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT image_data FROM game_definition_images WHERE definition_id = ?",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => Ok(Some(row.try_get::<Vec<u8>, _>("image_data").map_err(map_sqlx_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        // Owner-scoped + idempotent: both statements no-op when the definition
+        // is unknown or owned by someone else (the image DELETE is gated on the
+        // owned-id subquery), so clearing is always Ok.
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_images WHERE definition_id IN \
+             (SELECT id FROM game_definitions WHERE id = ? AND owner_id = ?)",
+        ))
+        .bind(id.to_string())
+        .bind(owner.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE game_definitions SET image_updated_at = NULL WHERE id = ? AND owner_id = ?",
+        ))
+        .bind(id.to_string())
+        .bind(owner.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
     // ── Collections ──
 
     async fn create_game_collection(
@@ -5300,6 +5488,141 @@ impl GameStore for SqlStore {
                 parse_uuid("grantee_user_id", &s)
             })
             .collect()
+    }
+
+    /// Stores (or replaces) a collection's image and stamps its
+    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_collection_image`].
+    ///
+    /// # Examples
+    ///
+    /// Set, read back, then clear a collection's image
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "framer".to_string(),
+    ///     full_name: "Framer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("framer@example.com")],
+    ///     password_hash: "hash".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    ///
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(),
+    ///     owner_id: Uuid::nil(),
+    ///     name: "Framed".to_string(),
+    ///     visibility: Visibility::Public,
+    ///     description: None,
+    ///     image_updated_at: None,
+    ///     items: vec![],
+    ///     created_at: chrono::Utc::now(),
+    ///     updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    ///
+    /// store.clear_collection_image(&owner, collection.id).await.unwrap();
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
+    /// # });
+    /// ```
+    async fn set_collection_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error> {
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE game_collections SET image_updated_at = ? WHERE id = ? AND owner_id = ?",
+        ))
+        .bind(datetime_to_sql(canonical_now_millis()))
+        .bind(id.to_string())
+        .bind(owner.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_images WHERE collection_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO game_collection_images (collection_id, image_data) VALUES (?, ?)",
+        ))
+        .bind(id.to_string())
+        .bind(png_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT image_data FROM game_collection_images WHERE collection_id = ?",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => Ok(Some(row.try_get::<Vec<u8>, _>("image_data").map_err(map_sqlx_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_images WHERE collection_id IN \
+             (SELECT id FROM game_collections WHERE id = ? AND owner_id = ?)",
+        ))
+        .bind(id.to_string())
+        .bind(owner.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE game_collections SET image_updated_at = NULL WHERE id = ? AND owner_id = ?",
+        ))
+        .bind(id.to_string())
+        .bind(owner.id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
     }
 }
 
