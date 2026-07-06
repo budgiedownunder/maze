@@ -14,7 +14,8 @@ use crate::api::v1::endpoints::handlers::{
     AppFeaturesResponse, Play3dConfigResponse,
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
-    ChangePasswordRequest, UpdateProfileRequest};
+    ChangePasswordRequest, UpdateProfileRequest,
+    UserLookupEntry, UserLookupResponse};
 use crate::api::v1::endpoints::avatar::AvatarUpdatedResponse;
 use crate::api::v1::endpoints::game_collections::{
     AddCollectionItemRequest, CollectionSharesResponse, GameCollectionDetailResponse,
@@ -143,6 +144,8 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::scores::get_leaderboard,
         crate::api::v1::endpoints::scores::get_my_history,
         crate::api::v1::endpoints::scores::reset_leaderboard,
+        // User lookup (share people-picker)
+        crate::api::v1::endpoints::handlers::lookup_users,
         // Users (admin)
         crate::api::v1::endpoints::handlers::get_users,
         crate::api::v1::endpoints::handlers::create_user,
@@ -156,6 +159,7 @@ impl utoipa::Modify for LoginTokenAuth {
             AppFeaturesResponse, OAuthProviderPublic, Play3dConfigResponse,
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
+            UserLookupEntry, UserLookupResponse,
             ChangePasswordRequest, UpdateProfileRequest,
             PasswordResetRequest, PasswordResetConfirmRequest,
             EmailVerificationRequest, EmailVerificationConfirmRequest,

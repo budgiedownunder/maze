@@ -1827,6 +1827,121 @@ pub async fn get_users(
     Ok(HttpResponse::Ok().json(user_items))
 }
 // **************************************************************************************************
+// Endpoint: GET /api/v1/users/lookup
+// Handler:  lookup_users()
+// **************************************************************************************************
+
+/// Page size used when the caller omits `limit` on the user lookup.
+const USER_LOOKUP_DEFAULT_PAGE_SIZE: u32 = 20;
+/// Hard cap on the user-lookup page size.
+const USER_LOOKUP_MAX_PAGE_SIZE: u32 = 100;
+
+/// Query parameters for the username-prefix user lookup.
+#[derive(Deserialize, Debug)]
+pub struct UserLookupQuery {
+    /// The username prefix to match (case-insensitive). A blank/absent value
+    /// matches nothing — the endpoint never lists every user.
+    pub username: Option<String>,
+    /// Page size (default 20, capped at 100).
+    pub limit: Option<u32>,
+    /// Zero-based page offset (default 0).
+    pub offset: Option<u32>,
+}
+
+/// A single lookup hit — deliberately just the id + username, never email,
+/// admin flag, or avatar, so the picker cannot be used to harvest profiles.
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
+pub struct UserLookupEntry {
+    /// The matched user's id (the value a share grant is keyed on).
+    #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub id: Uuid,
+    /// The matched user's username.
+    pub username: String,
+}
+
+/// A page of username-prefix lookup hits.
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
+pub struct UserLookupResponse {
+    /// The matched users, ordered by username.
+    pub users: Vec<UserLookupEntry>,
+    /// The effective page size applied (the request's `limit` capped at the max).
+    pub limit: u32,
+    /// The zero-based offset this page started at.
+    pub offset: u32,
+    /// Whether at least one further match exists beyond this page.
+    pub has_more: bool,
+}
+
+#[utoipa::path(
+    summary = "Look up users by username prefix",
+    description = "Returns a page of users whose username starts with the given prefix \
+                   (case-insensitive), for the share people-picker. Only id + username are \
+                   returned. A blank or absent prefix returns an empty page — the endpoint never \
+                   lists every user. Any signed-in user may call it.",
+    get,
+    path = "/api/v1/users/lookup",
+    params(
+        ("username" = Option<String>, Query, description = "Username prefix to match (case-insensitive); blank matches nothing"),
+        ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+    ),
+    responses(
+        (status = 200, description = "A page of matching users", body = UserLookupResponse),
+        (status = 401, description = "Unauthorized request")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[get("/users/lookup")]
+pub async fn lookup_users(
+    query: Query<UserLookupQuery>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let _ = get_authorized_user(&req, false)?;
+    let q = query.into_inner();
+    let limit = q.limit.unwrap_or(USER_LOOKUP_DEFAULT_PAGE_SIZE).min(USER_LOOKUP_MAX_PAGE_SIZE);
+    let offset = q.offset.unwrap_or(0);
+
+    // A blank prefix returns nothing rather than enumerating every user.
+    let prefix = q.username.unwrap_or_default().trim().to_lowercase();
+    if prefix.is_empty() {
+        return Ok(HttpResponse::Ok().json(UserLookupResponse {
+            users: Vec::new(),
+            limit,
+            offset,
+            has_more: false,
+        }));
+    }
+
+    let store_lock = get_store_read_lock(&store).await;
+    // Handler-level prefix filter over the full user list for now; the store-level
+    // prefix+page pushdown (indexed on LOWER(username)) is deferred.
+    let all_users = store_lock
+        .get_users()
+        .await
+        .map_err(|err| get_users_fetch_internal_error(&err))?;
+    let mut matched: Vec<User> = all_users
+        .into_iter()
+        .filter(|u| u.username.to_lowercase().starts_with(&prefix))
+        .collect();
+    matched.sort_by_key(|u| u.username.to_lowercase());
+
+    let total = matched.len();
+    let users: Vec<UserLookupEntry> = matched
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .map(|u| UserLookupEntry { id: u.id, username: u.username })
+        .collect();
+    let has_more = total > offset as usize + users.len();
+
+    Ok(HttpResponse::Ok().json(UserLookupResponse { users, limit, offset, has_more }))
+}
+// **************************************************************************************************
 // Endpoint: POST /api/v1/users/
 // Handler:  create_user()
 // **************************************************************************************************

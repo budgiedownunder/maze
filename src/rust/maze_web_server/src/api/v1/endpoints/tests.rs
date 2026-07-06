@@ -8,7 +8,7 @@ mod test_definitions {
         EmailVerificationConfirmRequest, EmailVerificationRequest,
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
-    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse};
     use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
@@ -8701,5 +8701,83 @@ mod test_definitions {
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert!(shares.grantees.is_empty());
+    }
+
+    // ****************************************************************************
+    // User lookup (username prefix search) tests
+    // ****************************************************************************
+
+    async fn lookup_users_page(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        key: Uuid,
+        query: &str,
+    ) -> UserLookupResponse {
+        let req = create_test_get_request(&format!("/api/v1/users/lookup?{query}"), Some(key), None);
+        let resp = test::call_service(app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        serde_json::from_slice(&test::read_body(resp).await).expect("json")
+    }
+
+    #[actix_web::test]
+    async fn user_lookup_matches_username_prefix_case_insensitively() {
+        // 3 users (user_1..user_3) + 1 admin (admin_1); caller is a non-admin.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 3, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let key = api_key_for(&mock_users, VALID_USERNAME_1);
+
+        // Prefix "user" → the three user_* accounts, ordered, not the admin.
+        let page = lookup_users_page(&app, key, "username=user").await;
+        assert_eq!(
+            page.users.iter().map(|u| u.username.clone()).collect::<Vec<_>>(),
+            vec!["user_1", "user_2", "user_3"]
+        );
+        assert!(!page.has_more);
+
+        // Case-insensitive.
+        let upper = lookup_users_page(&app, key, "username=USER").await;
+        assert_eq!(upper.users.len(), 3);
+
+        // A different prefix matches its own set.
+        let admins = lookup_users_page(&app, key, "username=admin").await;
+        assert_eq!(admins.users.iter().map(|u| u.username.clone()).collect::<Vec<_>>(), vec!["admin_1"]);
+
+        // Prefix, not substring: "ser" is inside "user_*" but matches nothing.
+        assert!(lookup_users_page(&app, key, "username=ser").await.users.is_empty());
+
+        // A blank / absent prefix never lists everyone.
+        assert!(lookup_users_page(&app, key, "username=").await.users.is_empty());
+        assert!(lookup_users_page(&app, key, "").await.users.is_empty());
+
+        // Only id + username are exposed — no email/admin/avatar leak.
+        let req = create_test_get_request("/api/v1/users/lookup?username=user", Some(key), None);
+        let body: serde_json::Value = serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        let first = body["users"][0].as_object().expect("entry object");
+        assert_eq!(first.keys().cloned().collect::<std::collections::BTreeSet<_>>(),
+            ["id", "username"].iter().map(|s| s.to_string()).collect::<std::collections::BTreeSet<_>>());
+    }
+
+    #[actix_web::test]
+    async fn user_lookup_pages_the_matches() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 3, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let key = api_key_for(&mock_users, VALID_USERNAME_1);
+
+        // First page of two → user_1, user_2, more to come.
+        let first = lookup_users_page(&app, key, "username=user&limit=2&offset=0").await;
+        assert_eq!(first.users.iter().map(|u| u.username.clone()).collect::<Vec<_>>(), vec!["user_1", "user_2"]);
+        assert_eq!(first.limit, 2);
+        assert!(first.has_more);
+
+        // Last page → user_3, nothing beyond.
+        let last = lookup_users_page(&app, key, "username=user&limit=2&offset=2").await;
+        assert_eq!(last.users.iter().map(|u| u.username.clone()).collect::<Vec<_>>(), vec!["user_3"]);
+        assert!(!last.has_more);
+
+        // Over-cap limit is capped and echoed back.
+        let capped = lookup_users_page(&app, key, "username=user&limit=1000").await;
+        assert_eq!(capped.limit, 100);
+        assert!(!capped.has_more);
     }
 }

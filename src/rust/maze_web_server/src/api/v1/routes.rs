@@ -60,6 +60,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(scores::get_leaderboard)
                 .service(scores::reset_leaderboard)
                 // Users (self-service) - must come BEFORE /users/{id}
+                // Username-prefix lookup for the share people-picker; the literal
+                // /users/lookup path must be registered before /users/{id}.
+                .service(handlers::lookup_users)
                 .service(handlers::change_password_me)
                 .service(handlers::update_profile_me)
                 .service(handlers::get_me)

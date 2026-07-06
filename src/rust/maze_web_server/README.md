@@ -645,6 +645,7 @@ The following endpoints manage user identity:
 | `GET` | `/api/v1/auth/oauth/{provider}/start` | None | Begin an OAuth sign-in flow; 302-redirects to the provider's consent page (see **OAuth Sign-In** below) |
 | `GET` | `/api/v1/auth/oauth/{provider}/callback` | None | Provider redirects here after consent; mints a bearer token and redirects back to the SPA or mobile app |
 | `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile (includes `email`, `emails`, and `has_password` — see below) |
+| `GET` | `/api/v1/users/lookup?username=<prefix>` | Either | Look up users whose username **starts with** `<prefix>` (case-insensitive) for the share people-picker. Returns a page of `{ id, username }` — no email/admin/avatar. Paged via `limit` (default 20, capped at 100) / `offset` with a `has_more` flag; a blank prefix returns an empty page (never lists every user) |
 | `PUT` | `/api/v1/users/me/profile` | Either | Update the signed-in user's username and full name. **Email is no longer mutable here** — use `/api/v1/users/me/emails` instead. Sending an `email` field returns `400 Bad Request` |
 | `PUT` | `/api/v1/users/me/password` | Either | **Sets or changes** the signed-in user's password — the same endpoint handles both flows (see **Password set-or-change** below) |
 | `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
