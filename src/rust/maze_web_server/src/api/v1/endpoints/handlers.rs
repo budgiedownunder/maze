@@ -1933,27 +1933,19 @@ pub async fn lookup_users(
         }));
     }
 
+    // Storage does the prefix filter + order + page; over-fetch one row for
+    // `has_more`.
     let store_lock = get_store_read_lock(&store).await;
-    // Handler-level prefix filter over the full user list for now; the store-level
-    // prefix+page pushdown (indexed on LOWER(username)) is deferred.
-    let all_users = store_lock
-        .get_users()
+    let mut matched = store_lock
+        .search_users_by_username_prefix(&prefix, limit + 1, offset)
         .await
         .map_err(|err| get_users_fetch_internal_error(&err))?;
-    let mut matched: Vec<User> = all_users
-        .into_iter()
-        .filter(|u| u.username.to_lowercase().starts_with(&prefix))
-        .collect();
-    matched.sort_by_key(|u| u.username.to_lowercase());
-
-    let total = matched.len();
+    let has_more = matched.len() as u32 > limit;
+    matched.truncate(limit as usize);
     let users: Vec<UserLookupEntry> = matched
         .into_iter()
-        .skip(offset as usize)
-        .take(limit as usize)
         .map(|u| UserLookupEntry { id: u.id, username: u.username })
         .collect();
-    let has_more = total > offset as usize + users.len();
 
     Ok(HttpResponse::Ok().json(UserLookupResponse { users, limit, offset, has_more }))
 }

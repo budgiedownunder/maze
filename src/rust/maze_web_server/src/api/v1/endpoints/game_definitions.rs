@@ -338,10 +338,10 @@ pub async fn create_game_definition(
 
 #[utoipa::path(
     summary = "List visible game definitions",
-    description = "Returns a page of the game definitions the caller may see — the merge of their \
-                   own (all visibilities, drafts included), those shared with them, and all public \
-                   and curated definitions — de-duplicated and ordered by name. Paging is via limit \
-                   (server-capped) and offset, applied after the merge.",
+    description = "Returns a page of the game definitions the caller may see — their own (all \
+                   visibilities, drafts included), those shared with them, and all public and \
+                   curated definitions — de-duplicated and ordered by name. Paged via limit \
+                   (server-capped) and offset.",
     get,
     path = "/api/v1/game-definitions",
     params(
@@ -367,35 +367,17 @@ pub async fn list_game_definitions(
     let offset = q.offset.unwrap_or(0);
     let store_lock = store.read().await;
 
-    let mut merged: Vec<GameDefinition> = Vec::new();
-    for source in [
-        store_lock.get_definitions_for_owner(&user).await,
-        store_lock.get_definitions_shared_with(user.id).await,
-        store_lock.get_public_definitions().await,
-        store_lock.get_curated_definitions().await,
-    ] {
-        match source {
-            Ok(defs) => merged.extend(defs),
-            Err(err) => {
-                log::warn!("list game definitions store error: {err}");
-                return Err(ErrorInternalServerError("Failed to list game definitions"));
-            }
-        }
-    }
-
-    // The same definition can arrive from several sources (e.g. an owned curated
-    // one). Keep the first occurrence per id, then order by name for a stable list.
-    let mut seen = std::collections::HashSet::new();
-    merged.retain(|def| seen.insert(def.id));
-    merged.sort_by_key(|def| def.name.to_lowercase());
-
-    // The four scoped reads have no cross-source paging primitive, so the merge
-    // is assembled in memory and the page sliced from it. Definition sets are
-    // small (a user's own plus the public/curated sets), so this is cheap.
-    let total = merged.len();
-    let definitions: Vec<GameDefinition> =
-        merged.into_iter().skip(offset as usize).take(limit as usize).collect();
-    let has_more = total > offset as usize + definitions.len();
+    // Storage composes + pages the "visible to me" set. Over-fetch one row so
+    // `has_more` needs no separate count.
+    let mut definitions = store_lock
+        .get_visible_definitions(&user, limit + 1, offset)
+        .await
+        .map_err(|err| {
+            log::warn!("list game definitions store error: {err}");
+            ErrorInternalServerError("Failed to list game definitions")
+        })?;
+    let has_more = definitions.len() as u32 > limit;
+    definitions.truncate(limit as usize);
 
     Ok(HttpResponse::Ok().json(GameDefinitionListResponse {
         definitions,

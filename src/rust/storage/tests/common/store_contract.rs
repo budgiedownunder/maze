@@ -3043,6 +3043,94 @@ pub async fn delete_game_collection_removes_its_image(store: &mut Box<dyn Store>
     assert_eq!(store.get_collection_image(col.id).await.expect("get"), None, "image gone with the collection");
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// GameStore — visible (composed + paged) reads
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn get_visible_definitions_composes_and_pages(store: &mut Box<dyn Store>) {
+    let a = fixture_user(store, "vis_a", "vis_a@example.com").await;
+    let b = fixture_user(store, "vis_b", "vis_b@example.com").await;
+    // A owns one of each visibility; the Shared one is granted to B.
+    let mut a_private = make_game_definition("A Private", Visibility::Private);
+    store.create_game_definition(&a, &mut a_private).await.expect("a private");
+    let mut a_public = make_game_definition("B Public", Visibility::Public);
+    store.create_game_definition(&a, &mut a_public).await.expect("a public");
+    let mut a_curated = make_game_definition("C Curated", Visibility::Curated);
+    store.create_game_definition(&a, &mut a_curated).await.expect("a curated");
+    let mut a_shared = make_game_definition("D Shared", Visibility::Shared);
+    store.create_game_definition(&a, &mut a_shared).await.expect("a shared");
+    store.grant_definition_access(&a, a_shared.id, b.id).await.expect("grant b");
+    let mut b_private = make_game_definition("E BPrivate", Visibility::Private);
+    store.create_game_definition(&b, &mut b_private).await.expect("b private");
+
+    // B sees public + curated + the shared-to-them + their own private — not A's private.
+    let b_visible = store.get_visible_definitions(&b, 100, 0).await.expect("b visible");
+    assert_eq!(
+        b_visible.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+        vec!["B Public", "C Curated", "D Shared", "E BPrivate"]
+    );
+    // A (owner) sees all four of their own, not B's private.
+    let a_visible = store.get_visible_definitions(&a, 100, 0).await.expect("a visible");
+    assert_eq!(
+        a_visible.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+        vec!["A Private", "B Public", "C Curated", "D Shared"]
+    );
+
+    // Paging B's ordered set.
+    let page1 = store.get_visible_definitions(&b, 2, 0).await.expect("page1");
+    assert_eq!(page1.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["B Public", "C Curated"]);
+    let page2 = store.get_visible_definitions(&b, 2, 2).await.expect("page2");
+    assert_eq!(page2.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["D Shared", "E BPrivate"]);
+}
+
+pub async fn get_visible_collections_composes_and_pages(store: &mut Box<dyn Store>) {
+    let a = fixture_user(store, "cvis_a", "cvis_a@example.com").await;
+    let b = fixture_user(store, "cvis_b", "cvis_b@example.com").await;
+    let mut a_private = make_game_collection("A Private", Visibility::Private);
+    store.create_game_collection(&a, &mut a_private).await.expect("a private");
+    let mut a_public = make_game_collection("B Public", Visibility::Public);
+    store.create_game_collection(&a, &mut a_public).await.expect("a public");
+    let mut a_shared = make_game_collection("C Shared", Visibility::Shared);
+    store.create_game_collection(&a, &mut a_shared).await.expect("a shared");
+    store.grant_collection_access(&a, a_shared.id, b.id).await.expect("grant b");
+
+    let b_visible = store.get_visible_collections(&b, 100, 0).await.expect("b visible");
+    assert_eq!(
+        b_visible.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        vec!["B Public", "C Shared"],
+        "B sees the public one and the shared-to-them one, not A's private"
+    );
+    let page = store.get_visible_collections(&b, 1, 1).await.expect("page");
+    assert_eq!(page.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["C Shared"]);
+}
+
+pub async fn search_users_by_username_prefix_filters_and_pages(store: &mut Box<dyn Store>) {
+    fixture_user(store, "alpha_one", "au1@example.com").await;
+    fixture_user(store, "alpha_two", "au2@example.com").await;
+    fixture_user(store, "alphaxone", "ax1@example.com").await;
+    fixture_user(store, "beta_one", "bu1@example.com").await;
+
+    // Prefix matches the three alphas (ordered), not beta.
+    let alphas = store.search_users_by_username_prefix("alpha", 100, 0).await.expect("alphas");
+    assert_eq!(
+        alphas.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(),
+        vec!["alpha_one", "alpha_two", "alphaxone"]
+    );
+    // Case-insensitive.
+    assert_eq!(store.search_users_by_username_prefix("ALPHA", 100, 0).await.expect("upper").len(), 3);
+    // The underscore is matched literally (not as a LIKE wildcard): `alpha_o`
+    // matches `alpha_one` only, never `alphaxone`.
+    let literal = store.search_users_by_username_prefix("alpha_o", 100, 0).await.expect("literal");
+    assert_eq!(literal.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), vec!["alpha_one"]);
+    // A blank prefix returns nothing.
+    assert!(store.search_users_by_username_prefix("", 100, 0).await.expect("blank").is_empty());
+    // Paging.
+    let page1 = store.search_users_by_username_prefix("alpha", 1, 0).await.expect("p1");
+    assert_eq!(page1.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), vec!["alpha_one"]);
+    let page3 = store.search_users_by_username_prefix("alpha", 1, 2).await.expect("p3");
+    assert_eq!(page3.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), vec!["alphaxone"]);
+}
+
 fn item_ids(collection: &GameCollection) -> Vec<Uuid> {
     collection.items.iter().map(|i| i.definition_id).collect()
 }

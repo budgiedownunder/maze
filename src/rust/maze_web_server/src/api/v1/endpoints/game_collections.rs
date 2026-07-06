@@ -301,10 +301,9 @@ pub async fn create_game_collection(
 
 #[utoipa::path(
     summary = "List visible game collections",
-    description = "Returns a page of the collections the caller may see — the merge of their own \
-                   (all visibilities), those shared with them, and all public and curated \
-                   collections — de-duplicated and ordered by name. Paging is via limit \
-                   (server-capped) and offset, applied after the merge.",
+    description = "Returns a page of the collections the caller may see — their own (all \
+                   visibilities), those shared with them, and all public and curated collections \
+                   — de-duplicated and ordered by name. Paged via limit (server-capped) and offset.",
     get,
     path = "/api/v1/game-collections",
     params(
@@ -330,35 +329,17 @@ pub async fn list_game_collections(
     let offset = q.offset.unwrap_or(0);
     let store_lock = store.read().await;
 
-    let mut merged: Vec<GameCollection> = Vec::new();
-    for source in [
-        store_lock.get_collections_for_owner(&user).await,
-        store_lock.get_collections_shared_with(user.id).await,
-        store_lock.get_public_collections().await,
-        store_lock.get_curated_collections().await,
-    ] {
-        match source {
-            Ok(cols) => merged.extend(cols),
-            Err(err) => {
-                log::warn!("list game collections store error: {err}");
-                return Err(ErrorInternalServerError("Failed to list game collections"));
-            }
-        }
-    }
-
-    // The same collection can arrive from several sources (e.g. an owned curated
-    // one). Keep the first occurrence per id, then order by name for a stable list.
-    let mut seen = std::collections::HashSet::new();
-    merged.retain(|col| seen.insert(col.id));
-    merged.sort_by_key(|col| col.name.to_lowercase());
-
-    // The four scoped reads have no cross-source paging primitive, so the merge
-    // is assembled in memory and the page sliced from it. Collection sets are
-    // small, so this is cheap.
-    let total = merged.len();
-    let collections: Vec<GameCollection> =
-        merged.into_iter().skip(offset as usize).take(limit as usize).collect();
-    let has_more = total > offset as usize + collections.len();
+    // Storage composes + pages the "visible to me" set; over-fetch one row for
+    // `has_more`.
+    let mut collections = store_lock
+        .get_visible_collections(&user, limit + 1, offset)
+        .await
+        .map_err(|err| {
+            log::warn!("list game collections store error: {err}");
+            ErrorInternalServerError("Failed to list game collections")
+        })?;
+    let has_more = collections.len() as u32 > limit;
+    collections.truncate(limit as usize);
 
     Ok(HttpResponse::Ok().json(GameCollectionListResponse {
         collections,

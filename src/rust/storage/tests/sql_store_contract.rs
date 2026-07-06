@@ -1063,3 +1063,23 @@ async fn game_collection_delete_removes_its_image() {
     let mut s = fresh_store().await;
     contract::delete_game_collection_removes_its_image(&mut s).await;
 }
+
+// ─── GameStore — visible (composed + paged) reads ─────────────────────────
+
+#[tokio::test]
+async fn game_visible_definitions_compose_and_page() {
+    let mut s = fresh_store().await;
+    contract::get_visible_definitions_composes_and_pages(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_visible_collections_compose_and_page() {
+    let mut s = fresh_store().await;
+    contract::get_visible_collections_composes_and_pages(&mut s).await;
+}
+
+#[tokio::test]
+async fn user_prefix_search_filters_and_pages() {
+    let mut s = fresh_store().await;
+    contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;
+}

@@ -69,6 +69,17 @@ pub trait UserStore {
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     async fn get_users(&self) -> Result<Vec<User>, Error>;
+    /// A page of active users whose username **starts with** `prefix`
+    /// (case-insensitive), ordered by username then id and sliced to
+    /// `limit`/`offset`. Soft-deleted users are excluded. A blank `prefix`
+    /// returns no rows — the lookup never enumerates every user. Backs the
+    /// share people-picker.
+    async fn search_users_by_username_prefix(
+        &self,
+        prefix: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<User>, Error>;
     /// Returns the list of admin users within the store
     async fn get_admin_users(&self) -> Result<Vec<User>, Error>;
     /// Returns whether at least one user exists in the store
@@ -504,6 +515,21 @@ pub trait GameStore {
     /// by name.
     async fn get_definitions_shared_with(&self, user: Uuid)
         -> Result<Vec<GameDefinition>, Error>;
+    /// A page of the definitions `viewer` may see — their own (any visibility,
+    /// drafts included), every `Public`/`Curated` one, and any `Shared` one
+    /// granted to them — ordered by name (case-insensitive) then id, sliced to
+    /// `limit`/`offset`. This composes the same "visible to me" set the server's
+    /// list endpoint returns, but pages it in the store rather than merging every
+    /// scoped read in memory. The predicate is a filter, not an access decision:
+    /// the server still owns *what* "visible" means and access-checks single
+    /// fetches. De-duplicated (each definition appears once however many predicate
+    /// branches it satisfies).
+    async fn get_visible_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error>;
     /// The user ids granted access to a definition — an unconditional primitive
     /// the server uses for the owner's manage-shares view and for composing the
     /// access decision. Returns an empty list for an unknown/ungranted id.
@@ -603,6 +629,17 @@ pub trait GameStore {
     /// Every collection explicitly granted to `user`, sorted by name.
     async fn get_collections_shared_with(&self, user: Uuid)
         -> Result<Vec<GameCollection>, Error>;
+    /// A page of the collections `viewer` may see — their own (any visibility),
+    /// every `Public`/`Curated` one, and any `Shared` one granted to them —
+    /// ordered by name (case-insensitive) then id, sliced to `limit`/`offset`.
+    /// The collection-side counterpart of [`GameStore::get_visible_definitions`];
+    /// same predicate-is-a-filter, server-owns-access rationale.
+    async fn get_visible_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error>;
     /// The user ids granted access to a collection — an unconditional primitive.
     /// Returns an empty list for an unknown/ungranted id.
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;

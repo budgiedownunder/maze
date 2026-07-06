@@ -547,6 +547,19 @@ mod test_definitions {
             Ok(users)
         }
 
+        async fn search_users_by_username_prefix(&self, prefix: &str, limit: u32, offset: u32) -> Result<Vec<User>, StoreError> {
+            let prefix = prefix.trim().to_lowercase();
+            if prefix.is_empty() {
+                return Ok(Vec::new());
+            }
+            let mut users: Vec<User> = self.users.values()
+                .map(|value| value.user.clone())
+                .filter(|u| u.username.to_lowercase().starts_with(&prefix))
+                .collect();
+            users.sort_by(|a, b| a.username.to_lowercase().cmp(&b.username.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(users.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+
         /// Returns the list of admin users within the store
         async fn get_admin_users(&self) -> Result<Vec<User>, StoreError> {
             let admins: Vec<User> = self.users.values()
@@ -1035,6 +1048,17 @@ mod test_definitions {
             Ok(defs)
         }
 
+        async fn get_visible_definitions(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
+                .filter(|d| d.owner_id == viewer.id
+                    || matches!(d.visibility, Visibility::Public | Visibility::Curated)
+                    || (d.visibility == Visibility::Shared
+                        && self.def_grantees.get(&d.id).is_some_and(|g| g.contains(&viewer.id))))
+                .cloned().collect();
+            defs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+
         async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
         }
@@ -1199,6 +1223,17 @@ mod test_definitions {
                 .cloned().collect();
             sort_by_name_ci(&mut cols, |c| &c.name);
             Ok(cols)
+        }
+
+        async fn get_visible_collections(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
+            let mut cols: Vec<GameCollection> = self.game_collections.iter()
+                .filter(|c| c.owner_id == viewer.id
+                    || matches!(c.visibility, Visibility::Public | Visibility::Curated)
+                    || (c.visibility == Visibility::Shared
+                        && self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&viewer.id))))
+                .cloned().collect();
+            cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
         async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {

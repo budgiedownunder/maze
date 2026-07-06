@@ -2231,6 +2231,68 @@ impl UserStore for FileStore {
         Ok(users)
     }
 
+    /// A page of active users whose username starts with `prefix`
+    /// (case-insensitive). See [`UserStore::search_users_by_username_prefix`].
+    ///
+    /// # Examples
+    ///
+    /// Prefix-match users, case-insensitively
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// for name in ["alice", "alina", "bob"] {
+    ///     let mut u = User {
+    ///         id: Uuid::nil(), is_admin: false, username: name.to_string(),
+    ///         full_name: name.to_string(),
+    ///         emails: vec![UserEmail::new_primary_verified(&format!("{name}@example.com"))],
+    ///         password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///         oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///         last_sign_in_at: None, avatar_updated_at: None,
+    ///     };
+    ///     store.create_user(&mut u).await.unwrap();
+    /// }
+    ///
+    /// let hits = store.search_users_by_username_prefix("AL", 10, 0).await.unwrap();
+    /// assert_eq!(
+    ///     hits.iter().map(|u| u.username.clone()).collect::<Vec<_>>(),
+    ///     vec!["alice", "alina"]
+    /// );
+    /// # });
+    /// ```
+    async fn search_users_by_username_prefix(
+        &self,
+        prefix: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<User>, Error> {
+        // Dev-only backend: filter the active users in memory (`get_users`
+        // already excludes soft-deleted), sort, and slice the page.
+        let prefix = prefix.trim().to_lowercase();
+        if prefix.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut users: Vec<User> = self
+            .get_users()
+            .await?
+            .into_iter()
+            .filter(|u| u.username.to_lowercase().starts_with(&prefix))
+            .collect();
+        users.sort_by(|a, b| {
+            a.username
+                .to_lowercase()
+                .cmp(&b.username.to_lowercase())
+                .then(a.id.cmp(&b.id))
+        });
+        Ok(users.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
     /// Returns the list of admin users within the store
     ///
     /// # Examples
@@ -4134,10 +4196,122 @@ impl GameStore for FileStore {
         Ok(defs)
     }
 
+    /// A page of the definitions `viewer` may see (owner ∨ curated/public ∨
+    /// granted), ordered by name then id. See [`GameStore::get_visible_definitions`].
+    ///
+    /// # Examples
+    ///
+    /// A public definition is visible to another user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// let visible = store.get_visible_definitions(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(visible.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
+    /// # });
+    /// ```
+    async fn get_visible_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        // Dev-only backend: evaluate the "visible to me" predicate in memory
+        // (one file per id, so each definition is naturally distinct), sort, and
+        // slice the page. The SqlStore does this as one paged predicate query.
+        let mut defs: Vec<GameDefinition> = Vec::new();
+        for def in self.read_all_game_definitions()? {
+            let visible = def.owner_id == viewer.id
+                || matches!(def.visibility, Visibility::Public | Visibility::Curated)
+                || (def.visibility == Visibility::Shared
+                    && self.read_game_definition_grantees(def.id)?.contains(&viewer.id));
+            if visible {
+                defs.push(def);
+            }
+        }
+        defs.sort_by(|a, b| {
+            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+        });
+        Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         self.read_game_definition_grantees(id)
     }
 
+    /// Stores (or replaces) a definition's image and stamps its
+    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_definition_image`].
+    ///
+    /// # Examples
+    ///
+    /// Set, read back, then clear a definition's image
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "framer".to_string(),
+    ///     full_name: "Framer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("framer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
+    /// assert!(store.get_game_definition(def.id).await.unwrap().image_updated_at.is_some());
+    ///
+    /// store.clear_definition_image(&owner, def.id).await.unwrap();
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
+    /// # });
+    /// ```
     async fn set_definition_image(
         &mut self,
         owner: &User,
@@ -4154,10 +4328,16 @@ impl GameStore for FileStore {
         Ok(())
     }
 
+    /// Loads a definition's image bytes, or `None` when it has none. See
+    /// [`GameStore::get_definition_image`] — the set/clear round-trip is shown on
+    /// [`FileStore::set_definition_image`].
     async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         read_image_if_present(&self.game_definition_image_file_path(id))
     }
 
+    /// Removes a definition's image and clears its marker, scoped to `owner`
+    /// (idempotent). See [`GameStore::clear_definition_image`]; round-trip on
+    /// [`FileStore::set_definition_image`].
     async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         // Idempotent + owner-scoped: an unknown or not-owned definition has
         // nothing for this owner to clear, so it is a successful no-op.
@@ -4382,10 +4562,74 @@ impl GameStore for FileStore {
         Ok(collections)
     }
 
+    /// A page of the collections `viewer` may see, ordered by name then id — the
+    /// collection counterpart of [`FileStore::get_visible_definitions`] (see there
+    /// for a worked example). See [`GameStore::get_visible_collections`].
+    async fn get_visible_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let mut collections: Vec<GameCollection> = Vec::new();
+        for collection in self.read_all_game_collections()? {
+            let visible = collection.owner_id == viewer.id
+                || matches!(collection.visibility, Visibility::Public | Visibility::Curated)
+                || (collection.visibility == Visibility::Shared
+                    && self.read_game_collection_grantees(collection.id)?.contains(&viewer.id));
+            if visible {
+                collections.push(collection);
+            }
+        }
+        collections.sort_by(|a, b| {
+            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+        });
+        Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         self.read_game_collection_grantees(id)
     }
 
+    /// Stores (or replaces) a collection's image and stamps its
+    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_collection_image`].
+    ///
+    /// # Examples
+    ///
+    /// Set, read back, then clear a collection's image
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "framer".to_string(),
+    ///     full_name: "Framer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("framer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
+    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    ///
+    /// store.clear_collection_image(&owner, collection.id).await.unwrap();
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
+    /// # });
+    /// ```
     async fn set_collection_image(
         &mut self,
         owner: &User,
@@ -4402,10 +4646,16 @@ impl GameStore for FileStore {
         Ok(())
     }
 
+    /// Loads a collection's image bytes, or `None` when it has none. See
+    /// [`GameStore::get_collection_image`]; round-trip on
+    /// [`FileStore::set_collection_image`].
     async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         read_image_if_present(&self.game_collection_image_file_path(id))
     }
 
+    /// Removes a collection's image and clears its marker, scoped to `owner`
+    /// (idempotent). See [`GameStore::clear_collection_image`]; round-trip on
+    /// [`FileStore::set_collection_image`].
     async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         let mut collection = match self.read_game_collection_raw(id) {
             Ok(collection) if collection.owner_id == owner.id => collection,

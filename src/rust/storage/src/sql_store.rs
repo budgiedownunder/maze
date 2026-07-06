@@ -856,6 +856,22 @@ fn bool_to_int(v: bool) -> i32 {
     }
 }
 
+/// Escapes the LIKE metacharacters (`%`, `_`) and the escape character (`!`) in
+/// a literal prefix so a value containing them (e.g. a username `user_1`) is
+/// matched literally. Paired with `ESCAPE '!'` in the query — `!` is used rather
+/// than backslash because it has no special meaning in a string literal on any
+/// of the three backends (MySQL re-processes backslash).
+fn escape_like(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if matches!(ch, '!' | '%' | '_') {
+            out.push('!');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result<User, Error> {
     let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
     let id = parse_uuid("user id", &id_str)?;
@@ -2308,6 +2324,85 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username",
         ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut users = Vec::with_capacity(rows.len());
+        for row in &rows {
+            users.push(user_from_row(&self.pool, self.kind, row).await?);
+        }
+        Ok(users)
+    }
+
+    /// Pages an active-user username-prefix match (case-insensitive). See
+    /// [`UserStore::search_users_by_username_prefix`].
+    ///
+    /// # Examples
+    ///
+    /// Prefix-match users, case-insensitively and ordered
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    ///
+    /// for name in ["alice", "alina", "bob"] {
+    ///     let mut u = User {
+    ///         id: Uuid::nil(),
+    ///         is_admin: false,
+    ///         username: name.to_string(),
+    ///         full_name: name.to_string(),
+    ///         emails: vec![UserEmail::new_primary_verified(&format!("{name}@example.com"))],
+    ///         password_hash: "h".to_string(),
+    ///         api_key: Uuid::nil(),
+    ///         logins: vec![],
+    ///         oauth_identities: vec![],
+    ///         deleted_at: None,
+    ///         created_at: chrono::Utc::now(),
+    ///         last_sign_in_at: None,
+    ///         avatar_updated_at: None,
+    ///     };
+    ///     store.create_user(&mut u).await.unwrap();
+    /// }
+    ///
+    /// let hits = store.search_users_by_username_prefix("AL", 10, 0).await.unwrap();
+    /// assert_eq!(
+    ///     hits.iter().map(|u| u.username.clone()).collect::<Vec<_>>(),
+    ///     vec!["alice", "alina"]
+    /// );
+    /// # });
+    /// ```
+    async fn search_users_by_username_prefix(
+        &self,
+        prefix: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<User>, Error> {
+        let prefix = prefix.trim().to_lowercase();
+        if prefix.is_empty() {
+            return Ok(Vec::new());
+        }
+        // `LOWER(username)` both sides makes the match case-insensitive on every
+        // backend; `escape_like` + `ESCAPE '!'` keeps `_` / `%` in a username
+        // (e.g. `user_1`) literal.
+        let pattern = format!("{}%", escape_like(&prefix));
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE deleted_at IS NULL AND LOWER(username) LIKE ? ESCAPE '!' \
+             ORDER BY LOWER(username), id LIMIT ? OFFSET ?",
+        ))
+        .bind(pattern)
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
         .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -5022,6 +5117,84 @@ impl GameStore for SqlStore {
         .await
     }
 
+    /// A page of the definitions `viewer` may see (owner ∨ curated/public ∨
+    /// granted), ordered by name then id. See [`GameStore::get_visible_definitions`].
+    ///
+    /// # Examples
+    ///
+    /// A public definition is visible to another user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// let visible = store.get_visible_definitions(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(visible.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
+    /// # });
+    /// ```
+    async fn get_visible_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        // One predicate query does the filter + order + page in the database; the
+        // OR-predicate yields each row once, so no dedup is needed.
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM game_definitions \
+             WHERE owner_id = ? \
+                OR visibility IN ('public', 'curated') \
+                OR (visibility = 'shared' AND EXISTS ( \
+                     SELECT 1 FROM game_definition_shares s \
+                     WHERE s.definition_id = game_definitions.id AND s.grantee_user_id = ?)) \
+             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+        ))
+        .bind(viewer.id.to_string())
+        .bind(viewer.id.to_string())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter().map(game_definition_from_row).collect()
+    }
+
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
@@ -5145,6 +5318,9 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Loads a definition's image bytes, or `None` when it has none. See
+    /// [`GameStore::get_definition_image`]; the set/get/clear round-trip is shown
+    /// on [`SqlStore::set_definition_image`].
     async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         let row = sqlx::query(&q(
             self.kind,
@@ -5160,6 +5336,9 @@ impl GameStore for SqlStore {
         }
     }
 
+    /// Removes a definition's image and clears its marker, scoped to `owner`
+    /// (idempotent). See [`GameStore::clear_definition_image`]; round-trip on
+    /// [`SqlStore::set_definition_image`].
     async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         // Owner-scoped + idempotent: both statements no-op when the definition
         // is unknown or owned by someone else (the image DELETE is gated on the
@@ -5473,6 +5652,40 @@ impl GameStore for SqlStore {
         .await
     }
 
+    /// A page of the collections `viewer` may see, ordered by name then id — the
+    /// collection counterpart of [`SqlStore::get_visible_definitions`] (see there
+    /// for a worked example). See [`GameStore::get_visible_collections`].
+    async fn get_visible_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM game_collections \
+             WHERE owner_id = ? \
+                OR visibility IN ('public', 'curated') \
+                OR (visibility = 'shared' AND EXISTS ( \
+                     SELECT 1 FROM game_collection_shares s \
+                     WHERE s.collection_id = game_collections.id AND s.grantee_user_id = ?)) \
+             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+        ))
+        .bind(viewer.id.to_string())
+        .bind(viewer.id.to_string())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut collections: Vec<GameCollection> =
+            rows.iter().map(game_collection_from_row).collect::<Result<_, _>>()?;
+        for collection in &mut collections {
+            collection.items = self.load_collection_items(collection.id).await?;
+        }
+        Ok(collections)
+    }
+
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
@@ -5587,6 +5800,9 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Loads a collection's image bytes, or `None` when it has none. See
+    /// [`GameStore::get_collection_image`]; round-trip on
+    /// [`SqlStore::set_collection_image`].
     async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         let row = sqlx::query(&q(
             self.kind,
@@ -5602,6 +5818,9 @@ impl GameStore for SqlStore {
         }
     }
 
+    /// Removes a collection's image and clears its marker, scoped to `owner`
+    /// (idempotent). See [`GameStore::clear_collection_image`]; round-trip on
+    /// [`SqlStore::set_collection_image`].
     async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         sqlx::query(&q(
             self.kind,
