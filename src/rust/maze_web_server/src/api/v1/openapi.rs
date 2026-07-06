@@ -23,7 +23,7 @@ use crate::api::v1::endpoints::game_collections::{
 };
 use crate::api::v1::endpoints::game_definitions::{
     DefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
-    GrantShareRequest,
+    GrantShareRequest, ImageUpdatedResponse,
 };
 use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
@@ -127,6 +127,9 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_definitions::list_definition_shares,
         crate::api::v1::endpoints::game_definitions::grant_definition_share,
         crate::api::v1::endpoints::game_definitions::revoke_definition_share,
+        crate::api::v1::endpoints::game_definitions::upload_definition_image,
+        crate::api::v1::endpoints::game_definitions::delete_definition_image,
+        crate::api::v1::endpoints::game_definitions::serve_definition_image,
         // Game collections
         crate::api::v1::endpoints::game_collections::create_game_collection,
         crate::api::v1::endpoints::game_collections::list_game_collections,
@@ -139,6 +142,9 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_collections::list_collection_shares,
         crate::api::v1::endpoints::game_collections::grant_collection_share,
         crate::api::v1::endpoints::game_collections::revoke_collection_share,
+        crate::api::v1::endpoints::game_collections::upload_collection_image,
+        crate::api::v1::endpoints::game_collections::delete_collection_image,
+        crate::api::v1::endpoints::game_collections::serve_collection_image,
         // Scores
         crate::api::v1::endpoints::scores::record_score,
         crate::api::v1::endpoints::scores::get_leaderboard,
@@ -171,7 +177,7 @@ impl utoipa::Modify for LoginTokenAuth {
             GrantShareRequest, DefinitionSharesResponse,
             GameCollection, CollectionItem, GameCollectionRequest, GameCollectionListResponse,
             GameCollectionDetailResponse, AddCollectionItemRequest, ReorderCollectionItemsRequest,
-            CollectionSharesResponse,
+            CollectionSharesResponse, ImageUpdatedResponse,
             AvatarUpdatedResponse),
 
     ),

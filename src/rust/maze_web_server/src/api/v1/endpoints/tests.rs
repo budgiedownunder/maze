@@ -8824,4 +8824,130 @@ mod test_definitions {
         assert_eq!(capped.limit, 100);
         assert!(!capped.has_more);
     }
+
+    // ****************************************************************************
+    // Game definition / collection image endpoint tests
+    // ****************************************************************************
+
+    /// Builds an authenticated multipart `POST` to an image endpoint.
+    fn image_upload_request(url: &str, api_key: Uuid, boundary: &str, body: Vec<u8>) -> actix_http::Request {
+        test::TestRequest::post()
+            .uri(url)
+            .insert_header(("X-API-KEY", api_key.to_string()))
+            .insert_header(("Content-Type", format!("multipart/form-data; boundary={boundary}")))
+            .set_payload(body)
+            .to_request()
+    }
+
+    #[actix_web::test]
+    async fn game_definition_image_upload_serve_and_delete() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let def = seed_game_definition(&store, &owner, "Framed", Visibility::Public, Rotation::Static).await;
+        let url = format!("/api/v1/game-definitions/{}/image", def.id);
+
+        // Upload a JPEG → canonicalised, stored, marker returned.
+        let jpeg = encode_test_image(10, 20, image::ImageFormat::Jpeg);
+        let (body, boundary) = multipart_file_body("g.jpg", "image/jpeg", &jpeg);
+        let resp = test::call_service(&app, image_upload_request(&url, owner.api_key, &boundary, body)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // A public definition's image is served to any signed-in viewer as PNG.
+        let get = test::call_service(&app, create_test_get_request(&url, Some(other.api_key), None)).await;
+        assert_eq!(get.status(), StatusCode::OK);
+        assert_eq!(
+            get.headers().get(actix_web::http::header::CONTENT_TYPE).unwrap().to_str().unwrap(),
+            "image/png"
+        );
+        let served = test::read_body(get).await;
+        assert_eq!(&served[..4], &PNG_SIGNATURE, "served bytes must be a PNG");
+
+        // Delete → 204, then the image is gone.
+        let del = test::call_service(&app, create_test_delete_request(&url, Some(owner.api_key), None)).await;
+        assert_eq!(del.status(), StatusCode::NO_CONTENT);
+        let gone = test::call_service(&app, create_test_get_request(&url, Some(owner.api_key), None)).await;
+        assert_eq!(gone.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn game_definition_image_enforces_access_and_ownership() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let def = seed_game_definition(&store, &owner, "Private", Visibility::Private, Rotation::Static).await;
+        let url = format!("/api/v1/game-definitions/{}/image", def.id);
+        let png = encode_test_image(8, 8, image::ImageFormat::Png);
+
+        // Owner uploads.
+        let (body, boundary) = multipart_file_body("g.png", "image/png", &png);
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, owner.api_key, &boundary, body)).await.status(),
+            StatusCode::OK
+        );
+
+        // A private definition's image is invisible to a non-owner…
+        assert_eq!(
+            test::call_service(&app, create_test_get_request(&url, Some(other.api_key), None)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+        // …and a non-owner can neither upload nor delete it.
+        let (body2, boundary2) = multipart_file_body("g.png", "image/png", &png);
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, other.api_key, &boundary2, body2)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            test::call_service(&app, create_test_delete_request(&url, Some(other.api_key), None)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+
+        // A non-image upload is rejected.
+        let (bad, bad_boundary) = multipart_file_body("x.png", "image/png", b"not an image");
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, owner.api_key, &bad_boundary, bad)).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn game_collection_image_upload_serve_and_delete() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let col = seed_game_collection(&store, &owner, "Framed", Visibility::Public).await;
+        let url = format!("/api/v1/game-collections/{}/image", col.id);
+
+        let png = encode_test_image(16, 8, image::ImageFormat::Png);
+        let (body, boundary) = multipart_file_body("c.png", "image/png", &png);
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, owner.api_key, &boundary, body)).await.status(),
+            StatusCode::OK
+        );
+
+        let get = test::call_service(&app, create_test_get_request(&url, Some(other.api_key), None)).await;
+        assert_eq!(get.status(), StatusCode::OK);
+        let served = test::read_body(get).await;
+        assert_eq!(&served[..4], &PNG_SIGNATURE);
+
+        let del = test::call_service(&app, create_test_delete_request(&url, Some(owner.api_key), None)).await;
+        assert_eq!(del.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            test::call_service(&app, create_test_get_request(&url, Some(owner.api_key), None)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+
+        // A non-owner cannot upload to someone else's collection.
+        let (body2, boundary2) = multipart_file_body("c.png", "image/png", &png);
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, other.api_key, &boundary2, body2)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+    }
 }

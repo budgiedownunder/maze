@@ -23,12 +23,14 @@
 //! dangling refs (to since-deleted definitions) and members the viewer cannot
 //! see are dropped, so a public collection never leaks a private member.
 
+use actix_multipart::form::MultipartForm;
 use actix_web::{
     delete, get, post, put, web, HttpMessage, HttpRequest, HttpResponse, Error,
     error::{
         ErrorBadRequest, ErrorConflict, ErrorForbidden, ErrorInternalServerError, ErrorNotFound,
         ErrorUnauthorized,
     },
+    http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
 use chrono::{DateTime, Utc};
 use data_model::{GameCollection, GameDefinition, User, Visibility};
@@ -37,7 +39,8 @@ use storage::{Error as StoreError, SharedStore};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use super::game_definitions::GrantShareRequest;
+use crate::api::v1::endpoints::avatar::canonicalise_to_png;
+use super::game_definitions::{GrantShareRequest, ImageUpdatedResponse, ImageUploadForm};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -811,4 +814,155 @@ pub async fn revoke_collection_share(
         ErrorInternalServerError("Failed to load collection shares")
     })?;
     Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))
+}
+
+// ---------------------------------------------------------------------------
+// Image — POST / DELETE / GET /api/v1/game-collections/{id}/image
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    summary = "Upload or replace a collection's image",
+    description = "Accepts a multipart/form-data upload with a single `file` part (PNG or JPEG, up \
+                   to 2 MiB), canonicalised to a 256x256 PNG. Owner-only. Returns the new \
+                   image_updated_at.",
+    post,
+    path = "/api/v1/game-collections/{id}/image",
+    params(("id" = String, Path, description = "Collection id")),
+    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB"),
+    responses(
+        (status = 200, description = "Image stored", body = ImageUpdatedResponse),
+        (status = 400, description = "Missing/invalid image or over the size limit"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Collection not found")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[post("/game-collections/{id}/image")]
+pub async fn upload_collection_image(
+    path: web::Path<Uuid>,
+    MultipartForm(form): MultipartForm<ImageUploadForm>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let png = canonicalise_to_png(&form.file.data)?;
+
+    let mut store_lock = store.write().await;
+    match store_lock.set_collection_image(&user, id, png).await {
+        Ok(()) => {}
+        Err(StoreError::GameCollectionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("set collection image store error: {err}");
+            return Err(ErrorInternalServerError("Failed to store image"));
+        }
+    }
+    let image_updated_at = store_lock
+        .get_game_collection(id)
+        .await
+        .map_err(|err| {
+            log::warn!("get collection after image set: {err}");
+            ErrorInternalServerError("Failed to store image")
+        })?
+        .image_updated_at
+        .ok_or_else(|| ErrorInternalServerError("image marker missing after store"))?;
+    Ok(HttpResponse::Ok().json(ImageUpdatedResponse { image_updated_at }))
+}
+
+#[utoipa::path(
+    summary = "Remove a collection's image",
+    description = "Removes the image of a collection owned by the caller and clears its \
+                   image_updated_at. Idempotent.",
+    delete,
+    path = "/api/v1/game-collections/{id}/image",
+    params(("id" = String, Path, description = "Collection id")),
+    responses(
+        (status = 204, description = "Image removed (or none was set)"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Collection not found")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[delete("/game-collections/{id}/image")]
+pub async fn delete_collection_image(
+    path: web::Path<Uuid>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let mut store_lock = store.write().await;
+
+    // Owner-check for a clean 404 (the storage clear no-ops for a non-owner).
+    owned_collection(&**store_lock, &user, id).await?;
+    store_lock.clear_collection_image(&user, id).await.map_err(|err| {
+        log::warn!("clear collection image store error: {err}");
+        ErrorInternalServerError("Failed to delete image")
+    })?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[utoipa::path(
+    summary = "Serve a collection's image",
+    description = "Returns the collection's image as image/png, or 404 when it has none. \
+                   Access-checked (owner, curated, public, or granted); an inaccessible collection \
+                   is reported as 404. Clients cache-bust with ?v=<imageUpdatedAt>.",
+    get,
+    path = "/api/v1/game-collections/{id}/image",
+    params(("id" = String, Path, description = "Collection id")),
+    responses(
+        (status = 200, description = "The image", content_type = "image/png"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Collection not accessible or has no image")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[get("/game-collections/{id}/image")]
+pub async fn serve_collection_image(
+    path: web::Path<Uuid>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let store_lock = store.read().await;
+
+    let collection = match store_lock.get_game_collection(id).await {
+        Ok(collection) => collection,
+        Err(StoreError::GameCollectionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("get collection for image serve: {err}");
+            return Err(ErrorInternalServerError("Failed to load image"));
+        }
+    };
+    let col_grantees = store_lock.get_collection_grantees(id).await.map_err(|err| {
+        log::warn!("get collection grantees store error: {err}");
+        ErrorInternalServerError("Failed to load image")
+    })?;
+    if !can_access(collection.owner_id, collection.visibility, user.id, &col_grantees) {
+        return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
+    }
+
+    let Some(data) = store_lock.get_collection_image(id).await.map_err(|err| {
+        log::warn!("get collection image store error: {err}");
+        ErrorInternalServerError("Failed to load image")
+    })?
+    else {
+        return Err(ErrorNotFound(format!("Game collection '{id}' has no image")));
+    };
+
+    let mut builder = HttpResponse::Ok();
+    builder.content_type("image/png");
+    builder.insert_header(CacheControl(vec![CacheDirective::Private, CacheDirective::NoCache]));
+    if let Some(ts) = collection.image_updated_at {
+        builder.insert_header(ETag(EntityTag::new_strong(ts.timestamp_millis().to_string())));
+    }
+    Ok(builder.body(data))
 }

@@ -690,6 +690,9 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 | `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view). |
 | `PUT`    | `/api/v1/game-definitions/{id}/shares` | Either | Grant a user access (body `{ "userId": … }`); returns the updated grantee list. Idempotent. |
 | `DELETE` | `/api/v1/game-definitions/{id}/shares/{grantee}` | Either | Revoke a user's access; returns the updated grantee list. Idempotent. |
+| `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `DELETE` | `/api/v1/game-definitions/{id}/image` | Either | Remove the game's image (idempotent). Owner-only. |
+| `GET`    | `/api/v1/game-definitions/{id}/image` | Either | Serve the game's image as `image/png`, or `404`. **Access-checked** like the play-fetch (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 
 - **Leaderboard subject** is per-definition: a `static` game uses its fixed seed and the key `def:<id>`; a `daily` game folds today's UTC date into both the seed and the key (`def:<id>:<yyyy-mm-dd>`), so each day gets a fresh, comparable board. `leaderboardTracked` is `true` once the definition is published (`public`, `curated`, or `shared` with at least one grantee).
 
@@ -712,6 +715,9 @@ On first launch the server seeds a curated **"Difficulty"** collection — the `
 | `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns. |
 | `PUT`    | `/api/v1/game-collections/{id}/shares` | Either | Grant a user access (body `{ "userId": … }`); returns the updated grantee list. Idempotent. |
 | `DELETE` | `/api/v1/game-collections/{id}/shares/{grantee}` | Either | Revoke a user's access; returns the updated grantee list. Idempotent. |
+| `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `DELETE` | `/api/v1/game-collections/{id}/image` | Either | Remove the collection's image (idempotent). Owner-only. |
+| `GET`    | `/api/v1/game-collections/{id}/image` | Either | Serve the collection's image as `image/png`, or `404`. Access-checked (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 
 - A collection's `visibility` gates the **grouping**; each member still enforces its own access, so the detail endpoint filters the member list per viewer. Membership stores only references — a ref to an inaccessible or since-deleted definition is simply skipped at detail time (dangling refs are tolerated).
 

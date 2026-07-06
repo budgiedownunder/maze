@@ -28,20 +28,24 @@
 //! definition folds today's UTC date into both, giving a fresh, comparable board
 //! each day (`def:<id>:<yyyy-mm-dd>`).
 
+use actix_multipart::form::{bytes::Bytes as MultipartBytes, MultipartForm};
 use actix_web::{
     delete, get, post, put, web, HttpMessage, HttpRequest, HttpResponse, Error,
     error::{
         ErrorBadRequest, ErrorConflict, ErrorForbidden, ErrorInternalServerError, ErrorNotFound,
         ErrorUnauthorized,
     },
+    http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use data_model::{GameDefinition, Rotation, User, Visibility};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use storage::{Error as StoreError, SharedStore};
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+use crate::api::v1::endpoints::avatar::canonicalise_to_png;
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -132,6 +136,26 @@ pub struct DefinitionSharesResponse {
     /// The user ids currently granted access.
     #[schema(value_type = Vec<String>)]
     pub grantees: Vec<Uuid>,
+}
+
+/// Multipart upload form for a definition / collection image — a single `file`
+/// part, oversize-rejected during extraction. Shared with the collection
+/// endpoints (identical shape to the avatar upload).
+#[derive(MultipartForm)]
+pub struct ImageUploadForm {
+    #[multipart(limit = "2 MiB")]
+    pub file: MultipartBytes,
+}
+
+/// `200` response for a successful image upload — the freshly-stamped
+/// `image_updated_at` the client uses to cache-bust the image URL. Shared by the
+/// definition + collection image endpoints.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageUpdatedResponse {
+    /// The new image cache-buster (RFC 3339).
+    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
+    pub image_updated_at: DateTime<Utc>,
 }
 
 // ---------------------------------------------------------------------------
@@ -729,6 +753,169 @@ pub async fn revoke_definition_share(
         ErrorInternalServerError("Failed to load definition shares")
     })?;
     Ok(HttpResponse::Ok().json(DefinitionSharesResponse { grantees }))
+}
+
+// ---------------------------------------------------------------------------
+// Image — POST / DELETE / GET /api/v1/game-definitions/{id}/image
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    summary = "Upload or replace a definition's image",
+    description = "Accepts a multipart/form-data upload with a single `file` part (PNG or JPEG, up \
+                   to 2 MiB). The server canonicalises it to a 256x256 PNG and stamps the \
+                   definition's image_updated_at. Owner-only. Returns the new image_updated_at.",
+    post,
+    path = "/api/v1/game-definitions/{id}/image",
+    params(("id" = String, Path, description = "Definition id")),
+    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB"),
+    responses(
+        (status = 200, description = "Image stored", body = ImageUpdatedResponse),
+        (status = 400, description = "Missing/invalid image or over the size limit"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Definition not found")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[post("/game-definitions/{id}/image")]
+pub async fn upload_definition_image(
+    path: web::Path<Uuid>,
+    MultipartForm(form): MultipartForm<ImageUploadForm>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let png = canonicalise_to_png(&form.file.data)?;
+
+    let mut store_lock = store.write().await;
+    match store_lock.set_definition_image(&user, id, png).await {
+        Ok(()) => {}
+        Err(StoreError::GameDefinitionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("set definition image store error: {err}");
+            return Err(ErrorInternalServerError("Failed to store image"));
+        }
+    }
+    // Read the freshly-stamped marker back to return it (same write guard).
+    let image_updated_at = store_lock
+        .get_game_definition(id)
+        .await
+        .map_err(|err| {
+            log::warn!("get definition after image set: {err}");
+            ErrorInternalServerError("Failed to store image")
+        })?
+        .image_updated_at
+        .ok_or_else(|| ErrorInternalServerError("image marker missing after store"))?;
+    Ok(HttpResponse::Ok().json(ImageUpdatedResponse { image_updated_at }))
+}
+
+#[utoipa::path(
+    summary = "Remove a definition's image",
+    description = "Removes the image of a definition owned by the caller and clears its \
+                   image_updated_at. Idempotent — succeeds even when no image is set.",
+    delete,
+    path = "/api/v1/game-definitions/{id}/image",
+    params(("id" = String, Path, description = "Definition id")),
+    responses(
+        (status = 204, description = "Image removed (or none was set)"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Definition not found")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[delete("/game-definitions/{id}/image")]
+pub async fn delete_definition_image(
+    path: web::Path<Uuid>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let mut store_lock = store.write().await;
+
+    // Owner-check for a clean 404 (the storage clear is a silent no-op for a
+    // non-owner, so the server enforces ownership here).
+    match store_lock.get_game_definition(id).await {
+        Ok(def) if def.owner_id == user.id => {}
+        Ok(_) | Err(StoreError::GameDefinitionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("get definition for image delete: {err}");
+            return Err(ErrorInternalServerError("Failed to delete image"));
+        }
+    }
+    store_lock.clear_definition_image(&user, id).await.map_err(|err| {
+        log::warn!("clear definition image store error: {err}");
+        ErrorInternalServerError("Failed to delete image")
+    })?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[utoipa::path(
+    summary = "Serve a definition's image",
+    description = "Returns the definition's image as image/png, or 404 when it has none. \
+                   Access-checked like the play-fetch (owner, curated, public, or granted); an \
+                   inaccessible definition is reported as 404. Clients cache-bust with \
+                   ?v=<imageUpdatedAt>.",
+    get,
+    path = "/api/v1/game-definitions/{id}/image",
+    params(("id" = String, Path, description = "Definition id")),
+    responses(
+        (status = 200, description = "The image", content_type = "image/png"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Definition not accessible or has no image")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[get("/game-definitions/{id}/image")]
+pub async fn serve_definition_image(
+    path: web::Path<Uuid>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let store_lock = store.read().await;
+
+    let definition = match store_lock.get_game_definition(id).await {
+        Ok(def) => def,
+        Err(StoreError::GameDefinitionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("get definition for image serve: {err}");
+            return Err(ErrorInternalServerError("Failed to load image"));
+        }
+    };
+    let grantees = store_lock.get_definition_grantees(id).await.map_err(|err| {
+        log::warn!("get definition grantees store error: {err}");
+        ErrorInternalServerError("Failed to load image")
+    })?;
+    if !can_view(&definition, &user, &grantees) {
+        return Err(ErrorNotFound(format!("Game definition '{id}' not found")));
+    }
+
+    let Some(data) = store_lock.get_definition_image(id).await.map_err(|err| {
+        log::warn!("get definition image store error: {err}");
+        ErrorInternalServerError("Failed to load image")
+    })?
+    else {
+        return Err(ErrorNotFound(format!("Game definition '{id}' has no image")));
+    };
+
+    let mut builder = HttpResponse::Ok();
+    builder.content_type("image/png");
+    builder.insert_header(CacheControl(vec![CacheDirective::Private, CacheDirective::NoCache]));
+    if let Some(ts) = definition.image_updated_at {
+        builder.insert_header(ETag(EntityTag::new_strong(ts.timestamp_millis().to_string())));
+    }
+    Ok(builder.body(data))
 }
 
 #[cfg(test)]
