@@ -8,7 +8,7 @@ mod test_definitions {
         EmailVerificationConfirmRequest, EmailVerificationRequest,
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
-    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse};
+    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse, UsersListResponse};
     use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
@@ -319,11 +319,19 @@ mod test_definitions {
     /// cap path. Matches `SqlStore::MAX_MAZE_CELLS` so the over-cap tests
     /// can use the same dimensions that fail on a real SQL deployment.
     const MOCK_MAX_MAZE_CELLS: usize = 3_600;
+    /// A small per-user maze cap for the MockStore — well above what any handler
+    /// test creates for one user, but low enough that the cap test can fill to it
+    /// cheaply.
+    const MOCK_MAX_MAZES_PER_USER: usize = 20;
 
     #[async_trait]
     impl MazeStore for MockStore {
         fn max_maze_cells(&self) -> Option<usize> {
             Some(MOCK_MAX_MAZE_CELLS)
+        }
+
+        fn max_mazes_per_user(&self) -> Option<usize> {
+            Some(MOCK_MAX_MAZES_PER_USER)
         }
 
         async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
@@ -334,6 +342,12 @@ mod test_definitions {
                 MOCK_MAX_MAZE_CELLS,
             )?;
             validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
+            if mock_user.mazes.len() >= MOCK_MAX_MAZES_PER_USER {
+                return Err(StoreError::MazeCountLimitReached {
+                    count: mock_user.mazes.len(),
+                    max: MOCK_MAX_MAZES_PER_USER,
+                });
+            }
             let id = MockMaze::create_id_from_name(&maze.name);
 
             if mock_user.mazes.contains_key(&id) {
@@ -538,13 +552,12 @@ mod test_definitions {
         }
         /// Returns the list of users within the store, sorted
         /// alphabetically by username in ascending order
-        async fn get_users(&self) -> Result<Vec<User>, StoreError> {
+        async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, StoreError> {
             let mut users: Vec<User> = self.users.values()
                 .map( |value| value.user.clone())
                 .collect();
-
-            users.sort_by_key(|user| user.username.clone());
-            Ok(users)
+            users.sort_by(|a, b| a.username.cmp(&b.username).then(a.id.cmp(&b.id)));
+            Ok(users.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
         async fn search_users_by_username_prefix(&self, prefix: &str, limit: u32, offset: u32) -> Result<Vec<User>, StoreError> {
@@ -1028,26 +1041,6 @@ mod test_definitions {
             Ok(defs)
         }
 
-        async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, StoreError> {
-            let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.visibility == Visibility::Curated).cloned().collect();
-            sort_by_name_ci(&mut defs, |d| &d.name);
-            Ok(defs)
-        }
-
-        async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, StoreError> {
-            let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.visibility == Visibility::Public).cloned().collect();
-            sort_by_name_ci(&mut defs, |d| &d.name);
-            Ok(defs)
-        }
-
-        async fn get_definitions_shared_with(&self, user: Uuid) -> Result<Vec<GameDefinition>, StoreError> {
-            let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
-                .filter(|d| self.def_grantees.get(&d.id).is_some_and(|g| g.contains(&user)))
-                .cloned().collect();
-            sort_by_name_ci(&mut defs, |d| &d.name);
-            Ok(defs)
-        }
-
         async fn get_visible_definitions(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
             let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
                 .filter(|d| d.owner_id == viewer.id
@@ -1201,26 +1194,6 @@ mod test_definitions {
 
         async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, StoreError> {
             let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.owner_id == owner.id).cloned().collect();
-            sort_by_name_ci(&mut cols, |c| &c.name);
-            Ok(cols)
-        }
-
-        async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, StoreError> {
-            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.visibility == Visibility::Curated).cloned().collect();
-            sort_by_name_ci(&mut cols, |c| &c.name);
-            Ok(cols)
-        }
-
-        async fn get_public_collections(&self) -> Result<Vec<GameCollection>, StoreError> {
-            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.visibility == Visibility::Public).cloned().collect();
-            sort_by_name_ci(&mut cols, |c| &c.name);
-            Ok(cols)
-        }
-
-        async fn get_collections_shared_with(&self, user: Uuid) -> Result<Vec<GameCollection>, StoreError> {
-            let mut cols: Vec<GameCollection> = self.game_collections.iter()
-                .filter(|c| self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&user)))
-                .cloned().collect();
             sort_by_name_ci(&mut cols, |c| &c.name);
             Ok(cols)
         }
@@ -1828,10 +1801,11 @@ mod test_definitions {
         assert_eq!(resp.status(), expected_status_code);
         if expected_status_code == StatusCode::OK {
             let body = test::read_body(resp).await;
-            let user_items: Vec<UserItem> = serde_json::from_slice(&body).expect("failed to deserialize response");
+            let page: UsersListResponse = serde_json::from_slice(&body).expect("failed to deserialize response");
             let expected_user_items = maze_store_mock_users_to_user_items(&mock_users);
-            assert_eq!(user_items, expected_user_items);
-        } 
+            assert_eq!(page.users, expected_user_items);
+            assert!(!page.has_more, "the default page holds every mock user");
+        }
     }
 
     impl CreateUserRequest {
@@ -8984,5 +8958,63 @@ mod test_definitions {
             test::call_service(&app, image_upload_request(&url, other.api_key, &boundary2, body2)).await.status(),
             StatusCode::NOT_FOUND
         );
+    }
+
+    // ****************************************************************************
+    // Paged admin user list + per-user maze cap
+    // ****************************************************************************
+
+    #[actix_web::test]
+    async fn get_users_pages_the_admin_list() {
+        // 1 admin + 4 users = 5 total.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 4, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+
+        // First page of two → more to come.
+        let req = create_test_get_request("/api/v1/users?limit=2&offset=0", Some(admin_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let page: UsersListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(page.users.len(), 2);
+        assert_eq!(page.limit, 2);
+        assert!(page.has_more);
+
+        // Over-cap limit is capped and returns everyone.
+        let req = create_test_get_request("/api/v1/users?limit=1000", Some(admin_key), None);
+        let page: UsersListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.limit, 100);
+        assert_eq!(page.users.len(), 5);
+        assert!(!page.has_more);
+
+        // The endpoint is admin-only.
+        let user_key = api_key_for(&mock_users, VALID_USERNAME_1);
+        let req = create_test_get_request("/api/v1/users?limit=2", Some(user_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn create_maze_returns_409_when_user_at_maze_cap() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let user = user_by_name(&mock_users, VALID_USERNAME_1);
+
+        // Fill the user up to the MockStore cap directly via the store.
+        {
+            let mut lock = store.write().await;
+            let cap = lock.max_mazes_per_user().expect("mock store reports a maze cap");
+            for i in 0..cap {
+                let mut m = new_sized_maze(&format!("m{i}.json"), &format!("m{i}"), 3, 3);
+                lock.create_maze(&user, &mut m).await.expect("seed maze under cap");
+            }
+        }
+
+        // The next create via the API is refused with 409.
+        let over = new_solvable_maze("over.json", "over");
+        let req = create_test_post_request("/api/v1/mazes", Some(user.api_key), None, Some(&over));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
     }
 }

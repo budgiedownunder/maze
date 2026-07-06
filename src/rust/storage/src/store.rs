@@ -66,9 +66,11 @@ pub trait UserStore {
     /// `provider` is matched case-insensitively); `provider_user_id` is matched
     /// exactly (it is an opaque stable id from the identity provider).
     async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error>;
-    /// Returns the list of users within the store, sorted
-    /// alphabetically by username in ascending order
-    async fn get_users(&self) -> Result<Vec<User>, Error>;
+    /// A page of active users, ordered by username then id and sliced to
+    /// `limit`/`offset`. The admin user list — paged (like [`Self::get_visible_definitions`])
+    /// so it never loads the whole userbase at once; pass a large `limit` for
+    /// "all". Soft-deleted users are excluded.
+    async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, Error>;
     /// A page of active users whose username **starts with** `prefix`
     /// (case-insensitive), ordered by username then id and sliced to
     /// `limit`/`offset`. Soft-deleted users are excluded. A blank `prefix`
@@ -179,6 +181,14 @@ pub trait MazeStore {
     /// enforce on writes. Callers use this to surface the limit to clients
     /// and to validate ahead of an actual write.
     fn max_maze_cells(&self) -> Option<usize> {
+        None
+    }
+    /// The maximum number of mazes one user may own, or `None` for no cap. Unlike
+    /// [`Self::max_maze_cells`] (bounded by a backend's per-row/runtime cost),
+    /// this is a **product** limit — the same value across backends — that keeps
+    /// a user's `get_maze_items` list bounded. `create_maze` rejects a save that
+    /// would exceed it with [`Error::MazeCountLimitReached`].
+    fn max_mazes_per_user(&self) -> Option<usize> {
         None
     }
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
@@ -453,6 +463,12 @@ pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
 /// whose 16,000-byte `definition` only just fits).
 pub const MAX_GAME_DEFINITION_CONFIG_BYTES: usize = 4_000;
 
+/// The maximum number of mazes one user may own. A **product** limit (the same
+/// across every backend, unlike the backend-specific cell-count caps) that keeps
+/// a user's `get_maze_items` list bounded; both stores report it from
+/// [`MazeStore::max_mazes_per_user`] and enforce it on `create_maze`.
+pub const MAX_MAZES_PER_USER: usize = 500;
+
 /// Represents a store for holding parametric 3D game definitions (and, later,
 /// game collections — one trait keeps all game facts together). Mutations are
 /// owner-scoped exactly like [`MazeStore`]; reads come in owner / curated /
@@ -507,14 +523,6 @@ pub trait GameStore {
     /// All of `owner`'s own definitions (every visibility, drafts included),
     /// sorted alphabetically by name.
     async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error>;
-    /// Every `Curated` definition, across all owners, sorted by name.
-    async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, Error>;
-    /// Every `Public` definition, across all owners, sorted by name.
-    async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, Error>;
-    /// Every definition explicitly granted to `user`, across all owners, sorted
-    /// by name.
-    async fn get_definitions_shared_with(&self, user: Uuid)
-        -> Result<Vec<GameDefinition>, Error>;
     /// A page of the definitions `viewer` may see — their own (any visibility,
     /// drafts included), every `Public`/`Curated` one, and any `Shared` one
     /// granted to them — ordered by name (case-insensitive) then id, sliced to
@@ -622,13 +630,6 @@ pub trait GameStore {
     ) -> Result<(), Error>;
     /// All of `owner`'s own collections, sorted alphabetically by name.
     async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error>;
-    /// Every `Curated` collection, across all owners, sorted by name.
-    async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error>;
-    /// Every `Public` collection, across all owners, sorted by name.
-    async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error>;
-    /// Every collection explicitly granted to `user`, sorted by name.
-    async fn get_collections_shared_with(&self, user: Uuid)
-        -> Result<Vec<GameCollection>, Error>;
     /// A page of the collections `viewer` may see — their own (any visibility),
     /// every `Public`/`Curated` one, and any `Shared` one granted to them —
     /// ordered by name (case-insensitive) then id, sliced to `limit`/`offset`.

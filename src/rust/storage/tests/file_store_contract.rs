@@ -925,15 +925,15 @@ async fn game_definition_delete_is_owner_scoped() {
 }
 
 #[tokio::test]
-async fn game_definition_list_reads_scope_by_owner_and_visibility() {
+async fn game_definition_owner_list_scopes_and_sorts() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_list_reads_scope_by_owner_and_visibility(&mut s).await;
+    contract::definition_owner_list_scopes_and_sorts(&mut s).await;
 }
 
 #[tokio::test]
-async fn game_definition_grants_control_shared_with() {
+async fn game_definition_grants_update_grantees() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_grants_control_shared_with(&mut s).await;
+    contract::definition_grants_update_grantees(&mut s).await;
 }
 
 #[tokio::test]
@@ -987,15 +987,15 @@ async fn game_collection_items_add_remove_and_reorder() {
 }
 
 #[tokio::test]
-async fn game_collection_list_reads_scope_by_owner_and_visibility() {
+async fn game_collection_owner_list_scopes_and_sorts() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_list_reads_scope_by_owner_and_visibility(&mut s).await;
+    contract::collection_owner_list_scopes_and_sorts(&mut s).await;
 }
 
 #[tokio::test]
-async fn game_collection_grants_control_shared_with() {
+async fn game_collection_grants_update_grantees() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_grants_control_shared_with(&mut s).await;
+    contract::collection_grants_update_grantees(&mut s).await;
 }
 
 #[tokio::test]
@@ -1060,4 +1060,16 @@ async fn game_visible_collections_compose_and_page() {
 async fn user_prefix_search_filters_and_pages() {
     let (mut s, _temp) = fresh_store().await;
     contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;
+}
+
+#[tokio::test]
+async fn user_list_orders_and_pages() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_users_orders_and_pages(&mut s).await;
+}
+
+#[tokio::test]
+async fn maze_create_enforces_per_user_cap() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::create_maze_enforces_per_user_cap(&mut s).await;
 }

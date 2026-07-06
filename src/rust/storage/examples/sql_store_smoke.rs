@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Final cleanup ────────────────────────────────────────────────────
     store.empty().await?;
-    let after = store.get_users().await?;
+    let after = store.get_users(u32::MAX, 0).await?;
     assert!(after.is_empty());
     println!("Manage::empty OK");
 

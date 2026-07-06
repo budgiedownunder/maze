@@ -1123,6 +1123,21 @@ impl FileStore {
         Ok(ids)
     }
 
+    // Loads every active (non-soft-deleted) user, sorted by username. The
+    // unbounded "load all users" primitive backing `get_users` (paged slice) and
+    // `search_users_by_username_prefix` (prefix filter) — kept private so the
+    // trait exposes only paged reads.
+    fn read_all_active_users(&self) -> Result<Vec<User>, Error> {
+        let mut users: Vec<User> = Vec::new();
+        for id in self.get_user_ids()? {
+            if let Some(user) = self.load_user_if_present(id)? {
+                users.push(user);
+            }
+        }
+        users.sort_by(|a, b| a.username.cmp(&b.username));
+        Ok(users)
+    }
+
     // Returns the maze id for a given maze name
     fn make_maze_id(&self, name: &str) -> String {
         format!("{name}.json")
@@ -1196,6 +1211,14 @@ impl FileStore {
     // Checks whether a given maze file exists
     fn maze_exists(&self, owner: &User, id: &str) -> bool {
         file_exists(&self.maze_path(owner, id))
+    }
+
+    // Counts the mazes `owner` currently owns (files in their mazes dir); 0 when
+    // the dir doesn't exist yet. Used to enforce the per-user maze cap.
+    fn count_owner_mazes(&self, owner: &User) -> usize {
+        fs::read_dir(self.get_mazes_dir(owner))
+            .map(|rd| rd.filter_map(|e| e.ok()).filter(|e| e.path().is_file()).count())
+            .unwrap_or(0)
     }
 
     // Returns the actual on-disk filename of any maze whose name matches
@@ -2154,8 +2177,9 @@ impl UserStore for FileStore {
         }
         Err(Error::UserNotFound())
     }
-    /// Returns the list of users within the store, sorted
-    /// alphabetically by username in ascending order
+    /// A page of active users, ordered by username then id, sliced to
+    /// `limit`/`offset` (pass a large `limit` for "all"). See
+    /// [`UserStore::get_users`].
     ///
     /// # Examples
     ///
@@ -2198,7 +2222,7 @@ impl UserStore for FileStore {
     ///             user.id
     ///         );
     ///         // Now attempt to load the user list and display the results
-    ///         match store.get_users().await {
+    ///         match store.get_users(10, 0).await {
     ///             Ok(users_found) => {
     ///                 println!("Successfully loaded {} users from within the file store", users_found.len());
     ///             }
@@ -2219,16 +2243,11 @@ impl UserStore for FileStore {
     /// }
     /// # });
     /// ```
-    async fn get_users(&self) -> Result<Vec<User>, Error> {
-        let ids = self.get_user_ids()?;
-        let mut users: Vec<User> = Vec::new();
-        for id in ids {
-            if let Some(user) = self.load_user_if_present(id)? {
-                users.push(user);
-            }
-        }
-        users.sort_by(|a, b| a.username.cmp(&b.username));
-        Ok(users)
+    async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, Error> {
+        // Dev-only backend: load all active users, then slice the page.
+        let mut users = self.read_all_active_users()?;
+        users.sort_by(|a, b| a.username.cmp(&b.username).then(a.id.cmp(&b.id)));
+        Ok(users.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
     /// A page of active users whose username starts with `prefix`
@@ -2279,8 +2298,7 @@ impl UserStore for FileStore {
             return Ok(Vec::new());
         }
         let mut users: Vec<User> = self
-            .get_users()
-            .await?
+            .read_all_active_users()?
             .into_iter()
             .filter(|u| u.username.to_lowercase().starts_with(&prefix))
             .collect();
@@ -2922,6 +2940,11 @@ impl MazeStore for FileStore {
     fn max_maze_cells(&self) -> Option<usize> {
         Some(MAX_MAZE_CELLS)
     }
+    /// Returns the per-user maze cap enforced on create — see
+    /// [`crate::MAX_MAZES_PER_USER`].
+    fn max_mazes_per_user(&self) -> Option<usize> {
+        Some(crate::MAX_MAZES_PER_USER)
+    }
     /// Creates a new maze within the file store instance
     ///
     /// # Examples
@@ -2986,6 +3009,11 @@ impl MazeStore for FileStore {
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         validate_maze_object_counts(&maze.definition.grid)?;
+        // Enforce the per-user maze cap before writing.
+        let count = self.count_owner_mazes(owner);
+        if count >= crate::MAX_MAZES_PER_USER {
+            return Err(Error::MazeCountLimitReached { count, max: crate::MAX_MAZES_PER_USER });
+        }
         // Reject case-insensitive name collision before writing — the
         // `write_maze_file` overwrite check uses `Path::exists`, which
         // is case-insensitive on NTFS/APFS but case-sensitive on ext4.
@@ -4162,40 +4190,6 @@ impl GameStore for FileStore {
         Ok(defs)
     }
 
-    async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
-        let mut defs: Vec<GameDefinition> = self
-            .read_all_game_definitions()?
-            .into_iter()
-            .filter(|d| d.visibility == Visibility::Curated)
-            .collect();
-        Self::sort_definitions_by_name(&mut defs);
-        Ok(defs)
-    }
-
-    async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
-        let mut defs: Vec<GameDefinition> = self
-            .read_all_game_definitions()?
-            .into_iter()
-            .filter(|d| d.visibility == Visibility::Public)
-            .collect();
-        Self::sort_definitions_by_name(&mut defs);
-        Ok(defs)
-    }
-
-    async fn get_definitions_shared_with(
-        &self,
-        user: Uuid,
-    ) -> Result<Vec<GameDefinition>, Error> {
-        let mut defs: Vec<GameDefinition> = Vec::new();
-        for def in self.read_all_game_definitions()? {
-            if self.read_game_definition_grantees(def.id)?.contains(&user) {
-                defs.push(def);
-            }
-        }
-        Self::sort_definitions_by_name(&mut defs);
-        Ok(defs)
-    }
-
     /// A page of the definitions `viewer` may see (owner ∨ curated/public ∨
     /// granted), ordered by name then id. See [`GameStore::get_visible_definitions`].
     ///
@@ -4528,40 +4522,6 @@ impl GameStore for FileStore {
         Ok(collections)
     }
 
-    async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error> {
-        let mut collections: Vec<GameCollection> = self
-            .read_all_game_collections()?
-            .into_iter()
-            .filter(|c| c.visibility == Visibility::Curated)
-            .collect();
-        Self::sort_collections_by_name(&mut collections);
-        Ok(collections)
-    }
-
-    async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error> {
-        let mut collections: Vec<GameCollection> = self
-            .read_all_game_collections()?
-            .into_iter()
-            .filter(|c| c.visibility == Visibility::Public)
-            .collect();
-        Self::sort_collections_by_name(&mut collections);
-        Ok(collections)
-    }
-
-    async fn get_collections_shared_with(
-        &self,
-        user: Uuid,
-    ) -> Result<Vec<GameCollection>, Error> {
-        let mut collections: Vec<GameCollection> = Vec::new();
-        for collection in self.read_all_game_collections()? {
-            if self.read_game_collection_grantees(collection.id)?.contains(&user) {
-                collections.push(collection);
-            }
-        }
-        Self::sort_collections_by_name(&mut collections);
-        Ok(collections)
-    }
-
     /// A page of the collections `viewer` may see, ordered by name then id — the
     /// collection counterpart of [`FileStore::get_visible_definitions`] (see there
     /// for a worked example). See [`GameStore::get_visible_collections`].
@@ -4840,7 +4800,7 @@ mod tests {
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
-        let users = store.get_users().await.expect("get_users should succeed despite orphaned directory");
+        let users = store.get_users(u32::MAX, 0).await.expect("get_users should succeed despite orphaned directory");
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].username, "valid");
     }

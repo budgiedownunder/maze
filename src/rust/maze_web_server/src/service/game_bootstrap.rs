@@ -208,7 +208,7 @@ pub async fn init_difficulty_collection(
 ) -> Result<(), StoreError> {
     // Own the curated content with the named default admin, falling back to any
     // active admin (e.g. if the default was renamed); skip if there is none yet.
-    let admins: Vec<User> = store.get_users().await?.into_iter().filter(|u| u.is_admin).collect();
+    let admins: Vec<User> = store.get_admin_users().await?;
     let admin = match admins.iter().find(|u| u.username == admin_username).or_else(|| admins.first()) {
         Some(user) => user.clone(),
         None => return Ok(()),
@@ -261,21 +261,22 @@ mod tests {
         (store, temp)
     }
 
-    async fn seed_admin(store: &mut Box<dyn Store>) {
+    async fn seed_admin(store: &mut Box<dyn Store>) -> User {
         store
             .init_default_admin_user("admin", "admin@test.local", "hash")
             .await
-            .expect("seed default admin");
+            .expect("seed default admin")
     }
 
     #[tokio::test]
     async fn seeds_the_difficulty_definitions_and_ordered_collection() {
         let (mut store, _temp) = fresh_store();
-        seed_admin(&mut store).await;
+        let admin = seed_admin(&mut store).await;
 
         init_difficulty_collection(&mut store, "admin").await.expect("bootstrap");
 
-        let defs = store.get_curated_definitions().await.expect("curated defs");
+        // The curated content is owned by the admin (the only content in the store).
+        let defs = store.get_definitions_for_owner(&admin).await.expect("admin defs");
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"Easy") && names.contains(&"Tricky") && names.contains(&"Hard"));
 
@@ -291,7 +292,7 @@ mod tests {
         assert!(easy.config.get("difficulty").is_none(), "stored config carries no difficulty tag");
 
         // The collection references the three, in easy → tricky → hard order.
-        let cols = store.get_curated_collections().await.expect("curated collections");
+        let cols = store.get_collections_for_owner(&admin).await.expect("admin collections");
         let difficulty = cols.iter().find(|c| c.name == DIFFICULTY_COLLECTION_NAME).expect("difficulty collection");
         let ordered: Vec<Uuid> = difficulty.items.iter().map(|i| i.definition_id).collect();
         let expected: Vec<Uuid> = ["Easy", "Tricky", "Hard"]
@@ -304,14 +305,14 @@ mod tests {
     #[tokio::test]
     async fn is_idempotent_across_relaunches() {
         let (mut store, _temp) = fresh_store();
-        seed_admin(&mut store).await;
+        let admin = seed_admin(&mut store).await;
 
         init_difficulty_collection(&mut store, "admin").await.expect("first launch");
         init_difficulty_collection(&mut store, "admin").await.expect("second launch");
 
-        assert_eq!(store.get_curated_definitions().await.unwrap().len(), 3);
+        assert_eq!(store.get_definitions_for_owner(&admin).await.unwrap().len(), 3);
         assert_eq!(
-            store.get_curated_collections().await.unwrap().iter()
+            store.get_collections_for_owner(&admin).await.unwrap().iter()
                 .filter(|c| c.name == DIFFICULTY_COLLECTION_NAME).count(),
             1
         );
@@ -322,6 +323,8 @@ mod tests {
         let (mut store, _temp) = fresh_store();
         // No admin seeded → nothing to own the curated content, so it is a no-op.
         init_difficulty_collection(&mut store, "admin").await.expect("no-op without admin");
-        assert!(store.get_curated_collections().await.unwrap().is_empty());
+        // Adding an admin afterwards, the earlier no-op left nothing to own.
+        let admin = seed_admin(&mut store).await;
+        assert!(store.get_collections_for_owner(&admin).await.unwrap().is_empty());
     }
 }

@@ -249,6 +249,12 @@ fn get_maze_definition_too_large_error(bytes: usize, max: usize) -> Error {
     ))
 }
 
+fn get_maze_count_limit_error(count: usize, max: usize) -> Error {
+    ErrorConflict(format!(
+        "Maze limit reached: you already own {count} mazes (max {max})"
+    ))
+}
+
 fn get_maze_too_many_objects_error(kind: &str, count: usize, max: usize) -> Error {
     ErrorUnprocessableEntity(format!(
         "Maze has too many {kind}: {count} exceeds the limit of {max}"
@@ -1808,14 +1814,47 @@ pub async fn renew(
 // Endpoint: GET /api/v1/users
 // Handler:  get_users()
 // **************************************************************************************************
+/// Page size used when the caller omits `limit` on the paged user reads
+/// (the admin user list + the username lookup).
+const USER_LIST_DEFAULT_PAGE_SIZE: u32 = 20;
+/// Hard cap on the paged user-read page size.
+const USER_LIST_MAX_PAGE_SIZE: u32 = 100;
+
+/// Query parameters for the paged admin user list.
+#[derive(Deserialize, Debug)]
+pub struct UsersListQuery {
+    /// Page size (default 20, capped at 100).
+    pub limit: Option<u32>,
+    /// Zero-based page offset (default 0).
+    pub offset: Option<u32>,
+}
+
+/// A page of the admin user list.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+pub struct UsersListResponse {
+    /// The page of users, ordered by username.
+    pub users: Vec<UserItem>,
+    /// The effective page size applied (the request's `limit` capped at the max).
+    pub limit: u32,
+    /// The zero-based offset this page started at.
+    pub offset: u32,
+    /// Whether at least one further user exists beyond this page.
+    pub has_more: bool,
+}
+
 #[utoipa::path(
-    summary = "Returns the list of registered users",
-    description = "This endpoint returns the list of register users",
+    summary = "Returns a page of registered users",
+    description = "Admin-only. Returns a page of the registered users, ordered by username, paged \
+                   via limit (server-capped) and offset with a has_more flag — the userbase is \
+                   never loaded in one shot.",
     get,
     path = "/api/v1/users",
+    params(
+        ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+    ),
     responses(
-        (status = 200, description = "User list loaded sucessfully", body=[UserItem]),
-        (status = 400, description = "Invalid request"),
+        (status = 200, description = "A page of users", body = UsersListResponse),
         (status = 401, description = "Unauthorized request")
     ),
     security(
@@ -1826,31 +1865,31 @@ pub async fn renew(
 )]
 #[get("/users")]
 pub async fn get_users(
+    query: Query<UsersListQuery>,
     req: HttpRequest,
     store: web::Data<SharedStore>
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
-    let store_users = store_lock.get_users().await.map_err(|err| {
-        get_users_fetch_internal_error(&err)
-    })?;
+    let q = query.into_inner();
+    let limit = q.limit.unwrap_or(USER_LIST_DEFAULT_PAGE_SIZE).min(USER_LIST_MAX_PAGE_SIZE);
+    let offset = q.offset.unwrap_or(0);
 
-    let user_items: Vec<UserItem> = store_users
-        .iter()
-        .map(UserItem::from_store_user)
-        .collect();
+    // Storage pages the read; over-fetch one row for `has_more`.
+    let mut store_users = store_lock
+        .get_users(limit + 1, offset)
+        .await
+        .map_err(|err| get_users_fetch_internal_error(&err))?;
+    let has_more = store_users.len() as u32 > limit;
+    store_users.truncate(limit as usize);
+    let users: Vec<UserItem> = store_users.iter().map(UserItem::from_store_user).collect();
 
-    Ok(HttpResponse::Ok().json(user_items))
+    Ok(HttpResponse::Ok().json(UsersListResponse { users, limit, offset, has_more }))
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/users/lookup
 // Handler:  lookup_users()
 // **************************************************************************************************
-
-/// Page size used when the caller omits `limit` on the user lookup.
-const USER_LOOKUP_DEFAULT_PAGE_SIZE: u32 = 20;
-/// Hard cap on the user-lookup page size.
-const USER_LOOKUP_MAX_PAGE_SIZE: u32 = 100;
 
 /// Query parameters for the username-prefix user lookup.
 #[derive(Deserialize, Debug)]
@@ -1919,7 +1958,7 @@ pub async fn lookup_users(
 ) -> Result<HttpResponse, Error> {
     let _ = get_authorized_user(&req, false)?;
     let q = query.into_inner();
-    let limit = q.limit.unwrap_or(USER_LOOKUP_DEFAULT_PAGE_SIZE).min(USER_LOOKUP_MAX_PAGE_SIZE);
+    let limit = q.limit.unwrap_or(USER_LIST_DEFAULT_PAGE_SIZE).min(USER_LIST_MAX_PAGE_SIZE);
     let offset = q.offset.unwrap_or(0);
 
     // A blank prefix returns nothing rather than enumerating every user.
@@ -2306,6 +2345,8 @@ pub async fn create_maze(
                     Err(get_maze_too_many_objects_error(kind, count, max)),
                 StoreError::MazeDefinitionTooLarge { bytes, max } =>
                     Err(get_maze_definition_too_large_error(bytes, max)),
+                StoreError::MazeCountLimitReached { count, max } =>
+                    Err(get_maze_count_limit_error(count, max)),
                 _ => Err(get_maze_create_internal_error(&err))
             }
         }

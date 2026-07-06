@@ -2251,8 +2251,9 @@ impl UserStore for SqlStore {
         }
     }
 
-    /// Returns the list of users within the store, sorted
-    /// alphabetically by username in ascending order
+    /// A page of active users, ordered by username then id, sliced to
+    /// `limit`/`offset` (pass a large `limit` for "all"). See
+    /// [`UserStore::get_users`].
     ///
     /// # Examples
     ///
@@ -2298,7 +2299,7 @@ impl UserStore for SqlStore {
     ///             user.id
     ///         );
     ///         // Now attempt to load the user list and display the results
-    ///         match store.get_users().await {
+    ///         match store.get_users(10, 0).await {
     ///             Ok(users_found) => {
     ///                 println!("Successfully loaded {} users from within the SQL store", users_found.len());
     ///             }
@@ -2319,11 +2320,13 @@ impl UserStore for SqlStore {
     /// }
     /// # });
     /// ```
-    async fn get_users(&self) -> Result<Vec<User>, Error> {
+    async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username",
+            "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username, id LIMIT ? OFFSET ?",
         ))
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
         .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -2500,7 +2503,7 @@ impl UserStore for SqlStore {
     ///
     /// Implemented as a `SELECT 1 FROM users LIMIT 1` existence probe so the
     /// engine can return on the first row it sees (index-only on the PK in
-    /// practice). Far cheaper than `get_users()` which would hydrate every
+    /// practice). Far cheaper than paging `get_users` which would hydrate every
     /// user plus their logins and oauth_identities.
     ///
     /// # Returns
@@ -3165,6 +3168,11 @@ impl MazeStore for SqlStore {
     fn max_maze_cells(&self) -> Option<usize> {
         Some(MAX_MAZE_CELLS)
     }
+    /// Returns the per-user maze cap enforced on create — see
+    /// [`crate::MAX_MAZES_PER_USER`].
+    fn max_mazes_per_user(&self) -> Option<usize> {
+        Some(crate::MAX_MAZES_PER_USER)
+    }
     /// Creates a new maze within the SQL store instance
     ///
     /// # Examples
@@ -3233,6 +3241,24 @@ impl MazeStore for SqlStore {
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         validate_maze_object_counts(&maze.definition.grid)?;
+
+        // Enforce the per-user maze cap.
+        let count: i64 = sqlx::query(&q(
+            self.kind,
+            "SELECT COUNT(*) AS c FROM mazes WHERE owner_id = ?",
+        ))
+        .bind(owner.id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?
+        .try_get("c")
+        .map_err(map_sqlx_err)?;
+        if count as usize >= crate::MAX_MAZES_PER_USER {
+            return Err(Error::MazeCountLimitReached {
+                count: count as usize,
+                max: crate::MAX_MAZES_PER_USER,
+            });
+        }
 
         let existing = sqlx::query(&q(
             self.kind,
@@ -5088,35 +5114,6 @@ impl GameStore for SqlStore {
         .await
     }
 
-    async fn get_curated_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
-        self.query_game_definitions(
-            "SELECT * FROM game_definitions WHERE visibility = ? ORDER BY LOWER(name) ASC",
-            &[Visibility::Curated.as_wire_str().to_string()],
-        )
-        .await
-    }
-
-    async fn get_public_definitions(&self) -> Result<Vec<GameDefinition>, Error> {
-        self.query_game_definitions(
-            "SELECT * FROM game_definitions WHERE visibility = ? ORDER BY LOWER(name) ASC",
-            &[Visibility::Public.as_wire_str().to_string()],
-        )
-        .await
-    }
-
-    async fn get_definitions_shared_with(
-        &self,
-        user: Uuid,
-    ) -> Result<Vec<GameDefinition>, Error> {
-        self.query_game_definitions(
-            "SELECT gd.* FROM game_definitions gd \
-             JOIN game_definition_shares s ON s.definition_id = gd.id \
-             WHERE s.grantee_user_id = ? ORDER BY LOWER(gd.name) ASC",
-            &[user.to_string()],
-        )
-        .await
-    }
-
     /// A page of the definitions `viewer` may see (owner ∨ curated/public ∨
     /// granted), ordered by name then id. See [`GameStore::get_visible_definitions`].
     ///
@@ -5619,35 +5616,6 @@ impl GameStore for SqlStore {
         self.query_game_collections(
             "SELECT * FROM game_collections WHERE owner_id = ? ORDER BY LOWER(name) ASC",
             &[owner.id.to_string()],
-        )
-        .await
-    }
-
-    async fn get_curated_collections(&self) -> Result<Vec<GameCollection>, Error> {
-        self.query_game_collections(
-            "SELECT * FROM game_collections WHERE visibility = ? ORDER BY LOWER(name) ASC",
-            &[Visibility::Curated.as_wire_str().to_string()],
-        )
-        .await
-    }
-
-    async fn get_public_collections(&self) -> Result<Vec<GameCollection>, Error> {
-        self.query_game_collections(
-            "SELECT * FROM game_collections WHERE visibility = ? ORDER BY LOWER(name) ASC",
-            &[Visibility::Public.as_wire_str().to_string()],
-        )
-        .await
-    }
-
-    async fn get_collections_shared_with(
-        &self,
-        user: Uuid,
-    ) -> Result<Vec<GameCollection>, Error> {
-        self.query_game_collections(
-            "SELECT gc.* FROM game_collections gc \
-             JOIN game_collection_shares s ON s.collection_id = gc.id \
-             WHERE s.grantee_user_id = ? ORDER BY LOWER(gc.name) ASC",
-            &[user.to_string()],
         )
         .await
     }

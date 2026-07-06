@@ -36,6 +36,7 @@ pub enum Error {
     MazeHasTooManyFeatures { keys: usize, doors: usize, max: usize },
     MazeHasTooManyObjects { kind: &'static str, count: usize, max: usize },
     MazeDefinitionTooLarge { bytes: usize, max: usize },
+    MazeCountLimitReached { count: usize, max: usize },
     GameDefinitionIdNotFound(String),
     GameDefinitionNameMissing(),
     GameDefinitionNameAlreadyExists(String),
@@ -98,6 +99,10 @@ impl std::fmt::Display for Error {
             Error::MazeDefinitionTooLarge { bytes, max } => write!(
                 f,
                 "Maze definition is too large to store: {bytes} bytes exceeds the {max}-byte limit"
+            ),
+            Error::MazeCountLimitReached { count, max } => write!(
+                f,
+                "Maze limit reached: you already own {count} mazes (max {max})"
             ),
             Error::GameDefinitionIdNotFound(id) => {
                 write!(f, "A game definition with id '{id}' was not found")

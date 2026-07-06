@@ -474,13 +474,13 @@ pub async fn get_users_returns_all_sorted_by_username(store: &mut Box<dyn Store>
     let _ = fixture_user(store, "bob", "bob@example.com").await;
     let _ = fixture_user(store, "alice", "alice@example.com").await;
 
-    let users = store.get_users().await.expect("get_users");
+    let users = store.get_users(u32::MAX, 0).await.expect("get_users");
     let names: Vec<&str> = users.iter().map(|u| u.username.as_str()).collect();
     assert_eq!(names, vec!["alice", "bob", "charlie"], "must sort by username");
 }
 
 pub async fn get_users_empty_when_store_empty(store: &mut Box<dyn Store>) {
-    let users = store.get_users().await.expect("get_users");
+    let users = store.get_users(u32::MAX, 0).await.expect("get_users");
     assert!(users.is_empty(), "got {} users on empty store", users.len());
 }
 
@@ -519,7 +519,7 @@ pub async fn init_default_admin_creates_first_time(store: &mut Box<dyn Store>) {
     assert_eq!(admin.username, "admin");
     assert!(admin.is_admin);
 
-    let users = store.get_users().await.expect("get_users");
+    let users = store.get_users(u32::MAX, 0).await.expect("get_users");
     assert_eq!(users.len(), 1);
 }
 
@@ -534,7 +534,7 @@ pub async fn init_default_admin_is_idempotent(store: &mut Box<dyn Store>) {
         .expect("second call must not error");
     assert_eq!(first.id, second.id, "second call must return the existing admin");
 
-    let users = store.get_users().await.expect("get_users");
+    let users = store.get_users(u32::MAX, 0).await.expect("get_users");
     assert_eq!(users.len(), 1, "no duplicate admin should be created");
 }
 
@@ -1168,7 +1168,7 @@ pub async fn get_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "alice", "alice@example.com").await;
     let _bob = fixture_user(store, "bob", "bob@example.com").await;
     store.delete_user(alice.id).await.expect("soft-delete");
-    let users = store.get_users().await.expect("get_users");
+    let users = store.get_users(u32::MAX, 0).await.expect("get_users");
     let names: Vec<&str> = users.iter().map(|u| u.username.as_str()).collect();
     assert_eq!(names, vec!["bob"], "soft-deleted alice must not appear");
 }
@@ -2025,7 +2025,7 @@ pub async fn empty_clears_all_data(store: &mut Box<dyn Store>) {
     // get_maze_items for the deleted user — FileStore reasonably errors
     // when the user's mazes directory no longer exists. The user-list
     // assertion is sufficient: no users → no mazes (mazes are owned).
-    assert!(store.get_users().await.expect("get_users").is_empty());
+    assert!(store.get_users(u32::MAX, 0).await.expect("get_users").is_empty());
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2604,9 +2604,7 @@ pub async fn delete_game_definition_is_owner_scoped(store: &mut Box<dyn Store>) 
     assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn definition_list_reads_scope_by_owner_and_visibility(
-    store: &mut Box<dyn Store>,
-) {
+pub async fn definition_owner_list_scopes_and_sorts(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "gd_alice", "gd_alice@example.com").await;
     let bob = fixture_user(store, "gd_bob", "gd_bob@example.com").await;
     for (name, vis) in [
@@ -2617,34 +2615,24 @@ pub async fn definition_list_reads_scope_by_owner_and_visibility(
         let mut d = make_game_definition(name, vis);
         store.create_game_definition(&alice, &mut d).await.expect("alice def");
     }
-    let mut b = make_game_definition("Bravo", Visibility::Public); // same name, different owner is fine
+    let mut b = make_game_definition("Zeta", Visibility::Public);
     store.create_game_definition(&bob, &mut b).await.expect("bob def");
 
+    // The owner list carries all of alice's definitions (every visibility, drafts
+    // included), sorted by name — and none of bob's.
     let alice_own = store.get_definitions_for_owner(&alice).await.expect("owner list");
     let alice_names: Vec<&str> = alice_own.iter().map(|d| d.name.as_str()).collect();
     assert_eq!(alice_names, ["Alpha", "Bravo", "Charlie"], "owner list, sorted by name");
-    assert!(alice_own.iter().all(|d| d.owner_id == alice.id));
-
-    let public = store.get_public_definitions().await.expect("public list");
-    let public_owners: Vec<Uuid> = public.iter().map(|d| d.owner_id).collect();
-    assert!(public.iter().all(|d| d.visibility == Visibility::Public));
-    assert!(public_owners.contains(&alice.id) && public_owners.contains(&bob.id),
-        "public list spans owners");
-
-    let curated = store.get_curated_definitions().await.expect("curated list");
-    assert_eq!(curated.len(), 1);
-    assert_eq!(curated[0].name, "Charlie");
-    assert_eq!(curated[0].visibility, Visibility::Curated);
+    assert!(alice_own.iter().all(|d| d.owner_id == alice.id), "scoped to the owner");
 }
 
-pub async fn definition_grants_control_shared_with(store: &mut Box<dyn Store>) {
+pub async fn definition_grants_update_grantees(store: &mut Box<dyn Store>) {
     let owner = fixture_user(store, "gd_owner", "gd_owner@example.com").await;
     let friend = fixture_user(store, "gd_friend", "gd_friend@example.com").await;
     let mut def = make_game_definition("Shared", Visibility::Shared);
     store.create_game_definition(&owner, &mut def).await.expect("create");
 
     assert!(store.get_definition_grantees(def.id).await.expect("grantees").is_empty());
-    assert!(store.get_definitions_shared_with(friend.id).await.expect("shared").is_empty());
 
     // A non-owner cannot grant.
     let err = store
@@ -2653,26 +2641,13 @@ pub async fn definition_grants_control_shared_with(store: &mut Box<dyn Store>) {
         .expect_err("non-owner grant must be rejected");
     assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
 
-    store
-        .grant_definition_access(&owner, def.id, friend.id)
-        .await
-        .expect("grant");
+    store.grant_definition_access(&owner, def.id, friend.id).await.expect("grant");
     // Idempotent.
-    store
-        .grant_definition_access(&owner, def.id, friend.id)
-        .await
-        .expect("grant again");
+    store.grant_definition_access(&owner, def.id, friend.id).await.expect("grant again");
     assert_eq!(store.get_definition_grantees(def.id).await.expect("grantees"), vec![friend.id]);
-    let shared = store.get_definitions_shared_with(friend.id).await.expect("shared");
-    assert_eq!(shared.len(), 1);
-    assert_eq!(shared[0].id, def.id);
 
-    store
-        .revoke_definition_access(&owner, def.id, friend.id)
-        .await
-        .expect("revoke");
+    store.revoke_definition_access(&owner, def.id, friend.id).await.expect("revoke");
     assert!(store.get_definition_grantees(def.id).await.expect("grantees").is_empty());
-    assert!(store.get_definitions_shared_with(friend.id).await.expect("shared").is_empty());
 }
 
 pub async fn delete_user_cascades_to_game_definitions(store: &mut Box<dyn Store>) {
@@ -2864,9 +2839,7 @@ pub async fn collection_items_add_remove_and_reorder(store: &mut Box<dyn Store>)
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn collection_list_reads_scope_by_owner_and_visibility(
-    store: &mut Box<dyn Store>,
-) {
+pub async fn collection_owner_list_scopes_and_sorts(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "col_alice", "col_alice@example.com").await;
     let bob = fixture_user(store, "col_bob", "col_bob@example.com").await;
     for (name, vis) in [
@@ -2877,7 +2850,7 @@ pub async fn collection_list_reads_scope_by_owner_and_visibility(
         let mut c = make_game_collection(name, vis);
         store.create_game_collection(&alice, &mut c).await.expect("alice collection");
     }
-    let mut b = make_game_collection("Bravo", Visibility::Public); // same name, other owner is fine
+    let mut b = make_game_collection("Zeta", Visibility::Public);
     store.create_game_collection(&bob, &mut b).await.expect("bob collection");
 
     let alice_own = store.get_collections_for_owner(&alice).await.expect("owner list");
@@ -2886,28 +2859,16 @@ pub async fn collection_list_reads_scope_by_owner_and_visibility(
         ["Alpha", "Bravo", "Charlie"],
         "owner list, sorted by name",
     );
-
-    let public = store.get_public_collections().await.expect("public list");
-    assert!(public.iter().all(|c| c.visibility == Visibility::Public));
-    let public_owners: Vec<Uuid> = public.iter().map(|c| c.owner_id).collect();
-    assert!(
-        public_owners.contains(&alice.id) && public_owners.contains(&bob.id),
-        "public list spans owners",
-    );
-
-    let curated = store.get_curated_collections().await.expect("curated list");
-    assert_eq!(curated.len(), 1);
-    assert_eq!(curated[0].name, "Charlie");
+    assert!(alice_own.iter().all(|c| c.owner_id == alice.id), "scoped to the owner");
 }
 
-pub async fn collection_grants_control_shared_with(store: &mut Box<dyn Store>) {
+pub async fn collection_grants_update_grantees(store: &mut Box<dyn Store>) {
     let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
     let friend = fixture_user(store, "col_friend", "col_friend@example.com").await;
     let mut collection = make_game_collection("Shared", Visibility::Shared);
     store.create_game_collection(&owner, &mut collection).await.expect("create");
 
     assert!(store.get_collection_grantees(collection.id).await.expect("grantees").is_empty());
-    assert!(store.get_collections_shared_with(friend.id).await.expect("shared").is_empty());
 
     // Non-owner cannot grant.
     let err = store
@@ -2922,13 +2883,46 @@ pub async fn collection_grants_control_shared_with(store: &mut Box<dyn Store>) {
         store.get_collection_grantees(collection.id).await.expect("grantees"),
         vec![friend.id],
     );
-    let shared = store.get_collections_shared_with(friend.id).await.expect("shared");
-    assert_eq!(shared.len(), 1);
-    assert_eq!(shared[0].id, collection.id);
 
     store.revoke_collection_access(&owner, collection.id, friend.id).await.expect("revoke");
     assert!(store.get_collection_grantees(collection.id).await.expect("grantees").is_empty());
-    assert!(store.get_collections_shared_with(friend.id).await.expect("shared").is_empty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore::get_users (paging) + MazeStore per-user maze cap
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn get_users_orders_and_pages(store: &mut Box<dyn Store>) {
+    for name in ["carol", "alice", "bob"] {
+        fixture_user(store, name, &format!("{name}@example.com")).await;
+    }
+    // Full list, ordered by username.
+    let all = store.get_users(100, 0).await.expect("list");
+    assert_eq!(
+        all.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(),
+        vec!["alice", "bob", "carol"]
+    );
+    // Paged.
+    let page1 = store.get_users(2, 0).await.expect("page1");
+    assert_eq!(page1.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), vec!["alice", "bob"]);
+    let page2 = store.get_users(2, 2).await.expect("page2");
+    assert_eq!(page2.iter().map(|u| u.username.as_str()).collect::<Vec<_>>(), vec!["carol"]);
+}
+
+pub async fn create_maze_enforces_per_user_cap(store: &mut Box<dyn Store>) {
+    // Both backends report the same product cap.
+    let cap = store.max_mazes_per_user().expect("both stores report a per-user maze cap");
+    let owner = fixture_user(store, "cap_owner", "cap_owner@example.com").await;
+
+    // Filling right up to the cap is allowed…
+    for i in 0..cap {
+        let mut m = make_maze(&format!("maze_{i}"));
+        store.create_maze(&owner, &mut m).await.expect("create under cap");
+    }
+    // …the next one is refused.
+    let mut over = make_maze("one_too_many");
+    let err = store.create_maze(&owner, &mut over).await.expect_err("over-cap create must be rejected");
+    assert!(matches!(err, Error::MazeCountLimitReached { .. }), "got {err:?}");
 }
 
 pub async fn delete_user_cascades_to_game_collections(store: &mut Box<dyn Store>) {
