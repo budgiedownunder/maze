@@ -4075,6 +4075,14 @@ impl ScoreStore for FileStore {
 
 #[async_trait]
 impl GameStore for FileStore {
+    fn max_definitions_per_user(&self) -> Option<usize> {
+        Some(crate::MAX_DEFINITIONS_PER_USER)
+    }
+
+    fn max_collections_per_user(&self) -> Option<usize> {
+        Some(crate::MAX_COLLECTIONS_PER_USER)
+    }
+
     async fn create_game_definition(
         &mut self,
         owner: &User,
@@ -4090,6 +4098,11 @@ impl GameStore for FileStore {
             .is_some()
         {
             return Err(Error::GameDefinitionNameAlreadyExists(definition.name.clone()));
+        }
+        // Enforce the per-user definition cap.
+        let count = self.read_all_game_definitions()?.iter().filter(|d| d.owner_id == owner.id).count();
+        if count >= crate::MAX_DEFINITIONS_PER_USER {
+            return Err(Error::GameDefinitionCountLimitReached { count, max: crate::MAX_DEFINITIONS_PER_USER });
         }
         definition.owner_id = owner.id;
         if definition.id.is_nil() {
@@ -4363,6 +4376,11 @@ impl GameStore for FileStore {
             .is_some()
         {
             return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+        }
+        // Enforce the per-user collection cap.
+        let count = self.read_all_game_collections()?.iter().filter(|c| c.owner_id == owner.id).count();
+        if count >= crate::MAX_COLLECTIONS_PER_USER {
+            return Err(Error::GameCollectionCountLimitReached { count, max: crate::MAX_COLLECTIONS_PER_USER });
         }
         collection.owner_id = owner.id;
         if collection.id.is_nil() {

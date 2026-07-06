@@ -210,6 +210,9 @@ fn map_write_error(err: StoreError) -> Error {
         StoreError::GameCollectionNameAlreadyExists(name) => {
             ErrorConflict(format!("A game collection named '{name}' already exists"))
         }
+        StoreError::GameCollectionCountLimitReached { count, max } => ErrorConflict(format!(
+            "Game collection limit reached: you already own {count} collections (max {max})"
+        )),
         other => {
             log::warn!("game collection store error: {other}");
             ErrorInternalServerError("Failed to store game collection")

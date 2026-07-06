@@ -4906,6 +4906,14 @@ impl SqlStore {
 
 #[async_trait]
 impl GameStore for SqlStore {
+    fn max_definitions_per_user(&self) -> Option<usize> {
+        Some(crate::MAX_DEFINITIONS_PER_USER)
+    }
+
+    fn max_collections_per_user(&self) -> Option<usize> {
+        Some(crate::MAX_COLLECTIONS_PER_USER)
+    }
+
     async fn create_game_definition(
         &mut self,
         owner: &User,
@@ -4928,6 +4936,24 @@ impl GameStore for SqlStore {
         .map_err(map_sqlx_err)?;
         if existing.is_some() {
             return Err(Error::GameDefinitionNameAlreadyExists(definition.name.clone()));
+        }
+
+        // Enforce the per-user definition cap.
+        let count: i64 = sqlx::query(&q(
+            self.kind,
+            "SELECT COUNT(*) AS c FROM game_definitions WHERE owner_id = ?",
+        ))
+        .bind(owner.id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?
+        .try_get("c")
+        .map_err(map_sqlx_err)?;
+        if count as usize >= crate::MAX_DEFINITIONS_PER_USER {
+            return Err(Error::GameDefinitionCountLimitReached {
+                count: count as usize,
+                max: crate::MAX_DEFINITIONS_PER_USER,
+            });
         }
 
         definition.owner_id = owner.id;
@@ -5383,6 +5409,24 @@ impl GameStore for SqlStore {
         .map_err(map_sqlx_err)?;
         if existing.is_some() {
             return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+        }
+
+        // Enforce the per-user collection cap.
+        let count: i64 = sqlx::query(&q(
+            self.kind,
+            "SELECT COUNT(*) AS c FROM game_collections WHERE owner_id = ?",
+        ))
+        .bind(owner.id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?
+        .try_get("c")
+        .map_err(map_sqlx_err)?;
+        if count as usize >= crate::MAX_COLLECTIONS_PER_USER {
+            return Err(Error::GameCollectionCountLimitReached {
+                count: count as usize,
+                max: crate::MAX_COLLECTIONS_PER_USER,
+            });
         }
 
         collection.owner_id = owner.id;

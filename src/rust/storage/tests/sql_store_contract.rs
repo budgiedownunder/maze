@@ -1095,3 +1095,15 @@ async fn maze_create_enforces_per_user_cap() {
     let mut s = fresh_store().await;
     contract::create_maze_enforces_per_user_cap(&mut s).await;
 }
+
+#[tokio::test]
+async fn game_stores_report_per_user_caps() {
+    let mut s = fresh_store().await;
+    contract::game_stores_report_per_user_caps(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_create_enforces_per_user_cap() {
+    let mut s = fresh_store().await;
+    contract::create_game_collection_enforces_per_user_cap(&mut s).await;
+}

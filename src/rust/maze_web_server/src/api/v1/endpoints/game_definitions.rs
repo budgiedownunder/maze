@@ -264,6 +264,9 @@ fn map_write_error(err: StoreError) -> Error {
         StoreError::GameDefinitionConfigTooLarge { bytes, max } => ErrorBadRequest(format!(
             "Game definition config is too large ({bytes} bytes; max {max})"
         )),
+        StoreError::GameDefinitionCountLimitReached { count, max } => ErrorConflict(format!(
+            "Game definition limit reached: you already own {count} definitions (max {max})"
+        )),
         other => {
             log::warn!("game definition store error: {other}");
             ErrorInternalServerError("Failed to store game definition")

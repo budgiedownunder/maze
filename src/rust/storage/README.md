@@ -254,7 +254,13 @@ Each `MazeStore` impl reports the maximum number of cells (`rows × cols`) it wi
 
 The cell-count cap assumes plain single-character cells. Per-cell **entity overrides** (an enemy/health/key/door cell serialised as `[{"type":"E",…}]` rather than the bare `"E"`) can inflate individual cells well beyond that, so a maze can sit under the cell-count cap yet still overflow the column. `SqlStore` therefore also enforces an authoritative **byte cap** — `SqlStore::MAX_MAZE_DEFINITION_BYTES = 16_000`, matching the `mazes.definition VARCHAR(16000)` column — on the exact serialised string about to be written. An over-cap maze is refused with `Error::MazeDefinitionTooLarge { bytes, max }` (surfaced by the server as HTTP 422) before the database sees it, rather than being silently truncated. `FileStore` keeps only the cell-count cap (its JSON files have no column-width limit). An optional per-maze `game_settings` object (the 3D launch environment) rides the same serialised `Maze` blob, so it likewise counts toward this byte cap — negligible in practice, being a small fixed object relative to the grid.
 
-Independently of the *size* caps above, both stores also cap the **number of mazes one user may own** at `MAX_MAZES_PER_USER` (= 500), reported by `MazeStore::max_mazes_per_user() -> Option<usize>` and enforced in `create_maze` (an over-cap save is refused with `Error::MazeCountLimitReached { count, max }`, surfaced by the server as HTTP 409). Unlike the backend-specific size caps, this is a single **product** limit shared across backends — it keeps a user's maze list (`get_maze_items`) bounded.
+Independently of the *size* caps above, both stores also cap the **number of items one user may own**, to keep the per-user list reads (`get_maze_items` / `get_definitions_for_owner` / `get_collections_for_owner`) bounded. Each is a single **product** limit shared across backends (unlike the backend-specific size caps), reported by a `max_*_per_user() -> Option<usize>` trait method and enforced on create (an over-cap save is refused with a dedicated `Error` variant, surfaced by the server as HTTP **409**):
+
+| Entity | Constant | Cap | Reported by | Enforced in | Error |
+|:---|:---|:--:|:---|:---|:---|
+| Mazes | `MAX_MAZES_PER_USER` | 500 | `MazeStore::max_mazes_per_user` | `create_maze` | `MazeCountLimitReached` |
+| Game definitions | `MAX_DEFINITIONS_PER_USER` | 500 | `GameStore::max_definitions_per_user` | `create_game_definition` | `GameDefinitionCountLimitReached` |
+| Game collections | `MAX_COLLECTIONS_PER_USER` | 100 | `GameStore::max_collections_per_user` | `create_game_collection` | `GameCollectionCountLimitReached` |
 
 
 ## Maze object-count caps

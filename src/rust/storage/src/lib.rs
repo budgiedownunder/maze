@@ -15,6 +15,8 @@ pub use sql_store::{SqlStore, SqlStoreConfig};
 pub use store::EmailAuditLog;
 pub use store::GameStore;
 pub use store::Manage;
+pub use store::MAX_COLLECTIONS_PER_USER;
+pub use store::MAX_DEFINITIONS_PER_USER;
 pub use store::MAX_GAME_DEFINITION_CONFIG_BYTES;
 pub use store::MAX_MAZES_PER_USER;
 pub use store::MazeItem;

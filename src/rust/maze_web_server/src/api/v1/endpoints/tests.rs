@@ -963,8 +963,21 @@ mod test_definitions {
         }
     }
 
+    /// Small per-user game caps for the MockStore — above what any handler test
+    /// creates for one user, but low enough that the cap tests can fill to them.
+    const MOCK_MAX_DEFINITIONS_PER_USER: usize = 10;
+    const MOCK_MAX_COLLECTIONS_PER_USER: usize = 10;
+
     #[async_trait]
     impl GameStore for MockStore {
+        fn max_definitions_per_user(&self) -> Option<usize> {
+            Some(MOCK_MAX_DEFINITIONS_PER_USER)
+        }
+
+        fn max_collections_per_user(&self) -> Option<usize> {
+            Some(MOCK_MAX_COLLECTIONS_PER_USER)
+        }
+
         // ── Definitions ──
 
         async fn create_game_definition(&mut self, owner: &User, definition: &mut GameDefinition) -> Result<(), StoreError> {
@@ -973,6 +986,10 @@ mod test_definitions {
             }
             if self.game_definitions.iter().any(|d| d.owner_id == owner.id && d.name.eq_ignore_ascii_case(&definition.name)) {
                 return Err(StoreError::GameDefinitionNameAlreadyExists(definition.name.clone()));
+            }
+            let count = self.game_definitions.iter().filter(|d| d.owner_id == owner.id).count();
+            if count >= MOCK_MAX_DEFINITIONS_PER_USER {
+                return Err(StoreError::GameDefinitionCountLimitReached { count, max: MOCK_MAX_DEFINITIONS_PER_USER });
             }
             definition.owner_id = owner.id;
             if definition.id.is_nil() {
@@ -1084,6 +1101,10 @@ mod test_definitions {
             }
             if self.game_collections.iter().any(|c| c.owner_id == owner.id && c.name.eq_ignore_ascii_case(&collection.name)) {
                 return Err(StoreError::GameCollectionNameAlreadyExists(collection.name.clone()));
+            }
+            let count = self.game_collections.iter().filter(|c| c.owner_id == owner.id).count();
+            if count >= MOCK_MAX_COLLECTIONS_PER_USER {
+                return Err(StoreError::GameCollectionCountLimitReached { count, max: MOCK_MAX_COLLECTIONS_PER_USER });
             }
             collection.owner_id = owner.id;
             if collection.id.is_nil() {
@@ -9015,6 +9036,38 @@ mod test_definitions {
         // The next create via the API is refused with 409.
         let over = new_solvable_maze("over.json", "over");
         let req = create_test_post_request("/api/v1/mazes", Some(user.api_key), None, Some(&over));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn create_game_definition_returns_409_at_cap() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+
+        // Fill the user up to the MockStore definition cap.
+        for i in 0..MOCK_MAX_DEFINITIONS_PER_USER {
+            seed_game_definition(&store, &owner, &format!("D{i}"), Visibility::Private, Rotation::Static).await;
+        }
+        // The next create via the API is refused with 409.
+        let body = definition_request("Over", Visibility::Private, Rotation::Static);
+        let req = create_test_post_request("/api/v1/game-definitions", Some(owner.api_key), None, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn create_game_collection_returns_409_at_cap() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+
+        for i in 0..MOCK_MAX_COLLECTIONS_PER_USER {
+            seed_game_collection(&store, &owner, &format!("C{i}"), Visibility::Private).await;
+        }
+        let body = collection_request("Over", Visibility::Private);
+        let req = create_test_post_request("/api/v1/game-collections", Some(owner.api_key), None, Some(&body));
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
     }
 }

@@ -469,6 +469,16 @@ pub const MAX_GAME_DEFINITION_CONFIG_BYTES: usize = 4_000;
 /// [`MazeStore::max_mazes_per_user`] and enforce it on `create_maze`.
 pub const MAX_MAZES_PER_USER: usize = 500;
 
+/// The maximum number of game definitions one user may own — a product limit
+/// (like [`MAX_MAZES_PER_USER`]) reported by [`GameStore::max_definitions_per_user`]
+/// and enforced on `create_game_definition`.
+pub const MAX_DEFINITIONS_PER_USER: usize = 500;
+
+/// The maximum number of game collections one user may own — a product limit
+/// reported by [`GameStore::max_collections_per_user`] and enforced on
+/// `create_game_collection`.
+pub const MAX_COLLECTIONS_PER_USER: usize = 100;
+
 /// Represents a store for holding parametric 3D game definitions (and, later,
 /// game collections — one trait keeps all game facts together). Mutations are
 /// owner-scoped exactly like [`MazeStore`]; reads come in owner / curated /
@@ -480,9 +490,21 @@ pub const MAX_MAZES_PER_USER: usize = 500;
 /// caller).
 #[async_trait]
 pub trait GameStore {
+    /// The maximum number of game definitions one user may own, or `None` for no
+    /// cap. Enforced on `create_game_definition`. A product limit, the same across
+    /// backends (see [`MAX_DEFINITIONS_PER_USER`]).
+    fn max_definitions_per_user(&self) -> Option<usize> {
+        None
+    }
+    /// The maximum number of game collections one user may own, or `None` for no
+    /// cap. Enforced on `create_game_collection` (see [`MAX_COLLECTIONS_PER_USER`]).
+    fn max_collections_per_user(&self) -> Option<usize> {
+        None
+    }
     /// Adds a new game definition, assigning `id` (if unset), `owner_id`, and
     /// the create/update timestamps within the object. Rejects an empty name,
-    /// a per-owner name collision, or an over-cap `config`.
+    /// a per-owner name collision, an over-cap `config`, or exceeding
+    /// [`Self::max_definitions_per_user`].
     async fn create_game_definition(
         &mut self,
         owner: &User,

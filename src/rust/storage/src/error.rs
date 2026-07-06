@@ -41,9 +41,11 @@ pub enum Error {
     GameDefinitionNameMissing(),
     GameDefinitionNameAlreadyExists(String),
     GameDefinitionConfigTooLarge { bytes: usize, max: usize },
+    GameDefinitionCountLimitReached { count: usize, max: usize },
     GameCollectionIdNotFound(String),
     GameCollectionNameMissing(),
     GameCollectionNameAlreadyExists(String),
+    GameCollectionCountLimitReached { count: usize, max: usize },
     DataModelError(DataModelError),
     Io(std::io::Error),
     SerdeJson(serde_json::Error),
@@ -117,6 +119,10 @@ impl std::fmt::Display for Error {
                 f,
                 "Game definition config is too large to store: {bytes} bytes exceeds the {max}-byte limit"
             ),
+            Error::GameDefinitionCountLimitReached { count, max } => write!(
+                f,
+                "Game definition limit reached: you already own {count} definitions (max {max})"
+            ),
             Error::GameCollectionIdNotFound(id) => {
                 write!(f, "A game collection with id '{id}' was not found")
             }
@@ -126,6 +132,10 @@ impl std::fmt::Display for Error {
             Error::GameCollectionNameAlreadyExists(name) => {
                 write!(f, "A game collection with the name '{name}' already exists")
             }
+            Error::GameCollectionCountLimitReached { count, max } => write!(
+                f,
+                "Game collection limit reached: you already own {count} collections (max {max})"
+            ),
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),
             Error::SerdeJson(error) => write!(f, "{error}"),

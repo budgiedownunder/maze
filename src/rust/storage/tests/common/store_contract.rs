@@ -2925,6 +2925,27 @@ pub async fn create_maze_enforces_per_user_cap(store: &mut Box<dyn Store>) {
     assert!(matches!(err, Error::MazeCountLimitReached { .. }), "got {err:?}");
 }
 
+/// Both backends report the product caps. The definition cap is high enough
+/// (500) that filling to it against a FileStore is O(n²) and needlessly slow, so
+/// the *rejection* path is exercised by `create_game_collection_enforces_per_user_cap`
+/// (identical count-on-create code, cheaper cap) + the server handler tests.
+pub async fn game_stores_report_per_user_caps(store: &mut Box<dyn Store>) {
+    assert_eq!(store.max_definitions_per_user(), Some(storage::MAX_DEFINITIONS_PER_USER));
+    assert_eq!(store.max_collections_per_user(), Some(storage::MAX_COLLECTIONS_PER_USER));
+}
+
+pub async fn create_game_collection_enforces_per_user_cap(store: &mut Box<dyn Store>) {
+    let cap = store.max_collections_per_user().expect("both stores report a collection cap");
+    let owner = fixture_user(store, "colcap_owner", "colcap_owner@example.com").await;
+    for i in 0..cap {
+        let mut c = make_game_collection(&format!("Col {i}"), Visibility::Private);
+        store.create_game_collection(&owner, &mut c).await.expect("create under cap");
+    }
+    let mut over = make_game_collection("One Too Many", Visibility::Private);
+    let err = store.create_game_collection(&owner, &mut over).await.expect_err("over-cap create must be rejected");
+    assert!(matches!(err, Error::GameCollectionCountLimitReached { .. }), "got {err:?}");
+}
+
 pub async fn delete_user_cascades_to_game_collections(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "col_alice", "col_alice@example.com").await;
     let bob = fixture_user(store, "col_bob", "col_bob@example.com").await;
