@@ -692,6 +692,26 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 
 - **Leaderboard subject** is per-definition: a `static` game uses its fixed seed and the key `def:<id>`; a `daily` game folds today's UTC date into both the seed and the key (`def:<id>:<yyyy-mm-dd>`), so each day gets a fresh, comparable board. `leaderboardTracked` is `true` once the definition is published (`public`, `curated`, or `shared` with at least one grantee).
 
+## Game collections
+
+A **game collection** is an ordered, presentation-only grouping of game definitions — it does not affect generation or scoring (leaderboards stay per-definition). Membership is order-only: an item is just a `definitionId` + position, and each game's name/description/image is intrinsic to its definition and shared across every collection it appears in.
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `POST`   | `/api/v1/game-collections` | Either | Create a collection (metadata only — `name`, `description`, `visibility`; starts empty). Setting `visibility = "curated"` requires an admin. |
+| `GET`    | `/api/v1/game-collections` | Either | List the collections the caller may see — own + shared-with-me + public + curated — de-duplicated, ordered by name. Paged via `limit` (default 20, capped at 100) / `offset`; echoes the effective `limit`/`offset` + a `hasMore` flag. |
+| `GET`    | `/api/v1/game-collections/{id}` | Either | Fetch one accessible collection (owner ∨ curated ∨ public ∨ granted; otherwise `404`) with its member definitions **hydrated, in order, and filtered to what the viewer may access** — a public collection never exposes a private member, and refs to since-deleted definitions are dropped. |
+| `PUT`    | `/api/v1/game-collections/{id}` | Either | Update a collection's metadata the caller owns (membership + image unchanged). |
+| `DELETE` | `/api/v1/game-collections/{id}` | Either | Delete a collection the caller owns (its member definitions are untouched). |
+| `POST`   | `/api/v1/game-collections/{id}/items` | Either | Append a game (body `{ "definitionId": … }`); returns the updated collection. Idempotent. |
+| `DELETE` | `/api/v1/game-collections/{id}/items/{definitionId}` | Either | Remove a game; returns the updated collection. Idempotent. |
+| `PUT`    | `/api/v1/game-collections/{id}/items/reorder` | Either | Rewrite member order (body `{ "ordered": [definitionId, …] }`); returns the updated collection. |
+| `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns. |
+| `PUT`    | `/api/v1/game-collections/{id}/shares` | Either | Grant a user access (body `{ "userId": … }`); returns the updated grantee list. Idempotent. |
+| `DELETE` | `/api/v1/game-collections/{id}/shares/{grantee}` | Either | Revoke a user's access; returns the updated grantee list. Idempotent. |
+
+- A collection's `visibility` gates the **grouping**; each member still enforces its own access, so the detail endpoint filters the member list per viewer. Membership stores only references — a ref to an inaccessible or since-deleted definition is simply skipped at detail time (dangling refs are tolerated).
+
 ## Game
 
 The 3D maze game (Bevy / WASM, served from `/game/`) fetches its session config at startup from the server, so a single edit to `config.toml` propagates to every client without a rebuild:

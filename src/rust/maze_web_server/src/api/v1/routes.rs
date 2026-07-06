@@ -1,6 +1,6 @@
 use actix_web::web;
 use actix_web::middleware::from_fn;
-use crate::api::v1::endpoints::{auth_reset, avatar, email_verification, game_definitions, handlers, scores, user_emails};
+use crate::api::v1::endpoints::{auth_reset, avatar, email_verification, game_collections, game_definitions, handlers, scores, user_emails};
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -42,6 +42,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(game_definitions::get_game_definition)
                 .service(game_definitions::update_game_definition)
                 .service(game_definitions::delete_game_definition)
+                // Game collections (ordered groupings of definitions)
+                .service(game_collections::create_game_collection)
+                .service(game_collections::list_game_collections)
+                .service(game_collections::reorder_collection_items)
+                .service(game_collections::add_collection_item)
+                .service(game_collections::remove_collection_item)
+                .service(game_collections::list_collection_shares)
+                .service(game_collections::grant_collection_share)
+                .service(game_collections::revoke_collection_share)
+                .service(game_collections::get_game_collection)
+                .service(game_collections::update_game_collection)
+                .service(game_collections::delete_game_collection)
                 // Scores
                 .service(scores::record_score)
                 .service(scores::get_my_history)

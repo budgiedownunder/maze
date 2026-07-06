@@ -19,6 +19,7 @@ mod test_definitions {
     use chrono::{DateTime, Utc};
     use data_model::{CollectionItem, GameCollection, GameDefinition, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
     use crate::api::v1::endpoints::game_definitions::{DefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GrantShareRequest};
+    use crate::api::v1::endpoints::game_collections::{AddCollectionItemRequest, CollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, ReorderCollectionItemsRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
@@ -8453,5 +8454,252 @@ mod test_definitions {
         // A non-owner cannot grant on someone else's definition.
         let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None, &grant);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    // ****************************************************************************
+    // Game-collection endpoint tests (CRUD + membership + shares + detail filter)
+    // ****************************************************************************
+
+    fn collection_request(name: &str, visibility: Visibility) -> GameCollectionRequest {
+        GameCollectionRequest {
+            name: name.to_string(),
+            description: None,
+            visibility,
+        }
+    }
+
+    /// Seeds an empty collection straight into the store, returning it with its
+    /// minted id.
+    async fn seed_game_collection(
+        store: &SharedStore,
+        owner: &User,
+        name: &str,
+        visibility: Visibility,
+    ) -> GameCollection {
+        let now = Utc::now();
+        let mut collection = GameCollection {
+            id: Uuid::nil(),
+            owner_id: Uuid::nil(),
+            name: name.to_string(),
+            visibility,
+            description: None,
+            image_updated_at: None,
+            items: Vec::new(),
+            created_at: now,
+            updated_at: now,
+        };
+        store.write().await.create_game_collection(owner, &mut collection).await.expect("seed collection");
+        collection
+    }
+
+    async fn add_collection_member(store: &SharedStore, owner: &User, collection_id: Uuid, definition_id: Uuid) {
+        store.write().await.add_collection_item(owner, collection_id, definition_id).await.expect("add item");
+    }
+
+    /// The ordered member ids of a `GameCollection` JSON response body.
+    fn collection_item_ids(collection: &GameCollection) -> Vec<Uuid> {
+        collection.items.iter().map(|i| i.definition_id).collect()
+    }
+
+    /// The ordered member definition ids of a collection-detail JSON body.
+    fn detail_definition_ids(body: &serde_json::Value) -> Vec<String> {
+        body["definitions"]
+            .as_array()
+            .expect("definitions array")
+            .iter()
+            .map(|d| d["id"].as_str().expect("id").to_string())
+            .collect()
+    }
+
+    #[actix_web::test]
+    async fn create_game_collection_defaults_and_rejects_duplicate_and_gates_curated() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        // Create → 201, empty, owned by the caller.
+        let body = collection_request("My Set", Visibility::Private);
+        let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let created: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert!(!created.id.is_nil());
+        assert_eq!(created.owner_id, owner.id);
+        assert!(created.items.is_empty());
+
+        // Duplicate name for the same owner → 409.
+        let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
+
+        // Curated requires an admin.
+        let curated = collection_request("Featured", Visibility::Curated);
+        let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&curated));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+        let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let req = create_test_post_request("/api/v1/game-collections", Some(admin_key), None, Some(&curated));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+    }
+
+    #[actix_web::test]
+    async fn game_collection_detail_filters_members_to_the_viewer() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        // A public collection owned by `owner` with four members, added in order.
+        let collection = seed_game_collection(&store, &owner, "Mixed", Visibility::Public).await;
+        let def_public = seed_game_definition(&store, &owner, "Pub", Visibility::Public, Rotation::Static).await;
+        let def_owner_private = seed_game_definition(&store, &owner, "OwnerPriv", Visibility::Private, Rotation::Static).await;
+        let def_other_private = seed_game_definition(&store, &other, "OtherPriv", Visibility::Private, Rotation::Static).await;
+        for def_id in [def_public.id, def_owner_private.id, def_other_private.id, Uuid::new_v4()] {
+            add_collection_member(&store, &owner, collection.id, def_id).await;
+        }
+
+        // The owner sees the public member + their own private one (not the other
+        // user's private, not the dangling ref), in insertion order.
+        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", collection.id), Some(owner.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(detail_definition_ids(&body), vec![def_public.id.to_string(), def_owner_private.id.to_string()]);
+
+        // The other user sees the public member + their own private one.
+        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", collection.id), Some(other.api_key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(detail_definition_ids(&body), vec![def_public.id.to_string(), def_other_private.id.to_string()]);
+
+        // A private collection is invisible to a non-owner.
+        let private = seed_game_collection(&store, &owner, "Secret", Visibility::Private).await;
+        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", private.id), Some(other.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn game_collection_membership_add_reorder_remove() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let collection = seed_game_collection(&store, &owner, "Set", Visibility::Private).await;
+        let d1 = seed_game_definition(&store, &owner, "D1", Visibility::Public, Rotation::Static).await;
+        let d2 = seed_game_definition(&store, &owner, "D2", Visibility::Public, Rotation::Static).await;
+        let d3 = seed_game_definition(&store, &owner, "D3", Visibility::Public, Rotation::Static).await;
+        let url = format!("/api/v1/game-collections/{}", collection.id);
+
+        // Add three members → appended in order.
+        for def in [d1.id, d2.id, d3.id] {
+            let body = AddCollectionItemRequest { definition_id: def };
+            let req = create_test_post_request(&format!("{url}/items"), Some(owner.api_key), None, Some(&body));
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), StatusCode::OK);
+            let _: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        }
+
+        // Reorder → d3, d1, d2.
+        let reorder = ReorderCollectionItemsRequest { ordered: vec![d3.id, d1.id, d2.id] };
+        let req = create_test_put_request(&format!("{url}/items/reorder"), Some(owner.api_key), None, &reorder);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let after_reorder: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(collection_item_ids(&after_reorder), vec![d3.id, d1.id, d2.id]);
+
+        // Remove d1 → d3, d2.
+        let req = create_test_delete_request(&format!("{url}/items/{}", d1.id), Some(owner.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let after_remove: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(collection_item_ids(&after_remove), vec![d3.id, d2.id]);
+
+        // A non-owner cannot mutate membership.
+        let body = AddCollectionItemRequest { definition_id: d1.id };
+        let req = create_test_post_request(&format!("{url}/items"), Some(other.api_key), None, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn list_game_collections_merges_and_pages() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let admin = user_by_name(&mock_users, VALID_ADMIN_USERNAME_1);
+
+        let mine = seed_game_collection(&store, &me, "A mine", Visibility::Private).await;
+        let public = seed_game_collection(&store, &other, "B public", Visibility::Public).await;
+        let shared = seed_game_collection(&store, &other, "C shared", Visibility::Shared).await;
+        store.write().await.grant_collection_access(&other, shared.id, me.id).await.expect("grant");
+        let curated = seed_game_collection(&store, &admin, "D curated", Visibility::Curated).await;
+        let others_private = seed_game_collection(&store, &other, "E others private", Visibility::Private).await;
+
+        // Full list: mine + public + shared-with-me + curated, not the other's private.
+        let req = create_test_get_request("/api/v1/game-collections", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
+        assert!(ids.contains(&mine.id));
+        assert!(ids.contains(&public.id));
+        assert!(ids.contains(&shared.id));
+        assert!(ids.contains(&curated.id));
+        assert!(!ids.contains(&others_private.id));
+        assert_eq!(ids.len(), 4);
+
+        // First page of two (sorted A, B, C, D) → A, B, more to come.
+        let req = create_test_get_request("/api/v1/game-collections?limit=2&offset=0", Some(me.api_key), None);
+        let page: GameCollectionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["A mine", "B public"]);
+        assert_eq!(page.limit, 2);
+        assert!(page.has_more);
+
+        // Over-cap limit is capped and echoed back.
+        let req = create_test_get_request("/api/v1/game-collections?limit=1000", Some(me.api_key), None);
+        let page: GameCollectionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.limit, 100);
+        assert!(!page.has_more);
+    }
+
+    #[actix_web::test]
+    async fn collection_share_grant_revoke_and_owner_only_read() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let collection = seed_game_collection(&store, &owner, "Shared", Visibility::Shared).await;
+        let grant = GrantShareRequest { user_id: other.id };
+        let url = format!("/api/v1/game-collections/{}/shares", collection.id);
+
+        // Grant → grantees include the target.
+        let req = create_test_put_request(&url, Some(owner.api_key), None, &grant);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(shares.grantees, vec![other.id]);
+
+        // Only the owner may read the grantee list.
+        let req = create_test_get_request(&url, Some(other.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+        let req = create_test_get_request(&url, Some(owner.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(shares.grantees, vec![other.id]);
+
+        // Revoke → empty.
+        let req = create_test_delete_request(&format!("{url}/{}", other.id), Some(owner.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert!(shares.grantees.is_empty());
     }
 }
