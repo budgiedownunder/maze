@@ -609,8 +609,24 @@ pub async fn get_play3d_config(
             "Unknown difficulty: \"{raw}\". Expected one of: easy, tricky, hard."
         )));
     };
-    Ok(HttpResponse::Ok().json(Play3dConfigResponse {
-        difficulty: normalised.clone(),
+    Ok(HttpResponse::Ok().json(build_play3d_config_response(
+        preset,
+        normalised.clone(),
+        config.game.play3d.resolved_title(&normalised),
+    )))
+}
+
+/// Builds the camelCase Play 3D wire config from a difficulty preset, tagging it
+/// with the given `difficulty` label + resolved `title`. Shared by the
+/// `play3d-config` endpoint and the curated-game bootstrap so both emit the
+/// identical shape the host page consumes as its `StartConfig`.
+pub(crate) fn build_play3d_config_response(
+    preset: &crate::config::game::Play3dDifficultyConfig,
+    difficulty: String,
+    title: String,
+) -> Play3dConfigResponse {
+    Play3dConfigResponse {
+        difficulty,
         rows: preset.rows,
         cols: preset.cols,
         timer_seconds: preset.timer_seconds,
@@ -618,7 +634,7 @@ pub async fn get_play3d_config(
         min_solution_length: preset.min_solution_length,
         minimap_cell_px: preset.minimap_cell_px,
         minimap_radius: preset.minimap_radius,
-        title: config.game.play3d.resolved_title(&normalised),
+        title,
         mode: preset.mode.clone(),
         landmarks: LandmarksResponse {
             wall_tint: preset.landmarks.wall_tint,
@@ -658,7 +674,7 @@ pub async fn get_play3d_config(
                 perimeter_walls: t.perimeter_walls,
             }),
         },
-    }))
+    }
 }
 
 // **************************************************************************************************
