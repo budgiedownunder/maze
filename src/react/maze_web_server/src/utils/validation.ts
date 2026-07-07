@@ -71,6 +71,70 @@ export function exceedsGenerateFeatureCap(
   return 2 * doorCount + spareDoors + spareKeys > MAX_TOTAL_FEATURES
 }
 
+// Validates the parametric generation fields shared by the game-definition
+// editor — rows/cols/minSolutionLength plus the door/spare/enemy/health/treasure
+// counts (no start/finish positions; a definition is generated from a seed, not
+// an authored grid). Returns the first error message, or null when all valid.
+// Reuses the same caps + feature-budget rule the Generate dialog enforces so a
+// definition can never ask for a maze the generator or solver would reject.
+export function validateGenerationFields(
+  v: {
+    rows: string
+    cols: string
+    minSolutionLength: string
+    doorCount: string
+    spareDoors: string
+    spareKeys: string
+    enemyCount: string
+    healthCount: string
+    treasureCount: string
+  },
+  maxMazeCells: number | null,
+): string | null {
+  const rows = parseInt(v.rows, 10)
+  const cols = parseInt(v.cols, 10)
+  const msl = parseInt(v.minSolutionLength, 10)
+  const doors = parseInt(v.doorCount, 10)
+  const sdoors = parseInt(v.spareDoors, 10)
+  const skeys = parseInt(v.spareKeys, 10)
+  const enemies = parseInt(v.enemyCount, 10)
+  const healths = parseInt(v.healthCount, 10)
+  const treasures = parseInt(v.treasureCount, 10)
+
+  if (!Number.isInteger(rows) || rows < 3) return 'Rows must be a whole number of 3 or more.'
+  if (!Number.isInteger(cols) || cols < 3) return 'Columns must be a whole number of 3 or more.'
+  if (exceedsMazeCellCap(rows, cols, maxMazeCells)) {
+    return `Total cells (rows × columns) cannot exceed ${maxMazeCells}.`
+  }
+  if (!Number.isInteger(msl) || msl < 1) return 'Min Solution Length must be a whole number of 1 or more.'
+  if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
+    return `Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
+  }
+  if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_DOOR_COUNT) {
+    return `Spare Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
+  }
+  if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_DOOR_COUNT) {
+    return `Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
+  }
+  if (!Number.isInteger(enemies) || enemies < 0 || enemies > MAX_ENEMY_COUNT) {
+    return `Enemies must be a whole number between 0 and ${MAX_ENEMY_COUNT}.`
+  }
+  if (!Number.isInteger(healths) || healths < 0 || healths > MAX_HEALTH_COUNT) {
+    return `Health must be a whole number between 0 and ${MAX_HEALTH_COUNT}.`
+  }
+  if (!Number.isInteger(treasures) || treasures < 0 || treasures > MAX_TREASURE_COUNT) {
+    return `Treasure must be a whole number between 0 and ${MAX_TREASURE_COUNT}.`
+  }
+  if (exceedsGenerateFeatureCap(doors, sdoors, skeys)) {
+    const total = 2 * doors + sdoors + skeys
+    return (
+      `Total keys + doors (${total}) exceeds the limit of ${MAX_TOTAL_FEATURES}. ` +
+      `Each door brings a key, so the count is 2·Doors + Spare Doors + Spare Keys.`
+    )
+  }
+  return null
+}
+
 export function validateSignupForm(fields: {
   email: string
   password: string
