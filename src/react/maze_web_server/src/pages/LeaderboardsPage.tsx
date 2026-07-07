@@ -8,7 +8,7 @@ import { useBusyCursor } from '../hooks/useBusyCursor'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getPlay3dConfig, resetLeaderboard } from '../api/client'
-import { buildChallenge } from '../utils/scores'
+import { buildChallenge, isPlay3dDifficulty } from '../utils/scores'
 import { launchPlay3dWithSettings, launchPlay3dCurated } from '../utils/play3dLaunch'
 import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
 import type { Maze, ScoreEntry } from '../types/api'
@@ -40,7 +40,14 @@ function defaultSelection(mostRecent: ScoreEntry | undefined, mazes: MazeOption[
     const id = resolveMazeId(mostRecent.maze_id, mazes)
     if (id) return { gameType: 'my-mazes', mazeId: id }
   }
-  if (mostRecent?.challenge) return { gameType: 'play3d', difficulty: parseDifficulty(mostRecent.challenge) }
+  // Only a curated "<difficulty>:<seed>" challenge maps to a play-3D board.
+  // Other challenge subjects (e.g. a stored game definition's "def:<id>", which
+  // has no board UI here yet) fall through rather than resolving to a bogus
+  // difficulty the play3d-config endpoint would reject.
+  if (mostRecent?.challenge) {
+    const difficulty = parseDifficulty(mostRecent.challenge)
+    if (isPlay3dDifficulty(difficulty)) return { gameType: 'play3d', difficulty }
+  }
   if (mazes.length > 0) return { gameType: 'my-mazes', mazeId: mazes[0].mazeId }
   return { gameType: 'play3d', difficulty: 'easy' }
 }

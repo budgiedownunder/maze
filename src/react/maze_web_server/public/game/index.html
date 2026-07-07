@@ -309,11 +309,13 @@
 
     // Records a won 3D run against the server leaderboard. Only wins are
     // recorded (no loss/quit). The subject is the user maze (?id) when present,
-    // otherwise the curated challenge "<difficulty>:<seed>" assembled from the
-    // result detail — which carries both fields for curated runs. Runs with no
-    // stable subject (the demo / no-config path: no id, no difficulty) are not
-    // recorded. Server-owned fields (the player and the record timestamp) are
-    // set by the endpoint, never sent from here.
+    // a stored game definition's server-computed challengeKey (?def, published
+    // definitions only), or otherwise the curated challenge "<difficulty>:<seed>"
+    // assembled from the result detail — which carries both fields for curated
+    // runs. Runs with no stable subject (the demo / no-config path, or an
+    // unpublished definition preview) are not recorded. Server-owned fields (the
+    // player and the record timestamp) are set by the endpoint, never sent from
+    // here.
     function submitScoreOnWin(detail) {
       if (!detail || detail.outcome !== 'win') return;
 
@@ -324,7 +326,14 @@
 
       var body = { score: detail.score, elapsed_ms: detail.elapsedMs };
       var mazeId = params.get('id');
-      if (mazeId) {
+      if (params.get('def')) {
+        // Stored game definition. The subject is the server-computed challengeKey,
+        // stashed on window by the definition loader after its fetch. It is only
+        // set for a published (leaderboard-tracked) definition, so its absence
+        // means an unpublished preview run — don't record.
+        if (!window.__mazeDefChallenge) return;
+        body.challenge = window.__mazeDefChallenge;
+      } else if (mazeId) {
         body.maze_id = mazeId;
       } else if (detail.difficulty != null && detail.seed != null) {
         // "<difficulty>:<seed>" — canonical definition is buildChallenge() in
@@ -538,6 +547,7 @@
     const canvas = document.getElementById('bevy-canvas');
     const params = new URLSearchParams(location.search);
     const mazeId = params.get('id');
+    const defId = params.get('def');
 
     if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React app
@@ -658,6 +668,42 @@
         canvas.focus({ preventScroll: true });
       } catch (err) {
         showLoadingError(`Failed to start game: ${err}`);
+      }
+    } else if (defId) {
+      // /game/?def=<id> — a stored game definition. The fetch is auth-gated: the
+      // server composes access and returns 404 for anything this user can't see.
+      // Forward the opaque `config` verbatim as the StartConfig (the server has
+      // already spliced in the effective seed), and — for a published,
+      // leaderboard-tracked definition — fetch its win-banner record thresholds
+      // and stash the server-computed challengeKey for the score submitter.
+      const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
+      const token = (auth && auth.token) || params.get('t');
+      clearInterval(timer);
+      document.getElementById('loading').querySelector('p').textContent = 'Loading game…';
+      const res = await fetch(`/api/v1/game-definitions/${encodeURIComponent(defId)}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const play = await res.json();
+        const startConfig = play.config;
+        if (play.leaderboardTracked) {
+          window.__mazeDefChallenge = play.challengeKey;
+          await applyRecordThresholds(
+            startConfig, `challenge=${encodeURIComponent(play.challengeKey)}`, token);
+        } else {
+          // Owner preview of an unpublished definition — playable but not tracked.
+          startConfig.leaderboardTracked = false;
+        }
+        try {
+          start_with_config(JSON.stringify(startConfig));
+          document.getElementById('loading').remove();
+          canvas.focus({ preventScroll: true });
+        } catch (err) {
+          showLoadingError(`Failed to start game: ${err}`);
+        }
+      } else {
+        const body = await res.text().catch(() => '');
+        showLoadingError(`Failed to load game definition (${res.status}): ${body || res.statusText}`);
       }
     } else {
       // /game/?difficulty=<…> — fetch the server-side preset, allow a

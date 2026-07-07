@@ -99,6 +99,33 @@ describe('LeaderboardsPage', () => {
     expect(screen.queryByText('Player')).not.toBeInTheDocument()
   })
 
+  it('falls back from a game-definition (def:) most-recent run instead of resolving it as a difficulty', async () => {
+    const play3dDifficulties: string[] = []
+    server.use(
+      // Most recent run is a stored game definition — challenge "def:<id>".
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', challenge: 'def:abc-123', user_id: 'me' })], limit: 100, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/game/play3d-config', ({ request }) => {
+        play3dDifficulties.push(new URL(request.url).searchParams.get('difficulty') ?? '')
+        return HttpResponse.json({ difficulty: 'easy', seed: 42 })
+      }),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [row({ id: 's1', maze_id: 'm1.json', user_id: 'me', elapsed_ms: 42137 })], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    renderPage()
+
+    // Defaults to the player's maze board, not a bogus "def" play-3D difficulty
+    // (which the play3d-config endpoint would reject).
+    await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
+    expect((screen.getByLabelText('Game Type') as HTMLSelectElement).value).toBe('my-mazes')
+    expect(play3dDifficulties).not.toContain('def')
+  })
+
   it('sets the busy cursor while loading and clears it when done', async () => {
     // Uses the default MSW score handlers.
     renderPage()

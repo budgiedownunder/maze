@@ -34,3 +34,10 @@ export function formatElapsedMs(ms: number): string {
 // the difficulty's fixed seed (resolved via `getPlay3dConfig`).
 export const PLAY3D_DIFFICULTIES = ['easy', 'tricky', 'hard'] as const
 export type Play3dDifficulty = (typeof PLAY3D_DIFFICULTIES)[number]
+
+// Whether a raw string is one of the curated 3D difficulties. Used to tell a
+// curated "<difficulty>:<seed>" challenge apart from other challenge subjects
+// (e.g. a stored game definition's "def:<id>"), which are not play-3D boards.
+export function isPlay3dDifficulty(value: string): value is Play3dDifficulty {
+  return (PLAY3D_DIFFICULTIES as readonly string[]).includes(value)
+}

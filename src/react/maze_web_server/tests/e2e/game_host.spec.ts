@@ -437,3 +437,172 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     expect(payload.landmarks.floorAccents).toBe(true)
   })
 })
+
+test.describe('Game host stored game-definition launch (?def=...)', () => {
+  // Stub the wasm JS module (capturing the start_with_config payload),
+  // fulfill the wasm binary with an empty 200, and stub the play-fetch of
+  // the definition. Mirrors the ?id launch harness above.
+  async function stubDefHost(
+    page: Page,
+    body: { config: Record<string, unknown>; challengeKey: string; leaderboardTracked: boolean }
+  ) {
+    await page.route('**/maze_game_bevy_wasm.js**', (route) => {
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          export default async function init() {}
+          export function start() {}
+          export function start_with_config(json) {
+            window.__lastStartConfigPayload = json;
+          }
+        `,
+      })
+    })
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
+    })
+    await page.route('**/api/v1/game-definitions/def-id*', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        // The play-fetch response: a flattened definition (with the effective
+        // seed already spliced into config) plus the leaderboard subject/flag.
+        body: JSON.stringify({
+          id: 'def-id',
+          ownerId: '00000000-0000-0000-0000-0000000000aa',
+          name: 'Tower',
+          description: null,
+          imageUpdatedAt: null,
+          visibility: 'public',
+          seed: 7,
+          rotation: 'static',
+          config: body.config,
+          createdAt: '2025-04-01T12:00:00Z',
+          updatedAt: '2025-04-01T12:00:00Z',
+          challengeKey: body.challengeKey,
+          leaderboardTracked: body.leaderboardTracked,
+        }),
+      })
+    })
+  }
+
+  async function capturedPayload(page: Page) {
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload === 'string'
+    )
+    return await page.evaluate(() =>
+      JSON.parse((window as unknown as { __lastStartConfigPayload: string }).__lastStartConfigPayload)
+    )
+  }
+
+  test('forwards the definition config verbatim to start_with_config', async ({ page }) => {
+    await stubDefHost(page, {
+      config: { timerSeconds: 90, mode: 'Tower', skyType: 'day', wallType: 'wood' },
+      challengeKey: 'def:def-id',
+      leaderboardTracked: false,
+    })
+    await page.goto('/game/index.html?t=fake&def=def-id')
+    const payload = await capturedPayload(page)
+    expect(payload.timerSeconds).toBe(90)
+    expect(payload.mode).toBe('Tower')
+    expect(payload.skyType).toBe('day')
+    expect(payload.wallType).toBe('wood')
+    // Unpublished preview → the config is marked un-tracked (no win banners).
+    expect(payload.leaderboardTracked).toBe(false)
+  })
+})
+
+test.describe('Game host stored game-definition score submission (?def=)', () => {
+  // Unlike the curated ?difficulty path (which reconstructs the challenge from
+  // the result detail), a ?def run records against the server-computed
+  // challengeKey that the loader stashes on window during the play-fetch — so
+  // the module must actually run here (working wasm-JS stub), not be aborted.
+  async function setup(page: Page, opts: { challengeKey: string; leaderboardTracked: boolean }) {
+    const posted: Array<Record<string, unknown>> = []
+    await page.route('**/maze_game_bevy_wasm.js**', (route) => {
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          export default async function init() {}
+          export function start() {}
+          export function start_with_config(json) {
+            window.__lastStartConfigPayload = json;
+          }
+        `,
+      })
+    })
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
+    })
+    await page.route('**/api/v1/game-definitions/def-id*', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'def-id',
+          ownerId: '00000000-0000-0000-0000-0000000000aa',
+          name: 'Tower',
+          description: null,
+          imageUpdatedAt: null,
+          visibility: 'public',
+          seed: 7,
+          rotation: 'static',
+          config: { timerSeconds: 90, mode: 'Tower' },
+          createdAt: '2025-04-01T12:00:00Z',
+          updatedAt: '2025-04-01T12:00:00Z',
+          challengeKey: opts.challengeKey,
+          leaderboardTracked: opts.leaderboardTracked,
+        }),
+      })
+    })
+    await page.route('**/api/v1/scores*', (route) => {
+      const req = route.request()
+      if (req.method() === 'POST') {
+        posted.push(JSON.parse(req.postData() ?? '{}'))
+        route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: '00000000-0000-0000-0000-000000000001',
+            user_id: '00000000-0000-0000-0000-000000000002',
+            score: 0,
+            elapsed_ms: 0,
+            recorded_at: '2025-04-01T12:00:00Z',
+          }),
+        })
+      } else {
+        // Board read for the win-banner thresholds (applyRecordThresholds).
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) })
+      }
+    })
+    await page.goto('/game/index.html?t=fake&def=def-id')
+    await expect(page.locator('#pause-menu')).toBeAttached()
+    return posted
+  }
+
+  async function fireResult(page: Page, detail: Record<string, unknown>) {
+    await page.evaluate((d) => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', { detail: d }))
+    }, detail)
+  }
+
+  test('submits the definition challengeKey on a published-definition win', async ({ page }) => {
+    const posted = await setup(page, { challengeKey: 'def:def-id', leaderboardTracked: true })
+    // The loader stashes the challenge subject once the play-fetch resolves.
+    await page.waitForFunction(
+      () => (window as unknown as { __mazeDefChallenge?: string }).__mazeDefChallenge === 'def:def-id'
+    )
+    await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
+    await expect.poll(() => posted.length).toBe(1)
+    expect(posted[0]).toEqual({ challenge: 'def:def-id', score: 5, elapsed_ms: 12345 })
+  })
+
+  test('does not submit for an unpublished-definition preview win', async ({ page }) => {
+    const posted = await setup(page, { challengeKey: 'def:def-id', leaderboardTracked: false })
+    // The loader ran (payload captured) but stashed no challenge — so no record.
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload === 'string'
+    )
+    await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
+    await page.waitForTimeout(200)
+    expect(posted).toHaveLength(0)
+  })
+})
