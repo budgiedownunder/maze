@@ -2,8 +2,8 @@ import { useRef, useState } from 'react'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
 import {
-  exceedsGenerateFeatureCap, exceedsMazeCellCap,
-  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT, MAX_TOTAL_FEATURES,
+  validateMazeGenerationFields,
+  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT,
 } from '../utils/validation'
 import { ModalTabStrip } from './ModalTabs'
 import { modalTabPanelProps, type ModalTab } from '../utils/modalTabs'
@@ -145,76 +145,31 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     const healths = parseInt(healthCount, 10)
     const treasures = parseInt(treasureCount, 10)
 
-    if (!Number.isInteger(r) || r < 3) {
-      setValidationError('Rows must be a whole number of 3 or more.')
-      return
-    }
-    if (!Number.isInteger(c) || c < 3) {
-      setValidationError('Columns must be a whole number of 3 or more.')
-      return
-    }
-    if (exceedsMazeCellCap(r, c, max_maze_cells)) {
-      setValidationError(`Total cells (rows × columns) cannot exceed ${max_maze_cells}.`)
-      return
-    }
-    if (!Number.isInteger(sr) || sr < 1 || sr > r) {
-      setValidationError(`Start Row must be between 1 and ${r}.`)
-      return
-    }
-    if (!Number.isInteger(sc) || sc < 1 || sc > c) {
-      setValidationError(`Start Column must be between 1 and ${c}.`)
-      return
-    }
-    if (!Number.isInteger(fr) || fr < 1 || fr > r) {
-      setValidationError(`Finish Row must be between 1 and ${r}.`)
-      return
-    }
-    if (!Number.isInteger(fc) || fc < 1 || fc > c) {
-      setValidationError(`Finish Column must be between 1 and ${c}.`)
-      return
-    }
-    if (sr === fr && sc === fc) {
-      setValidationError('Start and Finish cells must be different.')
-      return
-    }
-    if (!Number.isInteger(msl) || msl < 1) {
-      setValidationError('Min Solution Length must be a whole number of 1 or more.')
-      return
-    }
-    if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
-      setValidationError(`Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
-      return
-    }
-    if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_DOOR_COUNT) {
-      setValidationError(`Spare Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
-      return
-    }
-    if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_DOOR_COUNT) {
-      setValidationError(`Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
-      return
-    }
-    if (!Number.isInteger(enemies) || enemies < 0 || enemies > MAX_ENEMY_COUNT) {
-      setValidationError(`Enemies must be a whole number between 0 and ${MAX_ENEMY_COUNT}.`)
-      return
-    }
-    if (!Number.isInteger(healths) || healths < 0 || healths > MAX_HEALTH_COUNT) {
-      setValidationError(`Health must be a whole number between 0 and ${MAX_HEALTH_COUNT}.`)
-      return
-    }
-    if (!Number.isInteger(treasures) || treasures < 0 || treasures > MAX_TREASURE_COUNT) {
-      setValidationError(`Treasure must be a whole number between 0 and ${MAX_TREASURE_COUNT}.`)
-      return
-    }
-    // Cross-field budget: each real door contributes one 'K' and one 'D' to
-    // the generated grid, so the formula counts doors twice. The cap mirrors
-    // the key-aware solver's MAX_TOTAL_FEATURES so a generated maze always
-    // has a solvable path the editor can display.
-    if (exceedsGenerateFeatureCap(doors, sdoors, skeys)) {
-      const total = 2 * doors + sdoors + skeys
-      setValidationError(
-        `Total keys + doors (${total}) exceeds the limit of ${MAX_TOTAL_FEATURES}. ` +
-          `Each door brings a key, so the count is 2·Doors + Spare Doors + Spare Keys.`,
-      )
+    // Shared with the game-definition editor: the same caps + feature-budget
+    // rule, here with `'maze'` so the authored start/finish positions are also
+    // validated. The re-clamp behaviour on dimension change stays local (it is
+    // a UX nicety, not validation).
+    const error = validateMazeGenerationFields(
+      {
+        rows,
+        cols,
+        minSolutionLength: minSpineLength,
+        startRow,
+        startCol,
+        finishRow,
+        finishCol,
+        doorCount,
+        spareDoors,
+        spareKeys,
+        enemyCount,
+        healthCount,
+        treasureCount,
+      },
+      max_maze_cells,
+      'maze',
+    )
+    if (error) {
+      setValidationError(error)
       return
     }
 

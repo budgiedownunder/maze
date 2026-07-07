@@ -5,10 +5,10 @@ import { MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT }
 // this has **no start/finish positions and no grid** — a definition is generated
 // from its (hidden, auto-minted) seed, so there is nothing to place. Values are
 // strings (raw input text); the consumer validates + parses them with
-// `validateGenerationFields`. Field names match the `Play3dConfigResponse`
+// `validateMazeGenerationFields`. Field names match the `Play3dConfigResponse`
 // config keys the editor assembles.
 
-export interface GenerationFieldsValue {
+export interface MazeGenerationFieldsValue {
   rows: string
   cols: string
   minSolutionLength: string
@@ -21,7 +21,7 @@ export interface GenerationFieldsValue {
 }
 
 // The count fields all share the same 0..max shape, so they render from a table.
-const COUNT_FIELDS: { key: keyof GenerationFieldsValue; label: string; max: number }[] = [
+const COUNT_FIELDS: { key: keyof MazeGenerationFieldsValue; label: string; max: number }[] = [
   { key: 'doorCount', label: 'Doors', max: MAX_DOOR_COUNT },
   { key: 'spareDoors', label: 'Spare Doors', max: MAX_DOOR_COUNT },
   { key: 'spareKeys', label: 'Spare Keys', max: MAX_DOOR_COUNT },
@@ -30,12 +30,12 @@ const COUNT_FIELDS: { key: keyof GenerationFieldsValue; label: string; max: numb
   { key: 'treasureCount', label: 'Treasure', max: MAX_TREASURE_COUNT },
 ]
 
-interface GenerationFieldsProps {
-  value: GenerationFieldsValue
-  onChange: (patch: Partial<GenerationFieldsValue>) => void
+interface MazeGenerationFieldsProps {
+  value: MazeGenerationFieldsValue
+  onChange: (patch: Partial<MazeGenerationFieldsValue>) => void
 }
 
-export function GenerationFields({ value, onChange }: GenerationFieldsProps) {
+export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsProps) {
   return (
     <>
       <label>
@@ -78,7 +78,7 @@ export function GenerationFields({ value, onChange }: GenerationFieldsProps) {
             value={value[key]}
             min={0}
             max={max}
-            onChange={e => onChange({ [key]: e.target.value } as Partial<GenerationFieldsValue>)}
+            onChange={e => onChange({ [key]: e.target.value } as Partial<MazeGenerationFieldsValue>)}
           />
         </label>
       ))}

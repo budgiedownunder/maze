@@ -71,13 +71,18 @@ export function exceedsGenerateFeatureCap(
   return 2 * doorCount + spareDoors + spareKeys > MAX_TOTAL_FEATURES
 }
 
-// Validates the parametric generation fields shared by the game-definition
-// editor — rows/cols/minSolutionLength plus the door/spare/enemy/health/treasure
-// counts (no start/finish positions; a definition is generated from a seed, not
-// an authored grid). Returns the first error message, or null when all valid.
-// Reuses the same caps + feature-budget rule the Generate dialog enforces so a
-// definition can never ask for a maze the generator or solver would reject.
-export function validateGenerationFields(
+// Validates the parametric generation fields shared by the maze Generate dialog
+// and the game-definition editor — rows/cols/minSolutionLength plus the
+// door/spare/enemy/health/treasure counts. Returns the first error message, or
+// null when all valid. Reuses the same caps + feature-budget rule so neither
+// path can ask for a maze the generator or solver would reject.
+//
+// `kind` selects whether the start/finish positions are checked: a maze is
+// authored on a concrete grid (`'maze'` → positions required + in-bounds +
+// distinct), whereas a game definition is generated from a seed with no grid
+// (`'game'` → positions ignored). The position checks run in the same order and
+// with the same messages the Generate dialog used inline.
+export function validateMazeGenerationFields(
   v: {
     rows: string
     cols: string
@@ -88,8 +93,13 @@ export function validateGenerationFields(
     enemyCount: string
     healthCount: string
     treasureCount: string
+    startRow?: string
+    startCol?: string
+    finishRow?: string
+    finishCol?: string
   },
   maxMazeCells: number | null,
+  kind: 'maze' | 'game',
 ): string | null {
   const rows = parseInt(v.rows, 10)
   const cols = parseInt(v.cols, 10)
@@ -105,6 +115,17 @@ export function validateGenerationFields(
   if (!Number.isInteger(cols) || cols < 3) return 'Columns must be a whole number of 3 or more.'
   if (exceedsMazeCellCap(rows, cols, maxMazeCells)) {
     return `Total cells (rows × columns) cannot exceed ${maxMazeCells}.`
+  }
+  if (kind === 'maze') {
+    const sr = parseInt(v.startRow ?? '', 10)
+    const sc = parseInt(v.startCol ?? '', 10)
+    const fr = parseInt(v.finishRow ?? '', 10)
+    const fc = parseInt(v.finishCol ?? '', 10)
+    if (!Number.isInteger(sr) || sr < 1 || sr > rows) return `Start Row must be between 1 and ${rows}.`
+    if (!Number.isInteger(sc) || sc < 1 || sc > cols) return `Start Column must be between 1 and ${cols}.`
+    if (!Number.isInteger(fr) || fr < 1 || fr > rows) return `Finish Row must be between 1 and ${rows}.`
+    if (!Number.isInteger(fc) || fc < 1 || fc > cols) return `Finish Column must be between 1 and ${cols}.`
+    if (sr === fr && sc === fc) return 'Start and Finish cells must be different.'
   }
   if (!Number.isInteger(msl) || msl < 1) return 'Min Solution Length must be a whole number of 1 or more.'
   if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
