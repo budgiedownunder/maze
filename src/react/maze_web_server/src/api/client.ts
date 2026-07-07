@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -327,4 +327,124 @@ export function getScoreHistory(token: string, query: HistoryQuery = {}): Promis
 // uses its fixed `seed` to build the challenge board key.
 export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
   return request<Play3dConfig>(`/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`)
+}
+
+// --- Game definitions & collections -----------------------------------------
+
+interface PageQuery {
+  limit?: number
+  offset?: number
+}
+
+function pageQuery(query: PageQuery): string {
+  const params = new URLSearchParams()
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export function createGameDefinition(token: string, body: GameDefinitionRequest): Promise<GameDefinition> {
+  return request<GameDefinition>('/game-definitions', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+// Play-fetch of a single definition — access-gated (a 404 hides anything the
+// caller can't see). The returned `config` has the effective seed spliced in.
+export function getGameDefinition(token: string, id: string): Promise<GamePlayResponse> {
+  return request<GamePlayResponse>(`/game-definitions/${encodeURIComponent(id)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// A page of the definitions the caller may see (own ∨ shared ∨ public ∨ curated).
+export function listGameDefinitions(token: string, query: PageQuery = {}): Promise<GameDefinitionListResponse> {
+  return request<GameDefinitionListResponse>(`/game-definitions${pageQuery(query)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function updateGameDefinition(token: string, id: string, body: GameDefinitionRequest): Promise<GameDefinition> {
+  return request<GameDefinition>(`/game-definitions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteGameDefinition(token: string, id: string): Promise<void> {
+  return requestEmpty(`/game-definitions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+export function createGameCollection(token: string, body: GameCollectionRequest): Promise<GameCollection> {
+  return request<GameCollection>('/game-collections', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+// Collection detail — the collection plus its accessible member definitions,
+// hydrated and in order (inaccessible / dangling members dropped server-side).
+export function getGameCollection(token: string, id: string): Promise<GameCollectionDetailResponse> {
+  return request<GameCollectionDetailResponse>(`/game-collections/${encodeURIComponent(id)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// A page of the collections the caller may see.
+export function listGameCollections(token: string, query: PageQuery = {}): Promise<GameCollectionListResponse> {
+  return request<GameCollectionListResponse>(`/game-collections${pageQuery(query)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function updateGameCollection(token: string, id: string, body: GameCollectionRequest): Promise<GameCollection> {
+  return request<GameCollection>(`/game-collections/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteGameCollection(token: string, id: string): Promise<void> {
+  return requestEmpty(`/game-collections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// Appends a definition to a collection (idempotent). Returns the updated
+// collection with its raw membership (`items`), not the hydrated detail.
+export function addCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
+  return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ definitionId }),
+  })
+}
+
+// Removes a definition from a collection (idempotent). Returns the updated
+// collection.
+export function removeCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
+  return request<GameCollection>(
+    `/game-collections/${encodeURIComponent(collectionId)}/items/${encodeURIComponent(definitionId)}`,
+    { method: 'DELETE', headers: authHeaders(token) },
+  )
+}
+
+// Rewrites the member order to `ordered` (non-members ignored; members omitted
+// from `ordered` keep their prior relative order after the listed ones).
+export function reorderCollectionItems(token: string, collectionId: string, ordered: string[]): Promise<GameCollection> {
+  return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items/reorder`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ ordered }),
+  })
 }

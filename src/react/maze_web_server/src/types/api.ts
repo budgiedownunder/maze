@@ -1,8 +1,11 @@
 import type { CanonicalMazeDefinition } from './cellEntities'
 import type { MazeGameSettings } from '../utils/mazeGameSettings'
+import type { Visibility, Rotation } from '../utils/gameDefinitions'
 // Re-export score metrics so consumers can pull the DTO types and
 // the query vocabulary from one place.
 export type { ScoreMetric, SortDirection } from '../utils/scores'
+// Likewise the game-definition access/rotation vocabulary.
+export type { Visibility, Rotation } from '../utils/gameDefinitions'
 
 export interface UserEmail {
   email: string
@@ -136,4 +139,103 @@ export interface ResetScoresResponse {
 export interface Play3dConfig {
   difficulty: string
   seed: number
+}
+
+// --- Game definitions & collections -----------------------------------------
+
+// A stored 3D game definition — presentation metadata plus an opaque, client-
+// owned generation/render `config` (a StartConfig-shaped blob, stored and
+// forwarded verbatim). `seed` is server-owned: auto-minted and hidden from the
+// editor. `description` / `imageUpdatedAt` are absent when unset.
+export interface GameDefinition {
+  id: string
+  ownerId: string
+  name: string
+  description?: string
+  visibility: Visibility
+  seed: number
+  rotation: Rotation
+  config: Record<string, unknown>
+  imageUpdatedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// The play-fetch of a single definition (`GET /game-definitions/{id}`): the
+// definition with the effective seed spliced into `config`, plus its leaderboard
+// subject key and whether that board is tracked (published definitions only).
+export interface GamePlayResponse extends GameDefinition {
+  challengeKey: string
+  leaderboardTracked: boolean
+}
+
+// Create / update body — the caller supplies only editable fields; id, seed,
+// ownerId, image and timestamps are server-owned. `visibility` / `rotation`
+// default server-side (private / static) when omitted.
+export interface GameDefinitionRequest {
+  name: string
+  description?: string | null
+  visibility?: Visibility
+  rotation?: Rotation
+  config: Record<string, unknown>
+}
+
+// A page of the definitions the caller may see (own ∨ shared ∨ public ∨ curated).
+export interface GameDefinitionListResponse {
+  definitions: GameDefinition[]
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+// One ordered member of a collection — a reference to a definition by id.
+export interface CollectionItem {
+  definitionId: string
+  sortOrder: number
+}
+
+// A collection: an ordered, presentation-only grouping of definitions. It
+// carries its own access `visibility`; membership is order-only (`items`).
+export interface GameCollection {
+  id: string
+  ownerId: string
+  name: string
+  visibility: Visibility
+  description?: string
+  imageUpdatedAt?: string
+  items: CollectionItem[]
+  createdAt: string
+  updatedAt: string
+}
+
+// Create / update body for a collection's own metadata; membership is managed
+// via the item endpoints, so it is not part of this body.
+export interface GameCollectionRequest {
+  name: string
+  description?: string | null
+  visibility?: Visibility
+}
+
+// A page of the collections the caller may see.
+export interface GameCollectionListResponse {
+  collections: GameCollection[]
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+// Collection detail (`GET /game-collections/{id}`): the collection's metadata
+// plus its member definitions — hydrated, in order, and filtered to what the
+// viewer may access (inaccessible members and dangling refs omitted). This is
+// why it carries `definitions` rather than the raw `items`.
+export interface GameCollectionDetailResponse {
+  id: string
+  ownerId: string
+  name: string
+  description?: string
+  visibility: Visibility
+  imageUpdatedAt?: string
+  createdAt: string
+  updatedAt: string
+  definitions: GameDefinition[]
 }
