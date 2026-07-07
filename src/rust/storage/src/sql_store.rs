@@ -1941,6 +1941,45 @@ impl UserStore for SqlStore {
     ///
     /// See the trait doc-comment for usage rules — auth code must use
     /// [`Self::find_user_by_verified_email`] instead.
+    ///
+    /// # Examples
+    ///
+    /// Locate a user by an unverified email address
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_unverified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    ///
+    /// // The verified-only lookup misses it, but the any-state lookup finds it.
+    /// assert!(store.find_user_by_verified_email("alice@example.com").await.is_err());
+    /// let found = store
+    ///     .find_user_by_email_any_state("alice@example.com")
+    ///     .await
+    ///     .expect("find_user_by_email_any_state");
+    /// assert_eq!(found.id, user.id);
+    /// # });
+    /// ```
     async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
@@ -4681,6 +4720,66 @@ impl ScoreStore for SqlStore {
         Ok(entry.id)
     }
 
+    /// A ranked, paged leaderboard for a stored maze, ordered by the chosen
+    /// metric and direction. See [`ScoreStore::maze_leaderboard`].
+    ///
+    /// # Examples
+    ///
+    /// Record a run against a stored maze and read its board
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{Maze, User, UserEmail};
+    /// use storage::{
+    ///     MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore, SortDirection,
+    ///     SqlStore, SqlStoreConfig, UserStore,
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    ///
+    /// // The maze must exist for the maze_id FK.
+    /// let mut maze = Maze::from_vec(vec![vec!['S', ' ', 'W'], vec![' ', 'F', 'W']]);
+    /// maze.name = "board_maze".to_string();
+    /// store.create_maze(&user, &mut maze).await.expect("create_maze");
+    ///
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: Some(maze.id.clone()), challenge: None,
+    ///     score: 7, elapsed_ms: 40_000, recorded_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// let highest = ScoreOrdering {
+    ///     metric: ScoreMetric::Score,
+    ///     direction: SortDirection::Descending,
+    /// };
+    /// let board = store
+    ///     .maze_leaderboard(&maze.id, highest, 10, 0, true)
+    ///     .await
+    ///     .expect("maze_leaderboard");
+    /// assert_eq!(board.len(), 1);
+    /// assert_eq!(board[0].entry.score, 7);
+    /// assert_eq!(board[0].username.as_deref(), Some("alice"));
+    /// # });
+    /// ```
     async fn maze_leaderboard(
         &self,
         maze_id: &str,
@@ -4700,6 +4799,62 @@ impl ScoreStore for SqlStore {
         rows.iter().map(|r| scoreboard_entry_from_row(r, include_usernames)).collect()
     }
 
+    /// A ranked, paged leaderboard for a curated/shared challenge, ordered by the
+    /// chosen metric and direction. See [`ScoreStore::challenge_leaderboard`].
+    ///
+    /// # Examples
+    ///
+    /// Record two challenge runs and read them back fastest-first
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{
+    ///     ScoreEntry, ScoreMetric, ScoreOrdering, ScoreStore, SortDirection,
+    ///     SqlStore, SqlStoreConfig, UserStore,
+    /// };
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    ///
+    /// for elapsed in [50_000_u64, 30_000] {
+    ///     let entry = ScoreEntry {
+    ///         id: Uuid::new_v4(), user_id: user.id,
+    ///         maze_id: None, challenge: Some("hard:42".to_string()),
+    ///         score: 5, elapsed_ms: elapsed, recorded_at: chrono::Utc::now(),
+    ///     };
+    ///     store.record_score(&entry).await.expect("record_score");
+    /// }
+    ///
+    /// let fastest = ScoreOrdering {
+    ///     metric: ScoreMetric::Time,
+    ///     direction: SortDirection::Ascending,
+    /// };
+    /// let board = store
+    ///     .challenge_leaderboard("hard:42", fastest, 10, 0, false)
+    ///     .await
+    ///     .expect("challenge_leaderboard");
+    /// assert_eq!(board.len(), 2);
+    /// assert_eq!(board[0].entry.elapsed_ms, 30_000);
+    /// # });
+    /// ```
     async fn challenge_leaderboard(
         &self,
         challenge: &str,
@@ -4719,6 +4874,50 @@ impl ScoreStore for SqlStore {
         rows.iter().map(|r| scoreboard_entry_from_row(r, include_usernames)).collect()
     }
 
+    /// A page of a player's own runs, most recent first. See
+    /// [`ScoreStore::user_history`].
+    ///
+    /// # Examples
+    ///
+    /// Record a run then read it back from the player's history
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{ScoreEntry, ScoreStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    ///
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: None, challenge: Some("hard:42".to_string()),
+    ///     score: 5, elapsed_ms: 83_456, recorded_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// let history = store.user_history(user.id, 10, 0).await.expect("user_history");
+    /// assert_eq!(history.len(), 1);
+    /// assert_eq!(history[0].id, entry.id);
+    /// # });
+    /// ```
     async fn user_history(
         &self,
         user_id: Uuid,
@@ -4739,6 +4938,51 @@ impl ScoreStore for SqlStore {
         rows.iter().map(score_entry_from_row).collect()
     }
 
+    /// Deletes every score for a stored maze, returning the number removed. See
+    /// [`ScoreStore::clear_maze_scores`].
+    ///
+    /// # Examples
+    ///
+    /// Record a maze run then clear its board
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{Maze, User, UserEmail};
+    /// use storage::{MazeStore, ScoreEntry, ScoreStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let mut maze = Maze::from_vec(vec![vec!['S', ' ', 'W'], vec![' ', 'F', 'W']]);
+    /// maze.name = "board_maze".to_string();
+    /// store.create_maze(&user, &mut maze).await.expect("create_maze");
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: Some(maze.id.clone()), challenge: None,
+    ///     score: 7, elapsed_ms: 40_000, recorded_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// assert_eq!(store.clear_maze_scores(&maze.id).await.expect("clear"), 1);
+    /// assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 0);
+    /// # });
+    /// ```
     async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, Error> {
         let result = sqlx::query(&q(self.kind, "DELETE FROM score_history WHERE maze_id = ?"))
             .bind(maze_id)
@@ -4748,6 +4992,48 @@ impl ScoreStore for SqlStore {
         Ok(result.rows_affected())
     }
 
+    /// Deletes every score for one curated/shared challenge. See
+    /// [`ScoreStore::clear_challenge_scores`].
+    ///
+    /// # Examples
+    ///
+    /// Record a challenge run then clear that board
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{ScoreEntry, ScoreStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: None, challenge: Some("hard:42".to_string()),
+    ///     score: 5, elapsed_ms: 83_456, recorded_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// assert_eq!(store.clear_challenge_scores("hard:42").await.expect("clear"), 1);
+    /// assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 0);
+    /// # });
+    /// ```
     async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error> {
         let result = sqlx::query(&q(self.kind, "DELETE FROM score_history WHERE challenge = ?"))
             .bind(challenge)
@@ -4757,6 +5043,51 @@ impl ScoreStore for SqlStore {
         Ok(result.rows_affected())
     }
 
+    /// Deletes every score whose `challenge` matches a definition's prefix (all
+    /// of its per-maze boards). See [`ScoreStore::clear_challenge_scores_prefix`].
+    ///
+    /// # Examples
+    ///
+    /// Clear both a definition's static and daily boards in one call
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{ScoreEntry, ScoreStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// // A definition's static board plus one daily board share the `def:<id>` prefix.
+    /// for challenge in ["def:abc", "def:abc:2026-07-06"] {
+    ///     let entry = ScoreEntry {
+    ///         id: Uuid::new_v4(), user_id: user.id,
+    ///         maze_id: None, challenge: Some(challenge.to_string()),
+    ///         score: 5, elapsed_ms: 40_000, recorded_at: chrono::Utc::now(),
+    ///     };
+    ///     store.record_score(&entry).await.expect("record_score");
+    /// }
+    ///
+    /// assert_eq!(store.clear_challenge_scores_prefix("def:abc").await.expect("clear"), 2);
+    /// assert_eq!(store.user_history(user.id, 10, 0).await.unwrap().len(), 0);
+    /// # });
+    /// ```
     async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, Error> {
         // `prefix` is always `def:<uuid>` (no LIKE metacharacters), so the
         // `prefix:%` pattern is safe without escaping. Matches the static
@@ -4914,6 +5245,55 @@ impl GameStore for SqlStore {
         Some(crate::MAX_COLLECTIONS_PER_USER)
     }
 
+    /// Stores a new definition for `owner`, assigning its id and timestamps in
+    /// place.
+    ///
+    /// Rejects a blank name, an oversized config, a name that collides with one
+    /// of the owner's existing definitions, or exceeding
+    /// [`Self::max_definitions_per_user`]. See [`GameStore::create_game_definition`].
+    ///
+    /// # Examples
+    ///
+    /// Create a definition and read it back by id
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// assert!(!def.id.is_nil());
+    ///
+    /// let loaded = store.get_game_definition(def.id).await.unwrap();
+    /// assert_eq!(loaded.name, "Tower");
+    /// assert_eq!(loaded.owner_id, owner.id);
+    /// # });
+    /// ```
     async fn create_game_definition(
         &mut self,
         owner: &User,
@@ -4987,6 +5367,49 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Loads any definition by id, or [`Error::GameDefinitionIdNotFound`]. See
+    /// [`GameStore::get_game_definition`].
+    ///
+    /// # Examples
+    ///
+    /// Create a definition then read it back by id
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// let loaded = store.get_game_definition(def.id).await.unwrap();
+    /// assert_eq!(loaded.name, "Tower");
+    /// # });
+    /// ```
     async fn get_game_definition(&self, id: Uuid) -> Result<GameDefinition, Error> {
         let row = sqlx::query(&q(self.kind, "SELECT * FROM game_definitions WHERE id = ?"))
             .bind(id.to_string())
@@ -4999,6 +5422,52 @@ impl GameStore for SqlStore {
         }
     }
 
+    /// Updates the owner's definition in place, preserving its id/owner/creation
+    /// fields and refreshing `updated_at`. Rejects a blank name, oversized
+    /// config, or a name colliding with another of the owner's definitions. See
+    /// [`GameStore::update_game_definition`].
+    ///
+    /// # Examples
+    ///
+    /// Rename a definition and confirm the change persists
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// def.name = "Keep".to_string();
+    /// store.update_game_definition(&owner, &mut def).await.unwrap();
+    /// assert_eq!(store.get_game_definition(def.id).await.unwrap().name, "Keep");
+    /// # });
+    /// ```
     async fn update_game_definition(
         &mut self,
         owner: &User,
@@ -5052,6 +5521,49 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Deletes the owner's definition, along with its shares and image. See
+    /// [`GameStore::delete_game_definition`].
+    ///
+    /// # Examples
+    ///
+    /// Delete a definition and confirm it no longer loads
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// store.delete_game_definition(&owner, def.id).await.unwrap();
+    /// assert!(store.get_game_definition(def.id).await.is_err());
+    /// # });
+    /// ```
     async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         let existing = self.get_game_definition(id).await?;
         if existing.owner_id != owner.id {
@@ -5075,6 +5587,59 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Grants `grantee` access to the owner's definition (idempotent). See
+    /// [`GameStore::grant_definition_access`].
+    ///
+    /// # Examples
+    ///
+    /// Grant access and confirm the grantee is listed
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// assert_eq!(store.get_definition_grantees(def.id).await.unwrap(), vec![friend.id]);
+    /// # });
+    /// ```
     async fn grant_definition_access(
         &mut self,
         owner: &User,
@@ -5110,6 +5675,60 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Revokes `grantee`'s access to the owner's definition (idempotent). See
+    /// [`GameStore::revoke_definition_access`].
+    ///
+    /// # Examples
+    ///
+    /// Revoke a previously granted access
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    ///
+    /// store.revoke_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// assert!(store.get_definition_grantees(def.id).await.unwrap().is_empty());
+    /// # });
+    /// ```
     async fn revoke_definition_access(
         &mut self,
         owner: &User,
@@ -5132,6 +5751,57 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// All of `owner`'s own definitions, sorted by name. See
+    /// [`GameStore::get_definitions_for_owner`].
+    ///
+    /// # Examples
+    ///
+    /// List an owner's definitions in name order
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// for name in ["Beta", "Alpha"] {
+    ///     let mut def = GameDefinition {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
+    ///         description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///         seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     };
+    ///     store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// }
+    ///
+    /// let names: Vec<String> = store
+    ///     .get_definitions_for_owner(&owner)
+    ///     .await
+    ///     .unwrap()
+    ///     .into_iter()
+    ///     .map(|d| d.name)
+    ///     .collect();
+    /// assert_eq!(names, vec!["Alpha".to_string(), "Beta".to_string()]);
+    /// # });
+    /// ```
     async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error> {
         self.query_game_definitions(
             "SELECT * FROM game_definitions WHERE owner_id = ? ORDER BY LOWER(name) ASC",
@@ -5218,6 +5888,59 @@ impl GameStore for SqlStore {
         rows.iter().map(game_definition_from_row).collect()
     }
 
+    /// The user ids currently granted access to a definition. See
+    /// [`GameStore::get_definition_grantees`].
+    ///
+    /// # Examples
+    ///
+    /// Read back the grantee list after a grant
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    ///
+    /// assert_eq!(store.get_definition_grantees(def.id).await.unwrap(), vec![friend.id]);
+    /// # });
+    /// ```
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
@@ -5342,8 +6065,49 @@ impl GameStore for SqlStore {
     }
 
     /// Loads a definition's image bytes, or `None` when it has none. See
-    /// [`GameStore::get_definition_image`]; the set/get/clear round-trip is shown
-    /// on [`SqlStore::set_definition_image`].
+    /// [`GameStore::get_definition_image`].
+    ///
+    /// # Examples
+    ///
+    /// Read back an image after storing one
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
+    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
+    /// # });
+    /// ```
     async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         let row = sqlx::query(&q(
             self.kind,
@@ -5360,8 +6124,50 @@ impl GameStore for SqlStore {
     }
 
     /// Removes a definition's image and clears its marker, scoped to `owner`
-    /// (idempotent). See [`GameStore::clear_definition_image`]; round-trip on
-    /// [`SqlStore::set_definition_image`].
+    /// (idempotent). See [`GameStore::clear_definition_image`].
+    ///
+    /// # Examples
+    ///
+    /// Clear a stored image
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    ///
+    /// store.clear_definition_image(&owner, def.id).await.unwrap();
+    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
+    /// assert!(store.get_game_definition(def.id).await.unwrap().image_updated_at.is_none());
+    /// # });
+    /// ```
     async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         // Owner-scoped + idempotent: both statements no-op when the definition
         // is unknown or owned by someone else (the image DELETE is gated on the
@@ -5390,6 +6196,54 @@ impl GameStore for SqlStore {
 
     // ── Collections ──
 
+    /// Stores a new collection for `owner`, assigning its id and timestamps in
+    /// place.
+    ///
+    /// Rejects a blank name, a name that collides with one of the owner's
+    /// existing collections, or exceeding [`Self::max_collections_per_user`]. See
+    /// [`GameStore::create_game_collection`].
+    ///
+    /// # Examples
+    ///
+    /// Create a collection and read it back by id
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// assert!(!collection.id.is_nil());
+    ///
+    /// let loaded = store.get_game_collection(collection.id).await.unwrap();
+    /// assert_eq!(loaded.name, "Campaign");
+    /// assert_eq!(loaded.owner_id, owner.id);
+    /// # });
+    /// ```
     async fn create_game_collection(
         &mut self,
         owner: &User,
@@ -5459,6 +6313,48 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Loads any collection by id, or [`Error::GameCollectionIdNotFound`]. See
+    /// [`GameStore::get_game_collection`].
+    ///
+    /// # Examples
+    ///
+    /// Create a collection then read it back by id
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// let loaded = store.get_game_collection(collection.id).await.unwrap();
+    /// assert_eq!(loaded.name, "Campaign");
+    /// # });
+    /// ```
     async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, Error> {
         let row = sqlx::query(&q(self.kind, "SELECT * FROM game_collections WHERE id = ?"))
             .bind(id.to_string())
@@ -5475,6 +6371,50 @@ impl GameStore for SqlStore {
         }
     }
 
+    /// Updates a collection's metadata in place (membership is managed by the
+    /// item methods), preserving its id/owner/creation fields. See
+    /// [`GameStore::update_game_collection`].
+    ///
+    /// # Examples
+    ///
+    /// Rename a collection and confirm the change persists
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// collection.name = "Season One".to_string();
+    /// store.update_game_collection(&owner, &mut collection).await.unwrap();
+    /// assert_eq!(store.get_game_collection(collection.id).await.unwrap().name, "Season One");
+    /// # });
+    /// ```
     async fn update_game_collection(
         &mut self,
         owner: &User,
@@ -5525,6 +6465,48 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Deletes the owner's collection, along with its items, shares, and image.
+    /// See [`GameStore::delete_game_collection`].
+    ///
+    /// # Examples
+    ///
+    /// Delete a collection and confirm it no longer loads
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// store.delete_game_collection(&owner, collection.id).await.unwrap();
+    /// assert!(store.get_game_collection(collection.id).await.is_err());
+    /// # });
+    /// ```
     async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         if self.collection_owner_id(id).await? != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
@@ -5546,6 +6528,57 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Appends a definition to the end of the owner's collection (idempotent).
+    /// See [`GameStore::add_collection_item`].
+    ///
+    /// # Examples
+    ///
+    /// Add a definition to a collection and read the membership back
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// store.add_collection_item(&owner, collection.id, def.id).await.unwrap();
+    /// let items = store.get_game_collection(collection.id).await.unwrap().items;
+    /// assert_eq!(items.len(), 1);
+    /// assert_eq!(items[0].definition_id, def.id);
+    /// # });
+    /// ```
     async fn add_collection_item(
         &mut self,
         owner: &User,
@@ -5568,6 +6601,56 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Removes a definition from the owner's collection and closes the resulting
+    /// order gap (idempotent). See [`GameStore::remove_collection_item`].
+    ///
+    /// # Examples
+    ///
+    /// Remove a previously added item
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// store.add_collection_item(&owner, collection.id, def.id).await.unwrap();
+    ///
+    /// store.remove_collection_item(&owner, collection.id, def.id).await.unwrap();
+    /// assert!(store.get_game_collection(collection.id).await.unwrap().items.is_empty());
+    /// # });
+    /// ```
     async fn remove_collection_item(
         &mut self,
         owner: &User,
@@ -5588,6 +6671,68 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Reorders the owner's collection so its items follow `ordered`. See
+    /// [`GameStore::reorder_collection_items`].
+    ///
+    /// # Examples
+    ///
+    /// Reverse the order of two collection items
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// let mut ids = Vec::new();
+    /// for name in ["First", "Second"] {
+    ///     let mut def = GameDefinition {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
+    ///         description: None, image_updated_at: None, visibility: Visibility::Private,
+    ///         seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     };
+    ///     store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///     store.add_collection_item(&owner, collection.id, def.id).await.unwrap();
+    ///     ids.push(def.id);
+    /// }
+    ///
+    /// store.reorder_collection_items(&owner, collection.id, &[ids[1], ids[0]]).await.unwrap();
+    /// let order: Vec<Uuid> = store
+    ///     .get_game_collection(collection.id)
+    ///     .await
+    ///     .unwrap()
+    ///     .items
+    ///     .into_iter()
+    ///     .map(|i| i.definition_id)
+    ///     .collect();
+    /// assert_eq!(order, vec![ids[1], ids[0]]);
+    /// # });
+    /// ```
     async fn reorder_collection_items(
         &mut self,
         owner: &User,
@@ -5603,6 +6748,58 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Grants `grantee` access to the owner's collection (idempotent). See
+    /// [`GameStore::grant_collection_access`].
+    ///
+    /// # Examples
+    ///
+    /// Grant access and confirm the grantee is listed
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// assert_eq!(store.get_collection_grantees(collection.id).await.unwrap(), vec![friend.id]);
+    /// # });
+    /// ```
     async fn grant_collection_access(
         &mut self,
         owner: &User,
@@ -5635,6 +6832,59 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Revokes `grantee`'s access to the owner's collection (idempotent). See
+    /// [`GameStore::revoke_collection_access`].
+    ///
+    /// # Examples
+    ///
+    /// Revoke a previously granted access
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    ///
+    /// store.revoke_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// assert!(store.get_collection_grantees(collection.id).await.unwrap().is_empty());
+    /// # });
+    /// ```
     async fn revoke_collection_access(
         &mut self,
         owner: &User,
@@ -5656,6 +6906,56 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// All of `owner`'s own collections, sorted by name. See
+    /// [`GameStore::get_collections_for_owner`].
+    ///
+    /// # Examples
+    ///
+    /// List an owner's collections in name order
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// for name in ["Beta", "Alpha"] {
+    ///     let mut collection = GameCollection {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
+    ///         visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///         items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     };
+    ///     store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// }
+    ///
+    /// let names: Vec<String> = store
+    ///     .get_collections_for_owner(&owner)
+    ///     .await
+    ///     .unwrap()
+    ///     .into_iter()
+    ///     .map(|c| c.name)
+    ///     .collect();
+    /// assert_eq!(names, vec!["Alpha".to_string(), "Beta".to_string()]);
+    /// # });
+    /// ```
     async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error> {
         self.query_game_collections(
             "SELECT * FROM game_collections WHERE owner_id = ? ORDER BY LOWER(name) ASC",
@@ -5664,9 +6964,59 @@ impl GameStore for SqlStore {
         .await
     }
 
-    /// A page of the collections `viewer` may see, ordered by name then id — the
-    /// collection counterpart of [`SqlStore::get_visible_definitions`] (see there
-    /// for a worked example). See [`GameStore::get_visible_collections`].
+    /// A page of the collections `viewer` may see (owner ∨ curated/public ∨
+    /// granted), ordered by name then id — the collection counterpart of
+    /// [`SqlStore::get_visible_definitions`]. See [`GameStore::get_visible_collections`].
+    ///
+    /// # Examples
+    ///
+    /// A public collection is visible to another user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".into(),
+    ///     full_name: "Viewer".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
+    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// let visible = store.get_visible_collections(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(visible.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
+    /// # });
+    /// ```
     async fn get_visible_collections(
         &self,
         viewer: &User,
@@ -5698,6 +7048,58 @@ impl GameStore for SqlStore {
         Ok(collections)
     }
 
+    /// The user ids currently granted access to a collection. See
+    /// [`GameStore::get_collection_grantees`].
+    ///
+    /// # Examples
+    ///
+    /// Read back the grantee list after a grant
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    ///
+    /// assert_eq!(store.get_collection_grantees(collection.id).await.unwrap(), vec![friend.id]);
+    /// # });
+    /// ```
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
@@ -5813,8 +7215,48 @@ impl GameStore for SqlStore {
     }
 
     /// Loads a collection's image bytes, or `None` when it has none. See
-    /// [`GameStore::get_collection_image`]; round-trip on
-    /// [`SqlStore::set_collection_image`].
+    /// [`GameStore::get_collection_image`].
+    ///
+    /// # Examples
+    ///
+    /// Read back an image after storing one
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
+    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    /// # });
+    /// ```
     async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         let row = sqlx::query(&q(
             self.kind,
@@ -5831,8 +7273,49 @@ impl GameStore for SqlStore {
     }
 
     /// Removes a collection's image and clears its marker, scoped to `owner`
-    /// (idempotent). See [`GameStore::clear_collection_image`]; round-trip on
-    /// [`SqlStore::set_collection_image`].
+    /// (idempotent). See [`GameStore::clear_collection_image`].
+    ///
+    /// # Examples
+    ///
+    /// Clear a stored image
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    ///
+    /// store.clear_collection_image(&owner, collection.id).await.unwrap();
+    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
+    /// assert!(store.get_game_collection(collection.id).await.unwrap().image_updated_at.is_none());
+    /// # });
+    /// ```
     async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         sqlx::query(&q(
             self.kind,

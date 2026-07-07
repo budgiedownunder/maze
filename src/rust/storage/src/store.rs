@@ -67,7 +67,7 @@ pub trait UserStore {
     /// exactly (it is an opaque stable id from the identity provider).
     async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error>;
     /// A page of active users, ordered by username then id and sliced to
-    /// `limit`/`offset`. The admin user list — paged (like [`Self::get_visible_definitions`])
+    /// `limit`/`offset`. The admin user list — paged (like [`GameStore::get_visible_definitions`])
     /// so it never loads the whole userbase at once; pass a large `limit` for
     /// "all". Soft-deleted users are excluded.
     async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, Error>;
