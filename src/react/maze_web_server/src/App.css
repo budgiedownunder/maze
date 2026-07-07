@@ -422,6 +422,100 @@
   gap: 1rem;
 }
 
+/* Wizard-mode modal (StepModalShell): a vertical step rail beside the active
+   panel, with Cancel / Back / Next / Finish pinned below. Shares the
+   scroll-body + footer structure with the tabbed mode; only the rail chrome and
+   the wider box are wizard-specific. All colours come from theme vars so it
+   adapts to light/dark. */
+.modal-wizard {
+  max-width: 560px;
+  min-width: 300px;
+}
+
+.wizard-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.wizard-rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-right: 1rem;
+  border-right: 1px solid #d1d5db;
+  overflow-y: auto;
+}
+
+.wizard-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wizard-step {
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+  opacity: 0.6;
+}
+
+.wizard-step:hover { opacity: 0.85; }
+.wizard-step[data-state='current'] {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.wizard-step[data-state='done'] { opacity: 0.9; }
+
+/* Circular marker holding the step number, a done-check, or a step icon. */
+.wizard-step-marker {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.wizard-step[data-state='current'] .wizard-step-marker {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-step-marker img,
+.wizard-step-marker svg { width: 1rem; height: 1rem; }
+
+.wizard-step-label { font-weight: 600; }
+
+/* Narrow viewports (phone portrait / MAUI WebView): the rail collapses from a
+   left column to a horizontal, scrollable stepper above the content. */
+@media (max-width: 480px) {
+  .wizard-body { flex-direction: column; }
+  .wizard-rail {
+    flex-direction: row;
+    padding-right: 0;
+    padding-bottom: 0.5rem;
+    border-right: none;
+    border-bottom: 1px solid #d1d5db;
+    overflow-x: auto;
+  }
+}
+
 /* Stacked label: text on top, input/select below, with a clear gap
    between them. Used by the Play 3D custom-launch modal's dropdowns
    and the time-limit number input — the default browser layout puts
