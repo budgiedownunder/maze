@@ -20,6 +20,8 @@ import {
   type SkyType,
   type WallType,
 } from '../utils/mazeGameSettings'
+import { ModalTabStrip } from './ModalTabs'
+import { modalTabPanelProps, type ModalTab } from '../utils/modalTabs'
 
 interface Props {
   mazeName: string
@@ -40,13 +42,12 @@ interface Props {
 // the dialog reads as a few short panels rather than one long scrolling list.
 // The time limit, validation error and action buttons stay pinned below the
 // panels so a timer error is never hidden on an inactive tab.
-const TABS = ['scene', 'objects', 'decor'] as const
-type LaunchTab = (typeof TABS)[number]
-const TAB_LABELS: Record<LaunchTab, string> = {
-  scene: 'Scene',
-  objects: 'Objects',
-  decor: 'Decor',
-}
+const TABS = [
+  { id: 'scene', label: 'Scene' },
+  { id: 'objects', label: 'Objects' },
+  { id: 'decor', label: 'Decor' },
+] as const satisfies readonly ModalTab[]
+type LaunchTab = (typeof TABS)[number]['id']
 
 export function MazeGameSettingsModal({ mazeName, initialSettings, title, submitLabel, onSubmit, onCancel }: Props) {
   const initial = initialSettings ?? MAZE_GAME_SETTINGS_DEFAULTS
@@ -74,16 +75,6 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
 
   function clearError() {
     if (validationError !== null) setValidationError(null)
-  }
-
-  // Arrow-key navigation across the tab strip, matching the WAI-ARIA tabs
-  // pattern (Left/Right move between tabs, wrapping at the ends).
-  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-    e.preventDefault()
-    const delta = e.key === 'ArrowRight' ? 1 : -1
-    const next = (index + delta + TABS.length) % TABS.length
-    setActiveTab(TABS[next])
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -122,35 +113,19 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
       <div className="modal modal-sm modal-with-scroll-body">
         <h2 className="modal-title">{dialogTitle}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
-          <div className="modal-tabs" role="tablist" aria-label="Launch settings">
-            {TABS.map((tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                id={`launch-tab-${tab}`}
-                aria-selected={activeTab === tab}
-                aria-controls={`launch-panel-${tab}`}
-                tabIndex={activeTab === tab ? 0 : -1}
-                className="modal-tab"
-                onClick={() => setActiveTab(tab)}
-                onKeyDown={e => handleTabKeyDown(e, index)}
-              >
-                {TAB_LABELS[tab]}
-              </button>
-            ))}
-          </div>
+          <ModalTabStrip
+            tabs={TABS}
+            activeTab={activeTab}
+            onSelect={setActiveTab}
+            idPrefix="launch"
+            ariaLabel="Launch settings"
+          />
 
           {/* Scrollable middle region: only the active tab's controls scroll
               when the viewport is too short; the title, the pinned time-limit
               row and the action buttons stay outside this box. */}
           <div className="modal-scroll-body">
-            <div
-              role="tabpanel"
-              id="launch-panel-scene"
-              aria-labelledby="launch-tab-scene"
-              hidden={activeTab !== 'scene'}
-            >
+            <div {...modalTabPanelProps('launch', 'scene', activeTab)}>
               <label className="modal-stacked-input">
                 Sky
                 <select
@@ -210,12 +185,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               </label>
             </div>
 
-            <div
-              role="tabpanel"
-              id="launch-panel-objects"
-              aria-labelledby="launch-tab-objects"
-              hidden={activeTab !== 'objects'}
-            >
+            <div {...modalTabPanelProps('launch', 'objects', activeTab)}>
               <label className="modal-stacked-input">
                 Door Style (Default)
                 <select
@@ -269,12 +239,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
               </label>
             </div>
 
-            <div
-              role="tabpanel"
-              id="launch-panel-decor"
-              aria-labelledby="launch-tab-decor"
-              hidden={activeTab !== 'decor'}
-            >
+            <div {...modalTabPanelProps('launch', 'decor', activeTab)}>
               <label className="modal-checkbox">
                 <input
                   type="checkbox"

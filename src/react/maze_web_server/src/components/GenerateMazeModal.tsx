@@ -5,17 +5,18 @@ import {
   exceedsGenerateFeatureCap, exceedsMazeCellCap,
   MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT, MAX_TOTAL_FEATURES,
 } from '../utils/validation'
+import { ModalTabStrip } from './ModalTabs'
+import { modalTabPanelProps, type ModalTab } from '../utils/modalTabs'
 
 // Tab identifiers grouping the generate fields so the dialog reads as a few
 // short panels rather than one long scrolling list. The validation error and
 // action buttons stay pinned below the panels so an error from any field is
 // visible regardless of which tab is showing.
-const TABS = ['sizePosition', 'features'] as const
-type GenerateTab = (typeof TABS)[number]
-const TAB_LABELS: Record<GenerateTab, string> = {
-  sizePosition: 'Size & Position',
-  features: 'Features',
-}
+const TABS = [
+  { id: 'sizePosition', label: 'Size & Position' },
+  { id: 'features', label: 'Features' },
+] as const satisfies readonly ModalTab[]
+type GenerateTab = (typeof TABS)[number]['id']
 
 interface Props {
   grid: string[][]
@@ -126,16 +127,6 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
   // blur behaviour) so keyboard users get the same clamp as click/tab-away.
   function commitOnEnter(e: React.KeyboardEvent, commit: () => void) {
     if (e.key === 'Enter') commit()
-  }
-
-  // Arrow-key navigation across the tab strip, matching the WAI-ARIA tabs
-  // pattern (Left/Right move between tabs, wrapping at the ends).
-  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-    e.preventDefault()
-    const delta = e.key === 'ArrowRight' ? 1 : -1
-    const next = (index + delta + TABS.length) % TABS.length
-    setActiveTab(TABS[next])
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -258,35 +249,19 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
             The attributes are still useful: they cap each input's native
             spinner (so the user can't click past the bound). */}
         <form className="modal-form" noValidate onSubmit={handleSubmit}>
-          <div className="modal-tabs" role="tablist" aria-label="Generate settings">
-            {TABS.map((tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                id={`generate-tab-${tab}`}
-                aria-selected={activeTab === tab}
-                aria-controls={`generate-panel-${tab}`}
-                tabIndex={activeTab === tab ? 0 : -1}
-                className="modal-tab"
-                onClick={() => setActiveTab(tab)}
-                onKeyDown={e => handleTabKeyDown(e, index)}
-              >
-                {TAB_LABELS[tab]}
-              </button>
-            ))}
-          </div>
+          <ModalTabStrip
+            tabs={TABS}
+            activeTab={activeTab}
+            onSelect={setActiveTab}
+            idPrefix="generate"
+            ariaLabel="Generate settings"
+          />
 
           {/* Scrollable middle region: only the active tab's fields scroll when
               the viewport is too short; the title, the pinned error + action
               buttons stay outside this box. */}
           <div className="modal-scroll-body">
-            <div
-              role="tabpanel"
-              id="generate-panel-sizePosition"
-              aria-labelledby="generate-tab-sizePosition"
-              hidden={activeTab !== 'sizePosition'}
-            >
+            <div {...modalTabPanelProps('generate', 'sizePosition', activeTab)}>
               <label>
                 Rows
                 <input type="number" className="input" value={rows} min={3} autoFocus
@@ -328,12 +303,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
               </label>
             </div>
 
-            <div
-              role="tabpanel"
-              id="generate-panel-features"
-              aria-labelledby="generate-tab-features"
-              hidden={activeTab !== 'features'}
-            >
+            <div {...modalTabPanelProps('generate', 'features', activeTab)}>
               <label>
                 Doors
                 <input type="number" className="input" value={doorCount} min={0} max={MAX_DOOR_COUNT}
