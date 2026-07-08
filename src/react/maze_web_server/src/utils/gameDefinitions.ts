@@ -31,3 +31,8 @@ export type DifficultyChange = (typeof DIFFICULTY_CHANGES)[number]
 // How a reduced upper level is positioned over the level below it.
 export const LEVEL_ALIGNMENTS = ['edge', 'centre', 'random_base', 'random_level'] as const
 export type LevelAlignment = (typeof LEVEL_ALIGNMENTS)[number]
+
+// Upper bound on a multi-level run's level count. Mirrors `MAX_LEVEL_COUNT` in
+// `src/rust/maze_game_bevy/src/world/levels.rs`; the runtime clamps `count` to
+// `[1, MAX_LEVEL_COUNT]` regardless, and the editor uses it to bound the input.
+export const MAX_LEVEL_COUNT = 20

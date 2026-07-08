@@ -9,6 +9,8 @@ import {
   type ObjectsFieldsValue,
   type DecorFieldsValue,
 } from './GameSettingsFields'
+import { LevelsFields } from './LevelsFields'
+import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { validateMazeGenerationFields } from '../utils/validation'
@@ -28,6 +30,7 @@ const STEPS = [
   { id: 'scene', label: 'Scene' },
   { id: 'objects', label: 'Objects' },
   { id: 'decor', label: 'Decor' },
+  { id: 'levels', label: 'Levels' },
 ] as const satisfies readonly WizardStep[]
 
 type EditorStep = (typeof STEPS)[number]['id']
@@ -65,6 +68,8 @@ export function GameDefinitionEditor({
     setForm(f => ({ ...f, objects: { ...f.objects, ...patch } }))
   const patchDecor = (patch: Partial<DecorFieldsValue>) =>
     setForm(f => ({ ...f, decor: { ...f.decor, ...patch } }))
+  const patchLevels = (patch: Partial<DefinitionLevelsFormValue>) =>
+    setForm(f => ({ ...f, levels: { ...f.levels, ...patch } }))
 
   // The commit gate: a name and generation settings the generator would accept.
   // Every other field is defaulted, which is what makes the wizard's early
@@ -137,6 +142,10 @@ export function GameDefinitionEditor({
 
       <div {...modalTabPanelProps(ID_PREFIX, 'decor', activeStep)}>
         <DecorFields value={form.decor} onChange={patchDecor} />
+      </div>
+
+      <div {...modalTabPanelProps(ID_PREFIX, 'levels', activeStep)}>
+        <LevelsFields value={form.levels} onChange={patchLevels} />
       </div>
     </StepModalShell>
   )

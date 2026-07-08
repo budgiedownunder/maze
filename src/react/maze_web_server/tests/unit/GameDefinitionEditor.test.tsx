@@ -28,9 +28,9 @@ function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: 
 const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 
 describe('GameDefinitionEditor — steps', () => {
-  it('renders the five steps, Details first', () => {
+  it('renders the six steps, Details first', () => {
     renderEditor()
-    for (const label of ['Details', 'Generation', 'Scene', 'Objects', 'Decor']) {
+    for (const label of ['Details', 'Generation', 'Scene', 'Objects', 'Decor', 'Levels']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
     expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-current', 'step')
@@ -42,6 +42,13 @@ describe('GameDefinitionEditor — steps', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
     expect(screen.getByLabelText('Rows')).toBeVisible()
     expect(screen.getByLabelText('Treasure')).toBeVisible()
+  })
+
+  it('shows the levels field-group on the Levels step', async () => {
+    renderEditor()
+    await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
+    expect(screen.getByLabelText('Levels')).toBeVisible()
+    expect(screen.getByLabelText('Finish Type')).toBeVisible()
   })
 })
 
@@ -121,6 +128,30 @@ describe('GameDefinitionEditor — commit', () => {
       seed: 0,
       landmarks: expect.objectContaining({ floorAccents: !DEFINITION_DEFAULTS.decor.floorAccents }),
       levels: expect.objectContaining({ count: 1 }),
+    })
+  })
+
+  it('flows the edited Levels controls into the built config', async () => {
+    const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
+    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '4' } })
+    fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'portal' } })
+    fireEvent.change(screen.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Taper upper levels' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Override final level appearance' }))
+    fireEvent.change(screen.getByLabelText('Final Level Sky'), { target: { value: 'day' } })
+
+    await userEvent.click(commitButton())
+
+    expect(onSubmit.mock.calls[0][0].config).toMatchObject({
+      levels: expect.objectContaining({
+        count: 4,
+        finishType: 'portal',
+        difficultyChange: 'harder',
+        taper: true,
+        top: { skyType: 'day' },
+      }),
     })
   })
 
