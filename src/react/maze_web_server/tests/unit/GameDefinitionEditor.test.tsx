@@ -153,7 +153,7 @@ describe('GameDefinitionEditor — commit', () => {
     })
   })
 
-  it('flows the edited Levels controls into the built config', async () => {
+  it('flows the edited Levels controls and the Scene final-level override into the built config', async () => {
     const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
     // The count is on General and reveals the Levels tab once above 1.
@@ -162,6 +162,9 @@ describe('GameDefinitionEditor — commit', () => {
     fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'portal' } })
     fireEvent.change(screen.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
     await userEvent.click(screen.getByRole('checkbox', { name: 'Taper upper levels' }))
+
+    // The final-level override now lives on the Scene tab.
+    await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Override final level appearance' }))
     fireEvent.change(screen.getByLabelText('Final Level Sky'), { target: { value: 'day' } })
 
@@ -176,6 +179,21 @@ describe('GameDefinitionEditor — commit', () => {
         top: { skyType: 'day' },
       }),
     })
+  })
+
+  it('shows the final-level override on the Scene tab only for a multi-level game', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+
+    // Single-level: Scene has the scene fields but no final-level override.
+    await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
+    expect(screen.getByLabelText('Sky')).toBeVisible()
+    expect(screen.queryByRole('checkbox', { name: 'Override final level appearance' })).toBeNull()
+
+    // Raise the count on General → the override appears on Scene.
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '2' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
+    expect(screen.getByRole('checkbox', { name: 'Override final level appearance' })).toBeVisible()
   })
 
   it('flows the General time limit and edited Advanced controls into the built config', async () => {

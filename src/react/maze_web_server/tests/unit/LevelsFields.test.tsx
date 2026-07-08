@@ -28,10 +28,9 @@ describe('LevelsFields — rendering', () => {
     expect(screen.queryByLabelText('Levels')).toBeNull()
   })
 
-  it('hides the final-level override controls until the override is enabled', () => {
+  it('does not carry the final-level override (that lives on the Scene tab)', () => {
     renderFields()
-    expect(screen.queryByLabelText('Final Level Sky')).toBeNull()
-    expect(screen.queryByLabelText('Final Level Perimeter Walls')).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Override final level appearance' })).toBeNull()
   })
 })
 
@@ -48,53 +47,5 @@ describe('LevelsFields — patches', () => {
     const { onChange } = renderFields()
     await userEvent.click(screen.getByRole('checkbox', { name: 'Taper upper levels' }))
     expect(onChange).toHaveBeenCalledWith({ taper: true })
-  })
-})
-
-describe('LevelsFields — final-level override', () => {
-  it('enabling the override seeds an empty (all-inherit) top object', async () => {
-    const { onChange } = renderFields({ top: null })
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Override final level appearance' }))
-    expect(onChange).toHaveBeenCalledWith({ top: {} })
-  })
-
-  it('disabling the override clears top back to null', async () => {
-    const { onChange } = renderFields({ top: { skyType: 'day' } })
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Override final level appearance' }))
-    expect(onChange).toHaveBeenCalledWith({ top: null })
-  })
-
-  it('shows the sky + perimeter selects when the override is on, defaulting to Inherit', () => {
-    renderFields({ top: {} })
-    expect(screen.getByLabelText('Final Level Sky')).toHaveValue('')
-    expect(screen.getByLabelText('Final Level Perimeter Walls')).toHaveValue('inherit')
-  })
-
-  it('sets a sky override, and clears it back to inherit', () => {
-    const onChange = vi.fn<(patch: Partial<DefinitionLevelsFormValue>) => void>()
-    const { rerender } = render(<LevelsFields value={{ ...BASE, top: {} }} onChange={onChange} />)
-    fireEvent.change(screen.getByLabelText('Final Level Sky'), { target: { value: 'night' } })
-    expect(onChange).toHaveBeenCalledWith({ top: { skyType: 'night' } })
-
-    onChange.mockClear()
-    rerender(<LevelsFields value={{ ...BASE, top: { skyType: 'night' } }} onChange={onChange} />)
-    fireEvent.change(screen.getByLabelText('Final Level Sky'), { target: { value: '' } })
-    // Clearing to Inherit drops the key, leaving an empty override.
-    expect(onChange).toHaveBeenCalledWith({ top: {} })
-  })
-
-  it('maps the perimeter select to a tri-state (inherit / walled / open)', () => {
-    const { onChange } = renderFields({ top: {} })
-    const perim = screen.getByLabelText('Final Level Perimeter Walls')
-    fireEvent.change(perim, { target: { value: 'walled' } })
-    expect(onChange).toHaveBeenCalledWith({ top: { perimeterWalls: true } })
-    fireEvent.change(perim, { target: { value: 'open' } })
-    expect(onChange).toHaveBeenCalledWith({ top: { perimeterWalls: false } })
-  })
-
-  it('preserves the sky override when only the perimeter changes', () => {
-    const { onChange } = renderFields({ top: { skyType: 'day' } })
-    fireEvent.change(screen.getByLabelText('Final Level Perimeter Walls'), { target: { value: 'open' } })
-    expect(onChange).toHaveBeenCalledWith({ top: { skyType: 'day', perimeterWalls: false } })
   })
 })

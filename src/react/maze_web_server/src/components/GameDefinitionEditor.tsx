@@ -10,6 +10,7 @@ import {
   type DecorFieldsValue,
 } from './GameSettingsFields'
 import { LevelsFields } from './LevelsFields'
+import { FinalLevelOverrideFields } from './FinalLevelOverrideFields'
 import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
@@ -173,6 +174,10 @@ export function GameDefinitionEditor({
 
       <div {...modalTabPanelProps(ID_PREFIX, 'scene', effectiveStep)}>
         <SceneFields value={form.scene} onChange={patchScene} />
+        {/* The final-level scene override only applies to a multi-level game. */}
+        {isMultiLevel && (
+          <FinalLevelOverrideFields value={form.levels.top} onChange={top => patchLevels({ top })} />
+        )}
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'objects', effectiveStep)}>
