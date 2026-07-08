@@ -23,8 +23,8 @@ import { buildDefinitionConfig, type DefinitionFormState } from '../utils/defini
 import type { GameDefinitionRequest } from '../types/api'
 
 // The game-definition editor: the definition's own General details (name,
-// description, level count + time limit) plus the shared generation / scene /
-// objects / decor / levels / advanced field-groups, hosted in the dual-mode step
+// description, level count + time limit) plus the scene (incl. decor) / layout /
+// objects / levels / advanced field-groups, hosted in the dual-mode step
 // shell — a wizard for creating a definition, tabs for editing one. It owns the
 // working form state and hands the caller a finished `GameDefinitionRequest`, so
 // create and edit differ only in `mode`, the seed state and what the caller does
@@ -32,10 +32,9 @@ import type { GameDefinitionRequest } from '../types/api'
 
 const STEPS = [
   { id: 'general', label: 'General' },
-  { id: 'layout', label: 'Layout' },
   { id: 'scene', label: 'Scene' },
+  { id: 'layout', label: 'Layout' },
   { id: 'objects', label: 'Objects' },
-  { id: 'decor', label: 'Decor' },
   { id: 'levels', label: 'Levels' },
   { id: 'advanced', label: 'Advanced' },
 ] as const satisfies readonly WizardStep[]
@@ -185,6 +184,8 @@ export function GameDefinitionEditor({
 
       <div {...modalTabPanelProps(ID_PREFIX, 'scene', effectiveStep)}>
         <SceneFields value={form.scene} onChange={patchScene} />
+        {/* The decorative landmarks follow the scene's perimeter-walls toggle. */}
+        <DecorFields value={form.decor} onChange={patchDecor} />
         {/* The final-level scene override only applies to a multi-level game. */}
         {isMultiLevel && (
           <FinalLevelOverrideFields value={form.levels.top} onChange={top => patchLevels({ top })} />
@@ -200,10 +201,6 @@ export function GameDefinitionEditor({
           styles={form.objects}
           onStylesChange={patchObjects}
         />
-      </div>
-
-      <div {...modalTabPanelProps(ID_PREFIX, 'decor', effectiveStep)}>
-        <DecorFields value={form.decor} onChange={patchDecor} />
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'levels', effectiveStep)}>

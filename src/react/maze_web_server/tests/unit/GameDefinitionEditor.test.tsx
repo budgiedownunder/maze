@@ -30,11 +30,13 @@ const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 describe('GameDefinitionEditor — steps', () => {
   it('renders General first with its identity + structure fields, no Levels tab at count 1', () => {
     renderEditor()
-    for (const label of ['General', 'Layout', 'Scene', 'Objects', 'Decor', 'Advanced']) {
+    for (const label of ['General', 'Scene', 'Layout', 'Objects', 'Advanced']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
     // Single-level by default, so the Levels tab is absent from the strip.
     expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
+    // Decor was folded into the Scene tab; there is no Decor tab.
+    expect(screen.queryByRole('tab', { name: 'Decor' })).toBeNull()
     expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
     // The count + time limit live on General alongside name/description.
     for (const label of ['Name', 'Description', 'Levels', 'Time limit (seconds)']) {
@@ -165,7 +167,8 @@ describe('GameDefinitionEditor — commit', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     fireEvent.change(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count'), { target: { value: '3' } })
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Decor' }))
+    // The decor toggles now live on the Scene tab (below Perimeter walls).
+    await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Floor junction markers' }))
 
     await userEvent.click(commitButton())
@@ -218,6 +221,16 @@ describe('GameDefinitionEditor — commit', () => {
         top: { skyType: 'day' },
       }),
     })
+  })
+
+  it('carries the decor toggles on the Scene tab, after the perimeter-walls control', async () => {
+    renderEditor()
+    await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
+    // The Scene tab holds both the scene controls and the (folded-in) decor ones.
+    expect(screen.getByRole('checkbox', { name: 'Perimeter walls' })).toBeVisible()
+    for (const name of ['Dead-end objects', 'Sparse wall decorations', 'Floor junction markers']) {
+      expect(screen.getByRole('checkbox', { name })).toBeVisible()
+    }
   })
 
   it('shows the final-level override on the Scene tab only for a multi-level game', async () => {
