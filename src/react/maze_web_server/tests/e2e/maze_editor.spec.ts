@@ -809,7 +809,7 @@ test('Generate Maze dialog has all expected fields', async ({ page }) => {
   await expect(dialog.getByLabel('Start Column')).toBeVisible()
   await expect(dialog.getByLabel('Finish Row')).toBeVisible()
   await expect(dialog.getByLabel('Finish Column')).toBeVisible()
-  await expect(dialog.getByLabel('Min Solution Length')).toBeVisible()
+  await expect(dialog.getByLabel('Min Start to Finish Distance')).toBeVisible()
   // Features tab: doors / keys / enemies / health counts.
   await dialog.getByRole('tab', { name: 'Features' }).click()
   await expect(dialog.getByLabel('Doors', { exact: true })).toBeVisible()
@@ -857,7 +857,7 @@ test('generating with doors places key and door cells in the grid', async ({ pag
   await dialog.getByLabel('Start Column').fill('1')
   await dialog.getByLabel('Finish Row').fill('15')
   await dialog.getByLabel('Finish Column').fill('15')
-  await dialog.getByLabel('Min Solution Length').fill('8')
+  await dialog.getByLabel('Min Start to Finish Distance').fill('8')
   // Doors lives on the Features tab.
   await dialog.getByRole('tab', { name: 'Features' }).click()
   await dialog.getByLabel('Doors', { exact: true }).fill('3')
@@ -879,7 +879,7 @@ test('generating with enemies and health places enemy and health cells in the gr
   await dialog.getByLabel('Start Column').fill('1')
   await dialog.getByLabel('Finish Row').fill('15')
   await dialog.getByLabel('Finish Column').fill('15')
-  await dialog.getByLabel('Min Solution Length').fill('8')
+  await dialog.getByLabel('Min Start to Finish Distance').fill('8')
   // Enemies and Health live on the Features tab.
   await dialog.getByRole('tab', { name: 'Features' }).click()
   await dialog.getByLabel('Enemies').fill('2')
@@ -902,18 +902,18 @@ test('cancelling Generate dialog leaves the grid unchanged', async ({ page }) =>
   await expect(page.getByLabel('Row 4')).not.toBeVisible()
 })
 
-test('Generate dialog remembers last used Min Solution Length within the session', async ({ page }) => {
+test('Generate dialog remembers last used Min Start to Finish Distance within the session', async ({ page }) => {
   await login(page)
   await openFirstMaze(page)
-  // Open Generate dialog and set Min Solution Length to 5
+  // Open Generate dialog and set Min Start to Finish Distance to 5
   await page.getByRole('button', { name: 'Generate' }).click()
   const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
-  await dialog.getByLabel('Min Solution Length').fill('5')
+  await dialog.getByLabel('Min Start to Finish Distance').fill('5')
   await dialog.getByRole('button', { name: 'Generate' }).click()
   await expect(dialog).not.toBeVisible()
   // Reopen — should show 5, not 1
   await page.getByRole('button', { name: 'Generate' }).click()
-  await expect(page.getByRole('dialog', { name: 'Generate Maze' }).getByLabel('Min Solution Length')).toHaveValue('5')
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' }).getByLabel('Min Start to Finish Distance')).toHaveValue('5')
 })
 
 // ──────────────────────────────────────────────────────────────

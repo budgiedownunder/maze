@@ -140,7 +140,7 @@ export function validateMazeGenerationFields(
   }
   const minMsl = kind === 'maze' ? 1 : 0
   if (!Number.isInteger(msl) || msl < minMsl) {
-    return `Min Solution Length must be a whole number of ${minMsl} or more.`
+    return `Min Start to Finish Distance must be a whole number of ${minMsl} or more.`
   }
   if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
     return `Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`

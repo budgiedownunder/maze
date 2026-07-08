@@ -236,7 +236,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
                   onKeyDown={e => commitOnEnter(e, commitCols)} />
               </label>
               <label>
-                Min Solution Length
+                Min Start to Finish Distance
                 <input type="number" className="input" value={minSpineLength} min={0}
                   onChange={e => { setMinSpineLength(e.target.value); setValidationError(null) }} />
               </label>

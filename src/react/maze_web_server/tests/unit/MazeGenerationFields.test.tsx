@@ -36,10 +36,10 @@ describe('validateMazeGenerationFields (game subject — no positions)', () => {
   it('allows a min solution length of 0 (no minimum) but rejects a negative one', () => {
     expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '0' }, null, 'game')).toBeNull()
     expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '-1' }, null, 'game')).toBe(
-      'Min Solution Length must be a whole number of 0 or more.',
+      'Min Start to Finish Distance must be a whole number of 0 or more.',
     )
     expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '' }, null, 'game')).toBe(
-      'Min Solution Length must be a whole number of 0 or more.',
+      'Min Start to Finish Distance must be a whole number of 0 or more.',
     )
   })
 
@@ -104,17 +104,20 @@ describe('validateMazeGenerationFields (maze subject — positions checked)', ()
 
   it('still requires a min solution length of at least 1', () => {
     expect(validateMazeGenerationFields({ ...MAZE_VALID, minSolutionLength: '0' }, null, 'maze')).toBe(
-      'Min Solution Length must be a whole number of 1 or more.',
+      'Min Start to Finish Distance must be a whole number of 1 or more.',
     )
   })
 })
 
 describe('MazeGenerationFields', () => {
-  it('renders the size + count fields and no start/finish positions', () => {
+  it('renders the size + distance fields, with no counts or start/finish positions', () => {
     render(<MazeGenerationFields value={VALID} onChange={vi.fn()} />)
-    for (const label of ['Rows', 'Columns', 'Min Solution Length', 'Doors', 'Spare Doors', 'Spare Keys', 'Enemies', 'Health', 'Treasure']) {
+    for (const label of ['Rows', 'Columns', 'Min Start to Finish Distance']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument()
     }
+    // The feature counts moved to the Objects tab; positions never belonged here.
+    expect(screen.queryByLabelText('Doors')).toBeNull()
+    expect(screen.queryByLabelText('Treasure')).toBeNull()
     expect(screen.queryByLabelText(/Start Row/)).toBeNull()
     expect(screen.queryByLabelText(/Finish Row/)).toBeNull()
   })
@@ -124,7 +127,7 @@ describe('MazeGenerationFields', () => {
     render(<MazeGenerationFields value={VALID} onChange={onChange} />)
     fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '15' } })
     expect(onChange).toHaveBeenCalledWith({ rows: '15' })
-    fireEvent.change(screen.getByLabelText('Doors'), { target: { value: '5' } })
-    expect(onChange).toHaveBeenCalledWith({ doorCount: '5' })
+    fireEvent.change(screen.getByLabelText('Min Start to Finish Distance'), { target: { value: '4' } })
+    expect(onChange).toHaveBeenCalledWith({ minSolutionLength: '4' })
   })
 })

@@ -1,15 +1,10 @@
-import {
-  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT,
-  MAX_SPARE_DOOR_COUNT, MAX_SPARE_KEY_COUNT,
-} from '../utils/validation'
-
-// The parametric generation field-group for the game-definition editor: maze
-// size + solution length + the feature counts. Unlike the maze Generate dialog
-// this has **no start/finish positions and no grid** — a definition is generated
-// from its (hidden, auto-minted) seed, so there is nothing to place. Values are
-// strings (raw input text); the consumer validates + parses them with
-// `validateMazeGenerationFields`. Field names match the `Play3dConfigResponse`
-// config keys the editor assembles.
+// The parametric size + solution field-group for the game-definition editor:
+// maze size (rows/cols) and the minimum start→finish distance. The feature
+// counts (doors/spare/enemies/health/treasure) that share this value shape live
+// on the editor's Objects tab (see `FeatureCountFields`), grouped with their
+// related object dropdowns. Values are strings (raw input text); the consumer
+// validates + parses them with `validateMazeGenerationFields`. Field names match
+// the `Play3dConfigResponse` config keys the editor assembles.
 
 export interface MazeGenerationFieldsValue {
   rows: string
@@ -22,16 +17,6 @@ export interface MazeGenerationFieldsValue {
   healthCount: string
   treasureCount: string
 }
-
-// The count fields all share the same 0..max shape, so they render from a table.
-const COUNT_FIELDS: { key: keyof MazeGenerationFieldsValue; label: string; max: number }[] = [
-  { key: 'doorCount', label: 'Doors', max: MAX_DOOR_COUNT },
-  { key: 'spareDoors', label: 'Spare Doors', max: MAX_SPARE_DOOR_COUNT },
-  { key: 'spareKeys', label: 'Spare Keys', max: MAX_SPARE_KEY_COUNT },
-  { key: 'enemyCount', label: 'Enemies', max: MAX_ENEMY_COUNT },
-  { key: 'healthCount', label: 'Health', max: MAX_HEALTH_COUNT },
-  { key: 'treasureCount', label: 'Treasure', max: MAX_TREASURE_COUNT },
-]
 
 interface MazeGenerationFieldsProps {
   value: MazeGenerationFieldsValue
@@ -62,7 +47,7 @@ export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsPr
         />
       </label>
       <label>
-        Min Solution Length
+        Min Start to Finish Distance
         <input
           type="number"
           className="input"
@@ -71,20 +56,6 @@ export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsPr
           onChange={e => onChange({ minSolutionLength: e.target.value })}
         />
       </label>
-
-      {COUNT_FIELDS.map(({ key, label, max }) => (
-        <label key={key}>
-          {label}
-          <input
-            type="number"
-            className="input"
-            value={value[key]}
-            min={0}
-            max={max}
-            onChange={e => onChange({ [key]: e.target.value } as Partial<MazeGenerationFieldsValue>)}
-          />
-        </label>
-      ))}
     </>
   )
 }

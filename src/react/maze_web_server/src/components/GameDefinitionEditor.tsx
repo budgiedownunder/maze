@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { StepModalShell } from './StepModalShell'
 import { MazeGenerationFields, type MazeGenerationFieldsValue } from './MazeGenerationFields'
+import { ObjectGroupsFields } from './ObjectGroupsFields'
 import {
   SceneFields,
-  ObjectsFields,
   DecorFields,
   type SceneFieldsValue,
   type ObjectsFieldsValue,
@@ -181,7 +181,14 @@ export function GameDefinitionEditor({
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'objects', effectiveStep)}>
-        <ObjectsFields value={form.objects} onChange={patchObjects} />
+        {/* Each object kind grouped: its count (generation slice) next to its
+            style (objects slice). */}
+        <ObjectGroupsFields
+          counts={form.generation}
+          onCountsChange={patchGeneration}
+          styles={form.objects}
+          onStylesChange={patchObjects}
+        />
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'decor', effectiveStep)}>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { GameDefinitionEditor } from '../../src/components/GameDefinitionEditor'
 import { AppFeaturesContext } from '../../src/context/AppFeaturesContext'
@@ -46,7 +46,17 @@ describe('GameDefinitionEditor — steps', () => {
     renderEditor()
     await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
     expect(screen.getByLabelText('Rows')).toBeVisible()
-    expect(screen.getByLabelText('Treasure')).toBeVisible()
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toBeVisible()
+  })
+
+  it('shows the grouped object fields on the Objects step (count next to style)', async () => {
+    renderEditor()
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
+    const doors = within(screen.getByRole('group', { name: 'Doors' }))
+    expect(doors.getByLabelText('Count')).toBeVisible()
+    expect(doors.getByLabelText('Spares')).toBeVisible()
+    expect(doors.getByLabelText('Style')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count')).toBeVisible()
   })
 
   it('reveals the Levels tab only once the count is raised above 1, and hides it again', async () => {
@@ -100,8 +110,8 @@ describe('GameDefinitionEditor — canCommit gating', () => {
 
   it('keeps the generation error visible from another step (pinned footer)', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
-    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
-    fireEvent.change(screen.getByLabelText('Enemies'), { target: { value: '9' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
+    fireEvent.change(within(screen.getByRole('group', { name: 'Enemies' })).getByLabelText('Count'), { target: { value: '9' } })
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Enemies must be a whole number between 0 and 8.')
   })
@@ -116,7 +126,7 @@ describe('GameDefinitionEditor — canCommit gating', () => {
   it('accepts a min solution length of 0 (no minimum)', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
-    fireEvent.change(screen.getByLabelText('Min Solution Length'), { target: { value: '0' } })
+    fireEvent.change(screen.getByLabelText('Min Start to Finish Distance'), { target: { value: '0' } })
     expect(screen.queryByRole('alert')).toBeNull()
     expect(commitButton()).toBeEnabled()
   })
@@ -130,7 +140,10 @@ describe('GameDefinitionEditor — commit', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
     fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '12' } })
-    fireEvent.change(screen.getByLabelText('Treasure'), { target: { value: '3' } })
+
+    // The feature counts live on the Objects tab now, grouped by object kind.
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
+    fireEvent.change(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count'), { target: { value: '3' } })
 
     await userEvent.click(screen.getByRole('tab', { name: 'Decor' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Floor junction markers' }))

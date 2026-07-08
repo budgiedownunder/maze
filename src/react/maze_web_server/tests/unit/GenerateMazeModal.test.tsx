@@ -56,7 +56,7 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Start Column')).toBeInTheDocument()
     expect(screen.getByLabelText('Finish Row')).toBeInTheDocument()
     expect(screen.getByLabelText('Finish Column')).toBeInTheDocument()
-    expect(screen.getByLabelText('Min Solution Length')).toBeInTheDocument()
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toBeInTheDocument()
     expect(screen.getByLabelText('Doors')).toBeInTheDocument()
     expect(screen.getByLabelText('Spare Doors')).toBeInTheDocument()
     expect(screen.getByLabelText('Spare Keys')).toBeInTheDocument()
@@ -93,7 +93,7 @@ describe('GenerateMazeModal rendering and defaults', () => {
       'Start Column',
       'Finish Row',
       'Finish Column',
-      'Min Solution Length',
+      'Min Start to Finish Distance',
       'Doors',
       'Spare Doors',
       'Spare Keys',
@@ -235,14 +235,14 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Finish Column')).toHaveValue(3)
   })
 
-  it('defaults Min Solution Length to 1', () => {
+  it('defaults Min Start to Finish Distance to 1', () => {
     renderModal()
-    expect(screen.getByLabelText('Min Solution Length')).toHaveValue(1)
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toHaveValue(1)
   })
 
-  it('uses initialMinSpineLength prop as the default Min Solution Length', () => {
+  it('uses initialMinSpineLength prop as the default Min Start to Finish Distance', () => {
     renderModal({ initialMinSpineLength: 7 })
-    expect(screen.getByLabelText('Min Solution Length')).toHaveValue(7)
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toHaveValue(7)
   })
 
   it('defaults Start to row 1 col 1 when grid has no S', () => {
@@ -316,9 +316,9 @@ describe('GenerateMazeModal validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Start and Finish cells must be different.')
   })
 
-  it('shows error when Min Solution Length is less than 1', async () => {
-    await submitWith({ 'Min Solution Length': '0' })
-    expect(screen.getByRole('alert')).toHaveTextContent('Min Solution Length must be a whole number of 1 or more.')
+  it('shows error when Min Start to Finish Distance is less than 1', async () => {
+    await submitWith({ 'Min Start to Finish Distance': '0' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Min Start to Finish Distance must be a whole number of 1 or more.')
   })
 
   it('shows error when Doors exceeds the maximum', async () => {
