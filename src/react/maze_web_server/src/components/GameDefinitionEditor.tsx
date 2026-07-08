@@ -10,7 +10,9 @@ import {
   type DecorFieldsValue,
 } from './GameSettingsFields'
 import { LevelsFields } from './LevelsFields'
+import { LevelProgressionFields } from './LevelProgressionFields'
 import { FinalLevelOverrideFields } from './FinalLevelOverrideFields'
+import { FieldGroup } from './FieldGroup'
 import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
@@ -30,7 +32,7 @@ import type { GameDefinitionRequest } from '../types/api'
 
 const STEPS = [
   { id: 'general', label: 'General' },
-  { id: 'generation', label: 'Generation' },
+  { id: 'layout', label: 'Layout' },
   { id: 'scene', label: 'Scene' },
   { id: 'objects', label: 'Objects' },
   { id: 'decor', label: 'Decor' },
@@ -168,8 +170,17 @@ export function GameDefinitionEditor({
         </label>
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'generation', effectiveStep)}>
-        <MazeGenerationFields value={form.generation} onChange={patchGeneration} />
+      <div {...modalTabPanelProps(ID_PREFIX, 'layout', effectiveStep)}>
+        {/* The grid is the ground floor when the game stacks multiple levels. */}
+        <FieldGroup title={isMultiLevel ? 'Ground Floor Grid' : 'Grid'} id="grid">
+          <MazeGenerationFields value={form.generation} onChange={patchGeneration} />
+        </FieldGroup>
+        {/* Level progression only applies to a multi-level game. */}
+        {isMultiLevel && (
+          <FieldGroup title="Levels" id="levels">
+            <LevelProgressionFields value={form.levels} onChange={patchLevels} />
+          </FieldGroup>
+        )}
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'scene', effectiveStep)}>

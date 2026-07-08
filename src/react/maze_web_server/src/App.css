@@ -445,12 +445,12 @@
   gap: 1rem;
 }
 
-/* A labelled group of related fields within a tab panel (e.g. the editor's
-   Objects tab: Doors / Keys / Enemies / Health / Treasure), each with its count
-   next to its style. Each group is a bordered card with an accent, uppercase
-   caption above a divider rule, so the sections read as clearly distinct blocks
-   in both light and dark themes. */
-.object-group {
+/* A labelled group of related fields within a tab panel — the editor's Objects
+   tab (Doors / Keys / Enemies / Health / Treasure) and Layout tab (Grid /
+   Levels). Each group is a bordered card with an accent, uppercase caption above
+   a divider rule, so the sections read as clearly distinct blocks in both light
+   and dark themes. */
+.field-group {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -459,7 +459,7 @@
   padding: 0.85rem 0.9rem 0.95rem;
 }
 
-.object-group-title {
+.field-group-title {
   margin: 0;
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--border-input);

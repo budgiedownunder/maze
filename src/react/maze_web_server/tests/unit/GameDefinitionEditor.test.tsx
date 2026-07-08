@@ -30,7 +30,7 @@ const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 describe('GameDefinitionEditor — steps', () => {
   it('renders General first with its identity + structure fields, no Levels tab at count 1', () => {
     renderEditor()
-    for (const label of ['General', 'Generation', 'Scene', 'Objects', 'Decor', 'Advanced']) {
+    for (const label of ['General', 'Layout', 'Scene', 'Objects', 'Decor', 'Advanced']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
     // Single-level by default, so the Levels tab is absent from the strip.
@@ -42,11 +42,31 @@ describe('GameDefinitionEditor — steps', () => {
     }
   })
 
-  it('shows the generation field-group on the Generation step', async () => {
+  it('shows the Grid group on the Layout step', async () => {
     renderEditor()
-    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
-    expect(screen.getByLabelText('Rows')).toBeVisible()
-    expect(screen.getByLabelText('Min Start to Finish Distance')).toBeVisible()
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    // Single-level default: the group is just "Grid" and there is no Levels group.
+    const grid = within(screen.getByRole('group', { name: 'Grid' }))
+    expect(grid.getByLabelText('Rows')).toBeVisible()
+    expect(grid.getByLabelText('Min Start to Finish Distance')).toBeVisible()
+    expect(screen.queryByRole('group', { name: 'Levels' })).toBeNull()
+  })
+
+  it('relabels the Grid group and adds the Levels group when the game is multi-level', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    // Raise the count on General, then look at the Layout tab.
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '3' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+
+    // The grid group is now captioned for the ground floor…
+    expect(screen.queryByRole('group', { name: 'Grid' })).toBeNull()
+    expect(within(screen.getByRole('group', { name: 'Ground Floor Grid' })).getByLabelText('Rows')).toBeVisible()
+
+    // …and the Levels progression group appears with the moved (renamed) fields.
+    const levels = within(screen.getByRole('group', { name: 'Levels' }))
+    expect(levels.getByLabelText('Difficulty Change')).toBeVisible()
+    expect(levels.getByLabelText('Alignment')).toBeVisible()
+    expect(levels.getByRole('checkbox', { name: 'Taper' })).toBeVisible()
   })
 
   it('shows the grouped object fields on the Objects step (count next to style)', async () => {
@@ -63,7 +83,7 @@ describe('GameDefinitionEditor — steps', () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
     expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
 
-    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '3' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '3' } })
     expect(screen.getByRole('tab', { name: 'Levels' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
@@ -71,7 +91,7 @@ describe('GameDefinitionEditor — steps', () => {
 
     // Back to single-level: the tab disappears and the view falls back to General.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
-    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '1' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '1' } })
     expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
     expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
   })
@@ -102,7 +122,7 @@ describe('GameDefinitionEditor — canCommit gating', () => {
 
   it('disables Finish and reports the error when the generation fields are invalid', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
-    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '2' } })
     expect(screen.getByRole('alert')).toHaveTextContent('Rows must be a whole number of 3 or more.')
     expect(commitButton()).toBeDisabled()
@@ -125,7 +145,7 @@ describe('GameDefinitionEditor — canCommit gating', () => {
 
   it('accepts a min solution length of 0 (no minimum)', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
-    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByLabelText('Min Start to Finish Distance'), { target: { value: '0' } })
     expect(screen.queryByRole('alert')).toBeNull()
     expect(commitButton()).toBeEnabled()
@@ -138,7 +158,7 @@ describe('GameDefinitionEditor — commit', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'Tower')
     await userEvent.type(screen.getByLabelText('Description'), 'Climb it')
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '12' } })
 
     // The feature counts live on the Objects tab now, grouped by object kind.
@@ -169,12 +189,18 @@ describe('GameDefinitionEditor — commit', () => {
   it('flows the edited Levels controls and the Scene final-level override into the built config', async () => {
     const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
-    // The count is on General and reveals the Levels tab once above 1.
-    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '4' } })
+    // The count is on General and reveals the Levels tab + Layout Levels group.
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '4' } })
+
+    // Finish Type + the per-level toggles are on the Levels tab.
     await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
     fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'portal' } })
-    fireEvent.change(screen.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Taper upper levels' }))
+
+    // Difficulty Change + Taper are on the Layout tab's Levels group.
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    const levelsGroup = within(screen.getByRole('group', { name: 'Levels' }))
+    fireEvent.change(levelsGroup.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
+    await userEvent.click(levelsGroup.getByRole('checkbox', { name: 'Taper' }))
 
     // The final-level override now lives on the Scene tab.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
@@ -204,7 +230,7 @@ describe('GameDefinitionEditor — commit', () => {
 
     // Raise the count on General → the override appears on Scene.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
-    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '2' } })
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '2' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
     expect(screen.getByRole('checkbox', { name: 'Override final level appearance' })).toBeVisible()
   })

@@ -1,20 +1,13 @@
 import { titleCaseWire } from '../utils/cellEntityStyles'
-import {
-  FINISH_TYPES,
-  DIFFICULTY_CHANGES,
-  LEVEL_ALIGNMENTS,
-  type FinishType,
-  type DifficultyChange,
-  type LevelAlignment,
-} from '../utils/gameDefinitions'
+import { FINISH_TYPES, type FinishType } from '../utils/gameDefinitions'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 
-// The multi-level run field-group for the game-definition editor: how the level
-// stack behaves. The level **count** lives on the editor's General tab (it is
-// the single-vs-multi-level decision, and this whole tab is hidden while the
-// count is 1), so it is not repeated here. The final-level scene override
-// (`levels.top`) lives on the Scene tab (see `FinalLevelOverrideFields`). Field
-// names + wire values match the config's `levels` object; the consumer
+// The Levels-tab field-group for the game-definition editor: the interim finish
+// rig plus the per-level reset / perimeter / enemy toggles. The level **count**
+// lives on the General tab, the difficulty/alignment/taper progression on the
+// Layout tab's Levels group (see `LevelProgressionFields`), and the final-level
+// scene override (`levels.top`) on the Scene tab (see `FinalLevelOverrideFields`).
+// Field names + wire values match the config's `levels` object; the consumer
 // serializes them verbatim.
 
 interface LevelsFieldsProps {
@@ -38,32 +31,6 @@ export function LevelsFields({ value, onChange }: LevelsFieldsProps) {
         </select>
       </label>
 
-      <label className="modal-stacked-input">
-        Difficulty Change
-        <select
-          className="input"
-          value={value.difficultyChange}
-          onChange={e => onChange({ difficultyChange: e.target.value as DifficultyChange })}
-        >
-          {DIFFICULTY_CHANGES.map(d => (
-            <option key={d} value={d}>{titleCaseWire(d)}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="modal-stacked-input">
-        Level Alignment
-        <select
-          className="input"
-          value={value.alignment}
-          onChange={e => onChange({ alignment: e.target.value as LevelAlignment })}
-        >
-          {LEVEL_ALIGNMENTS.map(a => (
-            <option key={a} value={a}>{titleCaseWire(a)}</option>
-          ))}
-        </select>
-      </label>
-
       <label className="modal-checkbox">
         <input
           type="checkbox"
@@ -71,15 +38,6 @@ export function LevelsFields({ value, onChange }: LevelsFieldsProps) {
           onChange={e => onChange({ resetBag: e.target.checked })}
         />
         <span>Reset item bag each level</span>
-      </label>
-
-      <label className="modal-checkbox">
-        <input
-          type="checkbox"
-          checked={value.taper}
-          onChange={e => onChange({ taper: e.target.checked })}
-        />
-        <span>Taper upper levels</span>
       </label>
 
       <label className="modal-checkbox">

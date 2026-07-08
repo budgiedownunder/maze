@@ -13,12 +13,10 @@ function renderFields(over: Partial<DefinitionLevelsFormValue> = {}) {
 }
 
 describe('LevelsFields — rendering', () => {
-  it('renders the three enum selects and the four toggles', () => {
+  it('renders the Finish Type select and the three per-level toggles', () => {
     renderFields()
     expect(screen.getByLabelText('Finish Type')).toHaveValue('ladder')
-    expect(screen.getByLabelText('Difficulty Change')).toHaveValue('easier')
-    expect(screen.getByLabelText('Level Alignment')).toHaveValue('edge')
-    for (const name of ['Reset item bag each level', 'Taper upper levels', 'Randomise perimeter each level', 'Hide cleared-level enemies']) {
+    for (const name of ['Reset item bag each level', 'Randomise perimeter each level', 'Hide cleared-level enemies']) {
       expect(screen.getByRole('checkbox', { name })).toBeInTheDocument()
     }
   })
@@ -28,6 +26,13 @@ describe('LevelsFields — rendering', () => {
     expect(screen.queryByLabelText('Levels')).toBeNull()
   })
 
+  it('does not carry the progression fields (those live on the Layout tab)', () => {
+    renderFields()
+    expect(screen.queryByLabelText('Difficulty Change')).toBeNull()
+    expect(screen.queryByLabelText('Alignment')).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Taper' })).toBeNull()
+  })
+
   it('does not carry the final-level override (that lives on the Scene tab)', () => {
     renderFields()
     expect(screen.queryByRole('checkbox', { name: 'Override final level appearance' })).toBeNull()
@@ -35,17 +40,15 @@ describe('LevelsFields — rendering', () => {
 })
 
 describe('LevelsFields — patches', () => {
-  it('reports enum selections with their wire values', () => {
+  it('reports the finish-type selection with its wire value', () => {
     const { onChange } = renderFields()
     fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'random' } })
     expect(onChange).toHaveBeenCalledWith({ finishType: 'random' })
-    fireEvent.change(screen.getByLabelText('Level Alignment'), { target: { value: 'random_base' } })
-    expect(onChange).toHaveBeenCalledWith({ alignment: 'random_base' })
   })
 
   it('reports a toggle change', async () => {
     const { onChange } = renderFields()
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Taper upper levels' }))
-    expect(onChange).toHaveBeenCalledWith({ taper: true })
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Reset item bag each level' }))
+    expect(onChange).toHaveBeenCalledWith({ resetBag: false })
   })
 })

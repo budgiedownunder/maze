@@ -10,6 +10,7 @@ import {
   MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT,
   MAX_SPARE_DOOR_COUNT, MAX_SPARE_KEY_COUNT,
 } from '../utils/validation'
+import { FieldGroup } from './FieldGroup'
 import type { MazeGenerationFieldsValue } from './MazeGenerationFields'
 import type { ObjectsFieldsValue } from './GameSettingsFields'
 
@@ -47,8 +48,7 @@ export function ObjectGroupsFields({ counts, onCountsChange, styles, onStylesCha
 
   return (
     <>
-      <div className="object-group" role="group" aria-labelledby="gamedef-objgrp-doors">
-        <h4 id="gamedef-objgrp-doors" className="object-group-title">Doors</h4>
+      <FieldGroup title="Doors" id="doors">
         {countField('doorCount', 'Count', MAX_DOOR_COUNT)}
         {countField('spareDoors', 'Spares', MAX_SPARE_DOOR_COUNT)}
         <label className="modal-stacked-input">
@@ -63,10 +63,9 @@ export function ObjectGroupsFields({ counts, onCountsChange, styles, onStylesCha
             ))}
           </select>
         </label>
-      </div>
+      </FieldGroup>
 
-      <div className="object-group" role="group" aria-labelledby="gamedef-objgrp-keys">
-        <h4 id="gamedef-objgrp-keys" className="object-group-title">Keys</h4>
+      <FieldGroup title="Keys" id="keys">
         {countField('spareKeys', 'Spares', MAX_SPARE_KEY_COUNT)}
         <label className="modal-stacked-input">
           Holder
@@ -80,10 +79,9 @@ export function ObjectGroupsFields({ counts, onCountsChange, styles, onStylesCha
             ))}
           </select>
         </label>
-      </div>
+      </FieldGroup>
 
-      <div className="object-group" role="group" aria-labelledby="gamedef-objgrp-enemies">
-        <h4 id="gamedef-objgrp-enemies" className="object-group-title">Enemies</h4>
+      <FieldGroup title="Enemies" id="enemies">
         {countField('enemyCount', 'Count', MAX_ENEMY_COUNT)}
         <label className="modal-stacked-input">
           Type
@@ -97,10 +95,9 @@ export function ObjectGroupsFields({ counts, onCountsChange, styles, onStylesCha
             ))}
           </select>
         </label>
-      </div>
+      </FieldGroup>
 
-      <div className="object-group" role="group" aria-labelledby="gamedef-objgrp-health">
-        <h4 id="gamedef-objgrp-health" className="object-group-title">Health</h4>
+      <FieldGroup title="Health" id="health">
         {countField('healthCount', 'Count', MAX_HEALTH_COUNT)}
         <label className="modal-stacked-input">
           Type
@@ -114,12 +111,11 @@ export function ObjectGroupsFields({ counts, onCountsChange, styles, onStylesCha
             ))}
           </select>
         </label>
-      </div>
+      </FieldGroup>
 
-      <div className="object-group" role="group" aria-labelledby="gamedef-objgrp-treasure">
-        <h4 id="gamedef-objgrp-treasure" className="object-group-title">Treasure</h4>
+      <FieldGroup title="Treasure" id="treasure">
         {countField('treasureCount', 'Count', MAX_TREASURE_COUNT)}
-      </div>
+      </FieldGroup>
     </>
   )
 }
