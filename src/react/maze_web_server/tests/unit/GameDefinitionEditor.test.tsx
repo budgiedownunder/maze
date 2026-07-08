@@ -167,9 +167,9 @@ describe('GameDefinitionEditor — commit', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     fireEvent.change(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count'), { target: { value: '3' } })
 
-    // The decor toggles now live on the Scene tab (below Perimeter walls).
+    // The decor toggles now live in the Scene tab's Decoration group.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Floor junction markers' }))
+    await userEvent.click(within(screen.getByRole('group', { name: 'Decoration' })).getByRole('checkbox', { name: 'Floor junctions' }))
 
     await userEvent.click(commitButton())
 
@@ -205,10 +205,11 @@ describe('GameDefinitionEditor — commit', () => {
     fireEvent.change(levelsGroup.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
     await userEvent.click(levelsGroup.getByRole('checkbox', { name: 'Taper' }))
 
-    // The final-level override now lives on the Scene tab.
+    // The final-level override is on the Scene tab; its sky select ("Final Level")
+    // lives in the Sky group (a perimeter "Final Level" also exists in Walls).
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Override final level appearance' }))
-    fireEvent.change(screen.getByLabelText('Final Level Sky'), { target: { value: 'day' } })
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Override final' }))
+    fireEvent.change(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level'), { target: { value: 'day' } })
 
     await userEvent.click(commitButton())
 
@@ -223,13 +224,23 @@ describe('GameDefinitionEditor — commit', () => {
     })
   })
 
-  it('carries the decor toggles on the Scene tab, after the perimeter-walls control', async () => {
+  it('groups the Scene tab into Sky / Walls / Decoration with the renamed controls', async () => {
     renderEditor()
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    // The Scene tab holds both the scene controls and the (folded-in) decor ones.
-    expect(screen.getByRole('checkbox', { name: 'Perimeter walls' })).toBeVisible()
-    for (const name of ['Dead-end objects', 'Sparse wall decorations', 'Floor junction markers']) {
-      expect(screen.getByRole('checkbox', { name })).toBeVisible()
+
+    // Sky group: the sky dropdown (single-level → no final-level override yet).
+    expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Sky')).toBeVisible()
+
+    // Walls group: quadrant + renamed Texture / Perimeter.
+    const walls = within(screen.getByRole('group', { name: 'Walls' }))
+    expect(walls.getByRole('checkbox', { name: 'Quadrant wall types' })).toBeVisible()
+    expect(walls.getByLabelText('Texture')).toBeVisible()
+    expect(walls.getByRole('checkbox', { name: 'Perimeter' })).toBeVisible()
+
+    // Decoration group: the four renamed toggles (folded-in decor).
+    const decoration = within(screen.getByRole('group', { name: 'Decoration' }))
+    for (const name of ['Wall tints', 'Wall objects', 'Dead-end objects', 'Floor junctions']) {
+      expect(decoration.getByRole('checkbox', { name })).toBeVisible()
     }
   })
 
@@ -238,14 +249,14 @@ describe('GameDefinitionEditor — commit', () => {
 
     // Single-level: Scene has the scene fields but no final-level override.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    expect(screen.getByLabelText('Sky')).toBeVisible()
-    expect(screen.queryByRole('checkbox', { name: 'Override final level appearance' })).toBeNull()
+    expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Sky')).toBeVisible()
+    expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
 
     // Raise the count on General → the override appears on Scene.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '2' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    expect(screen.getByRole('checkbox', { name: 'Override final level appearance' })).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: 'Override final' })).toBeVisible()
   })
 
   it('flows the General time limit and edited Advanced controls into the built config', async () => {

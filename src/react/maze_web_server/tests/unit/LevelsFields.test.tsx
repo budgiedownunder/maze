@@ -35,7 +35,7 @@ describe('LevelsFields — rendering', () => {
 
   it('does not carry the final-level override (that lives on the Scene tab)', () => {
     renderFields()
-    expect(screen.queryByRole('checkbox', { name: 'Override final level appearance' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
   })
 })
 

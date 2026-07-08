@@ -6,7 +6,7 @@ import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 // rig plus the per-level reset / perimeter / enemy toggles. The level **count**
 // lives on the General tab, the difficulty/alignment/taper progression on the
 // Layout tab's Levels group (see `LevelProgressionFields`), and the final-level
-// scene override (`levels.top`) on the Scene tab (see `FinalLevelOverrideFields`).
+// scene override (`levels.top`) on the Scene tab (see `GameSceneFields`).
 // Field names + wire values match the config's `levels` object; the consumer
 // serializes them verbatim.
 

@@ -2,16 +2,14 @@ import { useState } from 'react'
 import { StepModalShell } from './StepModalShell'
 import { MazeGenerationFields, type MazeGenerationFieldsValue } from './MazeGenerationFields'
 import { ObjectGroupsFields } from './ObjectGroupsFields'
-import {
-  SceneFields,
-  DecorFields,
-  type SceneFieldsValue,
-  type ObjectsFieldsValue,
-  type DecorFieldsValue,
+import { GameSceneFields } from './GameSceneFields'
+import type {
+  SceneFieldsValue,
+  ObjectsFieldsValue,
+  DecorFieldsValue,
 } from './GameSettingsFields'
 import { LevelsFields } from './LevelsFields'
 import { LevelProgressionFields } from './LevelProgressionFields'
-import { FinalLevelOverrideFields } from './FinalLevelOverrideFields'
 import { FieldGroup } from './FieldGroup'
 import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
@@ -183,13 +181,15 @@ export function GameDefinitionEditor({
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'scene', effectiveStep)}>
-        <SceneFields value={form.scene} onChange={patchScene} />
-        {/* The decorative landmarks follow the scene's perimeter-walls toggle. */}
-        <DecorFields value={form.decor} onChange={patchDecor} />
-        {/* The final-level scene override only applies to a multi-level game. */}
-        {isMultiLevel && (
-          <FinalLevelOverrideFields value={form.levels.top} onChange={top => patchLevels({ top })} />
-        )}
+        <GameSceneFields
+          scene={form.scene}
+          onSceneChange={patchScene}
+          decor={form.decor}
+          onDecorChange={patchDecor}
+          top={form.levels.top}
+          onTopChange={top => patchLevels({ top })}
+          multiLevel={isMultiLevel}
+        />
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'objects', effectiveStep)}>
