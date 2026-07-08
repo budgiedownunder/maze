@@ -8,10 +8,11 @@ import type { DefinitionTopLevelConfig } from '../utils/definitionConfig'
 // controls grouped into cards. It composes the base scene settings (form.scene),
 // the decorative-landmark toggles (form.decor, folded in here rather than a
 // separate Decor tab) and — for a multi-level game — the final-level scene
-// override (form.levels.top). The override is one toggle ("Override final" in
-// the Sky group) that reveals two "Final Level" selects: the sky override in the
-// Sky group and the perimeter override in the Walls group. The labels are
-// shorter than the shared `SceneFields`/`DecorFields` (which back the single-
+// override (form.levels.top). The override needs no explicit toggle: for a
+// multi-level game the two "Final Level" selects (sky in the Sky group,
+// perimeter in the Walls group) are shown outright, each defaulting to "Inherit"
+// so leaving them alone keeps the final level looking like the rest. The labels
+// are shorter than the shared `SceneFields`/`DecorFields` (which back the single-
 // maze settings modal), so this composes its own controls rather than reusing
 // those groups.
 //
@@ -43,7 +44,6 @@ export function GameSceneFields({
   scene, onSceneChange, decor, onDecorChange, top, onTopChange, multiLevel,
 }: GameSceneFieldsProps) {
   const skyEnclosed = scene.skyType === 'dungeon' || scene.skyType === 'chamber'
-  const overrideOn = top !== null
 
   // Build the next `top` from a patch to one of its fields, dropping a key set
   // back to "inherit" so an absent field means inherit (matching the runtime).
@@ -58,33 +58,22 @@ export function GameSceneFields({
   return (
     <>
       <FieldGroup title="Sky" id="sky">
-        <label className="modal-stacked-input">
-          Sky
-          <select
-            className="input"
-            value={scene.skyType}
-            onChange={e => onSceneChange({ skyType: e.target.value as SkyType })}
-          >
-            {SKY_TYPES.map(s => (
-              <option key={s} value={s}>{titleCaseWire(s)}</option>
-            ))}
-          </select>
-        </label>
+        {/* No visible label — the group heading already names it; the aria-label
+            keeps the control accessible. */}
+        <select
+          className="input"
+          aria-label="Sky"
+          value={scene.skyType}
+          onChange={e => onSceneChange({ skyType: e.target.value as SkyType })}
+        >
+          {SKY_TYPES.map(s => (
+            <option key={s} value={s}>{titleCaseWire(s)}</option>
+          ))}
+        </select>
 
-        {/* The final-level override only applies to a multi-level game. */}
+        {/* For a multi-level game the final level's sky can override the base;
+            "Inherit" (the default) leaves it matching the rest. */}
         {multiLevel && (
-          <label className="modal-checkbox">
-            <input
-              type="checkbox"
-              checked={overrideOn}
-              // Toggling on seeds an empty override (every field inherits); off
-              // clears it back to null so the final level looks like the rest.
-              onChange={e => onTopChange(e.target.checked ? {} : null)}
-            />
-            <span>Override final</span>
-          </label>
-        )}
-        {multiLevel && overrideOn && (
           <label className="modal-stacked-input">
             Final Level
             <select
@@ -135,9 +124,9 @@ export function GameSceneFields({
           <span>Perimeter</span>
         </label>
 
-        {/* The final-level perimeter override — revealed by the Sky group's
-            "Override final" toggle, placed here beside the base Perimeter. */}
-        {multiLevel && overrideOn && (
+        {/* The final level's perimeter can override the base, beside it here;
+            "Inherit" (the default) leaves it matching the rest. */}
+        {multiLevel && (
           <label className="modal-stacked-input">
             Final Level
             <select

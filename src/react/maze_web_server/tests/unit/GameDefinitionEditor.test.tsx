@@ -206,9 +206,9 @@ describe('GameDefinitionEditor — commit', () => {
     await userEvent.click(levelsGroup.getByRole('checkbox', { name: 'Taper' }))
 
     // The final-level override is on the Scene tab; its sky select ("Final Level")
-    // lives in the Sky group (a perimeter "Final Level" also exists in Walls).
+    // shows outright (multi-level) in the Sky group — no toggle. A perimeter
+    // "Final Level" also exists in Walls.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Override final' }))
     fireEvent.change(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level'), { target: { value: 'day' } })
 
     await userEvent.click(commitButton())
@@ -244,19 +244,20 @@ describe('GameDefinitionEditor — commit', () => {
     }
   })
 
-  it('shows the final-level override on the Scene tab only for a multi-level game', async () => {
+  it('shows the Final Level overrides on the Scene tab only for a multi-level game', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
-    // Single-level: Scene has the scene fields but no final-level override.
+    // Single-level: Scene has the sky dropdown but no Final Level overrides.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
     expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Sky')).toBeVisible()
-    expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
+    expect(screen.queryByLabelText('Final Level')).toBeNull()
 
-    // Raise the count on General → the override appears on Scene.
+    // Raise the count on General → a Final Level select appears in Sky and Walls.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '2' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    expect(screen.getByRole('checkbox', { name: 'Override final' })).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Walls' })).getByLabelText('Final Level')).toBeVisible()
   })
 
   it('flows the General time limit and edited Advanced controls into the built config', async () => {

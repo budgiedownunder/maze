@@ -57,22 +57,17 @@ describe('GameSceneFields — layout', () => {
     }
   })
 
-  it('hides the final-level override entirely for a single-level game', () => {
+  it('has no Final Level controls for a single-level game (and no override toggle)', () => {
     renderScene({ multiLevel: false, top: {} })
     expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
     expect(screen.queryByLabelText('Final Level')).toBeNull()
   })
 
-  it('shows the override toggle (Sky group) but no Final Level selects until it is on', () => {
+  it('shows a Final Level select in BOTH the Sky and Walls groups for a multi-level game, defaulting to Inherit', () => {
+    // No override toggle any more — the selects appear outright, defaulting to Inherit.
     renderScene({ multiLevel: true, top: null })
-    expect(group('Sky').getByRole('checkbox', { name: 'Override final' })).not.toBeChecked()
-    expect(screen.queryByLabelText('Final Level')).toBeNull()
-  })
-
-  it('reveals a Final Level select in BOTH the Sky and Walls groups when the override is on', () => {
-    renderScene({ multiLevel: true, top: {} })
-    expect(group('Sky').getByRole('checkbox', { name: 'Override final' })).toBeChecked()
-    // Sky group's Final Level is the sky override (defaults to Inherit = '').
+    expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
+    // Sky group's Final Level is the sky override (Inherit = '').
     expect(group('Sky').getByLabelText('Final Level')).toHaveValue('')
     // Walls group's Final Level is the perimeter override (tri-state, Inherit).
     expect(group('Walls').getByLabelText('Final Level')).toHaveValue('inherit')
@@ -115,22 +110,16 @@ describe('GameSceneFields — patches', () => {
 })
 
 describe('GameSceneFields — final-level override', () => {
-  it('toggling the override on seeds an empty (all-inherit) top', async () => {
+  it('sets the Sky-group Final Level as the sky override (from a null top)', () => {
     const { onTopChange } = renderScene({ multiLevel: true, top: null })
-    await userEvent.click(group('Sky').getByRole('checkbox', { name: 'Override final' }))
-    expect(onTopChange).toHaveBeenCalledWith({})
-  })
-
-  it('toggling the override off clears the top back to null', async () => {
-    const { onTopChange } = renderScene({ multiLevel: true, top: { skyType: 'night' } })
-    await userEvent.click(group('Sky').getByRole('checkbox', { name: 'Override final' }))
-    expect(onTopChange).toHaveBeenCalledWith(null)
-  })
-
-  it('sets the Sky-group Final Level as the sky override', () => {
-    const { onTopChange } = renderScene({ multiLevel: true, top: {} })
     fireEvent.change(group('Sky').getByLabelText('Final Level'), { target: { value: 'night' } })
     expect(onTopChange).toHaveBeenCalledWith({ skyType: 'night' })
+  })
+
+  it('clearing the Sky-group Final Level back to Inherit drops the key', () => {
+    const { onTopChange } = renderScene({ multiLevel: true, top: { skyType: 'night' } })
+    fireEvent.change(group('Sky').getByLabelText('Final Level'), { target: { value: '' } })
+    expect(onTopChange).toHaveBeenCalledWith({})
   })
 
   it('sets the Walls-group Final Level as the tri-state perimeter override', () => {
