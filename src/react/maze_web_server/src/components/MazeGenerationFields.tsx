@@ -67,7 +67,7 @@ export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsPr
           type="number"
           className="input"
           value={value.minSolutionLength}
-          min={1}
+          min={0}
           onChange={e => onChange({ minSolutionLength: e.target.value })}
         />
       </label>

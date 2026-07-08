@@ -90,7 +90,9 @@ export function exceedsGenerateFeatureCap(
 // authored on a concrete grid (`'maze'` → positions required + in-bounds +
 // distinct), whereas a game definition is generated from a seed with no grid
 // (`'game'` → positions ignored). The position checks run in the same order and
-// with the same messages the Generate dialog used inline.
+// with the same messages the Generate dialog used inline. `kind` also sets the
+// `minSolutionLength` floor: a game accepts 0 (no minimum, as the server does),
+// while an authored maze needs a solution of at least one step.
 export function validateMazeGenerationFields(
   v: {
     rows: string
@@ -136,7 +138,10 @@ export function validateMazeGenerationFields(
     if (!Number.isInteger(fc) || fc < 1 || fc > cols) return `Finish Column must be between 1 and ${cols}.`
     if (sr === fr && sc === fc) return 'Start and Finish cells must be different.'
   }
-  if (!Number.isInteger(msl) || msl < 1) return 'Min Solution Length must be a whole number of 1 or more.'
+  const minMsl = kind === 'maze' ? 1 : 0
+  if (!Number.isInteger(msl) || msl < minMsl) {
+    return `Min Solution Length must be a whole number of ${minMsl} or more.`
+  }
   if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
     return `Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
   }

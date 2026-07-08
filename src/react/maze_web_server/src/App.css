@@ -70,6 +70,21 @@
   padding: 0.75rem 1rem;
 }
 
+/* Wash the accent out when disabled, rather than replacing it with grey: the
+   definition wizard's Finish sits beside the grey Cancel/Back, so a grey
+   disabled state would be indistinguishable from an enabled one. Keeping the
+   hue and dropping the contrast reads as "the primary action, not yet
+   available" — which is exactly the early-Finish affordance. */
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-gray:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-secondary {
   background: none;
   border: 1px solid var(--border-input);
@@ -528,12 +543,15 @@
 
 /* The global `input { font-size: 1rem; padding: … }` rule in
    index.css applies only to `<input>`. Without a matching rule,
-   `<select>` falls back to the browser's UA font (typically a
-   different font family + smaller size than the surrounding form
-   text), which reads as mismatched against the input fields beside
-   it. Apply the same family/size/padding so the dropdowns look like
-   the inputs do in e.g. the Generate Maze modal. */
-.modal-form select.input {
+   `<select>` and `<textarea>` fall back to the browser's UA font
+   (typically a different font family + smaller size than the
+   surrounding form text), which reads as mismatched against the input
+   fields beside them. Apply the same family/size/padding so every
+   field in a dialog matches, whether or not the dialog wraps its
+   fields in a `.modal-form` (the definition editor's step shell
+   doesn't). */
+select.input,
+textarea.input {
   font-family: inherit;
   font-size: 1rem;
   padding: 0.5rem 0.75rem;

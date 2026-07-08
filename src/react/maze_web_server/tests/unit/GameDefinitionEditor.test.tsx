@@ -1,0 +1,169 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { GameDefinitionEditor } from '../../src/components/GameDefinitionEditor'
+import { AppFeaturesContext } from '../../src/context/AppFeaturesContext'
+import { DEFINITION_DEFAULTS, type DefinitionFormState } from '../../src/utils/definitionConfig'
+import type { AppFeatures, GameDefinitionRequest } from '../../src/types/api'
+
+const FEATURES: AppFeatures = { allow_signup: true, oauth_providers: [], email_enabled: false, max_maze_cells: null }
+
+function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: number | null; mode?: 'tabs' | 'wizard' } = {}) {
+  const onSubmit = vi.fn<(request: GameDefinitionRequest) => void>()
+  const onCancel = vi.fn()
+  render(
+    <AppFeaturesContext.Provider value={{ ...FEATURES, max_maze_cells: over.maxMazeCells ?? null }}>
+      <GameDefinitionEditor
+        mode={over.mode ?? 'wizard'}
+        title="New game"
+        initialForm={over.initialForm ?? DEFINITION_DEFAULTS}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+      />
+    </AppFeaturesContext.Provider>,
+  )
+  return { onSubmit, onCancel }
+}
+
+const commitButton = () => screen.getByRole('button', { name: 'Finish' })
+
+describe('GameDefinitionEditor — steps', () => {
+  it('renders the five steps, Details first', () => {
+    renderEditor()
+    for (const label of ['Details', 'Generation', 'Scene', 'Objects', 'Decor']) {
+      expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByLabelText('Name')).toBeVisible()
+  })
+
+  it('shows the generation field-group on the Generation step', async () => {
+    renderEditor()
+    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    expect(screen.getByLabelText('Rows')).toBeVisible()
+    expect(screen.getByLabelText('Treasure')).toBeVisible()
+  })
+})
+
+describe('GameDefinitionEditor — canCommit gating', () => {
+  it('disables Finish until a non-empty name is entered', async () => {
+    renderEditor()
+    expect(commitButton()).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Name'), '   ')
+    expect(commitButton()).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Name'), 'Tower')
+    expect(commitButton()).toBeEnabled()
+  })
+
+  it('offers early Finish from the first step once the form validates', () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-current', 'step')
+    expect(commitButton()).toBeEnabled()
+  })
+
+  it('disables Finish and reports the error when the generation fields are invalid', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '2' } })
+    expect(screen.getByRole('alert')).toHaveTextContent('Rows must be a whole number of 3 or more.')
+    expect(commitButton()).toBeDisabled()
+  })
+
+  it('keeps the generation error visible from another step (pinned footer)', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    fireEvent.change(screen.getByLabelText('Enemies'), { target: { value: '9' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Details' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Enemies must be a whole number between 0 and 8.')
+  })
+
+  it('honours the server-reported cell cap', () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' }, maxMazeCells: 50 })
+    // The 8×8 defaults are 64 cells, over a cap of 50.
+    expect(screen.getByRole('alert')).toHaveTextContent('Total cells (rows × columns) cannot exceed 50.')
+    expect(commitButton()).toBeDisabled()
+  })
+
+  it('accepts a min solution length of 0 (no minimum)', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    fireEvent.change(screen.getByLabelText('Min Solution Length'), { target: { value: '0' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(commitButton()).toBeEnabled()
+  })
+})
+
+describe('GameDefinitionEditor — commit', () => {
+  it('builds the request from the edited form on Finish', async () => {
+    const { onSubmit } = renderEditor()
+    await userEvent.type(screen.getByLabelText('Name'), 'Tower')
+    await userEvent.type(screen.getByLabelText('Description'), 'Climb it')
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '12' } })
+    fireEvent.change(screen.getByLabelText('Treasure'), { target: { value: '3' } })
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Decor' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Floor junction markers' }))
+
+    await userEvent.click(commitButton())
+
+    expect(onSubmit).toHaveBeenCalledOnce()
+    const request = onSubmit.mock.calls[0][0]
+    expect(request.name).toBe('Tower')
+    expect(request.description).toBe('Climb it')
+    expect(request.visibility).toBe('private')
+    expect(request.rotation).toBe('static')
+    expect(request.config).toMatchObject({
+      rows: 12,
+      cols: 8,
+      treasureCount: 3,
+      seed: 0,
+      landmarks: expect.objectContaining({ floorAccents: !DEFINITION_DEFAULTS.decor.floorAccents }),
+      levels: expect.objectContaining({ count: 1 }),
+    })
+  })
+
+  it('trims the name and seeds title + mode from it when both are blank', async () => {
+    const { onSubmit } = renderEditor()
+    await userEvent.type(screen.getByLabelText('Name'), '  Tower  ')
+    await userEvent.click(commitButton())
+
+    const request = onSubmit.mock.calls[0][0]
+    expect(request.name).toBe('Tower')
+    expect(request.config).toMatchObject({ title: 'Tower', mode: 'Tower' })
+  })
+
+  it('leaves an explicit title / mode untouched', async () => {
+    const { onSubmit } = renderEditor({
+      initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower', title: 'Ascend!', mode: 'Endless' },
+    })
+    await userEvent.click(commitButton())
+    expect(onSubmit.mock.calls[0][0].config).toMatchObject({ title: 'Ascend!', mode: 'Endless' })
+  })
+
+  it('stores an empty description as unset', async () => {
+    const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(commitButton())
+    expect(onSubmit.mock.calls[0][0].description).toBeNull()
+  })
+
+  it('echoes the pass-through visibility / rotation / seed unchanged', async () => {
+    const { onSubmit } = renderEditor({
+      mode: 'tabs',
+      initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower', visibility: 'public', rotation: 'daily', seed: 99 },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const request = onSubmit.mock.calls[0][0]
+    expect(request.visibility).toBe('public')
+    expect(request.rotation).toBe('daily')
+    expect(request.config).toMatchObject({ seed: 99 })
+  })
+
+  it('cancels without submitting', async () => {
+    const { onSubmit, onCancel } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+})

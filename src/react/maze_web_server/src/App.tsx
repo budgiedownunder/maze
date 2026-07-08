@@ -14,6 +14,7 @@ import { HomePage } from './pages/HomePage'
 import { MazesPage } from './pages/MazesPage'
 import { MazePage } from './pages/MazePage'
 import { MazeGamePage } from './pages/MazeGamePage'
+import { GamesStubPage } from './pages/GamesStubPage'
 import { AccountPage } from './pages/AccountPage'
 import { LeaderboardsPage } from './pages/LeaderboardsPage'
 
@@ -35,6 +36,7 @@ const router = createBrowserRouter([
   { path: '/mazes/new', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/mazes/:id', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/play/:id', element: <ProtectedRoute><MazeGamePage /></ProtectedRoute> },
+  { path: '/games', element: <ProtectedRoute><GamesStubPage /></ProtectedRoute> },
   { path: '/leaderboards', element: <ProtectedRoute><LeaderboardsPage /></ProtectedRoute> },
   { path: '/account', element: <ProtectedRoute><AccountPage /></ProtectedRoute> },
   { path: '*', element: <Navigate to="/login" replace /> },

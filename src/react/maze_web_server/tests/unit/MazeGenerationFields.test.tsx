@@ -33,9 +33,13 @@ describe('validateMazeGenerationFields (game subject — no positions)', () => {
     expect(validateMazeGenerationFields(VALID, null, 'game')).toBeNull()
   })
 
-  it('requires a min solution length of at least 1', () => {
-    expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '0' }, null, 'game')).toBe(
-      'Min Solution Length must be a whole number of 1 or more.',
+  it('allows a min solution length of 0 (no minimum) but rejects a negative one', () => {
+    expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '0' }, null, 'game')).toBeNull()
+    expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '-1' }, null, 'game')).toBe(
+      'Min Solution Length must be a whole number of 0 or more.',
+    )
+    expect(validateMazeGenerationFields({ ...VALID, minSolutionLength: '' }, null, 'game')).toBe(
+      'Min Solution Length must be a whole number of 0 or more.',
     )
   })
 
@@ -96,6 +100,12 @@ describe('validateMazeGenerationFields (maze subject — positions checked)', ()
 
   it('rejects missing positions (the game path leaves them undefined)', () => {
     expect(validateMazeGenerationFields(VALID, null, 'maze')).toBe('Start Row must be between 1 and 10.')
+  })
+
+  it('still requires a min solution length of at least 1', () => {
+    expect(validateMazeGenerationFields({ ...MAZE_VALID, minSolutionLength: '0' }, null, 'maze')).toBe(
+      'Min Solution Length must be a whole number of 1 or more.',
+    )
   })
 })
 

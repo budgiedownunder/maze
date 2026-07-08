@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -203,6 +203,35 @@ export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
   mockMazes = [mockMazeAlpha, mockMazeBeta]
+}
+
+// In-memory mock game definitions, mirrored into sessionStorage for the same
+// reason the token maps are: an e2e reload re-imports this module, and a created
+// definition has to survive that to be seen in the reloaded list.
+const GAME_DEFINITION_STORAGE_KEY = '__msw_mock_game_definitions'
+
+function loadGameDefinitions(): GameDefinition[] {
+  if (typeof sessionStorage === 'undefined') return []
+  try {
+    const raw = sessionStorage.getItem(GAME_DEFINITION_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as GameDefinition[]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveGameDefinitions(): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(GAME_DEFINITION_STORAGE_KEY, JSON.stringify(mockGameDefinitions))
+  } catch { /* ignore quota / serialization errors */ }
+}
+
+export let mockGameDefinitions: GameDefinition[] = loadGameDefinitions()
+
+export function resetMockGameDefinitions(): void {
+  mockGameDefinitions = []
+  if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(GAME_DEFINITION_STORAGE_KEY)
 }
 
 // In-memory mock token stores (token → target email). Confirm endpoints look
@@ -458,6 +487,37 @@ export const handlers = [
     if (!exists) return new HttpResponse(null, { status: 404 })
     mockMazes = mockMazes.filter(m => m.id !== params.id)
     return new HttpResponse(null, { status: 200 })
+  }),
+
+  // Game definitions — the list the caller may see, and create. `seed` is
+  // server-minted, so the create handler stamps one.
+  http.get(`${BASE}/game-definitions`, () => {
+    return HttpResponse.json<GameDefinitionListResponse>({
+      definitions: mockGameDefinitions,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    })
+  }),
+
+  http.post(`${BASE}/game-definitions`, async ({ request }) => {
+    const body = await request.json() as GameDefinitionRequest
+    const now = new Date().toISOString()
+    const created: GameDefinition = {
+      id: `def-${Date.now()}`,
+      ownerId: mockProfile.id,
+      name: body.name,
+      description: body.description ?? undefined,
+      visibility: body.visibility ?? 'private',
+      seed: 424242,
+      rotation: body.rotation ?? 'static',
+      config: body.config,
+      createdAt: now,
+      updatedAt: now,
+    }
+    mockGameDefinitions = [...mockGameDefinitions, created]
+    saveGameDefinitions()
+    return HttpResponse.json(created, { status: 201 })
   }),
 
   // Scores — curated preset (for the leaderboard seed), personal history, and
