@@ -65,7 +65,7 @@ test('Edit opens the tabs editor over an existing game and Save persists the cha
   await expect(page.getByText(renamed)).toBeVisible()
 })
 
-test('New game wizard steps through Details → Generation and blocks an invalid size', async ({ page }) => {
+test('New game wizard steps through General → Generation and blocks an invalid size', async ({ page }) => {
   await login(page)
 
   await page.getByRole('button', { name: 'New game' }).click()
@@ -80,4 +80,25 @@ test('New game wizard steps through Details → Generation and blocks an invalid
 
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).toBeHidden()
+})
+
+test('the Levels tab appears only when the level count is raised above 1', async ({ page }) => {
+  await login(page)
+
+  await page.getByRole('button', { name: 'New game' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New game' })
+  await dialog.getByLabel('Name').fill('Stacked')
+
+  // Single-level by default: no Levels step in the wizard rail.
+  await expect(dialog.getByRole('tab', { name: 'Levels' })).toBeHidden()
+
+  await dialog.getByLabel('Levels', { exact: true }).fill('3')
+  await expect(dialog.getByRole('tab', { name: 'Levels' })).toBeVisible()
+  await dialog.getByRole('tab', { name: 'Levels' }).click()
+  await expect(dialog.getByLabel('Finish Type')).toBeVisible()
+
+  // Back to a single level hides the tab again.
+  await dialog.getByRole('tab', { name: 'General' }).click()
+  await dialog.getByLabel('Levels', { exact: true }).fill('1')
+  await expect(dialog.getByRole('tab', { name: 'Levels' })).toBeHidden()
 })

@@ -3,7 +3,6 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { AdvancedFields, type AdvancedFieldsValue } from '../../src/components/AdvancedFields'
 
 const BASE: AdvancedFieldsValue = {
-  timerSeconds: '120',
   maxHp: '3',
   enemyMovePeriodMs: '1500',
   minimapCellPx: '10',
@@ -19,15 +18,19 @@ function renderFields(over: Partial<AdvancedFieldsValue> = {}, namePlaceholder =
 }
 
 describe('AdvancedFields', () => {
-  it('renders the five numeric knobs and the two override text fields', () => {
+  it('renders the four numeric knobs and the two override text fields', () => {
     renderFields()
-    expect(screen.getByLabelText('Time limit (seconds)')).toHaveValue(120)
     expect(screen.getByLabelText('Max HP')).toHaveValue(3)
     expect(screen.getByLabelText('Enemy move period (ms)')).toHaveValue(1500)
     expect(screen.getByLabelText('Minimap cell size (px)')).toHaveValue(10)
     expect(screen.getByLabelText('Minimap radius (cells)')).toHaveValue(5)
     expect(screen.getByLabelText('Splash title')).toHaveValue('')
     expect(screen.getByLabelText('Status-bar label')).toHaveValue('')
+  })
+
+  it('does not carry the time limit (that lives on the General tab)', () => {
+    renderFields()
+    expect(screen.queryByLabelText('Time limit (seconds)')).toBeNull()
   })
 
   it('uses descriptive labels, not the raw config keys', () => {
@@ -64,7 +67,7 @@ describe('AdvancedFields', () => {
 
   it('hints a minimum on the numeric inputs', () => {
     renderFields()
-    expect(screen.getByLabelText('Time limit (seconds)')).toHaveAttribute('min', '1')
+    expect(screen.getByLabelText('Max HP')).toHaveAttribute('min', '1')
     expect(screen.getByLabelText('Minimap radius (cells)')).toHaveAttribute('min', '1')
   })
 })

@@ -13,9 +13,8 @@ function renderFields(over: Partial<DefinitionLevelsFormValue> = {}) {
 }
 
 describe('LevelsFields — rendering', () => {
-  it('renders the count, the three enum selects, and the four toggles', () => {
+  it('renders the three enum selects and the four toggles', () => {
     renderFields()
-    expect(screen.getByLabelText('Levels')).toHaveValue(1)
     expect(screen.getByLabelText('Finish Type')).toHaveValue('ladder')
     expect(screen.getByLabelText('Difficulty Change')).toHaveValue('easier')
     expect(screen.getByLabelText('Level Alignment')).toHaveValue('edge')
@@ -24,11 +23,9 @@ describe('LevelsFields — rendering', () => {
     }
   })
 
-  it('bounds the count input to [1, 20]', () => {
+  it('does not carry the level count (that lives on the General tab)', () => {
     renderFields()
-    const count = screen.getByLabelText('Levels')
-    expect(count).toHaveAttribute('min', '1')
-    expect(count).toHaveAttribute('max', '20')
+    expect(screen.queryByLabelText('Levels')).toBeNull()
   })
 
   it('hides the final-level override controls until the override is enabled', () => {
@@ -39,12 +36,6 @@ describe('LevelsFields — rendering', () => {
 })
 
 describe('LevelsFields — patches', () => {
-  it('reports a count change', () => {
-    const { onChange } = renderFields()
-    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '5' } })
-    expect(onChange).toHaveBeenCalledWith({ count: '5' })
-  })
-
   it('reports enum selections with their wire values', () => {
     const { onChange } = renderFields()
     fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'random' } })

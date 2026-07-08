@@ -4,19 +4,17 @@ import {
   FINISH_TYPES,
   DIFFICULTY_CHANGES,
   LEVEL_ALIGNMENTS,
-  MAX_LEVEL_COUNT,
   type FinishType,
   type DifficultyChange,
   type LevelAlignment,
 } from '../utils/gameDefinitions'
 import type { DefinitionLevelsFormValue, DefinitionTopLevelConfig } from '../utils/definitionConfig'
 
-// The multi-level run field-group for the game-definition editor: how many
-// levels a game stacks and how the stack behaves. A single-level game
-// (`count === 1`, the default) leaves every other field inert — the runtime
-// ignores them — so the controls stay editable rather than being gated; they
-// simply have no effect until the count is 2 or more. Field names + wire values
-// match the config's `levels` object; the consumer serializes them verbatim.
+// The multi-level run field-group for the game-definition editor: how the level
+// stack behaves. The level **count** lives on the editor's General tab (it is
+// the single-vs-multi-level decision, and this whole tab is hidden while the
+// count is 1), so it is not repeated here. Field names + wire values match the
+// config's `levels` object; the consumer serializes them verbatim.
 
 // The final-level scene override (`levels.top`): a value the perimeter select
 // maps to, plus `''` for "inherit the base game's setting".
@@ -48,18 +46,6 @@ export function LevelsFields({ value, onChange }: LevelsFieldsProps) {
 
   return (
     <>
-      <label className="modal-stacked-input">
-        Levels
-        <input
-          type="number"
-          className="input"
-          value={value.count}
-          min={1}
-          max={MAX_LEVEL_COUNT}
-          onChange={e => onChange({ count: e.target.value })}
-        />
-      </label>
-
       <label className="modal-stacked-input">
         Finish Type
         <select

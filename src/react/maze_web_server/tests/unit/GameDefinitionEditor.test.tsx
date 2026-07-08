@@ -28,13 +28,18 @@ function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: 
 const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 
 describe('GameDefinitionEditor — steps', () => {
-  it('renders the seven steps, Details first', () => {
+  it('renders General first with its identity + structure fields, no Levels tab at count 1', () => {
     renderEditor()
-    for (const label of ['Details', 'Generation', 'Scene', 'Objects', 'Decor', 'Levels', 'Advanced']) {
+    for (const label of ['General', 'Generation', 'Scene', 'Objects', 'Decor', 'Advanced']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByLabelText('Name')).toBeVisible()
+    // Single-level by default, so the Levels tab is absent from the strip.
+    expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
+    // The count + time limit live on General alongside name/description.
+    for (const label of ['Name', 'Description', 'Levels', 'Time limit (seconds)']) {
+      expect(screen.getByLabelText(label)).toBeVisible()
+    }
   })
 
   it('shows the generation field-group on the Generation step', async () => {
@@ -44,17 +49,27 @@ describe('GameDefinitionEditor — steps', () => {
     expect(screen.getByLabelText('Treasure')).toBeVisible()
   })
 
-  it('shows the levels field-group on the Levels step', async () => {
-    renderEditor()
+  it('reveals the Levels tab only once the count is raised above 1, and hides it again', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '3' } })
+    expect(screen.getByRole('tab', { name: 'Levels' })).toBeInTheDocument()
+
     await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
-    expect(screen.getByLabelText('Levels')).toBeVisible()
     expect(screen.getByLabelText('Finish Type')).toBeVisible()
+
+    // Back to single-level: the tab disappears and the view falls back to General.
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '1' } })
+    expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
   })
 
   it('shows the advanced field-group on the Advanced step', async () => {
     renderEditor()
     await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
-    expect(screen.getByLabelText('Time limit (seconds)')).toBeVisible()
+    expect(screen.getByLabelText('Max HP')).toBeVisible()
     expect(screen.getByLabelText('Splash title')).toBeVisible()
   })
 })
@@ -71,7 +86,7 @@ describe('GameDefinitionEditor — canCommit gating', () => {
 
   it('offers early Finish from the first step once the form validates', () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
     expect(commitButton()).toBeEnabled()
   })
 
@@ -87,7 +102,7 @@ describe('GameDefinitionEditor — canCommit gating', () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Generation' }))
     fireEvent.change(screen.getByLabelText('Enemies'), { target: { value: '9' } })
-    await userEvent.click(screen.getByRole('tab', { name: 'Details' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Enemies must be a whole number between 0 and 8.')
   })
 
@@ -141,8 +156,9 @@ describe('GameDefinitionEditor — commit', () => {
   it('flows the edited Levels controls into the built config', async () => {
     const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
+    // The count is on General and reveals the Levels tab once above 1.
     fireEvent.change(screen.getByLabelText('Levels'), { target: { value: '4' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
     fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'portal' } })
     fireEvent.change(screen.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
     await userEvent.click(screen.getByRole('checkbox', { name: 'Taper upper levels' }))
@@ -162,11 +178,13 @@ describe('GameDefinitionEditor — commit', () => {
     })
   })
 
-  it('flows the edited Advanced controls into the built config', async () => {
+  it('flows the General time limit and edited Advanced controls into the built config', async () => {
     const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    // Time limit is on General; the rest on Advanced.
     fireEvent.change(screen.getByLabelText('Time limit (seconds)'), { target: { value: '90' } })
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
     fireEvent.change(screen.getByLabelText('Max HP'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Minimap radius (cells)'), { target: { value: '8' } })
     // An explicit splash title overrides the name-seeding; the status-bar label

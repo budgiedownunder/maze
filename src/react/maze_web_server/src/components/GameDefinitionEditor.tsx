@@ -15,18 +15,20 @@ import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { validateMazeGenerationFields } from '../utils/validation'
+import { MAX_LEVEL_COUNT } from '../utils/gameDefinitions'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import type { GameDefinitionRequest } from '../types/api'
 
-// The game-definition editor: the definition's own Details (name + description)
-// plus the shared generation / scene / objects / decor field-groups, hosted in
-// the dual-mode step shell — a wizard for creating a definition, tabs for
-// editing one. It owns the working form state and hands the caller a finished
-// `GameDefinitionRequest`, so create and edit differ only in `mode`, the seed
-// state and what the caller does with the request.
+// The game-definition editor: the definition's own General details (name,
+// description, level count + time limit) plus the shared generation / scene /
+// objects / decor / levels / advanced field-groups, hosted in the dual-mode step
+// shell — a wizard for creating a definition, tabs for editing one. It owns the
+// working form state and hands the caller a finished `GameDefinitionRequest`, so
+// create and edit differ only in `mode`, the seed state and what the caller does
+// with the request.
 
 const STEPS = [
-  { id: 'details', label: 'Details' },
+  { id: 'general', label: 'General' },
   { id: 'generation', label: 'Generation' },
   { id: 'scene', label: 'Scene' },
   { id: 'objects', label: 'Objects' },
@@ -59,8 +61,19 @@ export function GameDefinitionEditor({
   onCancel,
 }: GameDefinitionEditorProps) {
   const { max_maze_cells } = useAppFeatures()
-  const [activeStep, setActiveStep] = useState<EditorStep>('details')
+  const [activeStep, setActiveStep] = useState<EditorStep>('general')
   const [form, setForm] = useState<DefinitionFormState>(initialForm)
+
+  // The Levels tab only exists for a multi-level game — a single-level game
+  // (count ≤ 1, incl. blank/invalid) hides it from both the wizard rail and the
+  // tab strip, so the single-vs-multi-level decision (the count on General) is
+  // what reveals it. The Levels panel itself stays mounted below, so toggling
+  // the count down and back up preserves the level settings.
+  const isMultiLevel = parseInt(form.levels.count, 10) > 1
+  const visibleSteps = isMultiLevel ? STEPS : STEPS.filter(s => s.id !== 'levels')
+  // Guard the shell against a stale active step (e.g. Levels was active when the
+  // count dropped to 1); fall back to General, which always exists.
+  const effectiveStep = visibleSteps.some(s => s.id === activeStep) ? activeStep : 'general'
 
   const patchGeneration = (patch: Partial<MazeGenerationFieldsValue>) =>
     setForm(f => ({ ...f, generation: { ...f.generation, ...patch } }))
@@ -101,8 +114,8 @@ export function GameDefinitionEditor({
     <StepModalShell
       mode={mode}
       title={title}
-      steps={STEPS}
-      activeStep={activeStep}
+      steps={visibleSteps}
+      activeStep={effectiveStep}
       onStepChange={setActiveStep}
       idPrefix={ID_PREFIX}
       ariaLabel="Game definition steps"
@@ -112,7 +125,7 @@ export function GameDefinitionEditor({
       commitLabel={commitLabel}
       footerNote={generationError && <p role="alert" className="error-msg">{generationError}</p>}
     >
-      <div {...modalTabPanelProps(ID_PREFIX, 'details', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'general', effectiveStep)}>
         <label className="modal-stacked-input">
           Name
           <input
@@ -131,32 +144,52 @@ export function GameDefinitionEditor({
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
           />
         </label>
+        <label className="modal-stacked-input">
+          Levels
+          <input
+            type="number"
+            className="input"
+            value={form.levels.count}
+            min={1}
+            max={MAX_LEVEL_COUNT}
+            onChange={e => patchLevels({ count: e.target.value })}
+          />
+        </label>
+        <label className="modal-stacked-input">
+          Time limit (seconds)
+          <input
+            type="number"
+            className="input"
+            value={form.timerSeconds}
+            min={1}
+            onChange={e => setForm(f => ({ ...f, timerSeconds: e.target.value }))}
+          />
+        </label>
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'generation', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'generation', effectiveStep)}>
         <MazeGenerationFields value={form.generation} onChange={patchGeneration} />
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'scene', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'scene', effectiveStep)}>
         <SceneFields value={form.scene} onChange={patchScene} />
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'objects', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'objects', effectiveStep)}>
         <ObjectsFields value={form.objects} onChange={patchObjects} />
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'decor', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'decor', effectiveStep)}>
         <DecorFields value={form.decor} onChange={patchDecor} />
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'levels', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'levels', effectiveStep)}>
         <LevelsFields value={form.levels} onChange={patchLevels} />
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'advanced', activeStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'advanced', effectiveStep)}>
         <AdvancedFields
           value={{
-            timerSeconds: form.timerSeconds,
             maxHp: form.maxHp,
             enemyMovePeriodMs: form.enemyMovePeriodMs,
             minimapCellPx: form.minimapCellPx,

@@ -10,13 +10,12 @@ import type { DefinitionFormState } from '../utils/definitionConfig'
 
 export type AdvancedFieldsValue = Pick<
   DefinitionFormState,
-  'timerSeconds' | 'maxHp' | 'enemyMovePeriodMs' | 'minimapCellPx' | 'minimapRadius' | 'title' | 'mode'
+  'maxHp' | 'enemyMovePeriodMs' | 'minimapCellPx' | 'minimapRadius' | 'title' | 'mode'
 >
 
 // The numeric knobs share the same labelled-number-input shape, so they render
 // from a table. `min` is an input hint only — the runtime clamps regardless.
 const NUMBER_FIELDS: { key: keyof AdvancedFieldsValue; label: string; min: number }[] = [
-  { key: 'timerSeconds', label: 'Time limit (seconds)', min: 1 },
   { key: 'maxHp', label: 'Max HP', min: 1 },
   { key: 'enemyMovePeriodMs', label: 'Enemy move period (ms)', min: 1 },
   { key: 'minimapCellPx', label: 'Minimap cell size (px)', min: 1 },
