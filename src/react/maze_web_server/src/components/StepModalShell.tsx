@@ -60,7 +60,7 @@ export function StepModalShell<T extends string>({
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={title} style={{ zIndex: 1200 }}>
-      <div className={`modal modal-with-scroll-body ${mode === 'wizard' ? 'modal-wizard' : 'modal-md'}`}>
+      <div className="modal modal-with-scroll-body modal-steps">
         <h2 className="modal-title">{title}</h2>
 
         {mode === 'wizard' ? (

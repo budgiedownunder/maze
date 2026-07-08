@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -498,6 +498,38 @@ export const handlers = [
       offset: 0,
       hasMore: false,
     })
+  }),
+
+  // Play-fetch of one definition. The real server splices the effective seed into
+  // `config` and computes the subject key; a Static mock needs neither mixed.
+  http.get(`${BASE}/game-definitions/:id`, ({ params }) => {
+    const def = mockGameDefinitions.find(d => d.id === params.id)
+    if (!def) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json<GamePlayResponse>({
+      ...def,
+      config: { ...def.config, seed: def.seed },
+      challengeKey: `def:${def.id}`,
+      leaderboardTracked: def.visibility !== 'private',
+    })
+  }),
+
+  http.put(`${BASE}/game-definitions/:id`, async ({ params, request }) => {
+    const body = await request.json() as GameDefinitionRequest
+    const index = mockGameDefinitions.findIndex(d => d.id === params.id)
+    if (index === -1) return new HttpResponse(null, { status: 404 })
+    // `seed`, `ownerId` and `createdAt` are server-owned and preserved.
+    const updated: GameDefinition = {
+      ...mockGameDefinitions[index],
+      name: body.name,
+      description: body.description ?? undefined,
+      visibility: body.visibility ?? mockGameDefinitions[index].visibility,
+      rotation: body.rotation ?? mockGameDefinitions[index].rotation,
+      config: body.config,
+      updatedAt: new Date().toISOString(),
+    }
+    mockGameDefinitions = mockGameDefinitions.map((d, i) => (i === index ? updated : d))
+    saveGameDefinitions()
+    return HttpResponse.json(updated)
   }),
 
   http.post(`${BASE}/game-definitions`, async ({ request }) => {

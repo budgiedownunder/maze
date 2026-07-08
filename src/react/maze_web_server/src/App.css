@@ -393,6 +393,11 @@
   border-bottom: 1px solid #d1d5db;
   margin-bottom: 0.75rem;
   flex: 0 0 auto;
+  /* Scroll the strip horizontally rather than truncating or wrapping labels
+     when the tabs don't fit */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-tab {
@@ -406,6 +411,9 @@
   color: inherit;
   cursor: pointer;
   opacity: 0.6;
+  /* Never shrink or wrap a label */
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .modal-tab:hover {
@@ -437,12 +445,11 @@
   gap: 1rem;
 }
 
-/* Wizard-mode modal (StepModalShell): a vertical step rail beside the active
-   panel, with Cancel / Back / Next / Finish pinned below. Shares the
-   scroll-body + footer structure with the tabbed mode; only the rail chrome and
-   the wider box are wizard-specific. All colours come from theme vars so it
-   adapts to light/dark. */
-.modal-wizard {
+/* The step-editor modal (StepModalShell), both tabs and wizard modes: wider
+   than a plain dialog to hold the multi-step content and its tab strip / rail.
+   The wizard adds a vertical step rail beside the active panel (.wizard-body);
+   all colours come from theme vars so it adapts to light/dark. */
+.modal-steps {
   max-width: 560px;
   min-width: 300px;
 }

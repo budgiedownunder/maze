@@ -34,6 +34,37 @@ test('New game wizard creates a definition that survives a reload', async ({ pag
   await expect(page.getByText(name)).toBeVisible()
 })
 
+test('Edit opens the tabs editor over an existing game and Save persists the change', async ({ page }) => {
+  await login(page)
+
+  const name = `Spire ${Date.now()}`
+  const renamed = `${name} v2`
+
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByText(name)).toBeVisible()
+
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+
+  // Tabs mode: no wizard navigation, Save instead of Finish, name hydrated.
+  const editor = page.getByRole('dialog', { name: 'Edit game' })
+  await expect(editor).toBeVisible()
+  await expect(editor.getByRole('button', { name: 'Next' })).toBeHidden()
+  await expect(editor.getByRole('button', { name: 'Back' })).toBeHidden()
+  await expect(editor.getByLabel('Name')).toHaveValue(name)
+
+  await editor.getByLabel('Name').fill(renamed)
+  await editor.getByRole('button', { name: 'Save' }).click()
+
+  await expect(editor).toBeHidden()
+  await expect(page.getByText(renamed)).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByText(renamed)).toBeVisible()
+})
+
 test('New game wizard steps through Details → Generation and blocks an invalid size', async ({ page }) => {
   await login(page)
 
