@@ -47,6 +47,17 @@ describe('validateMazeGenerationFields (game subject — no positions)', () => {
     )
   })
 
+  it('bounds spare doors to the door cap (8) and spare keys to the whole budget (16)', () => {
+    expect(validateMazeGenerationFields({ ...VALID, spareDoors: '9' }, null, 'game')).toBe(
+      'Spare Doors must be a whole number between 0 and 8.',
+    )
+    expect(validateMazeGenerationFields({ ...VALID, spareKeys: '17' }, null, 'game')).toBe(
+      'Spare Keys must be a whole number between 0 and 16.',
+    )
+    // 16 spare keys with no doors uses the whole budget exactly → valid.
+    expect(validateMazeGenerationFields({ ...VALID, spareKeys: '16' }, null, 'game')).toBeNull()
+  })
+
   it('enforces the combined keys + doors budget', () => {
     // 2*8 + 1 = 17 > 16.
     expect(validateMazeGenerationFields({ ...VALID, doorCount: '8', spareDoors: '1' }, null, 'game')).toBe(

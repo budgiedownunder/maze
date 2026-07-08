@@ -1,4 +1,7 @@
-import { MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT } from '../utils/validation'
+import {
+  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT,
+  MAX_SPARE_DOOR_COUNT, MAX_SPARE_KEY_COUNT,
+} from '../utils/validation'
 
 // The parametric generation field-group for the game-definition editor: maze
 // size + solution length + the feature counts. Unlike the maze Generate dialog
@@ -23,8 +26,8 @@ export interface MazeGenerationFieldsValue {
 // The count fields all share the same 0..max shape, so they render from a table.
 const COUNT_FIELDS: { key: keyof MazeGenerationFieldsValue; label: string; max: number }[] = [
   { key: 'doorCount', label: 'Doors', max: MAX_DOOR_COUNT },
-  { key: 'spareDoors', label: 'Spare Doors', max: MAX_DOOR_COUNT },
-  { key: 'spareKeys', label: 'Spare Keys', max: MAX_DOOR_COUNT },
+  { key: 'spareDoors', label: 'Spare Doors', max: MAX_SPARE_DOOR_COUNT },
+  { key: 'spareKeys', label: 'Spare Keys', max: MAX_SPARE_KEY_COUNT },
   { key: 'enemyCount', label: 'Enemies', max: MAX_ENEMY_COUNT },
   { key: 'healthCount', label: 'Health', max: MAX_HEALTH_COUNT },
   { key: 'treasureCount', label: 'Treasure', max: MAX_TREASURE_COUNT },

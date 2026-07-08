@@ -188,6 +188,35 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Doors')).toHaveValue(2)
   })
 
+  it('caps the Spare Doors spinner at the door cap and Spare Keys at the feature budget', () => {
+    renderModal()
+    expect(screen.getByLabelText('Spare Doors')).toHaveAttribute('max', '8')
+    expect(screen.getByLabelText('Spare Keys')).toHaveAttribute('max', '16')
+  })
+
+  it('seeds Spare Keys from the keys beyond the door count', () => {
+    // 1 door + 3 keys → 2 of the keys are spare (keys − doors).
+    const gridWithSpareKeys: string[][] = [
+      ['S', 'D', 'K'],
+      ['K', 'W', 'K'],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridWithSpareKeys })
+    expect(screen.getByLabelText('Doors')).toHaveValue(1)
+    expect(screen.getByLabelText('Spare Keys')).toHaveValue(2)
+  })
+
+  it('seeds Spare Keys to 0 when keys do not exceed doors', () => {
+    // 2 doors + 1 key → max(0, 1 − 2) = 0 spare keys.
+    const gridFewerKeys: string[][] = [
+      ['S', 'D', 'D'],
+      ['K', 'W', ' '],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridFewerKeys })
+    expect(screen.getByLabelText('Spare Keys')).toHaveValue(0)
+  })
+
   it('defaults Rows and Columns to the grid dimensions', () => {
     renderModal()
     expect(screen.getByLabelText('Rows')).toHaveValue(3)
@@ -313,13 +342,21 @@ describe('GenerateMazeModal validation', () => {
   })
 
   it('shows error when Spare Keys exceeds the maximum', async () => {
-    await submitWith({ 'Spare Keys': '9' })
-    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
+    // Spare keys are bounded by the whole 16-feature budget, not the door cap.
+    await submitWith({ 'Spare Keys': '17' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 16.')
   })
 
   it('shows error when Spare Keys is negative', async () => {
     await submitWith({ 'Spare Keys': '-1' })
-    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 16.')
+  })
+
+  it('accepts Spare Keys up to the 16-feature budget', async () => {
+    // 16 spare keys with no doors uses the whole budget exactly — now valid
+    // (previously capped at 8).
+    await submitWith({ 'Spare Keys': '16' })
+    expect(mockOnGenerate).toHaveBeenCalledWith(expect.objectContaining({ spareKeys: 16 }))
   })
 
   it('shows error when Enemies exceeds the maximum', async () => {

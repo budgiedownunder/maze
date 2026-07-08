@@ -31,6 +31,15 @@ export const MAX_TREASURE_COUNT = 12
 // same rule) never has to reject them.
 export const MAX_TOTAL_FEATURES = 16
 
+// Per-field caps for the two "spare" (decoy) feature counts. Spare doors are
+// clamped to the same door cap as real doors on the Rust side
+// (`place_spare_keys_and_doors` → `MAX_AUTO_DOORS`), so they share
+// `MAX_DOOR_COUNT`. Spare keys carry no door constraint — they are bounded only
+// by the combined `MAX_TOTAL_FEATURES` budget — so a spare key may in principle
+// use the whole budget.
+export const MAX_SPARE_DOOR_COUNT = MAX_DOOR_COUNT
+export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
+
 // Returns true when the rows × cols product would exceed the server-reported
 // store cap. A null cap means the configured store imposes no cap, in which
 // case this always returns false.
@@ -131,11 +140,11 @@ export function validateMazeGenerationFields(
   if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
     return `Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
   }
-  if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_DOOR_COUNT) {
-    return `Spare Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
+  if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_SPARE_DOOR_COUNT) {
+    return `Spare Doors must be a whole number between 0 and ${MAX_SPARE_DOOR_COUNT}.`
   }
-  if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_DOOR_COUNT) {
-    return `Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
+  if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_SPARE_KEY_COUNT) {
+    return `Spare Keys must be a whole number between 0 and ${MAX_SPARE_KEY_COUNT}.`
   }
   if (!Number.isInteger(enemies) || enemies < 0 || enemies > MAX_ENEMY_COUNT) {
     return `Enemies must be a whole number between 0 and ${MAX_ENEMY_COUNT}.`

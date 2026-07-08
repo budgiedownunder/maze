@@ -4,6 +4,7 @@ import type { GenerateOptions } from '../types/api'
 import {
   validateMazeGenerationFields,
   MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TREASURE_COUNT,
+  MAX_SPARE_DOOR_COUNT, MAX_SPARE_KEY_COUNT,
 } from '../utils/validation'
 import { ModalTabStrip } from './ModalTabs'
 import { modalTabPanelProps, type ModalTab } from '../utils/modalTabs'
@@ -41,10 +42,13 @@ function defaultsFromGrid(grid: string[][]) {
   const finish = findCell(grid, 'F')
   // Seed the Doors / Enemies / Health fields with the counts already in the maze
   // (so regenerating preserves the author's content), falling back to 0.
-  // Spare Doors and Spare Keys default to 0 — the grid alone can't tell us
-  // which `'D'` cells were decoys vs real path doors, so the safe default is
-  // "no extras" and let the author opt in.
+  // Spare Doors defaults to 0 — the grid alone can't tell us which `'D'` cells
+  // were decoys vs real path doors, so the safe default is "no extras".
+  // Spare Keys, though, we can infer: a real door places one key, so any keys
+  // beyond the door count are spare keys — seed those so regenerating preserves
+  // them instead of dropping to 0 (clamped to the field's cap).
   const doors = grid.reduce((n, row) => n + row.filter(c => c === 'D').length, 0)
+  const keys = grid.reduce((n, row) => n + row.filter(c => c === 'K').length, 0)
   const enemies = grid.reduce((n, row) => n + row.filter(c => c === 'E').length, 0)
   const healths = grid.reduce((n, row) => n + row.filter(c => c === 'H').length, 0)
   const treasures = grid.reduce((n, row) => n + row.filter(c => c === 'T').length, 0)
@@ -58,7 +62,7 @@ function defaultsFromGrid(grid: string[][]) {
     minSpineLength: '1',
     doorCount: String(doors),
     spareDoors: '0',
-    spareKeys: '0',
+    spareKeys: String(Math.min(MAX_SPARE_KEY_COUNT, Math.max(0, keys - doors))),
     enemyCount: String(enemies),
     healthCount: String(healths),
     treasureCount: String(treasures),
@@ -266,12 +270,12 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
               </label>
               <label>
                 Spare Doors
-                <input type="number" className="input" value={spareDoors} min={0} max={MAX_DOOR_COUNT}
+                <input type="number" className="input" value={spareDoors} min={0} max={MAX_SPARE_DOOR_COUNT}
                   onChange={e => { setSpareDoors(e.target.value); setValidationError(null) }} />
               </label>
               <label>
                 Spare Keys
-                <input type="number" className="input" value={spareKeys} min={0} max={MAX_DOOR_COUNT}
+                <input type="number" className="input" value={spareKeys} min={0} max={MAX_SPARE_KEY_COUNT}
                   onChange={e => { setSpareKeys(e.target.value); setValidationError(null) }} />
               </label>
               <label>
