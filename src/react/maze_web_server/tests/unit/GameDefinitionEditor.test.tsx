@@ -28,9 +28,9 @@ function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: 
 const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 
 describe('GameDefinitionEditor — steps', () => {
-  it('renders the six steps, Details first', () => {
+  it('renders the seven steps, Details first', () => {
     renderEditor()
-    for (const label of ['Details', 'Generation', 'Scene', 'Objects', 'Decor', 'Levels']) {
+    for (const label of ['Details', 'Generation', 'Scene', 'Objects', 'Decor', 'Levels', 'Advanced']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
     expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-current', 'step')
@@ -49,6 +49,13 @@ describe('GameDefinitionEditor — steps', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
     expect(screen.getByLabelText('Levels')).toBeVisible()
     expect(screen.getByLabelText('Finish Type')).toBeVisible()
+  })
+
+  it('shows the advanced field-group on the Advanced step', async () => {
+    renderEditor()
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    expect(screen.getByLabelText('Time limit (seconds)')).toBeVisible()
+    expect(screen.getByLabelText('Splash title')).toBeVisible()
   })
 })
 
@@ -152,6 +159,28 @@ describe('GameDefinitionEditor — commit', () => {
         taper: true,
         top: { skyType: 'day' },
       }),
+    })
+  })
+
+  it('flows the edited Advanced controls into the built config', async () => {
+    const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    fireEvent.change(screen.getByLabelText('Time limit (seconds)'), { target: { value: '90' } })
+    fireEvent.change(screen.getByLabelText('Max HP'), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('Minimap radius (cells)'), { target: { value: '8' } })
+    // An explicit splash title overrides the name-seeding; the status-bar label
+    // is left blank, so it still falls back to the name.
+    await userEvent.type(screen.getByLabelText('Splash title'), 'Ascend!')
+
+    await userEvent.click(commitButton())
+
+    expect(onSubmit.mock.calls[0][0].config).toMatchObject({
+      timerSeconds: 90,
+      maxHp: 5,
+      minimapRadius: 8,
+      title: 'Ascend!',
+      mode: 'Tower',
     })
   })
 

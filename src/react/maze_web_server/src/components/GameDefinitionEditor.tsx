@@ -10,6 +10,7 @@ import {
   type DecorFieldsValue,
 } from './GameSettingsFields'
 import { LevelsFields } from './LevelsFields'
+import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
@@ -31,6 +32,7 @@ const STEPS = [
   { id: 'objects', label: 'Objects' },
   { id: 'decor', label: 'Decor' },
   { id: 'levels', label: 'Levels' },
+  { id: 'advanced', label: 'Advanced' },
 ] as const satisfies readonly WizardStep[]
 
 type EditorStep = (typeof STEPS)[number]['id']
@@ -70,6 +72,9 @@ export function GameDefinitionEditor({
     setForm(f => ({ ...f, decor: { ...f.decor, ...patch } }))
   const patchLevels = (patch: Partial<DefinitionLevelsFormValue>) =>
     setForm(f => ({ ...f, levels: { ...f.levels, ...patch } }))
+  // The advanced fields are all top-level on the form state, so a patch merges
+  // straight in.
+  const patchAdvanced = (patch: Partial<AdvancedFieldsValue>) => setForm(f => ({ ...f, ...patch }))
 
   // The commit gate: a name and generation settings the generator would accept.
   // Every other field is defaulted, which is what makes the wizard's early
@@ -146,6 +151,22 @@ export function GameDefinitionEditor({
 
       <div {...modalTabPanelProps(ID_PREFIX, 'levels', activeStep)}>
         <LevelsFields value={form.levels} onChange={patchLevels} />
+      </div>
+
+      <div {...modalTabPanelProps(ID_PREFIX, 'advanced', activeStep)}>
+        <AdvancedFields
+          value={{
+            timerSeconds: form.timerSeconds,
+            maxHp: form.maxHp,
+            enemyMovePeriodMs: form.enemyMovePeriodMs,
+            minimapCellPx: form.minimapCellPx,
+            minimapRadius: form.minimapRadius,
+            title: form.title,
+            mode: form.mode,
+          }}
+          onChange={patchAdvanced}
+          namePlaceholder={form.name}
+        />
       </div>
     </StepModalShell>
   )
