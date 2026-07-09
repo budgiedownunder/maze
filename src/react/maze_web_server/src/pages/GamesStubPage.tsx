@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
 import { useToken } from '../context/AuthContext'
-import { createGameDefinition, getGameDefinition, listGameDefinitions, updateGameDefinition } from '../api/client'
+import { createGameDefinition, getGameDefinition, getLeaderboard, listGameDefinitions, reshuffleGameDefinition, updateGameDefinition } from '../api/client'
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import type { GameDefinition, GameDefinitionRequest } from '../types/api'
 
@@ -19,7 +19,7 @@ export function GamesStubPage() {
   const [errorFor, setErrorFor] = useState<{ key: number; message: string } | null>(null)
 
   const [isCreating, setIsCreating] = useState(false)
-  const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState } | null>(null)
+  const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const error = errorFor != null && errorFor.key === refreshCount ? errorFor.message : null
@@ -65,10 +65,16 @@ export function GamesStubPage() {
         visibility: def.visibility,
         rotation: def.rotation,
       })
+      // Whether the board already has scores drives the stronger reshuffle-confirm
+      // wording; a tracked board that is empty (or an untracked draft) is "no scores".
+      const board = def.leaderboardTracked
+        ? await getLeaderboard(token!, { challenge: def.challengeKey, limit: 1 })
+        : null
+      const hasScores = (board?.scores.length ?? 0) > 0
       // The play-fetch splices an *effective* seed into `config` (date-mixed for
       // a Daily game), so hydrate the seed from the record's own field instead —
       // otherwise a Save would bake one day's layout into the stored config.
-      setEditing({ id, form: { ...form, seed: def.seed } })
+      setEditing({ id, form: { ...form, seed: def.seed }, hasScores })
     } catch (ex: unknown) {
       setActionError((ex as { message?: string }).message ?? 'Failed to load game.')
     }
@@ -103,6 +109,8 @@ export function GamesStubPage() {
           initialForm={editing.form}
           onSubmit={request => void handleSave(request)}
           onCancel={closeEditor}
+          hasScores={editing.hasScores}
+          onReshuffle={() => reshuffleGameDefinition(token!, editing.id).then(d => d.seed)}
         />
       )}
       <AppHeader title="Games">

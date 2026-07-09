@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { GameDefinitionEditor } from '../../src/components/GameDefinitionEditor'
 import { AppFeaturesContext } from '../../src/context/AppFeaturesContext'
@@ -8,7 +8,13 @@ import type { AppFeatures, GameDefinitionRequest } from '../../src/types/api'
 
 const FEATURES: AppFeatures = { allow_signup: true, oauth_providers: [], email_enabled: false, max_maze_cells: null }
 
-function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: number | null; mode?: 'tabs' | 'wizard' } = {}) {
+function renderEditor(over: {
+  initialForm?: DefinitionFormState
+  maxMazeCells?: number | null
+  mode?: 'tabs' | 'wizard'
+  onReshuffle?: () => Promise<number>
+  hasScores?: boolean
+} = {}) {
   const onSubmit = vi.fn<(request: GameDefinitionRequest) => void>()
   const onCancel = vi.fn()
   render(
@@ -19,6 +25,8 @@ function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: 
         initialForm={over.initialForm ?? DEFINITION_DEFAULTS}
         onSubmit={onSubmit}
         onCancel={onCancel}
+        onReshuffle={over.onReshuffle}
+        hasScores={over.hasScores}
       />
     </AppFeaturesContext.Provider>,
   )
@@ -348,5 +356,81 @@ describe('GameDefinitionEditor — commit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(onCancel).toHaveBeenCalledOnce()
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+})
+
+describe('GameDefinitionEditor — reshuffle', () => {
+  const edit = { initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower', seed: 10 }, mode: 'tabs' as const }
+
+  async function openLayout() {
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+  }
+
+  it('offers the Reshuffle layout action on the Layout tab only when onReshuffle is provided', async () => {
+    // No onReshuffle (create) → no button.
+    const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await openLayout()
+    expect(screen.queryByRole('button', { name: 'Reshuffle Layout' })).toBeNull()
+    expect(onSubmit).toBeDefined()
+  })
+
+  it('shows the Reshuffle layout action when onReshuffle is provided (edit)', async () => {
+    renderEditor({ ...edit, onReshuffle: vi.fn().mockResolvedValue(20) })
+    await openLayout()
+    expect(screen.getByRole('button', { name: 'Reshuffle Layout' })).toBeVisible()
+  })
+
+  it('opens a confirm dialog; the wording is mild without scores', async () => {
+    renderEditor({ ...edit, onReshuffle: vi.fn().mockResolvedValue(20), hasScores: false })
+    await openLayout()
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle Layout' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reshuffle Layout' })
+    expect(dialog).toBeVisible()
+    // Mild wording: no mention of clearing the leaderboard.
+    expect(dialog).not.toHaveTextContent(/leaderboard/i)
+  })
+
+  it('uses the stronger, leaderboard-clearing wording when scores exist', async () => {
+    renderEditor({ ...edit, onReshuffle: vi.fn().mockResolvedValue(20), hasScores: true })
+    await openLayout()
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle Layout' }))
+    const dialog = screen.getByRole('dialog', { name: 'Reshuffle Layout' })
+    expect(dialog).toHaveTextContent(/permanently clears this game's leaderboard/i)
+  })
+
+  it('confirming calls onReshuffle, closes the dialog, and adopts the new seed', async () => {
+    const onReshuffle = vi.fn().mockResolvedValue(777)
+    const { onSubmit } = renderEditor({ ...edit, onReshuffle })
+    await openLayout()
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle Layout' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle' }))
+
+    expect(onReshuffle).toHaveBeenCalledOnce()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reshuffle Layout' })).toBeNull())
+
+    // The new seed flows into the form — a subsequent Save carries it.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(onSubmit.mock.calls[0][0].config).toMatchObject({ seed: 777 })
+  })
+
+  it('keeps the dialog open and shows an error when reshuffle fails', async () => {
+    const onReshuffle = vi.fn().mockRejectedValue(new Error('Server on fire'))
+    renderEditor({ ...edit, onReshuffle })
+    await openLayout()
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle Layout' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Server on fire'))
+    expect(screen.getByRole('dialog', { name: 'Reshuffle Layout' })).toBeVisible()
+  })
+
+  it('cancelling the confirm dialog does not call onReshuffle', async () => {
+    const onReshuffle = vi.fn().mockResolvedValue(20)
+    renderEditor({ ...edit, onReshuffle })
+    await openLayout()
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle Layout' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Reshuffle Layout' })).getByRole('button', { name: 'Cancel' }))
+    expect(onReshuffle).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Reshuffle Layout' })).toBeNull()
   })
 })

@@ -125,6 +125,39 @@ describe('GamesStubPage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
   })
 
+  it('Edit → Layout → Reshuffle layout confirms and calls the reshuffle endpoint', async () => {
+    let reshuffled = false
+    server.use(
+      http.post('/api/v1/game-definitions/:id/reshuffle', ({ params }) => {
+        reshuffled = true
+        return HttpResponse.json({
+          id: params.id, ownerId: 'o1', name: 'Tower', visibility: 'private',
+          seed: 5150, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x',
+        })
+      }),
+    )
+
+    renderGamesPage()
+    await waitFor(() => expect(screen.getByText('No games yet.')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'New game' }))
+    await userEvent.type(screen.getByLabelText('Name'), 'Tower')
+    await userEvent.click(screen.getByRole('button', { name: 'Finish' }))
+    await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Tower' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle Layout' }))
+    // A private draft has no scores → the mild wording.
+    const dialog = screen.getByRole('dialog', { name: 'Reshuffle Layout' })
+    expect(dialog).not.toHaveTextContent(/leaderboard/i)
+    await userEvent.click(screen.getByRole('button', { name: 'Reshuffle' }))
+
+    await waitFor(() => expect(reshuffled).toBe(true))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reshuffle Layout' })).toBeNull())
+  })
+
   it('Save echoes visibility / rotation unchanged and sends the stored seed, not the effective one', async () => {
     const stored = { id: 'd1', ownerId: 'o1', name: 'Daily Tower', visibility: 'public', seed: 99, rotation: 'daily', config: { rows: 11, cols: 9, title: 'Ascend!', mode: 'Endless' }, createdAt: 'x', updatedAt: 'x' }
     let put: GameDefinitionRequest | undefined

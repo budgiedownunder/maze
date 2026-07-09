@@ -6,6 +6,7 @@ import {
   getGameDefinition,
   listGameDefinitions,
   updateGameDefinition,
+  reshuffleGameDefinition,
   deleteGameDefinition,
   createGameCollection,
   getGameCollection,
@@ -116,6 +117,22 @@ describe('game-definition client', () => {
     expect(method).toBe('PUT')
     expect(body).toEqual({ name: 'Renamed', config: {} })
     expect(updated.name).toBe('Renamed')
+  })
+
+  it('reshuffleGameDefinition POSTs to the reshuffle path and returns the re-minted definition', async () => {
+    let method: string | undefined
+    let path: string | undefined
+    server.use(
+      http.post('/api/v1/game-definitions/:id/reshuffle', ({ request }) => {
+        method = request.method
+        path = new URL(request.url).pathname
+        return HttpResponse.json(def({ seed: 999 }))
+      }),
+    )
+    const reshuffled = await reshuffleGameDefinition(TOKEN, 'd1')
+    expect(method).toBe('POST')
+    expect(path).toBe('/api/v1/game-definitions/d1/reshuffle')
+    expect(reshuffled.seed).toBe(999)
   })
 
   it('deleteGameDefinition resolves on a 200 text response', async () => {

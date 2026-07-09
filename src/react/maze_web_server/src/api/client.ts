@@ -382,6 +382,17 @@ export function deleteGameDefinition(token: string, id: string): Promise<void> {
   })
 }
 
+// Re-mint a definition's seed to change its generated layout. The server owns
+// the seed (PUT preserves it), so reshuffling is its own endpoint; it also
+// resets the definition's leaderboard when published. Returns the definition
+// with its new seed.
+export function reshuffleGameDefinition(token: string, id: string): Promise<GameDefinition> {
+  return request<GameDefinition>(`/game-definitions/${encodeURIComponent(id)}/reshuffle`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+}
+
 export function createGameCollection(token: string, body: GameCollectionRequest): Promise<GameCollection> {
   return request<GameCollection>('/game-collections', {
     method: 'POST',

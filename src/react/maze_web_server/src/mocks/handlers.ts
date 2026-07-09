@@ -532,6 +532,20 @@ export const handlers = [
     return HttpResponse.json(updated)
   }),
 
+  // Reshuffle re-mints the seed (and, on the real server, resets the board).
+  http.post(`${BASE}/game-definitions/:id/reshuffle`, ({ params }) => {
+    const index = mockGameDefinitions.findIndex(d => d.id === params.id)
+    if (index === -1) return new HttpResponse(null, { status: 404 })
+    const reshuffled: GameDefinition = {
+      ...mockGameDefinitions[index],
+      seed: mockGameDefinitions[index].seed + 1,
+      updatedAt: new Date().toISOString(),
+    }
+    mockGameDefinitions = mockGameDefinitions.map((d, i) => (i === index ? reshuffled : d))
+    saveGameDefinitions()
+    return HttpResponse.json(reshuffled)
+  }),
+
   http.post(`${BASE}/game-definitions`, async ({ request }) => {
     const body = await request.json() as GameDefinitionRequest
     const now = new Date().toISOString()

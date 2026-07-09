@@ -11,6 +11,7 @@ import type {
 import { LevelProgressionFields } from './LevelProgressionFields'
 import { LevelSettingsFields } from './LevelSettingsFields'
 import { FieldGroup } from './FieldGroup'
+import { ConfirmModal } from './ConfirmModal'
 import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
@@ -51,6 +52,16 @@ interface GameDefinitionEditorProps {
   commitLabel?: string
   onSubmit: (request: GameDefinitionRequest) => void
   onCancel: () => void
+  /**
+   * Persists a reshuffle (server re-mints the seed) and resolves the new seed.
+   * When provided — i.e. editing an existing definition — the Advanced tab
+   * offers a "Reshuffle layout" action behind a confirm dialog. Omitted for a
+   * brand-new definition (there is no record to reshuffle yet).
+   */
+  onReshuffle?: () => Promise<number>
+  /** Whether the definition already has leaderboard scores — drives the stronger
+   *  reshuffle-confirm wording (the board will be wiped). */
+  hasScores?: boolean
 }
 
 export function GameDefinitionEditor({
@@ -60,10 +71,33 @@ export function GameDefinitionEditor({
   commitLabel,
   onSubmit,
   onCancel,
+  onReshuffle,
+  hasScores = false,
 }: GameDefinitionEditorProps) {
   const { max_maze_cells } = useAppFeatures()
   const [activeStep, setActiveStep] = useState<EditorStep>('general')
   const [form, setForm] = useState<DefinitionFormState>(initialForm)
+
+  // Reshuffle confirm-dialog state (only reachable when `onReshuffle` is set).
+  const [showReshuffleConfirm, setShowReshuffleConfirm] = useState(false)
+  const [isReshuffling, setIsReshuffling] = useState(false)
+  const [reshuffleError, setReshuffleError] = useState<string | null>(null)
+
+  async function handleReshuffle() {
+    if (!onReshuffle) return
+    setIsReshuffling(true)
+    setReshuffleError(null)
+    try {
+      const newSeed = await onReshuffle()
+      // Keep the (hidden) seed in the form in step with the server's new one.
+      setForm(f => ({ ...f, seed: newSeed }))
+      setShowReshuffleConfirm(false)
+    } catch (ex: unknown) {
+      setReshuffleError((ex as { message?: string }).message ?? 'Failed to reshuffle.')
+    } finally {
+      setIsReshuffling(false)
+    }
+  }
 
   // Whether the game stacks multiple levels (count ≤ 1, incl. blank/invalid, is
   // single-level). The multi-level-only controls — the Layout Levels group, the
@@ -106,7 +140,15 @@ export function GameDefinitionEditor({
     )
   }
 
+  // Layout changes ⇒ the board is no longer comparable, so a reshuffle on an
+  // already-scored definition wipes its leaderboard — say so plainly, more
+  // strongly when scores exist.
+  const reshuffleMessage = hasScores
+    ? "This generates a new maze layout, replacing the current one, and permanently clears this game's leaderboard — every recorded score was set on the old layout. This can't be undone."
+    : "This generates a new maze layout for the game, replacing the current one. This can't be undone."
+
   return (
+    <>
     <StepModalShell
       mode={mode}
       title={title}
@@ -180,6 +222,17 @@ export function GameDefinitionEditor({
             <LevelProgressionFields value={form.levels} onChange={patchLevels} />
           </FieldGroup>
         )}
+        {/* Reshuffle re-generates the layout (server-side); offered only when
+            editing an existing definition. The seed stays hidden. */}
+        {onReshuffle && (
+          <button
+            type="button"
+            className="btn-danger"
+            onClick={() => { setShowReshuffleConfirm(true); setReshuffleError(null) }}
+          >
+            Reshuffle Layout
+          </button>
+        )}
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'scene', activeStep)}>
@@ -243,5 +296,19 @@ export function GameDefinitionEditor({
         />
       </div>
     </StepModalShell>
+
+    {showReshuffleConfirm && (
+      <ConfirmModal
+        title="Reshuffle Layout"
+        message={reshuffleMessage}
+        confirmLabel="Reshuffle"
+        isDangerous={hasScores}
+        isLoading={isReshuffling}
+        error={reshuffleError}
+        onConfirm={() => void handleReshuffle()}
+        onCancel={() => { setShowReshuffleConfirm(false); setReshuffleError(null) }}
+      />
+    )}
+    </>
   )
 }
