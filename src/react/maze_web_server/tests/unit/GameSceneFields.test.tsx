@@ -60,7 +60,8 @@ describe('GameSceneFields — layout', () => {
   it('has no Final Level controls for a single-level game (and no override toggle)', () => {
     renderScene({ multiLevel: false, top: {} })
     expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
-    expect(screen.queryByLabelText('Final Level')).toBeNull()
+    expect(screen.queryByLabelText('Final Level Sky')).toBeNull()
+    expect(screen.queryByLabelText('Final Level Perimeter')).toBeNull()
   })
 
   it('shows a Final Level select in BOTH the Sky and Walls groups for a multi-level game, defaulting to Inherit', () => {
@@ -68,9 +69,9 @@ describe('GameSceneFields — layout', () => {
     renderScene({ multiLevel: true, top: null })
     expect(screen.queryByRole('checkbox', { name: 'Override final' })).toBeNull()
     // Sky group's Final Level is the sky override (Inherit = '').
-    expect(group('Sky').getByLabelText('Final Level')).toHaveValue('')
+    expect(group('Sky').getByLabelText('Final Level Sky')).toHaveValue('')
     // Walls group's Final Level is the perimeter override (tri-state, Inherit).
-    expect(group('Walls').getByLabelText('Final Level')).toHaveValue('inherit')
+    expect(group('Walls').getByLabelText('Final Level Perimeter')).toHaveValue('inherit')
   })
 })
 
@@ -112,19 +113,19 @@ describe('GameSceneFields — patches', () => {
 describe('GameSceneFields — final-level override', () => {
   it('sets the Sky-group Final Level as the sky override (from a null top)', () => {
     const { onTopChange } = renderScene({ multiLevel: true, top: null })
-    fireEvent.change(group('Sky').getByLabelText('Final Level'), { target: { value: 'night' } })
+    fireEvent.change(group('Sky').getByLabelText('Final Level Sky'), { target: { value: 'night' } })
     expect(onTopChange).toHaveBeenCalledWith({ skyType: 'night' })
   })
 
   it('clearing the Sky-group Final Level back to Inherit drops the key', () => {
     const { onTopChange } = renderScene({ multiLevel: true, top: { skyType: 'night' } })
-    fireEvent.change(group('Sky').getByLabelText('Final Level'), { target: { value: '' } })
+    fireEvent.change(group('Sky').getByLabelText('Final Level Sky'), { target: { value: '' } })
     expect(onTopChange).toHaveBeenCalledWith({})
   })
 
   it('sets the Walls-group Final Level as the tri-state perimeter override', () => {
     const { onTopChange } = renderScene({ multiLevel: true, top: { skyType: 'day' } })
-    const perim = group('Walls').getByLabelText('Final Level')
+    const perim = group('Walls').getByLabelText('Final Level Perimeter')
     fireEvent.change(perim, { target: { value: 'walled' } })
     // The sky override is preserved when only the perimeter changes.
     expect(onTopChange).toHaveBeenCalledWith({ skyType: 'day', perimeterWalls: true })

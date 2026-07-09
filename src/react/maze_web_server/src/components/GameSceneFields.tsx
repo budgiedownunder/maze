@@ -75,7 +75,10 @@ export function GameSceneFields({
             "Inherit" (the default) leaves it matching the rest. */}
         {multiLevel && (
           <label className="modal-stacked-input">
-            Final Level
+            {/* Visible "Final Level"; the hidden word names the overridden
+                attribute so screen readers can tell this apart from the Walls
+                group's "Final Level" without repeating the group name. */}
+            Final Level<span className="visually-hidden"> Sky</span>
             <select
               className="input"
               value={top?.skyType ?? ''}
@@ -128,7 +131,10 @@ export function GameSceneFields({
             "Inherit" (the default) leaves it matching the rest. */}
         {multiLevel && (
           <label className="modal-stacked-input">
-            Final Level
+            {/* Visible "Final Level"; the hidden word names the overridden
+                attribute (not the group) so it reads as "Final Level Perimeter"
+                to screen readers, distinct from the Sky group's "Final Level". */}
+            Final Level<span className="visually-hidden"> Perimeter</span>
             <select
               className="input"
               value={perimeterValue}

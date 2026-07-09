@@ -227,7 +227,7 @@ describe('GameDefinitionEditor — commit', () => {
     // shows outright (multi-level) in the Sky group — no toggle. A perimeter
     // "Final Level" also exists in Walls.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    fireEvent.change(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level'), { target: { value: 'day' } })
+    fireEvent.change(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level Sky'), { target: { value: 'day' } })
 
     await userEvent.click(commitButton())
 
@@ -269,14 +269,15 @@ describe('GameDefinitionEditor — commit', () => {
     // Single-level: Scene has the sky dropdown but no Final Level overrides.
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
     expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Sky')).toBeVisible()
-    expect(screen.queryByLabelText('Final Level')).toBeNull()
+    expect(screen.queryByLabelText('Final Level Sky')).toBeNull()
+    expect(screen.queryByLabelText('Final Level Perimeter')).toBeNull()
 
     // Raise the count on General → a Final Level select appears in Sky and Walls.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '2' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
-    expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level')).toBeVisible()
-    expect(within(screen.getByRole('group', { name: 'Walls' })).getByLabelText('Final Level')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level Sky')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Walls' })).getByLabelText('Final Level Perimeter')).toBeVisible()
   })
 
   it('flows the General time limit and edited Advanced controls into the built config', async () => {
