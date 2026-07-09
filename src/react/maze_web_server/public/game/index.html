@@ -64,6 +64,24 @@
       border-radius: 8px;
       cursor: pointer;
     }
+    /* Bottom banner shown over an *unseeded* preview (an unsaved game
+       definition launched from the editor). Informs that the previewed layout
+       is indicative — a saved game regenerates from a fresh seed. */
+    #preview-banner {
+      /* An in-flow strip at the end of the body flex column, so it sits BELOW
+         the D-pad controls (rather than overlaying them). Full-width and
+         left-aligned with minimal side padding, so on a narrow screen the text
+         uses the whole width instead of bunching into a tall centred block. */
+      flex: 0 0 auto;
+      padding: 8px 10px;
+      font-family: sans-serif;
+      font-size: 0.9rem;
+      line-height: 1.3;
+      text-align: left;
+      color: #111;
+      background: #ffff00;
+      border-top: 1px solid rgba(0, 0, 0, 0.3);
+    }
     #controls { display: none; }
     .game-dpad { display: none; }
     /* Persistent in-canvas pause button. Always available on touch
@@ -365,6 +383,22 @@
       btn.addEventListener('click', function () { location.reload(); });
       document.body.appendChild(btn);
     }
+
+    // Banner shown for any preview run — scores are never recorded. For an
+    // unseeded (unsaved) game it also notes the layout is indicative, since
+    // saving mints a fresh seed and regenerates it.
+    function showPreviewBanner(seeded) {
+      if (document.getElementById('preview-banner')) return;
+      var el = document.createElement('div');
+      el.id = 'preview-banner';
+      el.setAttribute('role', 'status');
+      el.textContent = seeded
+        ? 'Preview only — score will not be saved.'
+        : 'Preview only — score will not be saved. When you save this game its'
+          + ' layout will be generated from a new seed, so the saved game will'
+          + ' look different from this.';
+      document.body.appendChild(el);
+    }
   </script>
   <script>
     /* Pause-menu wiring — opens on Bevy's `maze-game-paused` event,
@@ -548,6 +582,10 @@
     const params = new URLSearchParams(location.search);
     const mazeId = params.get('id');
     const defId = params.get('def');
+    const isPreview = params.get('preview');
+    // localStorage handoff key for an editor preview — mirrors
+    // `PREVIEW_STORAGE_KEY` in src/utils/definitionPreview.ts.
+    const PREVIEW_STORAGE_KEY = 'gameDefinitionPreview';
 
     if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React app
@@ -704,6 +742,32 @@
       } else {
         const body = await res.text().catch(() => '');
         showLoadingError(`Failed to load game definition (${res.status}): ${body || res.statusText}`);
+      }
+    } else if (isPreview) {
+      // /game/?preview=1 — a one-off preview of an in-progress (possibly unsaved)
+      // definition config from the editor. The React app stashes {config, seeded}
+      // in localStorage; we start Bevy from it directly (no fetch, never records a
+      // score — there is no stable subject), and show a banner saying so (plus,
+      // for an unseeded/unsaved game, that its layout is indicative).
+      clearInterval(timer);
+      let payload = null;
+      try {
+        const raw = localStorage.getItem(PREVIEW_STORAGE_KEY);
+        if (raw) payload = JSON.parse(raw);
+      } catch (_) { /* malformed JSON or storage disabled — ignore */ }
+      if (!payload || !payload.config) {
+        showLoadingError('No preview to show — launch a preview from the game editor.');
+      } else {
+        const startConfig = payload.config;
+        startConfig.leaderboardTracked = false;
+        try {
+          start_with_config(JSON.stringify(startConfig));
+          document.getElementById('loading').remove();
+          canvas.focus({ preventScroll: true });
+          showPreviewBanner(payload.seeded);
+        } catch (err) {
+          showLoadingError(`Failed to start game: ${err}`);
+        }
       }
     } else {
       // /game/?difficulty=<…> — fetch the server-side preset, allow a

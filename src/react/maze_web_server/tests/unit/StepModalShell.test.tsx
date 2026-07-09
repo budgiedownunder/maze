@@ -26,6 +26,8 @@ interface Overrides {
   mode?: 'tabs' | 'wizard'
   activeStep?: StepId
   canCommit?: boolean
+  onPreview?: () => void
+  canPreview?: boolean
 }
 
 function renderShell(over: Overrides = {}) {
@@ -45,6 +47,8 @@ function renderShell(over: Overrides = {}) {
       onCancel={onCancel}
       onCommit={onCommit}
       canCommit={over.canCommit ?? true}
+      onPreview={over.onPreview}
+      canPreview={over.canPreview}
     >
       {panels(active)}
     </StepModalShell>,
@@ -78,6 +82,38 @@ describe('StepModalShell — tabs mode', () => {
     const { onStepChange } = renderShell({ mode: 'tabs' })
     await userEvent.click(screen.getByRole('tab', { name: 'Beta' }))
     expect(onStepChange).toHaveBeenCalledWith('b')
+  })
+})
+
+describe('StepModalShell — preview action', () => {
+  it('shows no Preview button without onPreview', () => {
+    renderShell({})
+    expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull()
+  })
+
+  it('shows a Preview button (in wizard mode too) when onPreview is provided', () => {
+    renderShell({ mode: 'wizard', onPreview: vi.fn(), canPreview: true })
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeVisible()
+  })
+
+  it('gates Preview on canPreview, independently of canCommit', () => {
+    const onPreview = vi.fn()
+    // Commit is blocked but preview is allowed — distinct gates.
+    renderShell({ onPreview, canPreview: true, canCommit: false })
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('disables Preview when canPreview is false', () => {
+    renderShell({ onPreview: vi.fn(), canPreview: false })
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled()
+  })
+
+  it('fires onPreview when clicked', async () => {
+    const onPreview = vi.fn()
+    renderShell({ onPreview, canPreview: true })
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    expect(onPreview).toHaveBeenCalledOnce()
   })
 })
 

@@ -4,6 +4,7 @@ import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
 import { useToken } from '../context/AuthContext'
 import { createGameDefinition, getGameDefinition, getLeaderboard, listGameDefinitions, reshuffleGameDefinition, updateGameDefinition } from '../api/client'
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
+import { launchDefinitionPreview } from '../utils/definitionPreview'
 import type { GameDefinition, GameDefinitionRequest } from '../types/api'
 
 // A minimal 3D-games surface: the definitions the caller can see, a New game
@@ -100,6 +101,8 @@ export function GamesStubPage() {
           initialForm={DEFINITION_DEFAULTS}
           onSubmit={request => void handleCreate(request)}
           onCancel={closeEditor}
+          // A new game has no server-minted seed yet → unseeded preview.
+          onPreview={config => launchDefinitionPreview(config, false)}
         />
       )}
       {editing && (
@@ -111,6 +114,8 @@ export function GamesStubPage() {
           onCancel={closeEditor}
           hasScores={editing.hasScores}
           onReshuffle={() => reshuffleGameDefinition(token!, editing.id).then(d => d.seed)}
+          // A saved definition has a real seed → the preview is the actual layout.
+          onPreview={config => launchDefinitionPreview(config, true)}
         />
       )}
       <AppHeader title="Games">

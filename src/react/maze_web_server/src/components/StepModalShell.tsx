@@ -31,6 +31,12 @@ interface StepModalShellProps<T extends string> {
   commitLabel?: string
   /** Wizard-only: step ids to mark complete in the rail. */
   completed?: readonly T[]
+  /** Optional preview action — a Preview button first in the footer action row,
+   *  the same size as the other buttons. Omit to hide it. */
+  onPreview?: () => void
+  /** Whether the preview action is available (its own gate, looser than
+   *  `canCommit` — e.g. a preview needs no name). Ignored without `onPreview`. */
+  canPreview?: boolean
 }
 
 // The dual-mode modal shell for the definition editor: a tab strip (edit) or a
@@ -52,6 +58,8 @@ export function StepModalShell<T extends string>({
   canCommit,
   commitLabel,
   completed,
+  onPreview,
+  canPreview = false,
 }: StepModalShellProps<T>) {
   const activeIndex = steps.findIndex(s => s.id === activeStep)
   const isFirst = activeIndex <= 0
@@ -91,6 +99,16 @@ export function StepModalShell<T extends string>({
         <div className="modal-tab-footer">
           {footerNote}
           <div className="modal-actions-row">
+            {onPreview && (
+              <button
+                type="button"
+                className="btn-primary btn-play"
+                onClick={onPreview}
+                disabled={!canPreview}
+              >
+                Preview
+              </button>
+            )}
             <button type="button" className="btn-gray" onClick={onCancel}>Cancel</button>
             {mode === 'wizard' && (
               <button type="button" className="btn-gray" onClick={() => onStepChange(steps[activeIndex - 1].id)} disabled={isFirst}>

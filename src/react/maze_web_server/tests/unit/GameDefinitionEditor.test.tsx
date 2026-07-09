@@ -14,6 +14,7 @@ function renderEditor(over: {
   mode?: 'tabs' | 'wizard'
   onReshuffle?: () => Promise<number>
   hasScores?: boolean
+  onPreview?: (config: GameDefinitionRequest['config']) => void
 } = {}) {
   const onSubmit = vi.fn<(request: GameDefinitionRequest) => void>()
   const onCancel = vi.fn()
@@ -27,6 +28,7 @@ function renderEditor(over: {
         onCancel={onCancel}
         onReshuffle={over.onReshuffle}
         hasScores={over.hasScores}
+        onPreview={over.onPreview}
       />
     </AppFeaturesContext.Provider>,
   )
@@ -432,5 +434,39 @@ describe('GameDefinitionEditor — reshuffle', () => {
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Reshuffle Layout' })).getByRole('button', { name: 'Cancel' }))
     expect(onReshuffle).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: 'Reshuffle Layout' })).toBeNull()
+  })
+})
+
+describe('GameDefinitionEditor — preview', () => {
+  it('shows no Preview button without onPreview', () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull()
+  })
+
+  it('enables Preview once the generation is valid, even without a name', async () => {
+    // Blank name: Finish is disabled, but Preview is available.
+    renderEditor({ onPreview: vi.fn() })
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeEnabled()
+    expect(commitButton()).toBeDisabled()
+  })
+
+  it('disables Preview when the generation config is invalid', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' }, onPreview: vi.fn() })
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    fireEvent.change(within(screen.getByRole('group', { name: 'Grid' })).getByLabelText('Rows'), { target: { value: '2' } })
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled()
+  })
+
+  it('builds the current config and passes it to onPreview on click', async () => {
+    const onPreview = vi.fn<(config: GameDefinitionRequest['config']) => void>()
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' }, onPreview })
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
+    fireEvent.change(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count'), { target: { value: '3' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+
+    expect(onPreview).toHaveBeenCalledOnce()
+    // The live config, with title/mode seeded from the name (as at commit).
+    expect(onPreview.mock.calls[0][0]).toMatchObject({ treasureCount: 3, title: 'Tower', mode: 'Tower' })
   })
 })

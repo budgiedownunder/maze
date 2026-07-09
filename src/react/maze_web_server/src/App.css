@@ -85,6 +85,16 @@
   cursor: not-allowed;
 }
 
+/* Green "play" recolour layered on .btn-primary — matches the in-game "Play
+   Again" and the Leaderboards Play button (#2f9e44). Used for the editor's
+   Preview action; inherits .btn-primary:disabled (faded) so it reads clearly
+   disabled, like Finish. */
+.btn-play {
+  background: #2f9e44;
+  border-color: #2f9e44;
+  color: #fff;
+}
+
 .btn-secondary {
   background: none;
   border: 1px solid var(--border-input);

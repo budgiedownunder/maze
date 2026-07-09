@@ -9,6 +9,32 @@ async function login(page: Page) {
   await page.goto('/games')
 }
 
+test('Preview stashes the config and opens the game host in a new tab', async ({ page, context }) => {
+  await login(page)
+
+  await page.getByRole('button', { name: 'New game' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New Game' })
+  await dialog.getByLabel('Name').fill('Previewable')
+
+  // Preview is offered on the footer and enabled with a valid (default) config.
+  const preview = dialog.getByRole('button', { name: 'Preview' })
+  await expect(preview).toBeEnabled()
+
+  const popupPromise = context.waitForEvent('page')
+  await preview.click()
+  const popup = await popupPromise
+  // Opened the host in preview mode (new tab, so the editor survives).
+  expect(popup.url()).toContain('/game/?preview=1')
+  await popup.close()
+
+  // The handoff payload is stashed for the host to read — unseeded (a new game).
+  const payload = await page.evaluate(() => JSON.parse(localStorage.getItem('gameDefinitionPreview') || 'null'))
+  expect(payload.seeded).toBe(false)
+  expect(payload.config).toMatchObject({ rows: 8, cols: 8, title: 'Previewable' })
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+})
+
 test('New game wizard creates a definition that survives a reload', async ({ page }) => {
   await login(page)
 

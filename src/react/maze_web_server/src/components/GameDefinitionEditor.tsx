@@ -62,6 +62,12 @@ interface GameDefinitionEditorProps {
   /** Whether the definition already has leaderboard scores — drives the stronger
    *  reshuffle-confirm wording (the board will be wiped). */
   hasScores?: boolean
+  /**
+   * Launches a one-off preview of the given (in-progress) config. When provided,
+   * a footer Preview button appears, enabled once the generation config is valid
+   * (a name is NOT required — unlike Finish — since a preview is not saved).
+   */
+  onPreview?: (config: GameDefinitionRequest['config']) => void
 }
 
 export function GameDefinitionEditor({
@@ -73,6 +79,7 @@ export function GameDefinitionEditor({
   onCancel,
   onReshuffle,
   hasScores = false,
+  onPreview,
 }: GameDefinitionEditorProps) {
   const { max_maze_cells } = useAppFeatures()
   const [activeStep, setActiveStep] = useState<EditorStep>('general')
@@ -125,19 +132,29 @@ export function GameDefinitionEditor({
   // footer, so it stays visible while the user is on another step.
   const generationError = validateMazeGenerationFields(form.generation, max_maze_cells, 'game')
   const canCommit = form.name.trim() !== '' && generationError === null
+  // Preview only needs a generatable config — a name is a save-only requirement.
+  const canPreview = generationError === null
+
+  // Build the config (+ request) from the live form, defaulting the in-game
+  // splash title / status-bar label from the name when left blank, so a
+  // definition always announces itself as something.
+  function buildFromForm() {
+    const name = form.name.trim()
+    return buildDefinitionConfig({
+      ...form,
+      name,
+      title: form.title.trim() === '' ? name : form.title,
+      mode: form.mode.trim() === '' ? name : form.mode,
+    })
+  }
 
   function handleCommit() {
-    const name = form.name.trim()
-    // The in-game splash title and status-bar label default to the game's name
-    // when left blank, so a definition always announces itself as something.
-    onSubmit(
-      buildDefinitionConfig({
-        ...form,
-        name,
-        title: form.title.trim() === '' ? name : form.title,
-        mode: form.mode.trim() === '' ? name : form.mode,
-      }).request,
-    )
+    onSubmit(buildFromForm().request)
+  }
+
+  function handlePreview() {
+    // `request.config` is the opaque, widened config (the StartConfig blob).
+    onPreview?.(buildFromForm().request.config)
   }
 
   // Layout changes ⇒ the board is no longer comparable, so a reshuffle on an
@@ -161,6 +178,8 @@ export function GameDefinitionEditor({
       onCommit={handleCommit}
       canCommit={canCommit}
       commitLabel={commitLabel}
+      onPreview={onPreview && handlePreview}
+      canPreview={canPreview}
       footerNote={generationError && <p role="alert" className="error-msg">{generationError}</p>}
     >
       <div {...modalTabPanelProps(ID_PREFIX, 'general', activeStep)}>
