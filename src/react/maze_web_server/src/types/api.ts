@@ -242,12 +242,27 @@ export interface GameCollectionDetailResponse {
 
 // --- Sharing & user lookup --------------------------------------------------
 
-// The grantee list returned by the definition / collection share endpoints — a
-// bare list of user ids (the server's `DefinitionSharesResponse` /
-// `CollectionSharesResponse`, which are structurally identical). Resolve ids to
-// usernames via the lookup when a grantee needs a display name.
-export interface SharesResponse {
-  grantees: string[]
+// A grantee in a share list — the granted user's id + username, resolved by the
+// server for the owner's manage-shares view (mirrors the server's
+// `GranteeSummary`). Structurally identical to `UserLookupEntry` but a distinct
+// concept: a user who HAS access, versus a people-picker search hit.
+export interface GranteeSummary {
+  id: string
+  username: string
+}
+
+// The grantee list returned by the definition share endpoints (mirrors the
+// server's `GameDefinitionSharesResponse`). Each grantee is resolved to
+// `{ id, username }` for the owner's manage-shares view.
+export interface GameDefinitionSharesResponse {
+  grantees: GranteeSummary[]
+}
+
+// The grantee list returned by the collection share endpoints (mirrors the
+// server's `GameCollectionSharesResponse`; structurally identical to
+// `GameDefinitionSharesResponse`).
+export interface GameCollectionSharesResponse {
+  grantees: GranteeSummary[]
 }
 
 // A single username-prefix lookup hit for the share people-picker. The server

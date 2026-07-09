@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -466,43 +466,43 @@ export function reorderGameCollectionItems(token: string, collectionId: string, 
 // list; grant/revoke are idempotent server-side, and a subject owned by someone
 // else returns 404. The grant body key is `userId`.
 
-export function listGameDefinitionShares(token: string, id: string): Promise<SharesResponse> {
-  return request<SharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
+export function listGameDefinitionShares(token: string, id: string): Promise<GameDefinitionSharesResponse> {
+  return request<GameDefinitionSharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
     headers: authHeaders(token),
   })
 }
 
-export function grantGameDefinitionShare(token: string, id: string, userId: string): Promise<SharesResponse> {
-  return request<SharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
+export function grantGameDefinitionShare(token: string, id: string, userId: string): Promise<GameDefinitionSharesResponse> {
+  return request<GameDefinitionSharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify({ userId }),
   })
 }
 
-export function revokeGameDefinitionShare(token: string, id: string, granteeId: string): Promise<SharesResponse> {
-  return request<SharesResponse>(
+export function revokeGameDefinitionShare(token: string, id: string, granteeId: string): Promise<GameDefinitionSharesResponse> {
+  return request<GameDefinitionSharesResponse>(
     `/game-definitions/${encodeURIComponent(id)}/shares/${encodeURIComponent(granteeId)}`,
     { method: 'DELETE', headers: authHeaders(token) },
   )
 }
 
-export function listGameCollectionShares(token: string, id: string): Promise<SharesResponse> {
-  return request<SharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
+export function listGameCollectionShares(token: string, id: string): Promise<GameCollectionSharesResponse> {
+  return request<GameCollectionSharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
     headers: authHeaders(token),
   })
 }
 
-export function grantGameCollectionShare(token: string, id: string, userId: string): Promise<SharesResponse> {
-  return request<SharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
+export function grantGameCollectionShare(token: string, id: string, userId: string): Promise<GameCollectionSharesResponse> {
+  return request<GameCollectionSharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify({ userId }),
   })
 }
 
-export function revokeGameCollectionShare(token: string, id: string, granteeId: string): Promise<SharesResponse> {
-  return request<SharesResponse>(
+export function revokeGameCollectionShare(token: string, id: string, granteeId: string): Promise<GameCollectionSharesResponse> {
+  return request<GameCollectionSharesResponse>(
     `/game-collections/${encodeURIComponent(id)}/shares/${encodeURIComponent(granteeId)}`,
     { method: 'DELETE', headers: authHeaders(token) },
   )
