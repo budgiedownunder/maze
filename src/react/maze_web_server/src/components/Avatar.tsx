@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchUserAvatar } from '../api/client'
+import { getAvatarObjectUrl } from '../utils/imageCache'
 import { useToken } from '../context/AuthContext'
 
 // Shipped generic placeholder (a person silhouette), shown whenever the user
@@ -21,12 +21,13 @@ interface AvatarProps {
 }
 
 /**
- * Circular user avatar. When `avatarUpdatedAt` is set it fetches the image over
- * an authenticated request — the serve route is guarded, so a bare `<img src>`
- * can't carry the bearer token — and renders it from an object URL; otherwise,
- * or on any fetch error (e.g. a 404), it shows the generic placeholder. The
- * object URL is revoked on unmount and whenever the (user, marker, token)
- * changes, so blobs don't leak.
+ * Circular user avatar. When `avatarUpdatedAt` is set it resolves the image
+ * through the shared {@link getAvatarObjectUrl} cache — fetched over an
+ * authenticated request (the serve route is guarded, so a bare `<img src>`
+ * can't carry the bearer token) once per user across the whole app — and renders
+ * it from the shared object URL; otherwise, or on any fetch error (e.g. a 404),
+ * it shows the generic placeholder. The URL is owned by the cache (shared across
+ * instances), so it is NOT revoked when a single Avatar unmounts.
  */
 export function Avatar({ userId, avatarUpdatedAt, size = 28, alt = '', className }: AvatarProps) {
   const token = useToken()
@@ -39,20 +40,9 @@ export function Avatar({ userId, avatarUpdatedAt, size = 28, alt = '', className
       return
     }
     let cancelled = false
-    let created: string | null = null
-    fetchUserAvatar(token, userId, avatarUpdatedAt)
-      .then(blob => {
-        if (cancelled) return
-        created = URL.createObjectURL(blob)
-        setObjectUrl(created)
-      })
-      .catch(() => {
-        if (!cancelled) setObjectUrl(null) // fall back to the placeholder
-      })
-    return () => {
-      cancelled = true
-      if (created) URL.revokeObjectURL(created)
-    }
+    getAvatarObjectUrl(token, userId, avatarUpdatedAt)
+      .then(url => { if (!cancelled) setObjectUrl(url) })
+    return () => { cancelled = true }
   }, [userId, avatarUpdatedAt, token])
 
   // Only show the fetched blob when the user actually has an avatar; the

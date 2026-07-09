@@ -24,7 +24,7 @@ beforeEach(() => {
   resetMockShares()
 })
 
-const defSubject = { kind: 'definition' as const, id: 'd1', name: 'Tower' }
+const defSubject = { kind: 'definition' as const, id: 'd1', name: 'Tower', ownerId: 'owner-1' }
 
 describe('ManageSharesModal', () => {
   it('shows the empty state, then a searched user can be added and is no longer offered', async () => {
@@ -51,6 +51,18 @@ describe('ManageSharesModal', () => {
     expect(screen.queryByRole('button', { name: 'Add ann' })).toBeNull()
   })
 
+  it("does not offer the game's owner in the picker (you can't share with yourself)", async () => {
+    // The owner (user-ann) is a real user the lookup would return; the picker
+    // must exclude them.
+    render(<ManageSharesModal subject={{ kind: 'definition', id: 'd1', name: 'Tower', ownerId: 'user-ann' }} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
+
+    // "an" matches ann + anna; ann is the owner → filtered out, anna remains.
+    await userEvent.type(screen.getByLabelText('Add user'), 'an')
+    expect(await screen.findByRole('button', { name: 'Add anna' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add ann' })).toBeNull()
+  })
+
   it('revokes a grantee', async () => {
     render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
@@ -64,7 +76,7 @@ describe('ManageSharesModal', () => {
   })
 
   it('drives the collection share endpoints for a collection subject', async () => {
-    render(<ManageSharesModal subject={{ kind: 'collection', id: 'c1', name: 'Campaign' }} onClose={vi.fn()} />)
+    render(<ManageSharesModal subject={{ kind: 'collection', id: 'c1', name: 'Campaign', ownerId: 'owner-1' }} onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
 
     await userEvent.type(screen.getByLabelText('Add user'), 'cleo')

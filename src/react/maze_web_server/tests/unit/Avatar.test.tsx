@@ -45,11 +45,11 @@ describe('Avatar', () => {
     expect(avatarSrc(container)).toBe(PLACEHOLDER)
   })
 
-  it('revokes the object URL on unmount so blobs do not leak', async () => {
+  it('does not revoke the object URL on unmount (the shared cache owns it)', async () => {
     mockFetchAvatar.mockResolvedValue(new Blob([new Uint8Array([1])], { type: 'image/png' }))
     const { container, unmount } = render(<Avatar userId="u1" avatarUpdatedAt="2025-04-01T12:00:00Z" />)
     await waitFor(() => expect(avatarSrc(container)).toBe('blob:mock-url'))
     unmount()
-    expect(globalThis.URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+    expect(globalThis.URL.revokeObjectURL).not.toHaveBeenCalled()
   })
 })

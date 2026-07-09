@@ -14,11 +14,13 @@ import {
 import type { GranteeSummary, UserLookupEntry } from '../types/api'
 
 // The thing being shared. `kind` selects which set of share endpoints to call;
-// `name` is shown in the modal so the owner knows what they are granting.
+// `name` is shown in the modal so the owner knows what they are granting;
+// `ownerId` is excluded from the people-picker (you can't share with yourself).
 export interface ShareSubject {
   kind: 'definition' | 'collection'
   id: string
   name: string
+  ownerId: string
 }
 
 interface Props {
@@ -90,10 +92,12 @@ export function ManageSharesModal({ subject, onClose }: Props) {
     return () => { cancelled = true; clearTimeout(handle) }
   }, [token, query])
 
-  // Hide already-granted users from the picker (grant is idempotent server-side,
-  // but re-offering them would be confusing).
+  // Hide the owner (you can't share with yourself — they already have access) and
+  // already-granted users.
   const grantedIds = new Set((grantees ?? []).map(g => g.id))
-  const pickable = query.trim() === '' ? [] : results.filter(u => !grantedIds.has(u.id))
+  const pickable = query.trim() === ''
+    ? []
+    : results.filter(u => u.id !== subject.ownerId && !grantedIds.has(u.id))
 
   async function handleGrant(userId: string) {
     setBusy(true)

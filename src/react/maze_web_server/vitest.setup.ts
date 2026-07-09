@@ -25,12 +25,17 @@ if (typeof URL !== 'undefined') {
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => {
+afterEach(async () => {
   server.resetHandlers()
   resetMockEmails()
   resetMockMazes()
   resetMockTokens()
   resetMockAvatar()
+  // Lazy import so this setup file doesn't eagerly load the image cache (and
+  // its real `client` dependency) before a test's `vi.mock('../api/client')`
+  // registers — which would make the cache call the real fetch.
+  const { resetImageCache } = await import('./src/utils/imageCache')
+  resetImageCache()
   cleanup()
 })
 afterAll(() => server.close())

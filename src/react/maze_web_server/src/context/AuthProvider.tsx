@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
+import { resetImageCache } from '../utils/imageCache'
 import type { UserProfile } from '../types/api'
 import {
   AuthContext,
@@ -112,6 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthState(null)
     setProfile(null)
     stopRenewalInterval()
+    // Sign-out is client-side (no page reload), so drop the previous session's
+    // cached guarded-image blobs — both for memory hygiene and so a later
+    // sign-in in the same tab can't reuse an access-controlled image (D5).
+    resetImageCache()
     if (state) {
       try {
         await api.logout(state.token)

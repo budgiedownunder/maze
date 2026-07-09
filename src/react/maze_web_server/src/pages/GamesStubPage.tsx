@@ -169,7 +169,7 @@ export function GamesStubPage() {
       )}
       {sharing && (
         <ManageSharesModal
-          subject={{ kind: 'definition', id: sharing.id, name: sharing.name }}
+          subject={{ kind: 'definition', id: sharing.id, name: sharing.name, ownerId: sharing.ownerId }}
           onClose={() => setSharing(null)}
         />
       )}
