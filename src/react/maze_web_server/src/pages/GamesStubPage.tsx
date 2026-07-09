@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
+import { PromptModal } from '../components/PromptModal'
 import { useToken } from '../context/AuthContext'
 import { createGameDefinition, getGameDefinition, getLeaderboard, listGameDefinitions, reshuffleGameDefinition, updateGameDefinition } from '../api/client'
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
@@ -21,6 +22,7 @@ export function GamesStubPage() {
 
   const [isCreating, setIsCreating] = useState(false)
   const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
+  const [duplicating, setDuplicating] = useState<{ source: GameDefinition; error: string | null; busy: boolean } | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const error = errorFor != null && errorFor.key === refreshCount ? errorFor.message : null
@@ -92,6 +94,38 @@ export function GamesStubPage() {
     }
   }
 
+  // A copy can't reuse an existing name (the server enforces unique per-owner and
+  // would 409); pre-check against the visible list for a friendlier message.
+  function validateDuplicateName(name: string): string | null {
+    return definitions.some(d => d.name.toLowerCase() === name.toLowerCase())
+      ? 'A game with that name already exists.'
+      : null
+  }
+
+  async function handleConfirmDuplicate(name: string) {
+    if (!duplicating) return
+    setDuplicating(d => (d ? { ...d, busy: true, error: null } : d))
+    try {
+      const source = duplicating.source
+      // Re-post the source's stored config verbatim under a new name; the server
+      // mints a fresh id + seed on create, so the copy is an independent draft.
+      // It is created Private (no leaderboard) whatever the source's tier, so an
+      // author can iterate without touching the original's live board.
+      await createGameDefinition(token!, {
+        name,
+        description: source.description ?? null,
+        visibility: 'private',
+        rotation: source.rotation,
+        config: source.config,
+      })
+      setDuplicating(null)
+      setRefreshCount(c => c + 1)
+    } catch (ex: unknown) {
+      const message = (ex as { message?: string }).message ?? 'Failed to duplicate game.'
+      setDuplicating(d => (d ? { ...d, busy: false, error: message } : d))
+    }
+  }
+
   return (
     <div className="games-page">
       {isCreating && (
@@ -118,6 +152,19 @@ export function GamesStubPage() {
           onPreview={config => launchDefinitionPreview(config, true)}
         />
       )}
+      {duplicating && (
+        <PromptModal
+          title="Duplicate Game"
+          label="Name"
+          initialValue={`Copy of ${duplicating.source.name}`}
+          confirmLabel="Duplicate"
+          validate={validateDuplicateName}
+          isLoading={duplicating.busy}
+          error={duplicating.error}
+          onConfirm={name => void handleConfirmDuplicate(name)}
+          onCancel={() => setDuplicating(null)}
+        />
+      )}
       <AppHeader title="Games">
         <button type="button" className="btn-primary" onClick={() => setIsCreating(true)}>
           New game
@@ -140,6 +187,14 @@ export function GamesStubPage() {
                   aria-label={`Edit ${d.name}`}
                 >
                   Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setDuplicating({ source: d, error: null, busy: false })}
+                  aria-label={`Duplicate ${d.name}`}
+                >
+                  Duplicate
                 </button>
               </li>
             ))}

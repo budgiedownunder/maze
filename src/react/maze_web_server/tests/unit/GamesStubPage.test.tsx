@@ -240,4 +240,58 @@ describe('GamesStubPage', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('A game with that name already exists.'))
     expect(screen.getByRole('button', { name: 'Finish' })).toBeInTheDocument()
   })
+
+  it('Duplicate clones a definition into a fresh private draft named "Copy of X"', async () => {
+    const stored = { id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'public', seed: 7, rotation: 'static', config: { rows: 9, cols: 9, title: 'Tower', mode: 'Tower' }, createdAt: 'x', updatedAt: 'x' }
+    const list = [stored]
+    let posted: GameDefinitionRequest | undefined
+    server.use(
+      http.get('/api/v1/game-definitions', () =>
+        HttpResponse.json({ definitions: list, limit: 20, offset: 0, hasMore: false }),
+      ),
+      http.post('/api/v1/game-definitions', async ({ request }) => {
+        posted = await request.json() as GameDefinitionRequest
+        const created = { id: 'd2', ownerId: 'o1', name: posted.name, visibility: 'private' as const, seed: 999, rotation: posted.rotation ?? 'static', config: posted.config, createdAt: 'x', updatedAt: 'x' }
+        list.push(created)
+        return HttpResponse.json(created, { status: 201 })
+      }),
+    )
+    renderGamesPage()
+    await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Duplicate Tower' }))
+    // The prompt is seeded with "Copy of <source name>".
+    expect(screen.getByLabelText('Name')).toHaveValue('Copy of Tower')
+    await userEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+
+    await waitFor(() => expect(posted).toBeDefined())
+    expect(posted?.name).toBe('Copy of Tower')
+    // A public source becomes a fresh private draft (no leaderboard).
+    expect(posted?.visibility).toBe('private')
+    // The source's stored config carries over verbatim.
+    expect(posted?.config).toMatchObject({ rows: 9, cols: 9, title: 'Tower', mode: 'Tower' })
+    // The list refreshes to include the copy.
+    await waitFor(() => expect(screen.getByText('Copy of Tower')).toBeInTheDocument())
+  })
+
+  it('blocks a duplicate name that collides with an existing game', async () => {
+    server.use(
+      http.get('/api/v1/game-definitions', () =>
+        HttpResponse.json({
+          definitions: [
+            { id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'private', seed: 1, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x' },
+            { id: 'd2', ownerId: 'o1', name: 'Copy of Tower', visibility: 'private', seed: 2, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x' },
+          ],
+          limit: 20, offset: 0, hasMore: false,
+        }),
+      ),
+    )
+    renderGamesPage()
+    await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Duplicate Tower' }))
+    // The default "Copy of Tower" already exists → the confirm is blocked client-side.
+    await userEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('A game with that name already exists.')
+  })
 })
