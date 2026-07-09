@@ -91,6 +91,35 @@ test('Edit opens the tabs editor over an existing game and Save persists the cha
   await expect(page.getByText(renamed)).toBeVisible()
 })
 
+test('Share adds and removes a grantee via the username people-picker', async ({ page }) => {
+  await login(page)
+
+  const name = `Shareable ${Date.now()}`
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByText(name)).toBeVisible()
+
+  await page.getByRole('button', { name: `Share ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: /^Share:/ })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('No one has access yet.')).toBeVisible()
+
+  // Search the username lookup ("bob" is not a prefix of any other mock user, so
+  // the Add/Remove button names stay unambiguous) and grant.
+  await dialog.getByLabel('Add user').fill('bob')
+  await dialog.getByRole('button', { name: 'Add bob' }).click()
+  await expect(dialog.getByRole('button', { name: 'Remove bob' })).toBeVisible()
+
+  // Revoke returns to the empty state.
+  await dialog.getByRole('button', { name: 'Remove bob' }).click()
+  await expect(dialog.getByText('No one has access yet.')).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toBeHidden()
+})
+
 test('New game wizard steps through General → Layout and blocks an invalid size', async ({ page }) => {
   await login(page)
 

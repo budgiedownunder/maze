@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { GamesStubPage } from '../../src/pages/GamesStubPage'
-import { resetMockGameDefinitions } from '../../src/mocks/handlers'
+import { resetMockGameDefinitions, resetMockShares } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
 import type { GameDefinition, GameDefinitionRequest } from '../../src/types/api'
 
@@ -31,6 +31,7 @@ function renderGamesPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   resetMockGameDefinitions()
+  resetMockShares()
 })
 
 describe('GamesStubPage', () => {
@@ -272,6 +273,28 @@ describe('GamesStubPage', () => {
     expect(posted?.config).toMatchObject({ rows: 9, cols: 9, title: 'Tower', mode: 'Tower' })
     // The list refreshes to include the copy.
     await waitFor(() => expect(screen.getByText('Copy of Tower')).toBeInTheDocument())
+  })
+
+  it('Share opens the manage-sharing modal for the row', async () => {
+    server.use(
+      http.get('/api/v1/game-definitions', () =>
+        HttpResponse.json({
+          definitions: [{ id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'shared', seed: 1, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x' }],
+          limit: 20, offset: 0, hasMore: false,
+        }),
+      ),
+    )
+    renderGamesPage()
+    await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share Tower' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Share: Tower' })
+    expect(dialog).toHaveTextContent('Tower')
+    // The people-picker is present.
+    expect(screen.getByLabelText('Add user')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Share: Tower' })).toBeNull())
   })
 
   it('blocks a duplicate name that collides with an existing game', async () => {

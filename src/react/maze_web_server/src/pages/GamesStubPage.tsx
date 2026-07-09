@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
 import { PromptModal } from '../components/PromptModal'
+import { ManageSharesModal } from '../components/ManageSharesModal'
 import { useToken } from '../context/AuthContext'
 import { createGameDefinition, getGameDefinition, getLeaderboard, listGameDefinitions, reshuffleGameDefinition, updateGameDefinition } from '../api/client'
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
@@ -23,6 +24,7 @@ export function GamesStubPage() {
   const [isCreating, setIsCreating] = useState(false)
   const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
   const [duplicating, setDuplicating] = useState<{ source: GameDefinition; error: string | null; busy: boolean } | null>(null)
+  const [sharing, setSharing] = useState<GameDefinition | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const error = errorFor != null && errorFor.key === refreshCount ? errorFor.message : null
@@ -165,6 +167,12 @@ export function GamesStubPage() {
           onCancel={() => setDuplicating(null)}
         />
       )}
+      {sharing && (
+        <ManageSharesModal
+          subject={{ kind: 'definition', id: sharing.id, name: sharing.name }}
+          onClose={() => setSharing(null)}
+        />
+      )}
       <AppHeader title="Games">
         <button type="button" className="btn-primary" onClick={() => setIsCreating(true)}>
           New game
@@ -195,6 +203,14 @@ export function GamesStubPage() {
                   aria-label={`Duplicate ${d.name}`}
                 >
                   Duplicate
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setSharing(d)}
+                  aria-label={`Share ${d.name}`}
+                >
+                  Share
                 </button>
               </li>
             ))}

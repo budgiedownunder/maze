@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -232,6 +232,43 @@ export let mockGameDefinitions: GameDefinition[] = loadGameDefinitions()
 export function resetMockGameDefinitions(): void {
   mockGameDefinitions = []
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(GAME_DEFINITION_STORAGE_KEY)
+}
+
+// The searchable user directory the share people-picker (B5 lookup) matches
+// against, plus per-subject grantee state. The share endpoints store only ids;
+// the list handler resolves them back to `{ id, username }` via this directory,
+// ordered by username — mirroring the server. In-memory (reset between tests).
+export const mockUserDirectory: UserLookupEntry[] = [
+  { id: 'user-ann', username: 'ann' },
+  { id: 'user-anna', username: 'anna' },
+  { id: 'user-bob', username: 'bob' },
+  { id: 'user-cleo', username: 'cleo' },
+  // A larger block sharing the "user" prefix so the people-picker's paging +
+  // "keep typing to narrow" hint and the scrollable grantee list are exercisable
+  // in the dev:mock run — type "user" to see a capped page + the hint, then add
+  // many to watch the "Shared with" list scroll.
+  ...Array.from({ length: 24 }, (_, i) => {
+    const n = i + 1
+    return { id: `user-${n}`, username: `user${n}` }
+  }),
+]
+
+let mockDefinitionShares: Record<string, string[]> = {}
+let mockCollectionShares: Record<string, string[]> = {}
+
+export function resetMockShares(): void {
+  mockDefinitionShares = {}
+  mockCollectionShares = {}
+}
+
+// Resolves grantee ids to `{ id, username }` summaries via the directory,
+// dropping unknown ids and ordering by username (as the server's JOIN does).
+function granteeSummaries(ids: string[]): GranteeSummary[] {
+  return ids
+    .map(uid => mockUserDirectory.find(u => u.id === uid))
+    .filter((u): u is UserLookupEntry => u !== undefined)
+    .map(u => ({ id: u.id, username: u.username }))
+    .sort((a, b) => a.username.localeCompare(b.username))
 }
 
 // In-memory mock token stores (token → target email). Confirm endpoints look
@@ -564,6 +601,62 @@ export const handlers = [
     mockGameDefinitions = [...mockGameDefinitions, created]
     saveGameDefinitions()
     return HttpResponse.json(created, { status: 201 })
+  }),
+
+  // User lookup (B5) — username-prefix search for the share people-picker. A
+  // blank prefix returns an empty page (never enumerates every user).
+  http.get(`${BASE}/users/lookup`, ({ request }) => {
+    const url = new URL(request.url)
+    const prefix = (url.searchParams.get('username') ?? '').trim().toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? '20')
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    const matches = prefix === ''
+      ? []
+      : mockUserDirectory
+          .filter(u => u.username.toLowerCase().startsWith(prefix))
+          .sort((a, b) => a.username.localeCompare(b.username))
+    const users = matches.slice(offset, offset + limit)
+    return HttpResponse.json<UserLookupResponse>({
+      users,
+      limit,
+      offset,
+      has_more: offset + limit < matches.length,
+    })
+  }),
+
+  // Definition shares — list / grant / revoke. Grant is idempotent; every verb
+  // returns the updated grantee list resolved to `{ id, username }`.
+  http.get(`${BASE}/game-definitions/:id/shares`, ({ params }) =>
+    HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[String(params.id)] ?? []) }),
+  ),
+  http.put(`${BASE}/game-definitions/:id/shares`, async ({ params, request }) => {
+    const { userId } = await request.json() as { userId: string }
+    const id = String(params.id)
+    const ids = mockDefinitionShares[id] ?? []
+    if (!ids.includes(userId)) mockDefinitionShares[id] = [...ids, userId]
+    return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id] ?? []) })
+  }),
+  http.delete(`${BASE}/game-definitions/:id/shares/:grantee`, ({ params }) => {
+    const id = String(params.id)
+    mockDefinitionShares[id] = (mockDefinitionShares[id] ?? []).filter(u => u !== String(params.grantee))
+    return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id]) })
+  }),
+
+  // Collection shares — mirror of the definition share endpoints.
+  http.get(`${BASE}/game-collections/:id/shares`, ({ params }) =>
+    HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[String(params.id)] ?? []) }),
+  ),
+  http.put(`${BASE}/game-collections/:id/shares`, async ({ params, request }) => {
+    const { userId } = await request.json() as { userId: string }
+    const id = String(params.id)
+    const ids = mockCollectionShares[id] ?? []
+    if (!ids.includes(userId)) mockCollectionShares[id] = [...ids, userId]
+    return HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[id] ?? []) })
+  }),
+  http.delete(`${BASE}/game-collections/:id/shares/:grantee`, ({ params }) => {
+    const id = String(params.id)
+    mockCollectionShares[id] = (mockCollectionShares[id] ?? []).filter(u => u !== String(params.grantee))
+    return HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[id]) })
   }),
 
   // Scores — curated preset (for the leaderboard seed), personal history, and
