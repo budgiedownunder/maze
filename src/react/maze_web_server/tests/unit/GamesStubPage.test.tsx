@@ -7,7 +7,7 @@ import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { GamesStubPage } from '../../src/pages/GamesStubPage'
 import { resetMockGameDefinitions } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
-import type { GameDefinitionRequest } from '../../src/types/api'
+import type { GameDefinition, GameDefinitionRequest } from '../../src/types/api'
 
 vi.mock('../../src/context/AuthContext', async () => {
   const actual = await vi.importActual('../../src/context/AuthContext')
@@ -242,8 +242,8 @@ describe('GamesStubPage', () => {
   })
 
   it('Duplicate clones a definition into a fresh private draft named "Copy of X"', async () => {
-    const stored = { id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'public', seed: 7, rotation: 'static', config: { rows: 9, cols: 9, title: 'Tower', mode: 'Tower' }, createdAt: 'x', updatedAt: 'x' }
-    const list = [stored]
+    const stored: GameDefinition = { id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'public', seed: 7, rotation: 'static', config: { rows: 9, cols: 9, title: 'Tower', mode: 'Tower' }, createdAt: 'x', updatedAt: 'x' }
+    const list: GameDefinition[] = [stored]
     let posted: GameDefinitionRequest | undefined
     server.use(
       http.get('/api/v1/game-definitions', () =>
@@ -251,7 +251,7 @@ describe('GamesStubPage', () => {
       ),
       http.post('/api/v1/game-definitions', async ({ request }) => {
         posted = await request.json() as GameDefinitionRequest
-        const created = { id: 'd2', ownerId: 'o1', name: posted.name, visibility: 'private' as const, seed: 999, rotation: posted.rotation ?? 'static', config: posted.config, createdAt: 'x', updatedAt: 'x' }
+        const created: GameDefinition = { id: 'd2', ownerId: 'o1', name: posted.name, visibility: 'private', seed: 999, rotation: posted.rotation ?? 'static', config: posted.config, createdAt: 'x', updatedAt: 'x' }
         list.push(created)
         return HttpResponse.json(created, { status: 201 })
       }),

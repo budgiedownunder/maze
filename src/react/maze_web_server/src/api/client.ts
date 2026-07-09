@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -433,7 +433,7 @@ export function deleteGameCollection(token: string, id: string): Promise<void> {
 
 // Appends a definition to a collection (idempotent). Returns the updated
 // collection with its raw membership (`items`), not the hydrated detail.
-export function addCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
+export function addGameCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
   return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items`, {
     method: 'POST',
     headers: authHeaders(token),
@@ -443,7 +443,7 @@ export function addCollectionItem(token: string, collectionId: string, definitio
 
 // Removes a definition from a collection (idempotent). Returns the updated
 // collection.
-export function removeCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
+export function removeGameCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
   return request<GameCollection>(
     `/game-collections/${encodeURIComponent(collectionId)}/items/${encodeURIComponent(definitionId)}`,
     { method: 'DELETE', headers: authHeaders(token) },
@@ -452,10 +452,77 @@ export function removeCollectionItem(token: string, collectionId: string, defini
 
 // Rewrites the member order to `ordered` (non-members ignored; members omitted
 // from `ordered` keep their prior relative order after the listed ones).
-export function reorderCollectionItems(token: string, collectionId: string, ordered: string[]): Promise<GameCollection> {
+export function reorderGameCollectionItems(token: string, collectionId: string, ordered: string[]): Promise<GameCollection> {
   return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items/reorder`, {
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify({ ordered }),
+  })
+}
+
+// --- Sharing & user lookup --------------------------------------------------
+
+// The share endpoints (definition + collection) all return the updated grantee
+// list; grant/revoke are idempotent server-side, and a subject owned by someone
+// else returns 404. The grant body key is `userId`.
+
+export function listGameDefinitionShares(token: string, id: string): Promise<SharesResponse> {
+  return request<SharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function grantGameDefinitionShare(token: string, id: string, userId: string): Promise<SharesResponse> {
+  return request<SharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ userId }),
+  })
+}
+
+export function revokeGameDefinitionShare(token: string, id: string, granteeId: string): Promise<SharesResponse> {
+  return request<SharesResponse>(
+    `/game-definitions/${encodeURIComponent(id)}/shares/${encodeURIComponent(granteeId)}`,
+    { method: 'DELETE', headers: authHeaders(token) },
+  )
+}
+
+export function listGameCollectionShares(token: string, id: string): Promise<SharesResponse> {
+  return request<SharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function grantGameCollectionShare(token: string, id: string, userId: string): Promise<SharesResponse> {
+  return request<SharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ userId }),
+  })
+}
+
+export function revokeGameCollectionShare(token: string, id: string, granteeId: string): Promise<SharesResponse> {
+  return request<SharesResponse>(
+    `/game-collections/${encodeURIComponent(id)}/shares/${encodeURIComponent(granteeId)}`,
+    { method: 'DELETE', headers: authHeaders(token) },
+  )
+}
+
+export interface UserLookupQuery {
+  username: string
+  limit?: number
+  offset?: number
+}
+
+// Looks up users whose username starts with `username` (case-insensitive) for
+// the share people-picker. A blank prefix returns an empty page — the server
+// never enumerates every user. Returns only id + username per hit.
+export function lookupUsers(token: string, query: UserLookupQuery): Promise<UserLookupResponse> {
+  const params = new URLSearchParams()
+  params.set('username', query.username)
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  return request<UserLookupResponse>(`/users/lookup?${params.toString()}`, {
+    headers: authHeaders(token),
   })
 }

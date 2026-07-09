@@ -239,3 +239,31 @@ export interface GameCollectionDetailResponse {
   updatedAt: string
   definitions: GameDefinition[]
 }
+
+// --- Sharing & user lookup --------------------------------------------------
+
+// The grantee list returned by the definition / collection share endpoints — a
+// bare list of user ids (the server's `DefinitionSharesResponse` /
+// `CollectionSharesResponse`, which are structurally identical). Resolve ids to
+// usernames via the lookup when a grantee needs a display name.
+export interface SharesResponse {
+  grantees: string[]
+}
+
+// A single username-prefix lookup hit for the share people-picker. The server
+// returns only id + username here — never email, admin flag, or avatar.
+export interface UserLookupEntry {
+  id: string
+  username: string
+}
+
+// A page of username-prefix lookup hits. Mirrors the server's
+// `UserLookupResponse`, which — unlike the other paged lists — is NOT
+// camelCase-renamed, so the last-page flag is the snake_case `has_more` (as in
+// `ScoreboardResponse`).
+export interface UserLookupResponse {
+  users: UserLookupEntry[]
+  limit: number
+  offset: number
+  has_more: boolean
+}
