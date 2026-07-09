@@ -18,7 +18,7 @@ test('New game wizard creates a definition that survives a reload', async ({ pag
 
   await page.getByRole('button', { name: 'New game' }).click()
 
-  const dialog = page.getByRole('dialog', { name: 'New game' })
+  const dialog = page.getByRole('dialog', { name: 'New Game' })
   await expect(dialog).toBeVisible()
   // Early Finish: offered on the first step, disabled until the name is entered.
   await expect(dialog.getByRole('button', { name: 'Finish' })).toBeDisabled()
@@ -41,7 +41,7 @@ test('Edit opens the tabs editor over an existing game and Save persists the cha
   const renamed = `${name} v2`
 
   await page.getByRole('button', { name: 'New game' }).click()
-  const wizard = page.getByRole('dialog', { name: 'New game' })
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
   await wizard.getByLabel('Name').fill(name)
   await wizard.getByRole('button', { name: 'Finish' }).click()
   await expect(page.getByText(name)).toBeVisible()
@@ -49,7 +49,7 @@ test('Edit opens the tabs editor over an existing game and Save persists the cha
   await page.getByRole('button', { name: `Edit ${name}` }).click()
 
   // Tabs mode: no wizard navigation, Save instead of Finish, name hydrated.
-  const editor = page.getByRole('dialog', { name: 'Edit game' })
+  const editor = page.getByRole('dialog', { name: 'Edit Game' })
   await expect(editor).toBeVisible()
   await expect(editor.getByRole('button', { name: 'Next' })).toBeHidden()
   await expect(editor.getByRole('button', { name: 'Back' })).toBeHidden()
@@ -69,7 +69,7 @@ test('New game wizard steps through General → Layout and blocks an invalid siz
   await login(page)
 
   await page.getByRole('button', { name: 'New game' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New game' })
+  const dialog = page.getByRole('dialog', { name: 'New Game' })
   await dialog.getByLabel('Name').fill('Invalid')
   // General → Scene → Layout (Scene now precedes Layout).
   await dialog.getByRole('button', { name: 'Next' }).click()
@@ -88,7 +88,7 @@ test('the multi-level controls appear only when the level count is raised above 
   await login(page)
 
   await page.getByRole('button', { name: 'New game' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New game' })
+  const dialog = page.getByRole('dialog', { name: 'New Game' })
   await dialog.getByLabel('Name').fill('Stacked')
 
   // There is no Levels tab; the settings are distributed across the other tabs.

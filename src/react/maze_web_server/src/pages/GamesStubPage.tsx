@@ -90,7 +90,7 @@ export function GamesStubPage() {
       {isCreating && (
         <GameDefinitionEditor
           mode="wizard"
-          title="New game"
+          title="New Game"
           initialForm={DEFINITION_DEFAULTS}
           onSubmit={request => void handleCreate(request)}
           onCancel={closeEditor}
@@ -99,7 +99,7 @@ export function GamesStubPage() {
       {editing && (
         <GameDefinitionEditor
           mode="tabs"
-          title="Edit game"
+          title="Edit Game"
           initialForm={editing.form}
           onSubmit={request => void handleSave(request)}
           onCancel={closeEditor}
