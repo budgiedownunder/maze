@@ -123,6 +123,7 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_definitions::list_game_definitions,
         crate::api::v1::endpoints::game_definitions::get_game_definition,
         crate::api::v1::endpoints::game_definitions::update_game_definition,
+        crate::api::v1::endpoints::game_definitions::reshuffle_game_definition,
         crate::api::v1::endpoints::game_definitions::delete_game_definition,
         crate::api::v1::endpoints::game_definitions::list_definition_shares,
         crate::api::v1::endpoints::game_definitions::grant_definition_share,

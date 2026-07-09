@@ -44,6 +44,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(game_definitions::serve_definition_image)
                 .service(game_definitions::get_game_definition)
                 .service(game_definitions::update_game_definition)
+                .service(game_definitions::reshuffle_game_definition)
                 .service(game_definitions::delete_game_definition)
                 // Game collections (ordered groupings of definitions)
                 .service(game_collections::create_game_collection)

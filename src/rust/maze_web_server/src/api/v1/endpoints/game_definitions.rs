@@ -591,6 +591,66 @@ pub async fn delete_game_definition(
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/v1/game-definitions/{id}/reshuffle
+// ---------------------------------------------------------------------------
+
+#[utoipa::path(
+    summary = "Reshuffle a game definition's layout",
+    description = "Re-mints the definition's seed, changing the generated layout. The seed is \
+                   otherwise server-owned and preserved across updates, so reshuffling is its own \
+                   endpoint. If the definition is published its leaderboard is reset (the layout — \
+                   and thus fair comparison — has changed); a private draft has no board to clear. \
+                   Owner-only.",
+    post,
+    path = "/api/v1/game-definitions/{id}/reshuffle",
+    params(("id" = String, Path, description = "Definition id")),
+    responses(
+        (status = 200, description = "Reshuffled; returns the definition with its new seed", body = GameDefinition),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "Definition not found")
+    ),
+    security(("api_key" = []), ("login_token" = [])),
+    tags = ["v1"]
+)]
+#[post("/game-definitions/{id}/reshuffle")]
+pub async fn reshuffle_game_definition(
+    path: web::Path<Uuid>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    let id = path.into_inner();
+    let mut store_lock = store.write().await;
+
+    // Load the caller's own record; anyone else's is reported as absent.
+    let mut definition = match store_lock.get_game_definition(id).await {
+        Ok(def) if def.owner_id == user.id => def,
+        Ok(_) | Err(StoreError::GameDefinitionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("get game definition store error: {err}");
+            return Err(ErrorInternalServerError("Failed to load game definition"));
+        }
+    };
+
+    // A fresh seed = a fresh layout. Persist it through the owner-scoped update.
+    definition.seed = mint_seed();
+    store_lock
+        .update_game_definition(&user, &mut definition)
+        .await
+        .map_err(map_write_error)?;
+
+    // The layout changed, so any board is no longer a fair comparison — reset it.
+    // A private draft is not tracked, so this is a no-op there.
+    if let Err(err) = store_lock.clear_challenge_scores_prefix(&challenge_prefix(id)).await {
+        log::warn!("failed to reset board on reshuffle for definition {id}: {err}");
+    }
+
+    Ok(HttpResponse::Ok().json(definition))
+}
+
+// ---------------------------------------------------------------------------
 // Share management — GET / PUT / DELETE /api/v1/game-definitions/{id}/shares
 // ---------------------------------------------------------------------------
 

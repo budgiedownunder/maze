@@ -8417,6 +8417,75 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn reshuffling_a_definition_changes_its_seed() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        // seed_game_definition stamps a fixed seed (12_345); reshuffle re-mints it.
+        let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
+        assert_eq!(def.seed, 12_345);
+
+        let req = create_test_post_request(
+            &format!("/api/v1/game-definitions/{}/reshuffle", def.id),
+            Some(key),
+            None,
+            None::<&()>,
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let reshuffled: GameDefinition = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_ne!(reshuffled.seed, 12_345, "the seed must be re-minted");
+        assert_eq!(reshuffled.id, def.id);
+    }
+
+    #[actix_web::test]
+    async fn reshuffling_a_published_definition_resets_its_board() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let def = seed_game_definition(&store, &owner, "Live", Visibility::Public, Rotation::Static).await;
+        let challenge = format!("def:{}", def.id);
+        record_challenge_score(&store, &owner, &challenge).await;
+        record_challenge_score(&store, &owner, &challenge).await;
+        assert_eq!(challenge_board_len(&store, &challenge).await, 2);
+
+        let req = create_test_post_request(
+            &format!("/api/v1/game-definitions/{}/reshuffle", def.id),
+            Some(key),
+            None,
+            None::<&()>,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        assert_eq!(challenge_board_len(&store, &challenge).await, 0, "the board is wiped on reshuffle");
+    }
+
+    #[actix_web::test]
+    async fn reshuffling_another_users_definition_returns_404() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let def = seed_game_definition(&store, &owner, "Mine", Visibility::Private, Rotation::Static).await;
+
+        // A non-owner cannot reshuffle — reported as absent, not forbidden.
+        let req = create_test_post_request(
+            &format!("/api/v1/game-definitions/{}/reshuffle", def.id),
+            Some(other.api_key),
+            None,
+            None::<&()>,
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
     async fn list_game_definitions_merges_visible_sources() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
