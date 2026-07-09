@@ -2,8 +2,8 @@ use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use data_model::{
-    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, Maze,
-    OneTimeToken, User, UserEmail,
+    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
+    Maze, OneTimeToken, User, UserEmail,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -561,9 +561,18 @@ pub trait GameStore {
         offset: u32,
     ) -> Result<Vec<GameDefinition>, Error>;
     /// The user ids granted access to a definition — an unconditional primitive
-    /// the server uses for the owner's manage-shares view and for composing the
-    /// access decision. Returns an empty list for an unknown/ungranted id.
+    /// the server uses for composing the access decision (owner ∨ granted).
+    /// Returns an empty list for an unknown/ungranted id.
     async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    /// The grantees of a definition **resolved to `{id, username}`** for the
+    /// owner's manage-shares view — the id-only [`GameStore::get_definition_grantees`]
+    /// left the caller with no non-admin way to name a grantee. Ordered by
+    /// username; a grantee whose user record is absent or soft-deleted is
+    /// dropped. Returns an empty list for an unknown/ungranted id.
+    async fn get_definition_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error>;
     /// Stores (or replaces) the image for a definition owned by `owner`,
     /// stamping its `image_updated_at` marker. `png_bytes` is the canonical
     /// image the caller has produced; the store keeps it verbatim. Owner-scoped:
@@ -666,6 +675,15 @@ pub trait GameStore {
     /// The user ids granted access to a collection — an unconditional primitive.
     /// Returns an empty list for an unknown/ungranted id.
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    /// The grantees of a collection **resolved to `{id, username}`** for the
+    /// owner's manage-shares view (see
+    /// [`GameStore::get_definition_grantee_summaries`] for the rationale).
+    /// Ordered by username; a grantee whose user record is absent or
+    /// soft-deleted is dropped. Returns an empty list for an unknown/ungranted id.
+    async fn get_collection_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error>;
     /// Stores (or replaces) the image for a collection owned by `owner`, stamping
     /// its `image_updated_at` marker. Owner-scoped: a collection not owned by
     /// `owner` is [`Error::GameCollectionIdNotFound`].

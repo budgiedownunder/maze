@@ -27,6 +27,31 @@ pub fn is_valid_email_format(email: &str) -> bool {
     re.is_match(email)
 }
 
+/// A minimal, safe reference to a user in a grantee list — just the granted
+/// user's id and username. The share tables store only the grantee id, and
+/// there is no non-admin id→username lookup (`/users/lookup` matches by
+/// username prefix, `GET /users/{id}` is admin-only), so the store resolves the
+/// username for the owner's manage-shares view. Deliberately carries no email,
+/// admin flag, or other profile field.
+///
+/// # Examples
+///
+/// ```
+/// use data_model::GranteeSummary;
+/// use uuid::Uuid;
+///
+/// let g = GranteeSummary { id: Uuid::nil(), username: "friend".to_string() };
+/// assert_eq!(g.username, "friend");
+/// ```
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
+pub struct GranteeSummary {
+    /// The granted user's id.
+    #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub id: Uuid,
+    /// The granted user's username.
+    pub username: String,
+}
+
 /// Represents a user of the system
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct User {

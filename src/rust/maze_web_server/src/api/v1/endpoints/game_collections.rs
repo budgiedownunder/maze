@@ -33,7 +33,7 @@ use actix_web::{
     http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
 use chrono::{DateTime, Utc};
-use data_model::{GameCollection, GameDefinition, User, Visibility};
+use data_model::{GameCollection, GameDefinition, GranteeSummary, User, Visibility};
 use serde::{Deserialize, Serialize};
 use storage::{Error as StoreError, SharedStore};
 use utoipa::ToSchema;
@@ -156,13 +156,13 @@ pub struct ReorderCollectionItemsRequest {
     pub ordered: Vec<Uuid>,
 }
 
-/// The current grantee list for a collection, returned by the share endpoints.
+/// The current grantee list for a collection, returned by the share endpoints —
+/// each grantee resolved to `{id, username}` for the owner's manage-shares view.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectionSharesResponse {
-    /// The user ids currently granted access.
-    #[schema(value_type = Vec<String>)]
-    pub grantees: Vec<Uuid>,
+    /// The users currently granted access (id + username).
+    pub grantees: Vec<GranteeSummary>,
 }
 
 // ---------------------------------------------------------------------------
@@ -676,8 +676,8 @@ pub async fn reorder_collection_items(
 
 #[utoipa::path(
     summary = "List a collection's grantees",
-    description = "Returns the user ids granted access to a collection owned by the caller. A \
-                   collection owned by someone else returns 404.",
+    description = "Returns the users (id + username) granted access to a collection owned by the \
+                   caller. A collection owned by someone else returns 404.",
     get,
     path = "/api/v1/game-collections/{id}/shares",
     params(("id" = String, Path, description = "Collection id")),
@@ -699,8 +699,8 @@ pub async fn list_collection_shares(
     let id = path.into_inner();
     let store_lock = store.read().await;
     owned_collection(&**store_lock, &user, id).await?;
-    let grantees = store_lock.get_collection_grantees(id).await.map_err(|err| {
-        log::warn!("get collection grantees store error: {err}");
+    let grantees = store_lock.get_collection_grantee_summaries(id).await.map_err(|err| {
+        log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
     })?;
     Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))
@@ -746,8 +746,8 @@ pub async fn grant_collection_share(
         }
     }
 
-    let grantees = store_lock.get_collection_grantees(id).await.map_err(|err| {
-        log::warn!("get collection grantees store error: {err}");
+    let grantees = store_lock.get_collection_grantee_summaries(id).await.map_err(|err| {
+        log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
     })?;
     Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))
@@ -793,8 +793,8 @@ pub async fn revoke_collection_share(
         }
     }
 
-    let grantees = store_lock.get_collection_grantees(id).await.map_err(|err| {
-        log::warn!("get collection grantees store error: {err}");
+    let grantees = store_lock.get_collection_grantee_summaries(id).await.map_err(|err| {
+        log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
     })?;
     Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))

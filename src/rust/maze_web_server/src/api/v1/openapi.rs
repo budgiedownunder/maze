@@ -1,4 +1,4 @@
-use data_model::{CollectionItem, GameCollection, GameDefinition, Maze, MazeDefinition, UserEmail};
+use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, UserEmail};
 use maze::{GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution};
 use storage::MazeItem;
 use utoipa::{
@@ -175,7 +175,7 @@ impl utoipa::Modify for LoginTokenAuth {
             GeneratorOptions, GenerationAlgorithm,
             RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
             GameDefinition, GameDefinitionRequest, GameDefinitionListResponse, GamePlayResponse,
-            GrantShareRequest, DefinitionSharesResponse,
+            GrantShareRequest, DefinitionSharesResponse, GranteeSummary,
             GameCollection, CollectionItem, GameCollectionRequest, GameCollectionListResponse,
             GameCollectionDetailResponse, AddCollectionItemRequest, ReorderCollectionItemsRequest,
             CollectionSharesResponse, ImageUpdatedResponse,

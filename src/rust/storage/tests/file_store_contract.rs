@@ -937,6 +937,12 @@ async fn game_definition_grants_update_grantees() {
 }
 
 #[tokio::test]
+async fn game_definition_grantee_summaries_resolve_usernames() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::definition_grantee_summaries_resolve_usernames(&mut s).await;
+}
+
+#[tokio::test]
 async fn game_definition_delete_user_cascades() {
     let (mut s, _temp) = fresh_store().await;
     contract::delete_user_cascades_to_game_definitions(&mut s).await;
@@ -996,6 +1002,12 @@ async fn game_collection_owner_list_scopes_and_sorts() {
 async fn game_collection_grants_update_grantees() {
     let (mut s, _temp) = fresh_store().await;
     contract::collection_grants_update_grantees(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_collection_grantee_summaries_resolve_usernames() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::collection_grantee_summaries_resolve_usernames(&mut s).await;
 }
 
 #[tokio::test]

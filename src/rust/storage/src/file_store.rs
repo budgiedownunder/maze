@@ -9,8 +9,8 @@ use unicase::UniCase;
 use uuid::Uuid;
 
 use data_model::{
-    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, Maze,
-    OneTimeToken, User, UserEmail, Visibility, truncate_email_audit_error_message,
+    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
+    Maze, OneTimeToken, User, UserEmail, Visibility, truncate_email_audit_error_message,
 };
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
@@ -608,6 +608,25 @@ impl FileStore {
         let file = File::open(&path)?;
         let reader = BufReader::new(file);
         serde_json::from_reader::<BufReader<File>, Vec<Uuid>>(reader).map_err(Error::from)
+    }
+
+    // Resolves grantee ids to `{id, username}` summaries for the owner's
+    // manage-shares view, loading each user by id. A grantee whose user record is
+    // soft-deleted or missing is dropped — `read_user` returns `UserIdNotFound`
+    // for both — so the FileStore matches the SqlStore JOIN (which excludes
+    // `deleted_at IS NULL` and non-matching ids). Ordered by username to match
+    // the SQL `ORDER BY u.username`.
+    fn resolve_grantee_summaries(&self, ids: Vec<Uuid>) -> Result<Vec<GranteeSummary>, Error> {
+        let mut summaries = Vec::with_capacity(ids.len());
+        for id in ids {
+            match self.read_user(id) {
+                Ok(user) => summaries.push(GranteeSummary { id, username: user.username }),
+                Err(Error::UserIdNotFound(_)) => {}
+                Err(err) => return Err(err),
+            }
+        }
+        summaries.sort_by(|a, b| a.username.cmp(&b.username));
+        Ok(summaries)
     }
 
     // Writes a definition's `shares.json`; an empty list removes the file so no
@@ -4916,6 +4935,61 @@ impl GameStore for FileStore {
         self.read_game_definition_grantees(id)
     }
 
+    /// A definition's grantees resolved to `{id, username}`. See
+    /// [`GameStore::get_definition_grantee_summaries`].
+    ///
+    /// # Examples
+    ///
+    /// Read back the resolved grantee list after a grant
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, GranteeSummary, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".to_string(),
+    ///     full_name: "Friend".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    ///
+    /// let grantees = store.get_definition_grantee_summaries(def.id).await.unwrap();
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// # });
+    /// ```
+    async fn get_definition_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error> {
+        let ids = self.read_game_definition_grantees(id)?;
+        self.resolve_grantee_summaries(ids)
+    }
+
     /// Stores (or replaces) a definition's image and stamps its
     /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_definition_image`].
     ///
@@ -5737,6 +5811,60 @@ impl GameStore for FileStore {
     /// ```
     async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         self.read_game_collection_grantees(id)
+    }
+
+    /// A collection's grantees resolved to `{id, username}`. See
+    /// [`GameStore::get_collection_grantee_summaries`].
+    ///
+    /// # Examples
+    ///
+    /// Read back the resolved grantee list after a grant
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, GranteeSummary, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".to_string(),
+    ///     full_name: "Friend".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    ///
+    /// let grantees = store.get_collection_grantee_summaries(collection.id).await.unwrap();
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// # });
+    /// ```
+    async fn get_collection_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error> {
+        let ids = self.read_game_collection_grantees(id)?;
+        self.resolve_grantee_summaries(ids)
     }
 
     /// Stores (or replaces) a collection's image and stamps its

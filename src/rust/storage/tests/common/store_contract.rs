@@ -13,9 +13,9 @@
 use chrono::{Duration, SubsecRound, Utc};
 use data_model::{
     AuditOutcome, CollectionItem, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS,
-    ERROR_MESSAGE_TRUNCATION_MARKER, EmailAuditEntry, GameCollection, GameDefinition, Maze,
-    MazeDefinition, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin,
-    Visibility,
+    ERROR_MESSAGE_TRUNCATION_MARKER, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
+    Maze, MazeDefinition, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail,
+    UserLogin, Visibility,
 };
 use storage::{
     Error, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
@@ -2650,6 +2650,31 @@ pub async fn definition_grants_update_grantees(store: &mut Box<dyn Store>) {
     assert!(store.get_definition_grantees(def.id).await.expect("grantees").is_empty());
 }
 
+pub async fn definition_grantee_summaries_resolve_usernames(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "gds_owner", "gds_owner@example.com").await;
+    let zeta = fixture_user(store, "gds_zeta", "gds_zeta@example.com").await;
+    let alpha = fixture_user(store, "gds_alpha", "gds_alpha@example.com").await;
+    let mut def = make_game_definition("Shared", Visibility::Shared);
+    store.create_game_definition(&owner, &mut def).await.expect("create");
+
+    // No grants → empty.
+    assert!(store.get_definition_grantee_summaries(def.id).await.expect("summaries").is_empty());
+
+    // Grant zeta first, then alpha; the summaries resolve each id to its username
+    // and come back ordered by username (alpha before zeta), independent of the
+    // grant order.
+    store.grant_definition_access(&owner, def.id, zeta.id).await.expect("grant zeta");
+    store.grant_definition_access(&owner, def.id, alpha.id).await.expect("grant alpha");
+    let summaries = store.get_definition_grantee_summaries(def.id).await.expect("summaries");
+    assert_eq!(
+        summaries,
+        vec![
+            GranteeSummary { id: alpha.id, username: "gds_alpha".to_string() },
+            GranteeSummary { id: zeta.id, username: "gds_zeta".to_string() },
+        ],
+    );
+}
+
 pub async fn delete_user_cascades_to_game_definitions(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "gd_alice", "gd_alice@example.com").await;
     let bob = fixture_user(store, "gd_bob", "gd_bob@example.com").await;
@@ -2886,6 +2911,29 @@ pub async fn collection_grants_update_grantees(store: &mut Box<dyn Store>) {
 
     store.revoke_collection_access(&owner, collection.id, friend.id).await.expect("revoke");
     assert!(store.get_collection_grantees(collection.id).await.expect("grantees").is_empty());
+}
+
+pub async fn collection_grantee_summaries_resolve_usernames(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "cds_owner", "cds_owner@example.com").await;
+    let zeta = fixture_user(store, "cds_zeta", "cds_zeta@example.com").await;
+    let alpha = fixture_user(store, "cds_alpha", "cds_alpha@example.com").await;
+    let mut collection = make_game_collection("Shared", Visibility::Shared);
+    store.create_game_collection(&owner, &mut collection).await.expect("create");
+
+    // No grants → empty.
+    assert!(store.get_collection_grantee_summaries(collection.id).await.expect("summaries").is_empty());
+
+    // Grant zeta first, then alpha; resolved + ordered by username.
+    store.grant_collection_access(&owner, collection.id, zeta.id).await.expect("grant zeta");
+    store.grant_collection_access(&owner, collection.id, alpha.id).await.expect("grant alpha");
+    let summaries = store.get_collection_grantee_summaries(collection.id).await.expect("summaries");
+    assert_eq!(
+        summaries,
+        vec![
+            GranteeSummary { id: alpha.id, username: "cds_alpha".to_string() },
+            GranteeSummary { id: zeta.id, username: "cds_zeta".to_string() },
+        ],
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────

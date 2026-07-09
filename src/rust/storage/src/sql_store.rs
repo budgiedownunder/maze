@@ -23,9 +23,9 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, Maze,
-    OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin, Visibility,
-    truncate_email_audit_error_message,
+    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
+    Maze, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin,
+    Visibility, truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
@@ -5958,6 +5958,85 @@ impl GameStore for SqlStore {
             .collect()
     }
 
+    /// A definition's grantees resolved to `{id, username}`. See
+    /// [`GameStore::get_definition_grantee_summaries`].
+    ///
+    /// # Examples
+    ///
+    /// Read back the resolved grantee list after a grant
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, GranteeSummary, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    ///
+    /// let grantees = store.get_definition_grantee_summaries(def.id).await.unwrap();
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// # });
+    /// ```
+    async fn get_definition_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT u.id AS grantee_id, u.username AS grantee_username \
+             FROM game_definition_shares s \
+             JOIN users u ON u.id = s.grantee_user_id \
+             WHERE s.definition_id = ? AND u.deleted_at IS NULL \
+             ORDER BY u.username ASC",
+        ))
+        .bind(id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| {
+                let s: String = row.try_get("grantee_id").map_err(map_sqlx_err)?;
+                let username: String = row.try_get("grantee_username").map_err(map_sqlx_err)?;
+                Ok(GranteeSummary { id: parse_uuid("grantee_id", &s)?, username })
+            })
+            .collect()
+    }
+
     /// Stores (or replaces) a definition's image and stamps its
     /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_definition_image`].
     ///
@@ -7113,6 +7192,84 @@ impl GameStore for SqlStore {
             .map(|row| {
                 let s: String = row.try_get("grantee_user_id").map_err(map_sqlx_err)?;
                 parse_uuid("grantee_user_id", &s)
+            })
+            .collect()
+    }
+
+    /// A collection's grantees resolved to `{id, username}`. See
+    /// [`GameStore::get_collection_grantee_summaries`].
+    ///
+    /// # Examples
+    ///
+    /// Read back the resolved grantee list after a grant
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, GranteeSummary, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut friend = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "friend".into(),
+    ///     full_name: "Friend".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("friend@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut friend).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    ///
+    /// let grantees = store.get_collection_grantee_summaries(collection.id).await.unwrap();
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// # });
+    /// ```
+    async fn get_collection_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT u.id AS grantee_id, u.username AS grantee_username \
+             FROM game_collection_shares s \
+             JOIN users u ON u.id = s.grantee_user_id \
+             WHERE s.collection_id = ? AND u.deleted_at IS NULL \
+             ORDER BY u.username ASC",
+        ))
+        .bind(id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| {
+                let s: String = row.try_get("grantee_id").map_err(map_sqlx_err)?;
+                let username: String = row.try_get("grantee_username").map_err(map_sqlx_err)?;
+                Ok(GranteeSummary { id: parse_uuid("grantee_id", &s)?, username })
             })
             .collect()
     }

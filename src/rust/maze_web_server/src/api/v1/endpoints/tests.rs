@@ -17,7 +17,7 @@ mod test_definitions {
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
-    use data_model::{CollectionItem, GameCollection, GameDefinition, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
+    use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
     use crate::api::v1::endpoints::game_definitions::{DefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GrantShareRequest};
     use crate::api::v1::endpoints::game_collections::{AddCollectionItemRequest, CollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, ReorderCollectionItemsRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
@@ -1073,6 +1073,16 @@ mod test_definitions {
             Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
         }
 
+        async fn get_definition_grantee_summaries(&self, id: Uuid) -> Result<Vec<GranteeSummary>, StoreError> {
+            let ids = self.def_grantees.get(&id).cloned().unwrap_or_default();
+            let mut out: Vec<GranteeSummary> = ids
+                .into_iter()
+                .filter_map(|gid| self.users.get(&gid).map(|u| GranteeSummary { id: gid, username: u.user.username.clone() }))
+                .collect();
+            out.sort_by(|a, b| a.username.cmp(&b.username));
+            Ok(out)
+        }
+
         async fn set_definition_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
             let def = self.game_definitions.iter_mut().find(|d| d.id == id && d.owner_id == owner.id)
                 .ok_or_else(|| StoreError::GameDefinitionIdNotFound(id.to_string()))?;
@@ -1232,6 +1242,16 @@ mod test_definitions {
 
         async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.col_grantees.get(&id).cloned().unwrap_or_default())
+        }
+
+        async fn get_collection_grantee_summaries(&self, id: Uuid) -> Result<Vec<GranteeSummary>, StoreError> {
+            let ids = self.col_grantees.get(&id).cloned().unwrap_or_default();
+            let mut out: Vec<GranteeSummary> = ids
+                .into_iter()
+                .filter_map(|gid| self.users.get(&gid).map(|u| GranteeSummary { id: gid, username: u.user.username.clone() }))
+                .collect();
+            out.sort_by(|a, b| a.username.cmp(&b.username));
+            Ok(out)
         }
 
         async fn set_collection_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
@@ -8577,7 +8597,7 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![other.id]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Only the owner may read the grantee list.
         let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None);
@@ -8585,7 +8605,7 @@ mod test_definitions {
         let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![other.id]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Revoke → empty.
         let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, other.id), Some(owner.api_key), None);
@@ -8828,7 +8848,7 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![other.id]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Only the owner may read the grantee list.
         let req = create_test_get_request(&url, Some(other.api_key), None);
@@ -8836,7 +8856,7 @@ mod test_definitions {
         let req = create_test_get_request(&url, Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![other.id]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Revoke → empty.
         let req = create_test_delete_request(&format!("{url}/{}", other.id), Some(owner.api_key), None);

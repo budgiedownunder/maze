@@ -38,7 +38,7 @@ use actix_web::{
     http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
-use data_model::{GameDefinition, Rotation, User, Visibility};
+use data_model::{GameDefinition, GranteeSummary, Rotation, User, Visibility};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use storage::{Error as StoreError, SharedStore};
@@ -129,13 +129,13 @@ pub struct GrantShareRequest {
     pub user_id: Uuid,
 }
 
-/// The current grantee list for a definition, returned by the share endpoints.
+/// The current grantee list for a definition, returned by the share endpoints —
+/// each grantee resolved to `{id, username}` for the owner's manage-shares view.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DefinitionSharesResponse {
-    /// The user ids currently granted access.
-    #[schema(value_type = Vec<String>)]
-    pub grantees: Vec<Uuid>,
+    /// The users currently granted access (id + username).
+    pub grantees: Vec<GranteeSummary>,
 }
 
 /// Multipart upload form for a definition / collection image — a single `file`
@@ -654,14 +654,15 @@ pub async fn reshuffle_game_definition(
 // Share management — GET / PUT / DELETE /api/v1/game-definitions/{id}/shares
 // ---------------------------------------------------------------------------
 
-/// Loads the current grantee list for a definition owned by `user`, or a 404 if
-/// the definition is absent or owned by someone else. Shared by the three share
-/// endpoints so a non-owner cannot probe another user's grants.
+/// Loads the current grantee list (resolved to `{id, username}`) for a
+/// definition owned by `user`, or a 404 if the definition is absent or owned by
+/// someone else. Shared by the three share endpoints so a non-owner cannot probe
+/// another user's grants.
 async fn owned_definition_grantees(
     store_lock: &dyn storage::Store,
     user: &User,
     id: Uuid,
-) -> Result<Vec<Uuid>, Error> {
+) -> Result<Vec<GranteeSummary>, Error> {
     match store_lock.get_game_definition(id).await {
         Ok(def) if def.owner_id == user.id => {}
         Ok(_) | Err(StoreError::GameDefinitionIdNotFound(_)) => {
@@ -672,16 +673,17 @@ async fn owned_definition_grantees(
             return Err(ErrorInternalServerError("Failed to load game definition"));
         }
     }
-    store_lock.get_definition_grantees(id).await.map_err(|err| {
-        log::warn!("get definition grantees store error: {err}");
+    store_lock.get_definition_grantee_summaries(id).await.map_err(|err| {
+        log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
     })
 }
 
 #[utoipa::path(
     summary = "List a definition's grantees",
-    description = "Returns the user ids granted access to a definition owned by the caller — the \
-                   owner's manage-shares view. A definition owned by someone else returns 404.",
+    description = "Returns the users (id + username) granted access to a definition owned by the \
+                   caller — the owner's manage-shares view. A definition owned by someone else \
+                   returns 404.",
     get,
     path = "/api/v1/game-definitions/{id}/shares",
     params(("id" = String, Path, description = "Definition id")),
@@ -746,8 +748,8 @@ pub async fn grant_definition_share(
         }
     }
 
-    let grantees = store_lock.get_definition_grantees(id).await.map_err(|err| {
-        log::warn!("get definition grantees store error: {err}");
+    let grantees = store_lock.get_definition_grantee_summaries(id).await.map_err(|err| {
+        log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
     })?;
     Ok(HttpResponse::Ok().json(DefinitionSharesResponse { grantees }))
@@ -793,8 +795,8 @@ pub async fn revoke_definition_share(
         }
     }
 
-    let grantees = store_lock.get_definition_grantees(id).await.map_err(|err| {
-        log::warn!("get definition grantees store error: {err}");
+    let grantees = store_lock.get_definition_grantee_summaries(id).await.map_err(|err| {
+        log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
     })?;
     Ok(HttpResponse::Ok().json(DefinitionSharesResponse { grantees }))
