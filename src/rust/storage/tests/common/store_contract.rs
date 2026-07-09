@@ -2669,10 +2669,18 @@ pub async fn game_definition_grantee_summaries_resolve_usernames(store: &mut Box
     assert_eq!(
         summaries,
         vec![
-            GranteeSummary { id: alpha.id, username: "gds_alpha".to_string() },
-            GranteeSummary { id: zeta.id, username: "gds_zeta".to_string() },
+            GranteeSummary { id: alpha.id, username: "gds_alpha".to_string(), avatar_updated_at: None },
+            GranteeSummary { id: zeta.id, username: "gds_zeta".to_string(), avatar_updated_at: None },
         ],
     );
+
+    // Test with avatar existence and not
+    store.set_user_avatar(alpha.id, vec![1, 2, 3]).await.expect("set avatar");
+    let summaries = store.get_game_definition_grantee_summaries(def.id).await.expect("summaries");
+    let alpha_summary = summaries.iter().find(|g| g.id == alpha.id).expect("alpha present");
+    let zeta_summary = summaries.iter().find(|g| g.id == zeta.id).expect("zeta present");
+    assert!(alpha_summary.avatar_updated_at.is_some(), "the avatar marker propagates");
+    assert!(zeta_summary.avatar_updated_at.is_none(), "no avatar → no marker");
 }
 
 pub async fn delete_user_cascades_to_game_definitions(store: &mut Box<dyn Store>) {
@@ -2930,8 +2938,8 @@ pub async fn game_collection_grantee_summaries_resolve_usernames(store: &mut Box
     assert_eq!(
         summaries,
         vec![
-            GranteeSummary { id: alpha.id, username: "cds_alpha".to_string() },
-            GranteeSummary { id: zeta.id, username: "cds_zeta".to_string() },
+            GranteeSummary { id: alpha.id, username: "cds_alpha".to_string(), avatar_updated_at: None },
+            GranteeSummary { id: zeta.id, username: "cds_zeta".to_string(), avatar_updated_at: None },
         ],
     );
 }

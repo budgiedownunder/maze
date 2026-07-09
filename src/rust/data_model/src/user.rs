@@ -40,7 +40,7 @@ pub fn is_valid_email_format(email: &str) -> bool {
 /// use data_model::GranteeSummary;
 /// use uuid::Uuid;
 ///
-/// let g = GranteeSummary { id: Uuid::nil(), username: "friend".to_string() };
+/// let g = GranteeSummary { id: Uuid::nil(), username: "friend".to_string(), avatar_updated_at: None };
 /// assert_eq!(g.username, "friend");
 /// ```
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
@@ -50,6 +50,10 @@ pub struct GranteeSummary {
     pub id: Uuid,
     /// The granted user's username.
     pub username: String,
+    /// The granted user's `avatar_updated_at` marker (if one exists)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<String>, format = "date-time")]
+    pub avatar_updated_at: Option<DateTime<Utc>>,
 }
 
 /// Represents a user of the system

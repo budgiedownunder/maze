@@ -6009,7 +6009,7 @@ impl GameStore for SqlStore {
     /// store.grant_game_definition_access(&owner, def.id, friend.id).await.unwrap();
     ///
     /// let grantees = store.get_game_definition_grantee_summaries(def.id).await.unwrap();
-    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into(), avatar_updated_at: None }]);
     /// # });
     /// ```
     async fn get_game_definition_grantee_summaries(
@@ -6018,7 +6018,7 @@ impl GameStore for SqlStore {
     ) -> Result<Vec<GranteeSummary>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT u.id AS grantee_id, u.username AS grantee_username \
+            "SELECT u.id AS grantee_id, u.username AS grantee_username, u.avatar_updated_at AS grantee_avatar_updated_at \
              FROM game_definition_shares s \
              JOIN users u ON u.id = s.grantee_user_id \
              WHERE s.definition_id = ? AND u.deleted_at IS NULL \
@@ -6032,7 +6032,12 @@ impl GameStore for SqlStore {
             .map(|row| {
                 let s: String = row.try_get("grantee_id").map_err(map_sqlx_err)?;
                 let username: String = row.try_get("grantee_username").map_err(map_sqlx_err)?;
-                Ok(GranteeSummary { id: parse_uuid("grantee_id", &s)?, username })
+                let avatar_str: Option<String> = row.try_get("grantee_avatar_updated_at").map_err(map_sqlx_err)?;
+                let avatar_updated_at = match avatar_str {
+                    Some(v) => Some(datetime_from_sql(&v)?),
+                    None => None,
+                };
+                Ok(GranteeSummary { id: parse_uuid("grantee_id", &s)?, username, avatar_updated_at })
             })
             .collect()
     }
@@ -7246,7 +7251,7 @@ impl GameStore for SqlStore {
     /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
     ///
     /// let grantees = store.get_game_collection_grantee_summaries(collection.id).await.unwrap();
-    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into(), avatar_updated_at: None }]);
     /// # });
     /// ```
     async fn get_game_collection_grantee_summaries(
@@ -7255,7 +7260,7 @@ impl GameStore for SqlStore {
     ) -> Result<Vec<GranteeSummary>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT u.id AS grantee_id, u.username AS grantee_username \
+            "SELECT u.id AS grantee_id, u.username AS grantee_username, u.avatar_updated_at AS grantee_avatar_updated_at \
              FROM game_collection_shares s \
              JOIN users u ON u.id = s.grantee_user_id \
              WHERE s.collection_id = ? AND u.deleted_at IS NULL \
@@ -7269,7 +7274,12 @@ impl GameStore for SqlStore {
             .map(|row| {
                 let s: String = row.try_get("grantee_id").map_err(map_sqlx_err)?;
                 let username: String = row.try_get("grantee_username").map_err(map_sqlx_err)?;
-                Ok(GranteeSummary { id: parse_uuid("grantee_id", &s)?, username })
+                let avatar_str: Option<String> = row.try_get("grantee_avatar_updated_at").map_err(map_sqlx_err)?;
+                let avatar_updated_at = match avatar_str {
+                    Some(v) => Some(datetime_from_sql(&v)?),
+                    None => None,
+                };
+                Ok(GranteeSummary { id: parse_uuid("grantee_id", &s)?, username, avatar_updated_at })
             })
             .collect()
     }

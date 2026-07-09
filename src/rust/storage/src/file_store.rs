@@ -620,7 +620,7 @@ impl FileStore {
         let mut summaries = Vec::with_capacity(ids.len());
         for id in ids {
             match self.read_user(id) {
-                Ok(user) => summaries.push(GranteeSummary { id, username: user.username }),
+                Ok(user) => summaries.push(GranteeSummary { id, username: user.username, avatar_updated_at: user.avatar_updated_at }),
                 Err(Error::UserIdNotFound(_)) => {}
                 Err(err) => return Err(err),
             }
@@ -4979,7 +4979,7 @@ impl GameStore for FileStore {
     /// store.grant_game_definition_access(&owner, def.id, friend.id).await.unwrap();
     ///
     /// let grantees = store.get_game_definition_grantee_summaries(def.id).await.unwrap();
-    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into(), avatar_updated_at: None }]);
     /// # });
     /// ```
     async fn get_game_definition_grantee_summaries(
@@ -5856,7 +5856,7 @@ impl GameStore for FileStore {
     /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
     ///
     /// let grantees = store.get_game_collection_grantee_summaries(collection.id).await.unwrap();
-    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
+    /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into(), avatar_updated_at: None }]);
     /// # });
     /// ```
     async fn get_game_collection_grantee_summaries(

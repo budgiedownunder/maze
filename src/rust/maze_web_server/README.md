@@ -688,7 +688,7 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 | `PUT`    | `/api/v1/game-definitions/{id}` | Either | Update a definition the caller owns. `seed` and image are server-owned and preserved. Publishing (a `private` → published transition) starts a fresh leaderboard; unpublishing back to `private` freezes it. |
 | `POST`   | `/api/v1/game-definitions/{id}/reshuffle` | Either | Re-mint the definition's `seed` to change its generated layout (the seed is otherwise preserved across updates, so this is its own endpoint). If the definition is published its leaderboard is reset (the layout — and thus fair comparison — has changed); a private draft has no board to clear. Owner-only. Returns the definition with its new seed. |
 | `DELETE` | `/api/v1/game-definitions/{id}` | Either | Delete a definition the caller owns, removing its shares and resetting its leaderboard(s). |
-| `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view) — each resolved to `{ id, username }`, ordered by username. |
+| `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view) — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
 | `PUT`    | `/api/v1/game-definitions/{id}/shares` | Either | Grant a user access (body `{ "userId": … }`); returns the updated grantee list. Idempotent. |
 | `DELETE` | `/api/v1/game-definitions/{id}/shares/{grantee}` | Either | Revoke a user's access; returns the updated grantee list. Idempotent. |
 | `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
@@ -713,7 +713,7 @@ On first launch the server seeds a curated **"Difficulty"** collection — the `
 | `POST`   | `/api/v1/game-collections/{id}/items` | Either | Append a game (body `{ "definitionId": … }`); returns the updated collection. Idempotent. |
 | `DELETE` | `/api/v1/game-collections/{id}/items/{definitionId}` | Either | Remove a game; returns the updated collection. Idempotent. |
 | `PUT`    | `/api/v1/game-collections/{id}/items/reorder` | Either | Rewrite member order (body `{ "ordered": [definitionId, …] }`); returns the updated collection. |
-| `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns — each resolved to `{ id, username }`, ordered by username. |
+| `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
 | `PUT`    | `/api/v1/game-collections/{id}/shares` | Either | Grant a user access (body `{ "userId": … }`); returns the updated grantee list. Idempotent. |
 | `DELETE` | `/api/v1/game-collections/{id}/shares/{grantee}` | Either | Revoke a user's access; returns the updated grantee list. Idempotent. |
 | `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |

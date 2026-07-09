@@ -1077,7 +1077,7 @@ mod test_definitions {
             let ids = self.def_grantees.get(&id).cloned().unwrap_or_default();
             let mut out: Vec<GranteeSummary> = ids
                 .into_iter()
-                .filter_map(|gid| self.users.get(&gid).map(|u| GranteeSummary { id: gid, username: u.user.username.clone() }))
+                .filter_map(|gid| self.users.get(&gid).map(|u| GranteeSummary { id: gid, username: u.user.username.clone(), avatar_updated_at: u.user.avatar_updated_at }))
                 .collect();
             out.sort_by(|a, b| a.username.cmp(&b.username));
             Ok(out)
@@ -1248,7 +1248,7 @@ mod test_definitions {
             let ids = self.col_grantees.get(&id).cloned().unwrap_or_default();
             let mut out: Vec<GranteeSummary> = ids
                 .into_iter()
-                .filter_map(|gid| self.users.get(&gid).map(|u| GranteeSummary { id: gid, username: u.user.username.clone() }))
+                .filter_map(|gid| self.users.get(&gid).map(|u| GranteeSummary { id: gid, username: u.user.username.clone(), avatar_updated_at: u.user.avatar_updated_at }))
                 .collect();
             out.sort_by(|a, b| a.username.cmp(&b.username));
             Ok(out)
@@ -8597,7 +8597,7 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
         // Only the owner may read the grantee list.
         let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None);
@@ -8605,7 +8605,7 @@ mod test_definitions {
         let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
         // Revoke → empty.
         let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, other.id), Some(owner.api_key), None);
@@ -8848,7 +8848,7 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
         // Only the owner may read the grantee list.
         let req = create_test_get_request(&url, Some(other.api_key), None);
@@ -8856,7 +8856,7 @@ mod test_definitions {
         let req = create_test_get_request(&url, Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
         // Revoke → empty.
         let req = create_test_delete_request(&format!("{url}/{}", other.id), Some(owner.api_key), None);
