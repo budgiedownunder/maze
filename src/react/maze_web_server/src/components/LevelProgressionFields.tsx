@@ -11,8 +11,9 @@ import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 // how difficulty shifts up the stack, how a smaller upper level is positioned
 // over the level below, and whether the stack tapers. Only meaningful for a
 // multi-level game, so the editor renders this group only when the level count
-// is above 1. Operates on the shared `levels` value shape (the rest of the
-// level settings live on the Levels tab; see `LevelsFields`).
+// is above 1. Operates on the shared `levels` value shape (the finish rig lives
+// on the Objects tab and the per-level toggles in the Advanced tab's Levels
+// group; see `LevelSettingsFields`).
 
 interface LevelProgressionFieldsProps {
   value: DefinitionLevelsFormValue

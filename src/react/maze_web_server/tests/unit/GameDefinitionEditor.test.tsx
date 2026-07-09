@@ -28,14 +28,14 @@ function renderEditor(over: { initialForm?: DefinitionFormState; maxMazeCells?: 
 const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 
 describe('GameDefinitionEditor — steps', () => {
-  it('renders General first with its identity + structure fields, no Levels tab at count 1', () => {
+  it('renders the five tabs (General first) with the General fields; no Levels or Decor tab', () => {
     renderEditor()
     for (const label of ['General', 'Scene', 'Layout', 'Objects', 'Advanced']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
-    // Single-level by default, so the Levels tab is absent from the strip.
+    // There is no Levels tab — the multi-level settings are distributed across
+    // the other tabs and revealed by the count. Decor was folded into Scene.
     expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
-    // Decor was folded into the Scene tab; there is no Decor tab.
     expect(screen.queryByRole('tab', { name: 'Decor' })).toBeNull()
     expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
     // The count + time limit live on General alongside name/description.
@@ -81,28 +81,42 @@ describe('GameDefinitionEditor — steps', () => {
     expect(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count')).toBeVisible()
   })
 
-  it('reveals the Levels tab only once the count is raised above 1, and hides it again', async () => {
+  it('reveals the Finish Type at the bottom of the Objects tab only when multi-level', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
-    expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
+    expect(screen.queryByLabelText('Finish Type')).toBeNull()
 
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '3' } })
-    expect(screen.getByRole('tab', { name: 'Levels' })).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     expect(screen.getByLabelText('Finish Type')).toBeVisible()
 
-    // Back to single-level: the tab disappears and the view falls back to General.
+    // Back to single-level hides it again.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '1' } })
-    expect(screen.queryByRole('tab', { name: 'Levels' })).toBeNull()
-    expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-current', 'step')
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
+    expect(screen.queryByLabelText('Finish Type')).toBeNull()
   })
 
-  it('shows the advanced field-group on the Advanced step', async () => {
-    renderEditor()
+  it('groups the Advanced tab and reveals its Levels group only when multi-level', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
-    expect(screen.getByLabelText('Max HP')).toBeVisible()
-    expect(screen.getByLabelText('Splash title')).toBeVisible()
+
+    // The always-present groups with their renamed fields.
+    expect(within(screen.getByRole('group', { name: 'Health & Enemies' })).getByLabelText('Max HP')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Minimap' })).getByLabelText('Cell size (px)')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Titles' })).getByLabelText('Splash')).toBeVisible()
+    // No Levels group at count 1.
+    expect(screen.queryByRole('group', { name: 'Levels' })).toBeNull()
+
+    // Raising the count reveals the Advanced Levels group with the per-level toggles.
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '2' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    const levels = within(screen.getByRole('group', { name: 'Levels' }))
+    expect(levels.getByRole('checkbox', { name: 'Reset item bag each level' })).toBeVisible()
+    expect(levels.getByRole('checkbox', { name: 'Randomise perimeter each level' })).toBeVisible()
+    expect(levels.getByRole('checkbox', { name: 'Hide cleared-level enemies' })).toBeVisible()
   })
 })
 
@@ -189,14 +203,14 @@ describe('GameDefinitionEditor — commit', () => {
     })
   })
 
-  it('flows the edited Levels controls and the Scene final-level override into the built config', async () => {
+  it('flows the distributed multi-level controls and the Scene final-level override into the built config', async () => {
     const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
-    // The count is on General and reveals the Levels tab + Layout Levels group.
+    // The count is on General and reveals the multi-level controls across tabs.
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '4' } })
 
-    // Finish Type + the per-level toggles are on the Levels tab.
-    await userEvent.click(screen.getByRole('tab', { name: 'Levels' }))
+    // Finish Type is at the bottom of the Objects tab.
+    await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'portal' } })
 
     // Difficulty Change + Taper are on the Layout tab's Levels group.
@@ -204,6 +218,10 @@ describe('GameDefinitionEditor — commit', () => {
     const levelsGroup = within(screen.getByRole('group', { name: 'Levels' }))
     fireEvent.change(levelsGroup.getByLabelText('Difficulty Change'), { target: { value: 'harder' } })
     await userEvent.click(levelsGroup.getByRole('checkbox', { name: 'Taper' }))
+
+    // A per-level toggle lives in the Advanced tab's Levels group.
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    await userEvent.click(within(screen.getByRole('group', { name: 'Levels' })).getByRole('checkbox', { name: 'Hide cleared-level enemies' }))
 
     // The final-level override is on the Scene tab; its sky select ("Final Level")
     // shows outright (multi-level) in the Sky group — no toggle. A perimeter
@@ -219,6 +237,7 @@ describe('GameDefinitionEditor — commit', () => {
         finishType: 'portal',
         difficultyChange: 'harder',
         taper: true,
+        hideCompletedEnemies: true,
         top: { skyType: 'day' },
       }),
     })
@@ -267,11 +286,11 @@ describe('GameDefinitionEditor — commit', () => {
     fireEvent.change(screen.getByLabelText('Time limit (seconds)'), { target: { value: '90' } })
 
     await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
-    fireEvent.change(screen.getByLabelText('Max HP'), { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText('Minimap radius (cells)'), { target: { value: '8' } })
+    fireEvent.change(within(screen.getByRole('group', { name: 'Health & Enemies' })).getByLabelText('Max HP'), { target: { value: '5' } })
+    fireEvent.change(within(screen.getByRole('group', { name: 'Minimap' })).getByLabelText('Radius (cells)'), { target: { value: '8' } })
     // An explicit splash title overrides the name-seeding; the status-bar label
     // is left blank, so it still falls back to the name.
-    await userEvent.type(screen.getByLabelText('Splash title'), 'Ascend!')
+    await userEvent.type(within(screen.getByRole('group', { name: 'Titles' })).getByLabelText('Splash'), 'Ascend!')
 
     await userEvent.click(commitButton())
 

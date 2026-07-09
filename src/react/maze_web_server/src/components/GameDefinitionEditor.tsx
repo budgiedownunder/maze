@@ -8,32 +8,33 @@ import type {
   ObjectsFieldsValue,
   DecorFieldsValue,
 } from './GameSettingsFields'
-import { LevelsFields } from './LevelsFields'
 import { LevelProgressionFields } from './LevelProgressionFields'
+import { LevelSettingsFields } from './LevelSettingsFields'
 import { FieldGroup } from './FieldGroup'
 import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { validateMazeGenerationFields } from '../utils/validation'
-import { MAX_LEVEL_COUNT } from '../utils/gameDefinitions'
+import { MAX_LEVEL_COUNT, FINISH_TYPES, type FinishType } from '../utils/gameDefinitions'
+import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import type { GameDefinitionRequest } from '../types/api'
 
 // The game-definition editor: the definition's own General details (name,
 // description, level count + time limit) plus the scene (incl. decor) / layout /
-// objects / levels / advanced field-groups, hosted in the dual-mode step
-// shell — a wizard for creating a definition, tabs for editing one. It owns the
-// working form state and hands the caller a finished `GameDefinitionRequest`, so
-// create and edit differ only in `mode`, the seed state and what the caller does
-// with the request.
+// objects / advanced field-groups, hosted in the dual-mode step shell — a wizard
+// for creating a definition, tabs for editing one. The multi-level settings are
+// distributed across those tabs (revealed when the count is above 1) rather than
+// a dedicated Levels tab. It owns the working form state and hands the caller a
+// finished `GameDefinitionRequest`, so create and edit differ only in `mode`, the
+// seed state and what the caller does with the request.
 
 const STEPS = [
   { id: 'general', label: 'General' },
   { id: 'scene', label: 'Scene' },
   { id: 'layout', label: 'Layout' },
   { id: 'objects', label: 'Objects' },
-  { id: 'levels', label: 'Levels' },
   { id: 'advanced', label: 'Advanced' },
 ] as const satisfies readonly WizardStep[]
 
@@ -64,16 +65,11 @@ export function GameDefinitionEditor({
   const [activeStep, setActiveStep] = useState<EditorStep>('general')
   const [form, setForm] = useState<DefinitionFormState>(initialForm)
 
-  // The Levels tab only exists for a multi-level game — a single-level game
-  // (count ≤ 1, incl. blank/invalid) hides it from both the wizard rail and the
-  // tab strip, so the single-vs-multi-level decision (the count on General) is
-  // what reveals it. The Levels panel itself stays mounted below, so toggling
-  // the count down and back up preserves the level settings.
+  // Whether the game stacks multiple levels (count ≤ 1, incl. blank/invalid, is
+  // single-level). The multi-level-only controls — the Layout Levels group, the
+  // Scene final-level overrides, the Objects Finish Type, and the Advanced Levels
+  // group — are revealed by this rather than a dedicated tab.
   const isMultiLevel = parseInt(form.levels.count, 10) > 1
-  const visibleSteps = isMultiLevel ? STEPS : STEPS.filter(s => s.id !== 'levels')
-  // Guard the shell against a stale active step (e.g. Levels was active when the
-  // count dropped to 1); fall back to General, which always exists.
-  const effectiveStep = visibleSteps.some(s => s.id === activeStep) ? activeStep : 'general'
 
   const patchGeneration = (patch: Partial<MazeGenerationFieldsValue>) =>
     setForm(f => ({ ...f, generation: { ...f.generation, ...patch } }))
@@ -114,8 +110,8 @@ export function GameDefinitionEditor({
     <StepModalShell
       mode={mode}
       title={title}
-      steps={visibleSteps}
-      activeStep={effectiveStep}
+      steps={STEPS}
+      activeStep={activeStep}
       onStepChange={setActiveStep}
       idPrefix={ID_PREFIX}
       ariaLabel="Game definition steps"
@@ -125,7 +121,7 @@ export function GameDefinitionEditor({
       commitLabel={commitLabel}
       footerNote={generationError && <p role="alert" className="error-msg">{generationError}</p>}
     >
-      <div {...modalTabPanelProps(ID_PREFIX, 'general', effectiveStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'general', activeStep)}>
         <label className="modal-stacked-input">
           Name
           <input
@@ -167,7 +163,7 @@ export function GameDefinitionEditor({
         </label>
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'layout', effectiveStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'layout', activeStep)}>
         {/* The grid is the ground floor when the game stacks multiple levels. */}
         <FieldGroup title={isMultiLevel ? 'Ground Floor Grid' : 'Grid'} id="grid">
           <MazeGenerationFields value={form.generation} onChange={patchGeneration} />
@@ -180,7 +176,7 @@ export function GameDefinitionEditor({
         )}
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'scene', effectiveStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'scene', activeStep)}>
         <GameSceneFields
           scene={form.scene}
           onSceneChange={patchScene}
@@ -192,7 +188,7 @@ export function GameDefinitionEditor({
         />
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'objects', effectiveStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'objects', activeStep)}>
         {/* Each object kind grouped: its count (generation slice) next to its
             style (objects slice). */}
         <ObjectGroupsFields
@@ -201,13 +197,24 @@ export function GameDefinitionEditor({
           styles={form.objects}
           onStylesChange={patchObjects}
         />
+        {/* The interim finish rig between levels — only for a multi-level game. */}
+        {isMultiLevel && (
+          <label className="modal-stacked-input">
+            Finish Type
+            <select
+              className="input"
+              value={form.levels.finishType}
+              onChange={e => patchLevels({ finishType: e.target.value as FinishType })}
+            >
+              {FINISH_TYPES.map(f => (
+                <option key={f} value={f}>{titleCaseWire(f)}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
-      <div {...modalTabPanelProps(ID_PREFIX, 'levels', effectiveStep)}>
-        <LevelsFields value={form.levels} onChange={patchLevels} />
-      </div>
-
-      <div {...modalTabPanelProps(ID_PREFIX, 'advanced', effectiveStep)}>
+      <div {...modalTabPanelProps(ID_PREFIX, 'advanced', activeStep)}>
         <AdvancedFields
           value={{
             maxHp: form.maxHp,
@@ -220,6 +227,12 @@ export function GameDefinitionEditor({
           onChange={patchAdvanced}
           namePlaceholder={form.name}
         />
+        {/* The per-level behaviour toggles — only for a multi-level game. */}
+        {isMultiLevel && (
+          <FieldGroup title="Levels" id="advanced-levels">
+            <LevelSettingsFields value={form.levels} onChange={patchLevels} />
+          </FieldGroup>
+        )}
       </div>
     </StepModalShell>
   )

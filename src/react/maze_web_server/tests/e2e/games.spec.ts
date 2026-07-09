@@ -84,23 +84,29 @@ test('New game wizard steps through General → Layout and blocks an invalid siz
   await expect(dialog).toBeHidden()
 })
 
-test('the Levels tab appears only when the level count is raised above 1', async ({ page }) => {
+test('the multi-level controls appear only when the level count is raised above 1', async ({ page }) => {
   await login(page)
 
   await page.getByRole('button', { name: 'New game' }).click()
   const dialog = page.getByRole('dialog', { name: 'New game' })
   await dialog.getByLabel('Name').fill('Stacked')
 
-  // Single-level by default: no Levels step in the wizard rail.
+  // There is no Levels tab; the settings are distributed across the other tabs.
   await expect(dialog.getByRole('tab', { name: 'Levels' })).toBeHidden()
 
+  // Single-level: the Objects tab has no Finish Type.
+  await dialog.getByRole('tab', { name: 'Objects' }).click()
+  await expect(dialog.getByLabel('Finish Type')).toBeHidden()
+
+  // Raise the count on General → Finish Type appears at the bottom of Objects.
+  await dialog.getByRole('tab', { name: 'General' }).click()
   await dialog.getByRole('spinbutton', { name: 'Levels' }).fill('3')
-  await expect(dialog.getByRole('tab', { name: 'Levels' })).toBeVisible()
-  await dialog.getByRole('tab', { name: 'Levels' }).click()
+  await dialog.getByRole('tab', { name: 'Objects' }).click()
   await expect(dialog.getByLabel('Finish Type')).toBeVisible()
 
-  // Back to a single level hides the tab again.
+  // Back to a single level hides it again.
   await dialog.getByRole('tab', { name: 'General' }).click()
   await dialog.getByRole('spinbutton', { name: 'Levels' }).fill('1')
-  await expect(dialog.getByRole('tab', { name: 'Levels' })).toBeHidden()
+  await dialog.getByRole('tab', { name: 'Objects' }).click()
+  await expect(dialog.getByLabel('Finish Type')).toBeHidden()
 })

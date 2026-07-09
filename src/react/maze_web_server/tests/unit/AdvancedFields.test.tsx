@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { AdvancedFields, type AdvancedFieldsValue } from '../../src/components/AdvancedFields'
 
 const BASE: AdvancedFieldsValue = {
@@ -17,15 +17,22 @@ function renderFields(over: Partial<AdvancedFieldsValue> = {}, namePlaceholder =
   return { onChange }
 }
 
+const group = (name: string) => within(screen.getByRole('group', { name }))
+
 describe('AdvancedFields', () => {
-  it('renders the four numeric knobs and the two override text fields', () => {
+  it('groups the knobs into Health & Enemies / Minimap / Titles with the renamed labels', () => {
     renderFields()
-    expect(screen.getByLabelText('Max HP')).toHaveValue(3)
-    expect(screen.getByLabelText('Enemy move period (ms)')).toHaveValue(1500)
-    expect(screen.getByLabelText('Minimap cell size (px)')).toHaveValue(10)
-    expect(screen.getByLabelText('Minimap radius (cells)')).toHaveValue(5)
-    expect(screen.getByLabelText('Splash title')).toHaveValue('')
-    expect(screen.getByLabelText('Status-bar label')).toHaveValue('')
+    const he = group('Health & Enemies')
+    expect(he.getByLabelText('Max HP')).toHaveValue(3)
+    expect(he.getByLabelText('Enemy move period (ms)')).toHaveValue(1500)
+
+    const minimap = group('Minimap')
+    expect(minimap.getByLabelText('Cell size (px)')).toHaveValue(10)
+    expect(minimap.getByLabelText('Radius (cells)')).toHaveValue(5)
+
+    const titles = group('Titles')
+    expect(titles.getByLabelText('Splash')).toHaveValue('')
+    expect(titles.getByLabelText('Status-bar')).toHaveValue('')
   })
 
   it('does not carry the time limit (that lives on the General tab)', () => {
@@ -33,41 +40,46 @@ describe('AdvancedFields', () => {
     expect(screen.queryByLabelText('Time limit (seconds)')).toBeNull()
   })
 
-  it('uses descriptive labels, not the raw config keys', () => {
+  it('uses descriptive labels, not the raw config keys or old verbose ones', () => {
     renderFields()
     expect(screen.queryByLabelText('title')).toBeNull()
-    expect(screen.queryByLabelText('mode')).toBeNull()
     expect(screen.queryByLabelText('minimapCellPx')).toBeNull()
+    // The old pre-grouping labels are gone.
+    expect(screen.queryByLabelText('Minimap cell size (px)')).toBeNull()
+    expect(screen.queryByLabelText('Splash title')).toBeNull()
   })
 
   it('shows the game name as the placeholder for both overrides', () => {
     renderFields({}, 'Tower')
-    expect(screen.getByLabelText('Splash title')).toHaveAttribute('placeholder', 'Tower')
-    expect(screen.getByLabelText('Status-bar label')).toHaveAttribute('placeholder', 'Tower')
+    expect(group('Titles').getByLabelText('Splash')).toHaveAttribute('placeholder', 'Tower')
+    expect(group('Titles').getByLabelText('Status-bar')).toHaveAttribute('placeholder', 'Tower')
   })
 
   it('falls back to a generic placeholder when the name is blank', () => {
     renderFields({}, '   ')
-    expect(screen.getByLabelText('Splash title')).toHaveAttribute('placeholder', "The game's name")
+    expect(group('Titles').getByLabelText('Splash')).toHaveAttribute('placeholder', "The game's name")
   })
 
   it('reports a numeric patch as a raw string', () => {
     const { onChange } = renderFields()
-    fireEvent.change(screen.getByLabelText('Max HP'), { target: { value: '7' } })
+    fireEvent.change(group('Health & Enemies').getByLabelText('Max HP'), { target: { value: '7' } })
     expect(onChange).toHaveBeenCalledWith({ maxHp: '7' })
+    fireEvent.change(group('Minimap').getByLabelText('Cell size (px)'), { target: { value: '14' } })
+    expect(onChange).toHaveBeenCalledWith({ minimapCellPx: '14' })
   })
 
   it('reports the override text patches', () => {
     const { onChange } = renderFields()
-    fireEvent.change(screen.getByLabelText('Splash title'), { target: { value: 'Ascend!' } })
+    const titles = group('Titles')
+    fireEvent.change(titles.getByLabelText('Splash'), { target: { value: 'Ascend!' } })
     expect(onChange).toHaveBeenCalledWith({ title: 'Ascend!' })
-    fireEvent.change(screen.getByLabelText('Status-bar label'), { target: { value: 'Endless' } })
+    fireEvent.change(titles.getByLabelText('Status-bar'), { target: { value: 'Endless' } })
     expect(onChange).toHaveBeenCalledWith({ mode: 'Endless' })
   })
 
   it('hints a minimum on the numeric inputs', () => {
     renderFields()
-    expect(screen.getByLabelText('Max HP')).toHaveAttribute('min', '1')
-    expect(screen.getByLabelText('Minimap radius (cells)')).toHaveAttribute('min', '1')
+    expect(group('Health & Enemies').getByLabelText('Max HP')).toHaveAttribute('min', '1')
+    expect(group('Minimap').getByLabelText('Radius (cells)')).toHaveAttribute('min', '1')
   })
 })
