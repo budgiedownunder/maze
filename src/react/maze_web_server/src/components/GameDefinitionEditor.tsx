@@ -67,7 +67,7 @@ export function GameDefinitionEditor({
 
   // Whether the game stacks multiple levels (count ≤ 1, incl. blank/invalid, is
   // single-level). The multi-level-only controls — the Layout Levels group, the
-  // Scene final-level overrides, the Objects Finish Type, and the Advanced Levels
+  // Scene final-level overrides, the Objects Finish Cell, and the Advanced Levels
   // group — are revealed by this rather than a dedicated tab.
   const isMultiLevel = parseInt(form.levels.count, 10) > 1
 
@@ -199,18 +199,20 @@ export function GameDefinitionEditor({
         />
         {/* The interim finish rig between levels — only for a multi-level game. */}
         {isMultiLevel && (
-          <label className="modal-stacked-input">
-            Finish Type
-            <select
-              className="input"
-              value={form.levels.finishType}
-              onChange={e => patchLevels({ finishType: e.target.value as FinishType })}
-            >
-              {FINISH_TYPES.map(f => (
-                <option key={f} value={f}>{titleCaseWire(f)}</option>
-              ))}
-            </select>
-          </label>
+          <FieldGroup title="Levels" id="objects-levels">
+            <label className="modal-stacked-input">
+              Finish Cell
+              <select
+                className="input"
+                value={form.levels.finishType}
+                onChange={e => patchLevels({ finishType: e.target.value as FinishType })}
+              >
+                {FINISH_TYPES.map(f => (
+                  <option key={f} value={f}>{titleCaseWire(f)}</option>
+                ))}
+              </select>
+            </label>
+          </FieldGroup>
         )}
       </div>
 
@@ -226,13 +228,13 @@ export function GameDefinitionEditor({
           }}
           onChange={patchAdvanced}
           namePlaceholder={form.name}
+          // Slotted between Health & Enemies and Minimap; multi-level only.
+          levelsGroup={isMultiLevel && (
+            <FieldGroup title="Levels" id="advanced-levels">
+              <LevelSettingsFields value={form.levels} onChange={patchLevels} />
+            </FieldGroup>
+          )}
         />
-        {/* The per-level behaviour toggles — only for a multi-level game. */}
-        {isMultiLevel && (
-          <FieldGroup title="Levels" id="advanced-levels">
-            <LevelSettingsFields value={form.levels} onChange={patchLevels} />
-          </FieldGroup>
-        )}
       </div>
     </StepModalShell>
   )

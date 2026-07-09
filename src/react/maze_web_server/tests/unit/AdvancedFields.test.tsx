@@ -82,4 +82,28 @@ describe('AdvancedFields', () => {
     expect(group('Health & Enemies').getByLabelText('Max HP')).toHaveAttribute('min', '1')
     expect(group('Minimap').getByLabelText('Radius (cells)')).toHaveAttribute('min', '1')
   })
+
+  it('slots a supplied levelsGroup between Health & Enemies and Minimap', () => {
+    const onChange = vi.fn()
+    render(
+      <AdvancedFields
+        value={BASE}
+        onChange={onChange}
+        namePlaceholder="Tower"
+        levelsGroup={<div role="group" aria-label="Levels" />}
+      />,
+    )
+    // The accessible name of each group is either its aria-label (the slot) or
+    // its heading text (the FieldGroups). Assert the order.
+    const ordered = screen.getAllByRole('group').map(
+      g => g.getAttribute('aria-label') ?? g.querySelector('.field-group-title')?.textContent,
+    )
+    expect(ordered).toEqual(['Health & Enemies', 'Levels', 'Minimap', 'Titles'])
+  })
+
+  it('renders nothing for a false levelsGroup (single-level)', () => {
+    const onChange = vi.fn()
+    render(<AdvancedFields value={BASE} onChange={onChange} namePlaceholder="Tower" levelsGroup={false} />)
+    expect(screen.queryByRole('group', { name: 'Levels' })).toBeNull()
+  })
 })

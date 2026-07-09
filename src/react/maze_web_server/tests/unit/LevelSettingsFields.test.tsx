@@ -22,7 +22,7 @@ describe('LevelSettingsFields', () => {
 
   it('does not carry the finish rig or progression fields (those live elsewhere)', () => {
     renderFields()
-    expect(screen.queryByLabelText('Finish Type')).toBeNull()
+    expect(screen.queryByLabelText('Finish Cell')).toBeNull()
     expect(screen.queryByLabelText('Difficulty Change')).toBeNull()
   })
 

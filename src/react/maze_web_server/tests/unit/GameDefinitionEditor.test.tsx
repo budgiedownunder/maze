@@ -81,21 +81,21 @@ describe('GameDefinitionEditor — steps', () => {
     expect(within(screen.getByRole('group', { name: 'Treasure' })).getByLabelText('Count')).toBeVisible()
   })
 
-  it('reveals the Finish Type at the bottom of the Objects tab only when multi-level', async () => {
+  it('reveals a Levels group with the Finish Cell at the bottom of Objects only when multi-level', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
-    expect(screen.queryByLabelText('Finish Type')).toBeNull()
+    expect(screen.queryByLabelText('Finish Cell')).toBeNull()
 
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '3' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
-    expect(screen.getByLabelText('Finish Type')).toBeVisible()
+    expect(within(screen.getByRole('group', { name: 'Levels' })).getByLabelText('Finish Cell')).toBeVisible()
 
     // Back to single-level hides it again.
     await userEvent.click(screen.getByRole('tab', { name: 'General' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '1' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
-    expect(screen.queryByLabelText('Finish Type')).toBeNull()
+    expect(screen.queryByLabelText('Finish Cell')).toBeNull()
   })
 
   it('groups the Advanced tab and reveals its Levels group only when multi-level', async () => {
@@ -209,9 +209,9 @@ describe('GameDefinitionEditor — commit', () => {
     // The count is on General and reveals the multi-level controls across tabs.
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Levels' }), { target: { value: '4' } })
 
-    // Finish Type is at the bottom of the Objects tab.
+    // The Finish Cell is in the Objects tab's Levels group.
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
-    fireEvent.change(screen.getByLabelText('Finish Type'), { target: { value: 'portal' } })
+    fireEvent.change(screen.getByLabelText('Finish Cell'), { target: { value: 'portal' } })
 
     // Difficulty Change + Taper are on the Layout tab's Levels group.
     await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { FieldGroup } from './FieldGroup'
 import type { DefinitionFormState } from '../utils/definitionConfig'
 
@@ -20,9 +21,12 @@ interface AdvancedFieldsProps {
   /** The game's name, shown as the placeholder for the title / mode overrides
    *  since both default to it when left blank. */
   namePlaceholder: string
+  /** Optional group slotted between Health & Enemies and Minimap — the editor
+   *  passes the multi-level Levels group here (it owns the levels slice). */
+  levelsGroup?: ReactNode
 }
 
-export function AdvancedFields({ value, onChange, namePlaceholder }: AdvancedFieldsProps) {
+export function AdvancedFields({ value, onChange, namePlaceholder, levelsGroup }: AdvancedFieldsProps) {
   const placeholder = namePlaceholder.trim() === '' ? "The game's name" : namePlaceholder.trim()
 
   // A labelled number input; `min` is an input hint only — the runtime clamps.
@@ -59,6 +63,8 @@ export function AdvancedFields({ value, onChange, namePlaceholder }: AdvancedFie
         {numberField('maxHp', 'Max HP', 1)}
         {numberField('enemyMovePeriodMs', 'Enemy move period (ms)', 1)}
       </FieldGroup>
+
+      {levelsGroup}
 
       <FieldGroup title="Minimap" id="minimap">
         {numberField('minimapCellPx', 'Cell size (px)', 1)}
