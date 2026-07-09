@@ -122,45 +122,51 @@ export function GameDefinitionEditor({
       footerNote={generationError && <p role="alert" className="error-msg">{generationError}</p>}
     >
       <div {...modalTabPanelProps(ID_PREFIX, 'general', activeStep)}>
-        <label className="modal-stacked-input">
-          Name
-          <input
-            type="text"
-            className="input"
-            value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-          />
-        </label>
-        <label className="modal-stacked-input">
-          Description
-          <textarea
-            className="input"
-            rows={3}
-            value={form.description}
-            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-          />
-        </label>
-        <label className="modal-stacked-input">
-          Levels
+        <FieldGroup title="Details" id="details">
+          <label className="modal-stacked-input">
+            Name
+            <input
+              type="text"
+              className="input"
+              value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </label>
+          <label className="modal-stacked-input">
+            Description
+            <textarea
+              className="input"
+              rows={3}
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            />
+          </label>
+        </FieldGroup>
+
+        {/* Single-field groups: the group heading is the field's label, so the
+            lone input carries an aria-label for its accessible name. */}
+        <FieldGroup title="Number of Levels" id="number-of-levels">
           <input
             type="number"
             className="input"
+            aria-label="Number of Levels"
             value={form.levels.count}
             min={1}
             max={MAX_LEVEL_COUNT}
             onChange={e => patchLevels({ count: e.target.value })}
           />
-        </label>
-        <label className="modal-stacked-input">
-          Time limit (seconds)
+        </FieldGroup>
+
+        <FieldGroup title="Time limit (seconds)" id="time-limit">
           <input
             type="number"
             className="input"
+            aria-label="Time limit (seconds)"
             value={form.timerSeconds}
             min={1}
             onChange={e => setForm(f => ({ ...f, timerSeconds: e.target.value }))}
           />
-        </label>
+        </FieldGroup>
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'layout', activeStep)}>
