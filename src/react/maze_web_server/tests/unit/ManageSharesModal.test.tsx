@@ -11,6 +11,14 @@ vi.mock('../../src/context/AuthContext', async () => {
   return { ...actual, useToken: () => 'test-token' }
 })
 
+// Stub the avatar to expose its props (the real fetch/object-URL behaviour is
+// covered by Avatar.test); each grantee row's avatar becomes queryable by id.
+vi.mock('../../src/components/Avatar', () => ({
+  Avatar: ({ userId, avatarUpdatedAt }: { userId: string; avatarUpdatedAt?: string | null }) => (
+    <span data-testid={`avatar-${userId}`} data-marker={avatarUpdatedAt ?? ''} />
+  ),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   resetMockShares()
@@ -62,6 +70,24 @@ describe('ManageSharesModal', () => {
     await userEvent.type(screen.getByLabelText('Add user'), 'cleo')
     await userEvent.click(await screen.findByRole('button', { name: 'Add cleo' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Remove cleo' })).toBeInTheDocument())
+  })
+
+  it('renders an avatar per grantee, carrying the marker only when they have one', async () => {
+    render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
+
+    // bob (user-bob) has a seeded avatar in the mock directory; ann (user-ann) does not.
+    await userEvent.type(screen.getByLabelText('Add user'), 'bob')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add bob' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText('Add user'), 'ann')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add ann' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove ann' })).toBeInTheDocument())
+
+    // Each grantee row shows an avatar keyed to their id; the marker is passed
+    // through only for the grantee who has one.
+    expect(screen.getByTestId('avatar-user-bob').getAttribute('data-marker')).not.toBe('')
+    expect(screen.getByTestId('avatar-user-ann').getAttribute('data-marker')).toBe('')
   })
 
   it('hints to keep typing when the lookup reports more matches than the page', async () => {

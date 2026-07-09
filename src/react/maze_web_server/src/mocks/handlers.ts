@@ -261,13 +261,24 @@ export function resetMockShares(): void {
   mockCollectionShares = {}
 }
 
-// Resolves grantee ids to `{ id, username }` summaries via the directory,
-// dropping unknown ids and ordering by username (as the server's JOIN does).
+// A few directory users have an avatar (id → marker) so the grantee list's
+// `<Avatar>` fetch path is exercisable in the dev:mock run; the rest fall back
+// to the placeholder. The marker doubles as the has-avatar gate + cache-buster,
+// exactly as the server's `GranteeSummary.avatar_updated_at`.
+const mockGranteeAvatars: Record<string, string> = {
+  'user-bob': '2026-01-03T00:00:00.000Z',
+  'user-1': '2026-01-01T00:00:00.000Z',
+  'user-2': '2026-01-02T00:00:00.000Z',
+}
+
+// Resolves grantee ids to `{ id, username, avatar_updated_at? }` summaries via
+// the directory, dropping unknown ids and ordering by username (as the server's
+// JOIN does).
 function granteeSummaries(ids: string[]): GranteeSummary[] {
   return ids
     .map(uid => mockUserDirectory.find(u => u.id === uid))
     .filter((u): u is UserLookupEntry => u !== undefined)
-    .map(u => ({ id: u.id, username: u.username }))
+    .map(u => ({ id: u.id, username: u.username, avatar_updated_at: mockGranteeAvatars[u.id] }))
     .sort((a, b) => a.username.localeCompare(b.username))
 }
 
@@ -366,10 +377,12 @@ export const handlers = [
     return HttpResponse.json({ ...mockProfile, avatar_updated_at: mockAvatarUpdatedAt })
   }),
 
-  // Avatar serve — returns the stored bytes once an avatar is set, else 404
-  // (the client then shows the placeholder). Ignores the id (single mock user).
-  http.get(`${BASE}/users/:id/avatar`, () => {
-    if (mockAvatarUpdatedAt == null) return new HttpResponse(null, { status: 404 })
+  // Avatar serve — returns the stored bytes for a seeded grantee avatar, or the
+  // signed-in user's own uploaded avatar (that branch ignores the id, mirroring
+  // the single mock user); else 404 (the client then shows the placeholder).
+  http.get(`${BASE}/users/:id/avatar`, ({ params }) => {
+    const hasSeededAvatar = mockGranteeAvatars[String(params.id)] != null
+    if (!hasSeededAvatar && mockAvatarUpdatedAt == null) return new HttpResponse(null, { status: 404 })
     return new HttpResponse(MOCK_AVATAR_PNG, { headers: { 'Content-Type': 'image/png' } })
   }),
 

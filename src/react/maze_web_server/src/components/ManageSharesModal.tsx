@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useToken } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
+import { Avatar } from './Avatar'
 import {
   grantGameCollectionShare,
   grantGameDefinitionShare,
@@ -165,7 +166,10 @@ export function ManageSharesModal({ subject, onClose }: Props) {
               <ul className="share-grantees">
                 {grantees.map(g => (
                   <li key={g.id}>
-                    <span>{g.username}</span>
+                    <span className="share-grantee-user">
+                      <Avatar userId={g.id} avatarUpdatedAt={g.avatar_updated_at} size={24} />
+                      <span>{g.username}</span>
+                    </span>
                     <button type="button" className="btn-icon" disabled={busy} onClick={() => void handleRevoke(g.id)} aria-label={`Remove ${g.username}`}>
                       <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" width={18} height={18} />
                     </button>

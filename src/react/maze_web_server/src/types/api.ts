@@ -249,6 +249,7 @@ export interface GameCollectionDetailResponse {
 export interface GranteeSummary {
   id: string
   username: string
+  avatar_updated_at?: string | null
 }
 
 // The grantee list returned by the definition share endpoints (mirrors the

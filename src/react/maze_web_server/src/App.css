@@ -430,6 +430,13 @@
   justify-content: space-between;
   gap: 0.75rem;
 }
+/* The grantee's avatar + username, grouped on the left of the row. */
+.share-grantee-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
 /* Cap the grantee list so it scrolls within the group box rather than growing
    the modal as users are added; the Done button stays visible below it. */
 .share-grantees {
