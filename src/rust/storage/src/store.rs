@@ -67,7 +67,7 @@ pub trait UserStore {
     /// exactly (it is an opaque stable id from the identity provider).
     async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error>;
     /// A page of active users, ordered by username then id and sliced to
-    /// `limit`/`offset`. The admin user list — paged (like [`GameStore::get_visible_definitions`])
+    /// `limit`/`offset`. The admin user list — paged (like [`GameStore::get_visible_game_definitions`])
     /// so it never loads the whole userbase at once; pass a large `limit` for
     /// "all". Soft-deleted users are excluded.
     async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, Error>;
@@ -483,7 +483,7 @@ pub const MAX_COLLECTIONS_PER_USER: usize = 100;
 /// game collections — one trait keeps all game facts together). Mutations are
 /// owner-scoped exactly like [`MazeStore`]; reads come in owner / curated /
 /// public / shared-with flavours plus two unconditional primitives
-/// (`get_game_definition`, `get_definition_grantees`). The store enforces **no
+/// (`get_game_definition`, `get_game_definition_grantees`). The store enforces **no
 /// view-access policy** — it is a set of owner-scoped mutations and by-subject
 /// reads, and the `owner ∨ curated ∨ public ∨ granted` decision is composed by
 /// the server layer (mirroring how [`ScoreStore`] leaves authorization to the
@@ -529,14 +529,14 @@ pub trait GameStore {
     async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
     /// Grants `grantee` access to a definition owned by `owner`. Idempotent —
     /// re-granting an existing grantee is a no-op.
-    async fn grant_definition_access(
+    async fn grant_game_definition_access(
         &mut self,
         owner: &User,
         id: Uuid,
         grantee: Uuid,
     ) -> Result<(), Error>;
     /// Revokes `grantee`'s access to a definition owned by `owner`. Idempotent.
-    async fn revoke_definition_access(
+    async fn revoke_game_definition_access(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -544,7 +544,7 @@ pub trait GameStore {
     ) -> Result<(), Error>;
     /// All of `owner`'s own definitions (every visibility, drafts included),
     /// sorted alphabetically by name.
-    async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error>;
+    async fn get_game_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error>;
     /// A page of the definitions `viewer` may see — their own (any visibility,
     /// drafts included), every `Public`/`Curated` one, and any `Shared` one
     /// granted to them — ordered by name (case-insensitive) then id, sliced to
@@ -554,7 +554,7 @@ pub trait GameStore {
     /// the server still owns *what* "visible" means and access-checks single
     /// fetches. De-duplicated (each definition appears once however many predicate
     /// branches it satisfies).
-    async fn get_visible_definitions(
+    async fn get_visible_game_definitions(
         &self,
         viewer: &User,
         limit: u32,
@@ -563,13 +563,13 @@ pub trait GameStore {
     /// The user ids granted access to a definition — an unconditional primitive
     /// the server uses for composing the access decision (owner ∨ granted).
     /// Returns an empty list for an unknown/ungranted id.
-    async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    async fn get_game_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
     /// The grantees of a definition **resolved to `{id, username}`** for the
-    /// owner's manage-shares view — the id-only [`GameStore::get_definition_grantees`]
+    /// owner's manage-shares view — the id-only [`GameStore::get_game_definition_grantees`]
     /// left the caller with no non-admin way to name a grantee. Ordered by
     /// username; a grantee whose user record is absent or soft-deleted is
     /// dropped. Returns an empty list for an unknown/ungranted id.
-    async fn get_definition_grantee_summaries(
+    async fn get_game_definition_grantee_summaries(
         &self,
         id: Uuid,
     ) -> Result<Vec<GranteeSummary>, Error>;
@@ -577,7 +577,7 @@ pub trait GameStore {
     /// stamping its `image_updated_at` marker. `png_bytes` is the canonical
     /// image the caller has produced; the store keeps it verbatim. Owner-scoped:
     /// a definition not owned by `owner` is [`Error::GameDefinitionIdNotFound`].
-    async fn set_definition_image(
+    async fn set_game_definition_image(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -586,11 +586,11 @@ pub trait GameStore {
     /// Loads a definition's image bytes, or `None` when it has none (never set,
     /// since cleared, or no such definition) — an unconditional primitive; the
     /// server composes the view-access decision.
-    async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    async fn get_game_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
     /// Removes a definition's image if present and clears its `image_updated_at`,
     /// for a definition owned by `owner`. Idempotent — clearing an image-less
     /// (or not-owned/unknown) definition is a successful no-op.
-    async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+    async fn clear_game_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
 
     // ── Collections (an ordered, presentation-only grouping of definitions) ──
 
@@ -622,14 +622,14 @@ pub trait GameStore {
     /// the reference; the definition's existence/accessibility is the server's
     /// concern (a dangling ref to a since-deleted definition is filtered at
     /// display).
-    async fn add_collection_item(
+    async fn add_game_collection_item(
         &mut self,
         owner: &User,
         collection_id: Uuid,
         definition_id: Uuid,
     ) -> Result<(), Error>;
     /// Removes `definition_id` from the owner's collection. Idempotent.
-    async fn remove_collection_item(
+    async fn remove_game_collection_item(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -639,34 +639,34 @@ pub trait GameStore {
     /// (`sort_order` becomes each id's index). Ids in `ordered` that aren't
     /// members are ignored; members omitted from `ordered` keep their prior
     /// relative order after the listed ones.
-    async fn reorder_collection_items(
+    async fn reorder_game_collection_items(
         &mut self,
         owner: &User,
         collection_id: Uuid,
         ordered: &[Uuid],
     ) -> Result<(), Error>;
     /// Grants `grantee` access to the owner's collection. Idempotent.
-    async fn grant_collection_access(
+    async fn grant_game_collection_access(
         &mut self,
         owner: &User,
         id: Uuid,
         grantee: Uuid,
     ) -> Result<(), Error>;
     /// Revokes `grantee`'s access to the owner's collection. Idempotent.
-    async fn revoke_collection_access(
+    async fn revoke_game_collection_access(
         &mut self,
         owner: &User,
         id: Uuid,
         grantee: Uuid,
     ) -> Result<(), Error>;
     /// All of `owner`'s own collections, sorted alphabetically by name.
-    async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error>;
+    async fn get_game_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error>;
     /// A page of the collections `viewer` may see — their own (any visibility),
     /// every `Public`/`Curated` one, and any `Shared` one granted to them —
     /// ordered by name (case-insensitive) then id, sliced to `limit`/`offset`.
-    /// The collection-side counterpart of [`GameStore::get_visible_definitions`];
+    /// The collection-side counterpart of [`GameStore::get_visible_game_definitions`];
     /// same predicate-is-a-filter, server-owns-access rationale.
-    async fn get_visible_collections(
+    async fn get_visible_game_collections(
         &self,
         viewer: &User,
         limit: u32,
@@ -674,20 +674,20 @@ pub trait GameStore {
     ) -> Result<Vec<GameCollection>, Error>;
     /// The user ids granted access to a collection — an unconditional primitive.
     /// Returns an empty list for an unknown/ungranted id.
-    async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    async fn get_game_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
     /// The grantees of a collection **resolved to `{id, username}`** for the
     /// owner's manage-shares view (see
-    /// [`GameStore::get_definition_grantee_summaries`] for the rationale).
+    /// [`GameStore::get_game_definition_grantee_summaries`] for the rationale).
     /// Ordered by username; a grantee whose user record is absent or
     /// soft-deleted is dropped. Returns an empty list for an unknown/ungranted id.
-    async fn get_collection_grantee_summaries(
+    async fn get_game_collection_grantee_summaries(
         &self,
         id: Uuid,
     ) -> Result<Vec<GranteeSummary>, Error>;
     /// Stores (or replaces) the image for a collection owned by `owner`, stamping
     /// its `image_updated_at` marker. Owner-scoped: a collection not owned by
     /// `owner` is [`Error::GameCollectionIdNotFound`].
-    async fn set_collection_image(
+    async fn set_game_collection_image(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -695,10 +695,10 @@ pub trait GameStore {
     ) -> Result<(), Error>;
     /// Loads a collection's image bytes, or `None` when it has none — an
     /// unconditional primitive; the server composes the view-access decision.
-    async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    async fn get_game_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
     /// Removes a collection's image if present and clears its `image_updated_at`,
     /// for a collection owned by `owner`. Idempotent.
-    async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+    async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
 }
 
 /// Normalises a collection's item ordering: rewrites `sort_order = index` in the

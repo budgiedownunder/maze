@@ -11,7 +11,7 @@
 //!     access facts (a collection's `visibility`, its grantee list) but performs
 //!     no checks; the server composes the `owner ∨ curated ∨ public ∨ granted`
 //!     decision from the primitives (`get_game_collection`,
-//!     `get_collection_grantees`).
+//!     `get_game_collection_grantees`).
 //!   * **Setting `Curated` requires an admin;** every other visibility is
 //!     owner-only (the mutations are already owner-scoped by storage).
 //!   * **Membership is order-only.** Items carry just a `definition_id` +
@@ -40,7 +40,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
-use super::game_definitions::{GrantShareRequest, ImageUpdatedResponse, ImageUploadForm};
+use super::game_definitions::{GrantGameShareRequest, ImageUpdatedResponse, ImageUploadForm};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -139,7 +139,7 @@ impl GameCollectionDetailResponse {
 /// Request body for adding a game to a collection.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct AddCollectionItemRequest {
+pub struct AddGameCollectionItemRequest {
     /// The definition to append (idempotent — re-adding is a no-op).
     #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
     pub definition_id: Uuid,
@@ -148,7 +148,7 @@ pub struct AddCollectionItemRequest {
 /// Request body for re-ordering a collection's members.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct ReorderCollectionItemsRequest {
+pub struct ReorderGameCollectionItemsRequest {
     /// The member definition ids in the desired order. Ids that are not members
     /// are ignored; members omitted here keep their prior relative order after
     /// the listed ones.
@@ -160,7 +160,7 @@ pub struct ReorderCollectionItemsRequest {
 /// each grantee resolved to `{id, username}` for the owner's manage-shares view.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct CollectionSharesResponse {
+pub struct GameCollectionSharesResponse {
     /// The users currently granted access (id + username).
     pub grantees: Vec<GranteeSummary>,
 }
@@ -335,7 +335,7 @@ pub async fn list_game_collections(
     // Storage composes + pages the "visible to me" set; over-fetch one row for
     // `has_more`.
     let mut collections = store_lock
-        .get_visible_collections(&user, limit + 1, offset)
+        .get_visible_game_collections(&user, limit + 1, offset)
         .await
         .map_err(|err| {
             log::warn!("list game collections store error: {err}");
@@ -394,7 +394,7 @@ pub async fn get_game_collection(
         }
     };
 
-    let col_grantees = store_lock.get_collection_grantees(id).await.map_err(|err| {
+    let col_grantees = store_lock.get_game_collection_grantees(id).await.map_err(|err| {
         log::warn!("get collection grantees store error: {err}");
         ErrorInternalServerError("Failed to load game collection")
     })?;
@@ -417,7 +417,7 @@ pub async fn get_game_collection(
                 return Err(ErrorInternalServerError("Failed to load game collection"));
             }
         };
-        let def_grantees = store_lock.get_definition_grantees(definition.id).await.map_err(|err| {
+        let def_grantees = store_lock.get_game_definition_grantees(definition.id).await.map_err(|err| {
             log::warn!("get member grantees store error: {err}");
             ErrorInternalServerError("Failed to load game collection")
         })?;
@@ -547,7 +547,7 @@ pub async fn delete_game_collection(
     post,
     path = "/api/v1/game-collections/{id}/items",
     params(("id" = String, Path, description = "Collection id")),
-    request_body = AddCollectionItemRequest,
+    request_body = AddGameCollectionItemRequest,
     responses(
         (status = 200, description = "Item added", body = GameCollection),
         (status = 401, description = "Unauthorized request"),
@@ -557,9 +557,9 @@ pub async fn delete_game_collection(
     tags = ["v1"]
 )]
 #[post("/game-collections/{id}/items")]
-pub async fn add_collection_item(
+pub async fn add_game_collection_item(
     path: web::Path<Uuid>,
-    body: web::Json<AddCollectionItemRequest>,
+    body: web::Json<AddGameCollectionItemRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
@@ -568,7 +568,7 @@ pub async fn add_collection_item(
     let definition_id = body.into_inner().definition_id;
     let mut store_lock = store.write().await;
 
-    match store_lock.add_collection_item(&user, id, definition_id).await {
+    match store_lock.add_game_collection_item(&user, id, definition_id).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -602,7 +602,7 @@ pub async fn add_collection_item(
     tags = ["v1"]
 )]
 #[delete("/game-collections/{id}/items/{definition_id}")]
-pub async fn remove_collection_item(
+pub async fn remove_game_collection_item(
     path: web::Path<(Uuid, Uuid)>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -611,7 +611,7 @@ pub async fn remove_collection_item(
     let (id, definition_id) = path.into_inner();
     let mut store_lock = store.write().await;
 
-    match store_lock.remove_collection_item(&user, id, definition_id).await {
+    match store_lock.remove_game_collection_item(&user, id, definition_id).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -634,7 +634,7 @@ pub async fn remove_collection_item(
     put,
     path = "/api/v1/game-collections/{id}/items/reorder",
     params(("id" = String, Path, description = "Collection id")),
-    request_body = ReorderCollectionItemsRequest,
+    request_body = ReorderGameCollectionItemsRequest,
     responses(
         (status = 200, description = "Members reordered", body = GameCollection),
         (status = 401, description = "Unauthorized request"),
@@ -644,9 +644,9 @@ pub async fn remove_collection_item(
     tags = ["v1"]
 )]
 #[put("/game-collections/{id}/items/reorder")]
-pub async fn reorder_collection_items(
+pub async fn reorder_game_collection_items(
     path: web::Path<Uuid>,
-    body: web::Json<ReorderCollectionItemsRequest>,
+    body: web::Json<ReorderGameCollectionItemsRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
@@ -655,7 +655,7 @@ pub async fn reorder_collection_items(
     let ordered = body.into_inner().ordered;
     let mut store_lock = store.write().await;
 
-    match store_lock.reorder_collection_items(&user, id, &ordered).await {
+    match store_lock.reorder_game_collection_items(&user, id, &ordered).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -682,7 +682,7 @@ pub async fn reorder_collection_items(
     path = "/api/v1/game-collections/{id}/shares",
     params(("id" = String, Path, description = "Collection id")),
     responses(
-        (status = 200, description = "The current grantees", body = CollectionSharesResponse),
+        (status = 200, description = "The current grantees", body = GameCollectionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Collection not found")
     ),
@@ -690,7 +690,7 @@ pub async fn reorder_collection_items(
     tags = ["v1"]
 )]
 #[get("/game-collections/{id}/shares")]
-pub async fn list_collection_shares(
+pub async fn list_game_collection_shares(
     path: web::Path<Uuid>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -699,11 +699,11 @@ pub async fn list_collection_shares(
     let id = path.into_inner();
     let store_lock = store.read().await;
     owned_collection(&**store_lock, &user, id).await?;
-    let grantees = store_lock.get_collection_grantee_summaries(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
     })?;
-    Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))
+    Ok(HttpResponse::Ok().json(GameCollectionSharesResponse { grantees }))
 }
 
 #[utoipa::path(
@@ -714,9 +714,9 @@ pub async fn list_collection_shares(
     put,
     path = "/api/v1/game-collections/{id}/shares",
     params(("id" = String, Path, description = "Collection id")),
-    request_body = GrantShareRequest,
+    request_body = GrantGameShareRequest,
     responses(
-        (status = 200, description = "Access granted", body = CollectionSharesResponse),
+        (status = 200, description = "Access granted", body = GameCollectionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Collection not found")
     ),
@@ -724,9 +724,9 @@ pub async fn list_collection_shares(
     tags = ["v1"]
 )]
 #[put("/game-collections/{id}/shares")]
-pub async fn grant_collection_share(
+pub async fn grant_game_collection_share(
     path: web::Path<Uuid>,
-    body: web::Json<GrantShareRequest>,
+    body: web::Json<GrantGameShareRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
@@ -735,7 +735,7 @@ pub async fn grant_collection_share(
     let grantee = body.into_inner().user_id;
     let mut store_lock = store.write().await;
 
-    match store_lock.grant_collection_access(&user, id, grantee).await {
+    match store_lock.grant_game_collection_access(&user, id, grantee).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -746,11 +746,11 @@ pub async fn grant_collection_share(
         }
     }
 
-    let grantees = store_lock.get_collection_grantee_summaries(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
     })?;
-    Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))
+    Ok(HttpResponse::Ok().json(GameCollectionSharesResponse { grantees }))
 }
 
 #[utoipa::path(
@@ -765,7 +765,7 @@ pub async fn grant_collection_share(
         ("grantee" = String, Path, description = "The user id to revoke")
     ),
     responses(
-        (status = 200, description = "Access revoked", body = CollectionSharesResponse),
+        (status = 200, description = "Access revoked", body = GameCollectionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Collection not found")
     ),
@@ -773,7 +773,7 @@ pub async fn grant_collection_share(
     tags = ["v1"]
 )]
 #[delete("/game-collections/{id}/shares/{grantee}")]
-pub async fn revoke_collection_share(
+pub async fn revoke_game_collection_share(
     path: web::Path<(Uuid, Uuid)>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -782,7 +782,7 @@ pub async fn revoke_collection_share(
     let (id, grantee) = path.into_inner();
     let mut store_lock = store.write().await;
 
-    match store_lock.revoke_collection_access(&user, id, grantee).await {
+    match store_lock.revoke_game_collection_access(&user, id, grantee).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -793,11 +793,11 @@ pub async fn revoke_collection_share(
         }
     }
 
-    let grantees = store_lock.get_collection_grantee_summaries(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
     })?;
-    Ok(HttpResponse::Ok().json(CollectionSharesResponse { grantees }))
+    Ok(HttpResponse::Ok().json(GameCollectionSharesResponse { grantees }))
 }
 
 // ---------------------------------------------------------------------------
@@ -823,7 +823,7 @@ pub async fn revoke_collection_share(
     tags = ["v1"]
 )]
 #[post("/game-collections/{id}/image")]
-pub async fn upload_collection_image(
+pub async fn upload_game_collection_image(
     path: web::Path<Uuid>,
     MultipartForm(form): MultipartForm<ImageUploadForm>,
     store: web::Data<SharedStore>,
@@ -834,7 +834,7 @@ pub async fn upload_collection_image(
     let png = canonicalise_to_png(&form.file.data)?;
 
     let mut store_lock = store.write().await;
-    match store_lock.set_collection_image(&user, id, png).await {
+    match store_lock.set_game_collection_image(&user, id, png).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -872,7 +872,7 @@ pub async fn upload_collection_image(
     tags = ["v1"]
 )]
 #[delete("/game-collections/{id}/image")]
-pub async fn delete_collection_image(
+pub async fn delete_game_collection_image(
     path: web::Path<Uuid>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -883,7 +883,7 @@ pub async fn delete_collection_image(
 
     // Owner-check for a clean 404 (the storage clear no-ops for a non-owner).
     owned_collection(&**store_lock, &user, id).await?;
-    store_lock.clear_collection_image(&user, id).await.map_err(|err| {
+    store_lock.clear_game_collection_image(&user, id).await.map_err(|err| {
         log::warn!("clear collection image store error: {err}");
         ErrorInternalServerError("Failed to delete image")
     })?;
@@ -907,7 +907,7 @@ pub async fn delete_collection_image(
     tags = ["v1"]
 )]
 #[get("/game-collections/{id}/image")]
-pub async fn serve_collection_image(
+pub async fn serve_game_collection_image(
     path: web::Path<Uuid>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -926,7 +926,7 @@ pub async fn serve_collection_image(
             return Err(ErrorInternalServerError("Failed to load image"));
         }
     };
-    let col_grantees = store_lock.get_collection_grantees(id).await.map_err(|err| {
+    let col_grantees = store_lock.get_game_collection_grantees(id).await.map_err(|err| {
         log::warn!("get collection grantees store error: {err}");
         ErrorInternalServerError("Failed to load image")
     })?;
@@ -934,7 +934,7 @@ pub async fn serve_collection_image(
         return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
     }
 
-    let Some(data) = store_lock.get_collection_image(id).await.map_err(|err| {
+    let Some(data) = store_lock.get_game_collection_image(id).await.map_err(|err| {
         log::warn!("get collection image store error: {err}");
         ErrorInternalServerError("Failed to load image")
     })?

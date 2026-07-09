@@ -18,8 +18,8 @@ mod test_definitions {
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
     use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
-    use crate::api::v1::endpoints::game_definitions::{DefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GrantShareRequest};
-    use crate::api::v1::endpoints::game_collections::{AddCollectionItemRequest, CollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, ReorderCollectionItemsRequest};
+    use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GrantGameShareRequest};
+    use crate::api::v1::endpoints::game_collections::{AddGameCollectionItemRequest, GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, ReorderGameCollectionItemsRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
@@ -1035,7 +1035,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn grant_definition_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+        async fn grant_game_definition_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
             self.owned_def_or_not_found(owner, id)?;
             let grantees = self.def_grantees.entry(id).or_default();
             if !grantees.contains(&grantee) {
@@ -1044,7 +1044,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn revoke_definition_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+        async fn revoke_game_definition_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
             self.owned_def_or_not_found(owner, id)?;
             if let Some(grantees) = self.def_grantees.get_mut(&id) {
                 grantees.retain(|g| *g != grantee);
@@ -1052,13 +1052,13 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, StoreError> {
+        async fn get_game_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, StoreError> {
             let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.owner_id == owner.id).cloned().collect();
             sort_by_name_ci(&mut defs, |d| &d.name);
             Ok(defs)
         }
 
-        async fn get_visible_definitions(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
+        async fn get_visible_game_definitions(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
             let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
                 .filter(|d| d.owner_id == viewer.id
                     || matches!(d.visibility, Visibility::Public | Visibility::Curated)
@@ -1069,11 +1069,11 @@ mod test_definitions {
             Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
-        async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
+        async fn get_game_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
         }
 
-        async fn get_definition_grantee_summaries(&self, id: Uuid) -> Result<Vec<GranteeSummary>, StoreError> {
+        async fn get_game_definition_grantee_summaries(&self, id: Uuid) -> Result<Vec<GranteeSummary>, StoreError> {
             let ids = self.def_grantees.get(&id).cloned().unwrap_or_default();
             let mut out: Vec<GranteeSummary> = ids
                 .into_iter()
@@ -1083,7 +1083,7 @@ mod test_definitions {
             Ok(out)
         }
 
-        async fn set_definition_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
+        async fn set_game_definition_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
             let def = self.game_definitions.iter_mut().find(|d| d.id == id && d.owner_id == owner.id)
                 .ok_or_else(|| StoreError::GameDefinitionIdNotFound(id.to_string()))?;
             def.image_updated_at = Some(Utc::now());
@@ -1091,11 +1091,11 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+        async fn get_game_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
             Ok(self.def_images.get(&id).cloned())
         }
 
-        async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+        async fn clear_game_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
             if let Some(def) = self.game_definitions.iter_mut().find(|d| d.id == id && d.owner_id == owner.id) {
                 def.image_updated_at = None;
                 self.def_images.remove(&id);
@@ -1165,7 +1165,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn add_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
+        async fn add_game_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, collection_id)?;
             let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
             if collection.items.iter().any(|i| i.definition_id == definition_id) {
@@ -1177,7 +1177,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn remove_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
+        async fn remove_game_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, collection_id)?;
             let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
             let before = collection.items.len();
@@ -1189,7 +1189,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn reorder_collection_items(&mut self, owner: &User, collection_id: Uuid, ordered: &[Uuid]) -> Result<(), StoreError> {
+        async fn reorder_game_collection_items(&mut self, owner: &User, collection_id: Uuid, ordered: &[Uuid]) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, collection_id)?;
             let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
             let mut remaining = std::mem::take(&mut collection.items);
@@ -1206,7 +1206,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn grant_collection_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+        async fn grant_game_collection_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, id)?;
             let grantees = self.col_grantees.entry(id).or_default();
             if !grantees.contains(&grantee) {
@@ -1215,7 +1215,7 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn revoke_collection_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
+        async fn revoke_game_collection_access(&mut self, owner: &User, id: Uuid, grantee: Uuid) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, id)?;
             if let Some(grantees) = self.col_grantees.get_mut(&id) {
                 grantees.retain(|g| *g != grantee);
@@ -1223,13 +1223,13 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, StoreError> {
+        async fn get_game_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, StoreError> {
             let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.owner_id == owner.id).cloned().collect();
             sort_by_name_ci(&mut cols, |c| &c.name);
             Ok(cols)
         }
 
-        async fn get_visible_collections(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
+        async fn get_visible_game_collections(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
             let mut cols: Vec<GameCollection> = self.game_collections.iter()
                 .filter(|c| c.owner_id == viewer.id
                     || matches!(c.visibility, Visibility::Public | Visibility::Curated)
@@ -1240,11 +1240,11 @@ mod test_definitions {
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
-        async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
+        async fn get_game_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.col_grantees.get(&id).cloned().unwrap_or_default())
         }
 
-        async fn get_collection_grantee_summaries(&self, id: Uuid) -> Result<Vec<GranteeSummary>, StoreError> {
+        async fn get_game_collection_grantee_summaries(&self, id: Uuid) -> Result<Vec<GranteeSummary>, StoreError> {
             let ids = self.col_grantees.get(&id).cloned().unwrap_or_default();
             let mut out: Vec<GranteeSummary> = ids
                 .into_iter()
@@ -1254,7 +1254,7 @@ mod test_definitions {
             Ok(out)
         }
 
-        async fn set_collection_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
+        async fn set_game_collection_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
             let collection = self.game_collections.iter_mut().find(|c| c.id == id && c.owner_id == owner.id)
                 .ok_or_else(|| StoreError::GameCollectionIdNotFound(id.to_string()))?;
             collection.image_updated_at = Some(Utc::now());
@@ -1262,11 +1262,11 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+        async fn get_game_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
             Ok(self.col_images.get(&id).cloned())
         }
 
-        async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
+        async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
             if let Some(collection) = self.game_collections.iter_mut().find(|c| c.id == id && c.owner_id == owner.id) {
                 collection.image_updated_at = None;
                 self.col_images.remove(&id);
@@ -8298,7 +8298,7 @@ mod test_definitions {
         let shared = seed_game_definition(&store, &owner, "Shared", Visibility::Shared, Rotation::Static).await;
         let public = seed_game_definition(&store, &owner, "Public", Visibility::Public, Rotation::Static).await;
         let curated = seed_game_definition(&store, &owner, "Curated", Visibility::Curated, Rotation::Static).await;
-        store.write().await.grant_definition_access(&owner, shared.id, other.id).await.expect("grant");
+        store.write().await.grant_game_definition_access(&owner, shared.id, other.id).await.expect("grant");
 
         // (definition id, viewer, expected status) — owner sees all; a shared def
         // only its grantee; curated/public anyone; an admin gets no special view.
@@ -8518,7 +8518,7 @@ mod test_definitions {
         let my_public = seed_game_definition(&store, &me, "B my public", Visibility::Public, Rotation::Static).await;
         let others_public = seed_game_definition(&store, &other, "C others public", Visibility::Public, Rotation::Static).await;
         let shared_to_me = seed_game_definition(&store, &other, "D shared to me", Visibility::Shared, Rotation::Static).await;
-        store.write().await.grant_definition_access(&other, shared_to_me.id, me.id).await.expect("grant");
+        store.write().await.grant_game_definition_access(&other, shared_to_me.id, me.id).await.expect("grant");
         let others_private = seed_game_definition(&store, &other, "E others private", Visibility::Private, Rotation::Static).await;
         let curated = seed_game_definition(&store, &admin, "F curated", Visibility::Curated, Rotation::Static).await;
 
@@ -8590,13 +8590,13 @@ mod test_definitions {
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
 
         let def = seed_game_definition(&store, &owner, "Shared", Visibility::Shared, Rotation::Static).await;
-        let grant = GrantShareRequest { user_id: other.id };
+        let grant = GrantGameShareRequest { user_id: other.id };
 
         // Grant → grantees include the target.
         let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
-        let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Only the owner may read the grantee list.
@@ -8604,14 +8604,14 @@ mod test_definitions {
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
         let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
-        let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Revoke → empty.
         let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, other.id), Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
-        let shares: DefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert!(shares.grantees.is_empty());
 
         // A non-owner cannot grant on someone else's definition.
@@ -8656,7 +8656,7 @@ mod test_definitions {
     }
 
     async fn add_collection_member(store: &SharedStore, owner: &User, collection_id: Uuid, definition_id: Uuid) {
-        store.write().await.add_collection_item(owner, collection_id, definition_id).await.expect("add item");
+        store.write().await.add_game_collection_item(owner, collection_id, definition_id).await.expect("add item");
     }
 
     /// The ordered member ids of a `GameCollection` JSON response body.
@@ -8758,7 +8758,7 @@ mod test_definitions {
 
         // Add three members → appended in order.
         for def in [d1.id, d2.id, d3.id] {
-            let body = AddCollectionItemRequest { definition_id: def };
+            let body = AddGameCollectionItemRequest { definition_id: def };
             let req = create_test_post_request(&format!("{url}/items"), Some(owner.api_key), None, Some(&body));
             let resp = test::call_service(&app, req).await;
             assert_eq!(resp.status(), StatusCode::OK);
@@ -8766,7 +8766,7 @@ mod test_definitions {
         }
 
         // Reorder → d3, d1, d2.
-        let reorder = ReorderCollectionItemsRequest { ordered: vec![d3.id, d1.id, d2.id] };
+        let reorder = ReorderGameCollectionItemsRequest { ordered: vec![d3.id, d1.id, d2.id] };
         let req = create_test_put_request(&format!("{url}/items/reorder"), Some(owner.api_key), None, &reorder);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
@@ -8781,7 +8781,7 @@ mod test_definitions {
         assert_eq!(collection_item_ids(&after_remove), vec![d3.id, d2.id]);
 
         // A non-owner cannot mutate membership.
-        let body = AddCollectionItemRequest { definition_id: d1.id };
+        let body = AddGameCollectionItemRequest { definition_id: d1.id };
         let req = create_test_post_request(&format!("{url}/items"), Some(other.api_key), None, Some(&body));
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
@@ -8798,7 +8798,7 @@ mod test_definitions {
         let mine = seed_game_collection(&store, &me, "A mine", Visibility::Private).await;
         let public = seed_game_collection(&store, &other, "B public", Visibility::Public).await;
         let shared = seed_game_collection(&store, &other, "C shared", Visibility::Shared).await;
-        store.write().await.grant_collection_access(&other, shared.id, me.id).await.expect("grant");
+        store.write().await.grant_game_collection_access(&other, shared.id, me.id).await.expect("grant");
         let curated = seed_game_collection(&store, &admin, "D curated", Visibility::Curated).await;
         let others_private = seed_game_collection(&store, &other, "E others private", Visibility::Private).await;
 
@@ -8840,14 +8840,14 @@ mod test_definitions {
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
 
         let collection = seed_game_collection(&store, &owner, "Shared", Visibility::Shared).await;
-        let grant = GrantShareRequest { user_id: other.id };
+        let grant = GrantGameShareRequest { user_id: other.id };
         let url = format!("/api/v1/game-collections/{}/shares", collection.id);
 
         // Grant → grantees include the target.
         let req = create_test_put_request(&url, Some(owner.api_key), None, &grant);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
-        let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Only the owner may read the grantee list.
@@ -8855,14 +8855,14 @@ mod test_definitions {
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
         let req = create_test_get_request(&url, Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
-        let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string() }]);
 
         // Revoke → empty.
         let req = create_test_delete_request(&format!("{url}/{}", other.id), Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
-        let shares: CollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert!(shares.grantees.is_empty());
     }
 

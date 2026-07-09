@@ -439,9 +439,9 @@ async fn get_maze_items_lists_owners_mazes_sorted() {
 }
 
 #[tokio::test]
-async fn get_maze_items_includes_definition_when_requested() {
+async fn get_maze_items_includes_maze_definition_when_requested() {
     let (mut s, _temp) = fresh_store().await;
-    contract::get_maze_items_includes_definition_when_requested(&mut s).await;
+    contract::get_maze_items_includes_maze_definition_when_requested(&mut s).await;
 }
 
 #[tokio::test]
@@ -875,9 +875,9 @@ async fn score_leaderboard_includes_usernames_when_requested() {
 }
 
 #[tokio::test]
-async fn score_clear_prefix_removes_a_definitions_boards() {
+async fn score_clear_prefix_removes_a_game_definitions_boards() {
     let (mut s, _temp) = fresh_store().await;
-    contract::score_clear_prefix_removes_a_definitions_boards(&mut s).await;
+    contract::score_clear_prefix_removes_a_game_definitions_boards(&mut s).await;
 }
 
 // ─── GameStore — game definitions ─────────────────────────────────────────
@@ -927,19 +927,19 @@ async fn game_definition_delete_is_owner_scoped() {
 #[tokio::test]
 async fn game_definition_owner_list_scopes_and_sorts() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_owner_list_scopes_and_sorts(&mut s).await;
+    contract::game_definition_owner_list_scopes_and_sorts(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_grants_update_grantees() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_grants_update_grantees(&mut s).await;
+    contract::game_definition_grants_update_grantees(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_grantee_summaries_resolve_usernames() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_grantee_summaries_resolve_usernames(&mut s).await;
+    contract::game_definition_grantee_summaries_resolve_usernames(&mut s).await;
 }
 
 #[tokio::test]
@@ -989,25 +989,25 @@ async fn game_collection_delete_is_owner_scoped() {
 #[tokio::test]
 async fn game_collection_items_add_remove_and_reorder() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_items_add_remove_and_reorder(&mut s).await;
+    contract::game_collection_items_add_remove_and_reorder(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_owner_list_scopes_and_sorts() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_owner_list_scopes_and_sorts(&mut s).await;
+    contract::game_collection_owner_list_scopes_and_sorts(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_grants_update_grantees() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_grants_update_grantees(&mut s).await;
+    contract::game_collection_grants_update_grantees(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_grantee_summaries_resolve_usernames() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_grantee_summaries_resolve_usernames(&mut s).await;
+    contract::game_collection_grantee_summaries_resolve_usernames(&mut s).await;
 }
 
 #[tokio::test]
@@ -1021,13 +1021,13 @@ async fn game_collection_delete_user_cascades() {
 #[tokio::test]
 async fn game_definition_image_round_trips_and_moves_marker() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_image_round_trips_and_moves_marker(&mut s).await;
+    contract::game_definition_image_round_trips_and_moves_marker(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_definition_image_is_owner_scoped() {
     let (mut s, _temp) = fresh_store().await;
-    contract::definition_image_is_owner_scoped(&mut s).await;
+    contract::game_definition_image_is_owner_scoped(&mut s).await;
 }
 
 #[tokio::test]
@@ -1039,13 +1039,13 @@ async fn game_definition_delete_removes_its_image() {
 #[tokio::test]
 async fn game_collection_image_round_trips_and_moves_marker() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_image_round_trips_and_moves_marker(&mut s).await;
+    contract::game_collection_image_round_trips_and_moves_marker(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_collection_image_is_owner_scoped() {
     let (mut s, _temp) = fresh_store().await;
-    contract::collection_image_is_owner_scoped(&mut s).await;
+    contract::game_collection_image_is_owner_scoped(&mut s).await;
 }
 
 #[tokio::test]
@@ -1059,13 +1059,13 @@ async fn game_collection_delete_removes_its_image() {
 #[tokio::test]
 async fn game_visible_definitions_compose_and_page() {
     let (mut s, _temp) = fresh_store().await;
-    contract::get_visible_definitions_composes_and_pages(&mut s).await;
+    contract::get_visible_game_definitions_composes_and_pages(&mut s).await;
 }
 
 #[tokio::test]
 async fn game_visible_collections_compose_and_page() {
     let (mut s, _temp) = fresh_store().await;
-    contract::get_visible_collections_composes_and_pages(&mut s).await;
+    contract::get_visible_game_collections_composes_and_pages(&mut s).await;
 }
 
 #[tokio::test]

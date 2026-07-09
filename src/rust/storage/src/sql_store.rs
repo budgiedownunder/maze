@@ -5588,7 +5588,7 @@ impl GameStore for SqlStore {
     }
 
     /// Grants `grantee` access to the owner's definition (idempotent). See
-    /// [`GameStore::grant_definition_access`].
+    /// [`GameStore::grant_game_definition_access`].
     ///
     /// # Examples
     ///
@@ -5636,11 +5636,11 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
     ///
-    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
-    /// assert_eq!(store.get_definition_grantees(def.id).await.unwrap(), vec![friend.id]);
+    /// store.grant_game_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// assert_eq!(store.get_game_definition_grantees(def.id).await.unwrap(), vec![friend.id]);
     /// # });
     /// ```
-    async fn grant_definition_access(
+    async fn grant_game_definition_access(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -5676,7 +5676,7 @@ impl GameStore for SqlStore {
     }
 
     /// Revokes `grantee`'s access to the owner's definition (idempotent). See
-    /// [`GameStore::revoke_definition_access`].
+    /// [`GameStore::revoke_game_definition_access`].
     ///
     /// # Examples
     ///
@@ -5723,13 +5723,13 @@ impl GameStore for SqlStore {
     ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
-    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// store.grant_game_definition_access(&owner, def.id, friend.id).await.unwrap();
     ///
-    /// store.revoke_definition_access(&owner, def.id, friend.id).await.unwrap();
-    /// assert!(store.get_definition_grantees(def.id).await.unwrap().is_empty());
+    /// store.revoke_game_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// assert!(store.get_game_definition_grantees(def.id).await.unwrap().is_empty());
     /// # });
     /// ```
-    async fn revoke_definition_access(
+    async fn revoke_game_definition_access(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -5752,7 +5752,7 @@ impl GameStore for SqlStore {
     }
 
     /// All of `owner`'s own definitions, sorted by name. See
-    /// [`GameStore::get_definitions_for_owner`].
+    /// [`GameStore::get_game_definitions_for_owner`].
     ///
     /// # Examples
     ///
@@ -5793,7 +5793,7 @@ impl GameStore for SqlStore {
     /// }
     ///
     /// let names: Vec<String> = store
-    ///     .get_definitions_for_owner(&owner)
+    ///     .get_game_definitions_for_owner(&owner)
     ///     .await
     ///     .unwrap()
     ///     .into_iter()
@@ -5802,7 +5802,7 @@ impl GameStore for SqlStore {
     /// assert_eq!(names, vec!["Alpha".to_string(), "Beta".to_string()]);
     /// # });
     /// ```
-    async fn get_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error> {
+    async fn get_game_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error> {
         self.query_game_definitions(
             "SELECT * FROM game_definitions WHERE owner_id = ? ORDER BY LOWER(name) ASC",
             &[owner.id.to_string()],
@@ -5811,7 +5811,7 @@ impl GameStore for SqlStore {
     }
 
     /// A page of the definitions `viewer` may see (owner ∨ curated/public ∨
-    /// granted), ordered by name then id. See [`GameStore::get_visible_definitions`].
+    /// granted), ordered by name then id. See [`GameStore::get_visible_game_definitions`].
     ///
     /// # Examples
     ///
@@ -5856,11 +5856,11 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
     ///
-    /// let visible = store.get_visible_definitions(&viewer, 10, 0).await.unwrap();
+    /// let visible = store.get_visible_game_definitions(&viewer, 10, 0).await.unwrap();
     /// assert_eq!(visible.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
     /// # });
     /// ```
-    async fn get_visible_definitions(
+    async fn get_visible_game_definitions(
         &self,
         viewer: &User,
         limit: u32,
@@ -5889,7 +5889,7 @@ impl GameStore for SqlStore {
     }
 
     /// The user ids currently granted access to a definition. See
-    /// [`GameStore::get_definition_grantees`].
+    /// [`GameStore::get_game_definition_grantees`].
     ///
     /// # Examples
     ///
@@ -5936,12 +5936,12 @@ impl GameStore for SqlStore {
     ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
-    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// store.grant_game_definition_access(&owner, def.id, friend.id).await.unwrap();
     ///
-    /// assert_eq!(store.get_definition_grantees(def.id).await.unwrap(), vec![friend.id]);
+    /// assert_eq!(store.get_game_definition_grantees(def.id).await.unwrap(), vec![friend.id]);
     /// # });
     /// ```
-    async fn get_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
+    async fn get_game_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
             "SELECT grantee_user_id FROM game_definition_shares WHERE definition_id = ? ORDER BY grantee_user_id ASC",
@@ -5959,7 +5959,7 @@ impl GameStore for SqlStore {
     }
 
     /// A definition's grantees resolved to `{id, username}`. See
-    /// [`GameStore::get_definition_grantee_summaries`].
+    /// [`GameStore::get_game_definition_grantee_summaries`].
     ///
     /// # Examples
     ///
@@ -6006,13 +6006,13 @@ impl GameStore for SqlStore {
     ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
-    /// store.grant_definition_access(&owner, def.id, friend.id).await.unwrap();
+    /// store.grant_game_definition_access(&owner, def.id, friend.id).await.unwrap();
     ///
-    /// let grantees = store.get_definition_grantee_summaries(def.id).await.unwrap();
+    /// let grantees = store.get_game_definition_grantee_summaries(def.id).await.unwrap();
     /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
     /// # });
     /// ```
-    async fn get_definition_grantee_summaries(
+    async fn get_game_definition_grantee_summaries(
         &self,
         id: Uuid,
     ) -> Result<Vec<GranteeSummary>, Error> {
@@ -6038,7 +6038,7 @@ impl GameStore for SqlStore {
     }
 
     /// Stores (or replaces) a definition's image and stamps its
-    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_definition_image`].
+    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_game_definition_image`].
     ///
     /// # Examples
     ///
@@ -6090,15 +6090,15 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
     ///
-    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
-    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
+    /// store.set_game_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    /// assert_eq!(store.get_game_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
     /// assert!(store.get_game_definition(def.id).await.unwrap().image_updated_at.is_some());
     ///
-    /// store.clear_definition_image(&owner, def.id).await.unwrap();
-    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
+    /// store.clear_game_definition_image(&owner, def.id).await.unwrap();
+    /// assert_eq!(store.get_game_definition_image(def.id).await.unwrap(), None);
     /// # });
     /// ```
-    async fn set_definition_image(
+    async fn set_game_definition_image(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -6144,7 +6144,7 @@ impl GameStore for SqlStore {
     }
 
     /// Loads a definition's image bytes, or `None` when it has none. See
-    /// [`GameStore::get_definition_image`].
+    /// [`GameStore::get_game_definition_image`].
     ///
     /// # Examples
     ///
@@ -6182,12 +6182,12 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
     ///
-    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
-    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
-    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
+    /// assert_eq!(store.get_game_definition_image(def.id).await.unwrap(), None);
+    /// store.set_game_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    /// assert_eq!(store.get_game_definition_image(def.id).await.unwrap(), Some(vec![1, 2, 3]));
     /// # });
     /// ```
-    async fn get_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+    async fn get_game_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         let row = sqlx::query(&q(
             self.kind,
             "SELECT image_data FROM game_definition_images WHERE definition_id = ?",
@@ -6203,7 +6203,7 @@ impl GameStore for SqlStore {
     }
 
     /// Removes a definition's image and clears its marker, scoped to `owner`
-    /// (idempotent). See [`GameStore::clear_definition_image`].
+    /// (idempotent). See [`GameStore::clear_game_definition_image`].
     ///
     /// # Examples
     ///
@@ -6240,14 +6240,14 @@ impl GameStore for SqlStore {
     ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_definition(&owner, &mut def).await.unwrap();
-    /// store.set_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
+    /// store.set_game_definition_image(&owner, def.id, vec![1, 2, 3]).await.unwrap();
     ///
-    /// store.clear_definition_image(&owner, def.id).await.unwrap();
-    /// assert_eq!(store.get_definition_image(def.id).await.unwrap(), None);
+    /// store.clear_game_definition_image(&owner, def.id).await.unwrap();
+    /// assert_eq!(store.get_game_definition_image(def.id).await.unwrap(), None);
     /// assert!(store.get_game_definition(def.id).await.unwrap().image_updated_at.is_none());
     /// # });
     /// ```
-    async fn clear_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+    async fn clear_game_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         // Owner-scoped + idempotent: both statements no-op when the definition
         // is unknown or owned by someone else (the image DELETE is gated on the
         // owned-id subquery), so clearing is always Ok.
@@ -6608,7 +6608,7 @@ impl GameStore for SqlStore {
     }
 
     /// Appends a definition to the end of the owner's collection (idempotent).
-    /// See [`GameStore::add_collection_item`].
+    /// See [`GameStore::add_game_collection_item`].
     ///
     /// # Examples
     ///
@@ -6652,13 +6652,13 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.add_collection_item(&owner, collection.id, def.id).await.unwrap();
+    /// store.add_game_collection_item(&owner, collection.id, def.id).await.unwrap();
     /// let items = store.get_game_collection(collection.id).await.unwrap().items;
     /// assert_eq!(items.len(), 1);
     /// assert_eq!(items[0].definition_id, def.id);
     /// # });
     /// ```
-    async fn add_collection_item(
+    async fn add_game_collection_item(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -6681,7 +6681,7 @@ impl GameStore for SqlStore {
     }
 
     /// Removes a definition from the owner's collection and closes the resulting
-    /// order gap (idempotent). See [`GameStore::remove_collection_item`].
+    /// order gap (idempotent). See [`GameStore::remove_game_collection_item`].
     ///
     /// # Examples
     ///
@@ -6724,13 +6724,13 @@ impl GameStore for SqlStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.add_collection_item(&owner, collection.id, def.id).await.unwrap();
+    /// store.add_game_collection_item(&owner, collection.id, def.id).await.unwrap();
     ///
-    /// store.remove_collection_item(&owner, collection.id, def.id).await.unwrap();
+    /// store.remove_game_collection_item(&owner, collection.id, def.id).await.unwrap();
     /// assert!(store.get_game_collection(collection.id).await.unwrap().items.is_empty());
     /// # });
     /// ```
-    async fn remove_collection_item(
+    async fn remove_game_collection_item(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -6751,7 +6751,7 @@ impl GameStore for SqlStore {
     }
 
     /// Reorders the owner's collection so its items follow `ordered`. See
-    /// [`GameStore::reorder_collection_items`].
+    /// [`GameStore::reorder_game_collection_items`].
     ///
     /// # Examples
     ///
@@ -6796,11 +6796,11 @@ impl GameStore for SqlStore {
     ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     ///     };
     ///     store.create_game_definition(&owner, &mut def).await.unwrap();
-    ///     store.add_collection_item(&owner, collection.id, def.id).await.unwrap();
+    ///     store.add_game_collection_item(&owner, collection.id, def.id).await.unwrap();
     ///     ids.push(def.id);
     /// }
     ///
-    /// store.reorder_collection_items(&owner, collection.id, &[ids[1], ids[0]]).await.unwrap();
+    /// store.reorder_game_collection_items(&owner, collection.id, &[ids[1], ids[0]]).await.unwrap();
     /// let order: Vec<Uuid> = store
     ///     .get_game_collection(collection.id)
     ///     .await
@@ -6812,7 +6812,7 @@ impl GameStore for SqlStore {
     /// assert_eq!(order, vec![ids[1], ids[0]]);
     /// # });
     /// ```
-    async fn reorder_collection_items(
+    async fn reorder_game_collection_items(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -6828,7 +6828,7 @@ impl GameStore for SqlStore {
     }
 
     /// Grants `grantee` access to the owner's collection (idempotent). See
-    /// [`GameStore::grant_collection_access`].
+    /// [`GameStore::grant_game_collection_access`].
     ///
     /// # Examples
     ///
@@ -6875,11 +6875,11 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
-    /// assert_eq!(store.get_collection_grantees(collection.id).await.unwrap(), vec![friend.id]);
+    /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// assert_eq!(store.get_game_collection_grantees(collection.id).await.unwrap(), vec![friend.id]);
     /// # });
     /// ```
-    async fn grant_collection_access(
+    async fn grant_game_collection_access(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -6912,7 +6912,7 @@ impl GameStore for SqlStore {
     }
 
     /// Revokes `grantee`'s access to the owner's collection (idempotent). See
-    /// [`GameStore::revoke_collection_access`].
+    /// [`GameStore::revoke_game_collection_access`].
     ///
     /// # Examples
     ///
@@ -6958,13 +6958,13 @@ impl GameStore for SqlStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
     ///
-    /// store.revoke_collection_access(&owner, collection.id, friend.id).await.unwrap();
-    /// assert!(store.get_collection_grantees(collection.id).await.unwrap().is_empty());
+    /// store.revoke_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// assert!(store.get_game_collection_grantees(collection.id).await.unwrap().is_empty());
     /// # });
     /// ```
-    async fn revoke_collection_access(
+    async fn revoke_game_collection_access(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -6986,7 +6986,7 @@ impl GameStore for SqlStore {
     }
 
     /// All of `owner`'s own collections, sorted by name. See
-    /// [`GameStore::get_collections_for_owner`].
+    /// [`GameStore::get_game_collections_for_owner`].
     ///
     /// # Examples
     ///
@@ -7026,7 +7026,7 @@ impl GameStore for SqlStore {
     /// }
     ///
     /// let names: Vec<String> = store
-    ///     .get_collections_for_owner(&owner)
+    ///     .get_game_collections_for_owner(&owner)
     ///     .await
     ///     .unwrap()
     ///     .into_iter()
@@ -7035,7 +7035,7 @@ impl GameStore for SqlStore {
     /// assert_eq!(names, vec!["Alpha".to_string(), "Beta".to_string()]);
     /// # });
     /// ```
-    async fn get_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error> {
+    async fn get_game_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error> {
         self.query_game_collections(
             "SELECT * FROM game_collections WHERE owner_id = ? ORDER BY LOWER(name) ASC",
             &[owner.id.to_string()],
@@ -7045,7 +7045,7 @@ impl GameStore for SqlStore {
 
     /// A page of the collections `viewer` may see (owner ∨ curated/public ∨
     /// granted), ordered by name then id — the collection counterpart of
-    /// [`SqlStore::get_visible_definitions`]. See [`GameStore::get_visible_collections`].
+    /// [`SqlStore::get_visible_game_definitions`]. See [`GameStore::get_visible_game_collections`].
     ///
     /// # Examples
     ///
@@ -7092,11 +7092,11 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// let visible = store.get_visible_collections(&viewer, 10, 0).await.unwrap();
+    /// let visible = store.get_visible_game_collections(&viewer, 10, 0).await.unwrap();
     /// assert_eq!(visible.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
     /// # });
     /// ```
-    async fn get_visible_collections(
+    async fn get_visible_game_collections(
         &self,
         viewer: &User,
         limit: u32,
@@ -7128,7 +7128,7 @@ impl GameStore for SqlStore {
     }
 
     /// The user ids currently granted access to a collection. See
-    /// [`GameStore::get_collection_grantees`].
+    /// [`GameStore::get_game_collection_grantees`].
     ///
     /// # Examples
     ///
@@ -7174,12 +7174,12 @@ impl GameStore for SqlStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
     ///
-    /// assert_eq!(store.get_collection_grantees(collection.id).await.unwrap(), vec![friend.id]);
+    /// assert_eq!(store.get_game_collection_grantees(collection.id).await.unwrap(), vec![friend.id]);
     /// # });
     /// ```
-    async fn get_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
+    async fn get_game_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
             "SELECT grantee_user_id FROM game_collection_shares WHERE collection_id = ? ORDER BY grantee_user_id ASC",
@@ -7197,7 +7197,7 @@ impl GameStore for SqlStore {
     }
 
     /// A collection's grantees resolved to `{id, username}`. See
-    /// [`GameStore::get_collection_grantee_summaries`].
+    /// [`GameStore::get_game_collection_grantee_summaries`].
     ///
     /// # Examples
     ///
@@ -7243,13 +7243,13 @@ impl GameStore for SqlStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.grant_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
     ///
-    /// let grantees = store.get_collection_grantee_summaries(collection.id).await.unwrap();
+    /// let grantees = store.get_game_collection_grantee_summaries(collection.id).await.unwrap();
     /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into() }]);
     /// # });
     /// ```
-    async fn get_collection_grantee_summaries(
+    async fn get_game_collection_grantee_summaries(
         &self,
         id: Uuid,
     ) -> Result<Vec<GranteeSummary>, Error> {
@@ -7275,7 +7275,7 @@ impl GameStore for SqlStore {
     }
 
     /// Stores (or replaces) a collection's image and stamps its
-    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_collection_image`].
+    /// `image_updated_at`, scoped to `owner`. See [`GameStore::set_game_collection_image`].
     ///
     /// # Examples
     ///
@@ -7325,14 +7325,14 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
-    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    /// store.set_game_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
     ///
-    /// store.clear_collection_image(&owner, collection.id).await.unwrap();
-    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
+    /// store.clear_game_collection_image(&owner, collection.id).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), None);
     /// # });
     /// ```
-    async fn set_collection_image(
+    async fn set_game_collection_image(
         &mut self,
         owner: &User,
         id: Uuid,
@@ -7372,7 +7372,7 @@ impl GameStore for SqlStore {
     }
 
     /// Loads a collection's image bytes, or `None` when it has none. See
-    /// [`GameStore::get_collection_image`].
+    /// [`GameStore::get_game_collection_image`].
     ///
     /// # Examples
     ///
@@ -7409,12 +7409,12 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
-    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
-    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), None);
+    /// store.set_game_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
     /// # });
     /// ```
-    async fn get_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
+    async fn get_game_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
         let row = sqlx::query(&q(
             self.kind,
             "SELECT image_data FROM game_collection_images WHERE collection_id = ?",
@@ -7430,7 +7430,7 @@ impl GameStore for SqlStore {
     }
 
     /// Removes a collection's image and clears its marker, scoped to `owner`
-    /// (idempotent). See [`GameStore::clear_collection_image`].
+    /// (idempotent). See [`GameStore::clear_game_collection_image`].
     ///
     /// # Examples
     ///
@@ -7466,14 +7466,14 @@ impl GameStore for SqlStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.set_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// store.set_game_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
     ///
-    /// store.clear_collection_image(&owner, collection.id).await.unwrap();
-    /// assert_eq!(store.get_collection_image(collection.id).await.unwrap(), None);
+    /// store.clear_game_collection_image(&owner, collection.id).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), None);
     /// assert!(store.get_game_collection(collection.id).await.unwrap().image_updated_at.is_none());
     /// # });
     /// ```
-    async fn clear_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
+    async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         sqlx::query(&q(
             self.kind,
             "DELETE FROM game_collection_images WHERE collection_id IN \

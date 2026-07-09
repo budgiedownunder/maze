@@ -185,7 +185,7 @@ async fn ensure_difficulty_definition(
     match store.create_game_definition(admin, &mut definition).await {
         Ok(()) => Ok(definition.id),
         Err(StoreError::GameDefinitionNameAlreadyExists(_)) => store
-            .get_definitions_for_owner(admin)
+            .get_game_definitions_for_owner(admin)
             .await?
             .into_iter()
             .find(|d| d.name == preset.name)
@@ -215,7 +215,7 @@ pub async fn init_difficulty_collection(
     };
 
     // Idempotent: nothing to do once the curated "Difficulty" collection exists.
-    let existing = store.get_collections_for_owner(&admin).await?;
+    let existing = store.get_game_collections_for_owner(&admin).await?;
     if existing
         .iter()
         .any(|c| c.visibility == Visibility::Curated && c.name == DIFFICULTY_COLLECTION_NAME)
@@ -242,7 +242,7 @@ pub async fn init_difficulty_collection(
     };
     store.create_game_collection(&admin, &mut collection).await?;
     for definition_id in definition_ids {
-        store.add_collection_item(&admin, collection.id, definition_id).await?;
+        store.add_game_collection_item(&admin, collection.id, definition_id).await?;
     }
 
     Ok(())
@@ -276,7 +276,7 @@ mod tests {
         init_difficulty_collection(&mut store, "admin").await.expect("bootstrap");
 
         // The curated content is owned by the admin (the only content in the store).
-        let defs = store.get_definitions_for_owner(&admin).await.expect("admin defs");
+        let defs = store.get_game_definitions_for_owner(&admin).await.expect("admin defs");
         let names: Vec<&str> = defs.iter().map(|d| d.name.as_str()).collect();
         assert!(names.contains(&"Easy") && names.contains(&"Tricky") && names.contains(&"Hard"));
 
@@ -292,7 +292,7 @@ mod tests {
         assert!(easy.config.get("difficulty").is_none(), "stored config carries no difficulty tag");
 
         // The collection references the three, in easy → tricky → hard order.
-        let cols = store.get_collections_for_owner(&admin).await.expect("admin collections");
+        let cols = store.get_game_collections_for_owner(&admin).await.expect("admin collections");
         let difficulty = cols.iter().find(|c| c.name == DIFFICULTY_COLLECTION_NAME).expect("difficulty collection");
         let ordered: Vec<Uuid> = difficulty.items.iter().map(|i| i.definition_id).collect();
         let expected: Vec<Uuid> = ["Easy", "Tricky", "Hard"]
@@ -310,9 +310,9 @@ mod tests {
         init_difficulty_collection(&mut store, "admin").await.expect("first launch");
         init_difficulty_collection(&mut store, "admin").await.expect("second launch");
 
-        assert_eq!(store.get_definitions_for_owner(&admin).await.unwrap().len(), 3);
+        assert_eq!(store.get_game_definitions_for_owner(&admin).await.unwrap().len(), 3);
         assert_eq!(
-            store.get_collections_for_owner(&admin).await.unwrap().iter()
+            store.get_game_collections_for_owner(&admin).await.unwrap().iter()
                 .filter(|c| c.name == DIFFICULTY_COLLECTION_NAME).count(),
             1
         );
@@ -325,6 +325,6 @@ mod tests {
         init_difficulty_collection(&mut store, "admin").await.expect("no-op without admin");
         // Adding an admin afterwards, the earlier no-op left nothing to own.
         let admin = seed_admin(&mut store).await;
-        assert!(store.get_collections_for_owner(&admin).await.unwrap().is_empty());
+        assert!(store.get_game_collections_for_owner(&admin).await.unwrap().is_empty());
     }
 }

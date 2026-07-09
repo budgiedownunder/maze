@@ -10,7 +10,7 @@
 //!     access facts (a definition's `visibility`, its grantee list) but performs
 //!     no access checks — it exposes owner-scoped mutations, scoped reads, and
 //!     two unconditional primitives (`get_game_definition`,
-//!     `get_definition_grantees`). The server reads those facts and composes the
+//!     `get_game_definition_grantees`). The server reads those facts and composes the
 //!     `owner ∨ curated ∨ public ∨ granted` view decision at the handler.
 //!   * **Seed is server-owned.** It is minted on create and preserved verbatim
 //!     across updates — never taken from the client — so a definition's layout
@@ -123,7 +123,7 @@ pub struct GamePlayResponse {
 /// Request body for granting a share.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct GrantShareRequest {
+pub struct GrantGameShareRequest {
     /// The user to grant access to.
     #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
     pub user_id: Uuid,
@@ -133,7 +133,7 @@ pub struct GrantShareRequest {
 /// each grantee resolved to `{id, username}` for the owner's manage-shares view.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct DefinitionSharesResponse {
+pub struct GameDefinitionSharesResponse {
     /// The users currently granted access (id + username).
     pub grantees: Vec<GranteeSummary>,
 }
@@ -373,7 +373,7 @@ pub async fn list_game_definitions(
     // Storage composes + pages the "visible to me" set. Over-fetch one row so
     // `has_more` needs no separate count.
     let mut definitions = store_lock
-        .get_visible_definitions(&user, limit + 1, offset)
+        .get_visible_game_definitions(&user, limit + 1, offset)
         .await
         .map_err(|err| {
             log::warn!("list game definitions store error: {err}");
@@ -433,7 +433,7 @@ pub async fn get_game_definition(
         }
     };
 
-    let grantees = store_lock.get_definition_grantees(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_definition_grantees(id).await.map_err(|err| {
         log::warn!("get definition grantees store error: {err}");
         ErrorInternalServerError("Failed to load game definition")
     })?;
@@ -673,7 +673,7 @@ async fn owned_definition_grantees(
             return Err(ErrorInternalServerError("Failed to load game definition"));
         }
     }
-    store_lock.get_definition_grantee_summaries(id).await.map_err(|err| {
+    store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
     })
@@ -688,7 +688,7 @@ async fn owned_definition_grantees(
     path = "/api/v1/game-definitions/{id}/shares",
     params(("id" = String, Path, description = "Definition id")),
     responses(
-        (status = 200, description = "The current grantees", body = DefinitionSharesResponse),
+        (status = 200, description = "The current grantees", body = GameDefinitionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Definition not found")
     ),
@@ -696,7 +696,7 @@ async fn owned_definition_grantees(
     tags = ["v1"]
 )]
 #[get("/game-definitions/{id}/shares")]
-pub async fn list_definition_shares(
+pub async fn list_game_definition_shares(
     path: web::Path<Uuid>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -705,7 +705,7 @@ pub async fn list_definition_shares(
     let id = path.into_inner();
     let store_lock = store.read().await;
     let grantees = owned_definition_grantees(&**store_lock, &user, id).await?;
-    Ok(HttpResponse::Ok().json(DefinitionSharesResponse { grantees }))
+    Ok(HttpResponse::Ok().json(GameDefinitionSharesResponse { grantees }))
 }
 
 #[utoipa::path(
@@ -716,9 +716,9 @@ pub async fn list_definition_shares(
     put,
     path = "/api/v1/game-definitions/{id}/shares",
     params(("id" = String, Path, description = "Definition id")),
-    request_body = GrantShareRequest,
+    request_body = GrantGameShareRequest,
     responses(
-        (status = 200, description = "Access granted", body = DefinitionSharesResponse),
+        (status = 200, description = "Access granted", body = GameDefinitionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Definition not found")
     ),
@@ -726,9 +726,9 @@ pub async fn list_definition_shares(
     tags = ["v1"]
 )]
 #[put("/game-definitions/{id}/shares")]
-pub async fn grant_definition_share(
+pub async fn grant_game_definition_share(
     path: web::Path<Uuid>,
-    body: web::Json<GrantShareRequest>,
+    body: web::Json<GrantGameShareRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
@@ -737,7 +737,7 @@ pub async fn grant_definition_share(
     let grantee = body.into_inner().user_id;
     let mut store_lock = store.write().await;
 
-    match store_lock.grant_definition_access(&user, id, grantee).await {
+    match store_lock.grant_game_definition_access(&user, id, grantee).await {
         Ok(()) => {}
         Err(StoreError::GameDefinitionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
@@ -748,11 +748,11 @@ pub async fn grant_definition_share(
         }
     }
 
-    let grantees = store_lock.get_definition_grantee_summaries(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
     })?;
-    Ok(HttpResponse::Ok().json(DefinitionSharesResponse { grantees }))
+    Ok(HttpResponse::Ok().json(GameDefinitionSharesResponse { grantees }))
 }
 
 #[utoipa::path(
@@ -767,7 +767,7 @@ pub async fn grant_definition_share(
         ("grantee" = String, Path, description = "The user id to revoke")
     ),
     responses(
-        (status = 200, description = "Access revoked", body = DefinitionSharesResponse),
+        (status = 200, description = "Access revoked", body = GameDefinitionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Definition not found")
     ),
@@ -775,7 +775,7 @@ pub async fn grant_definition_share(
     tags = ["v1"]
 )]
 #[delete("/game-definitions/{id}/shares/{grantee}")]
-pub async fn revoke_definition_share(
+pub async fn revoke_game_definition_share(
     path: web::Path<(Uuid, Uuid)>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -784,7 +784,7 @@ pub async fn revoke_definition_share(
     let (id, grantee) = path.into_inner();
     let mut store_lock = store.write().await;
 
-    match store_lock.revoke_definition_access(&user, id, grantee).await {
+    match store_lock.revoke_game_definition_access(&user, id, grantee).await {
         Ok(()) => {}
         Err(StoreError::GameDefinitionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
@@ -795,11 +795,11 @@ pub async fn revoke_definition_share(
         }
     }
 
-    let grantees = store_lock.get_definition_grantee_summaries(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
     })?;
-    Ok(HttpResponse::Ok().json(DefinitionSharesResponse { grantees }))
+    Ok(HttpResponse::Ok().json(GameDefinitionSharesResponse { grantees }))
 }
 
 // ---------------------------------------------------------------------------
@@ -825,7 +825,7 @@ pub async fn revoke_definition_share(
     tags = ["v1"]
 )]
 #[post("/game-definitions/{id}/image")]
-pub async fn upload_definition_image(
+pub async fn upload_game_definition_image(
     path: web::Path<Uuid>,
     MultipartForm(form): MultipartForm<ImageUploadForm>,
     store: web::Data<SharedStore>,
@@ -836,7 +836,7 @@ pub async fn upload_definition_image(
     let png = canonicalise_to_png(&form.file.data)?;
 
     let mut store_lock = store.write().await;
-    match store_lock.set_definition_image(&user, id, png).await {
+    match store_lock.set_game_definition_image(&user, id, png).await {
         Ok(()) => {}
         Err(StoreError::GameDefinitionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
@@ -875,7 +875,7 @@ pub async fn upload_definition_image(
     tags = ["v1"]
 )]
 #[delete("/game-definitions/{id}/image")]
-pub async fn delete_definition_image(
+pub async fn delete_game_definition_image(
     path: web::Path<Uuid>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -896,7 +896,7 @@ pub async fn delete_definition_image(
             return Err(ErrorInternalServerError("Failed to delete image"));
         }
     }
-    store_lock.clear_definition_image(&user, id).await.map_err(|err| {
+    store_lock.clear_game_definition_image(&user, id).await.map_err(|err| {
         log::warn!("clear definition image store error: {err}");
         ErrorInternalServerError("Failed to delete image")
     })?;
@@ -921,7 +921,7 @@ pub async fn delete_definition_image(
     tags = ["v1"]
 )]
 #[get("/game-definitions/{id}/image")]
-pub async fn serve_definition_image(
+pub async fn serve_game_definition_image(
     path: web::Path<Uuid>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
@@ -940,7 +940,7 @@ pub async fn serve_definition_image(
             return Err(ErrorInternalServerError("Failed to load image"));
         }
     };
-    let grantees = store_lock.get_definition_grantees(id).await.map_err(|err| {
+    let grantees = store_lock.get_game_definition_grantees(id).await.map_err(|err| {
         log::warn!("get definition grantees store error: {err}");
         ErrorInternalServerError("Failed to load image")
     })?;
@@ -948,7 +948,7 @@ pub async fn serve_definition_image(
         return Err(ErrorNotFound(format!("Game definition '{id}' not found")));
     }
 
-    let Some(data) = store_lock.get_definition_image(id).await.map_err(|err| {
+    let Some(data) = store_lock.get_game_definition_image(id).await.map_err(|err| {
         log::warn!("get definition image store error: {err}");
         ErrorInternalServerError("Failed to load image")
     })?
