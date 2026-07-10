@@ -64,6 +64,11 @@ export function HamburgerMenu() {
               </button>
             </li>
             <li role="none">
+              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/workshop') }}>
+                3D Game Workshop
+              </button>
+            </li>
+            <li role="none">
               <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/mazes') }}>
                 Mazes
               </button>

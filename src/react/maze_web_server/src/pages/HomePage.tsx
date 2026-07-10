@@ -4,6 +4,7 @@ import { AppHeader } from '../components/AppHeader'
 import { Play3dDifficultyModal } from '../components/Play3dDifficultyModal'
 import appIcon from '../assets/app.png'
 import play3dIcon from '../assets/play3d.png'
+import workshopIcon from '../assets/workshop.svg'
 import leaderboardsIcon from '../assets/leaderboards.svg'
 
 export function HomePage() {
@@ -18,6 +19,10 @@ export function HomePage() {
     // `/game/` is the standalone Bevy/WASM page, not a React route — a full
     // page navigation is required. The server maps `?difficulty=` to a preset.
     window.location.href = `/game/?difficulty=${encodeURIComponent(difficulty)}`
+  }
+
+  function handleWorkshop() {
+    navigate('/workshop')
   }
 
   function handleMyMazes() {
@@ -38,6 +43,13 @@ export function HomePage() {
             <div className="home-tile-text">
               <h2 className="home-tile-title">Play 3D</h2>
               <p className="home-tile-desc">Play single-level and multi-level 3D games in easy, tricky or hard mode</p>
+            </div>
+          </button>
+          <button type="button" className="home-tile" onClick={handleWorkshop}>
+            <img src={workshopIcon} className="home-tile-img" alt="" aria-hidden="true" />
+            <div className="home-tile-text">
+              <h2 className="home-tile-title">3D Game Workshop</h2>
+              <p className="home-tile-desc">Create, publish and share your own 3D games and collections</p>
             </div>
           </button>
           <button type="button" className="home-tile" onClick={handleMyMazes}>

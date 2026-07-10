@@ -48,8 +48,15 @@ describe('HomePage', () => {
   it('renders the tile titles', () => {
     renderHomePage()
     expect(screen.getByRole('heading', { name: /play 3d/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^3d game workshop$/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^mazes$/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /^leaderboards$/i })).toBeInTheDocument()
+  })
+
+  it('clicking 3D Game Workshop navigates to /workshop', async () => {
+    renderHomePage()
+    await userEvent.click(screen.getByRole('button', { name: /3d game workshop/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/workshop')
   })
 
   it('clicking Play 3D opens the difficulty modal (no navigation yet)', async () => {

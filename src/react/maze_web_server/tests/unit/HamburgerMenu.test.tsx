@@ -89,6 +89,13 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/mazes')
   })
 
+  it('navigates to /workshop when 3D Game Workshop is clicked', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /3d game workshop/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/workshop')
+  })
+
   it('Play 3D opens the difficulty modal (no navigation yet)', async () => {
     const locationStub = { href: '' }
     vi.stubGlobal('location', locationStub)

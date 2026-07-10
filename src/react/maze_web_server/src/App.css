@@ -1031,6 +1031,7 @@ textarea.input {
   padding: 0.5rem 1rem;
   font-size: 0.95rem;
   color: var(--text-h);
+  white-space: nowrap;
 }
 
 .menu-item:hover {
