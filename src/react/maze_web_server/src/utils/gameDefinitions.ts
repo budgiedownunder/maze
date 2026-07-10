@@ -9,6 +9,30 @@
 export const VISIBILITIES = ['private', 'shared', 'public', 'curated'] as const
 export type Visibility = (typeof VISIBILITIES)[number]
 
+// User-facing label for a visibility tier, matching the wording of the Access
+// picker (Just me / Specific people / Everyone / Featured). Used for the
+// read-only access badge on the workshop games list.
+const ACCESS_LABELS: Record<Visibility, string> = {
+  private: 'Just me',
+  shared: 'Specific people',
+  public: 'Everyone',
+  curated: 'Featured',
+}
+
+export function accessLabel(visibility: Visibility): string {
+  return ACCESS_LABELS[visibility]
+}
+
+// Confirm-dialog body for a layout reshuffle. A reshuffle changes the generated
+// maze, so a definition that already has scores loses its (now-incomparable)
+// leaderboard — say so more strongly when scores exist. Shared by the editor's
+// in-tab Reshuffle action and the workshop list's per-row Reshuffle.
+export function reshuffleConfirmMessage(hasScores: boolean): string {
+  return hasScores
+    ? "This generates a new maze layout, replacing the current one, and permanently clears this game's leaderboard — every recorded score was set on the old layout. This can't be undone."
+    : "This generates a new maze layout for the game, replacing the current one. This can't be undone."
+}
+
 // Whether a definition's layout — and thus its leaderboard — is fixed ("static")
 // or rotates by UTC date ("daily", a daily challenge).
 export const ROTATIONS = ['static', 'daily'] as const

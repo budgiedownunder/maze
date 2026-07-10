@@ -6,7 +6,7 @@ async function login(page: Page) {
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign in/i }).click()
   await expect(page).toHaveURL(/\/$/)
-  await page.goto('/workshop/games')
+  await page.goto('/workshop/my-games')
 }
 
 test('Preview stashes the config and opens the game host in a new tab', async ({ page, context }) => {
@@ -118,6 +118,48 @@ test('Share adds and removes a grantee via the username people-picker', async ({
 
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect(dialog).toBeHidden()
+})
+
+test('Leaderboard opens the board modal for an unpublished game', async ({ page }) => {
+  await login(page)
+
+  const name = `Boarded ${Date.now()}`
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByText(name)).toBeVisible()
+
+  await page.getByRole('button', { name: `Leaderboard for ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: `Leaderboard: ${name}` })
+  await expect(dialog).toBeVisible()
+  // A fresh game is private → not published → no board yet.
+  await expect(dialog.getByText(/isn.t published/i)).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toBeHidden()
+})
+
+test('Delete removes a game after confirmation', async ({ page }) => {
+  await login(page)
+
+  const name = `Doomed ${Date.now()}`
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByText(name)).toBeVisible()
+
+  await page.getByRole('button', { name: `Delete ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'Delete Game' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: 'Delete' }).click()
+
+  // Assert on the row's own action button (unambiguous — the name also appears
+  // transiently in the confirm dialog's message text).
+  await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
+  await page.reload()
+  await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
 })
 
 test('New game wizard steps through General → Layout and blocks an invalid size', async ({ page }) => {

@@ -360,7 +360,7 @@ describe('MazesPage', () => {
   it('New maze button navigates to /mazes/new', async () => {
     renderMazesPage()
     await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: 'New maze' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New maze' }))
     expect(mockNavigate).toHaveBeenCalledWith('/mazes/new')
   })
 

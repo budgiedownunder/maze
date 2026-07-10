@@ -12,14 +12,14 @@ test('Home 3D Game Workshop tile opens the hub', async ({ page }) => {
   await login(page)
   await page.getByRole('button', { name: /create, publish and share your own 3d games/i }).click()
   await expect(page).toHaveURL(/\/workshop$/)
-  await expect(page.getByRole('heading', { name: /^games$/i })).toBeVisible()
-  await expect(page.getByRole('heading', { name: /^game collections$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^my games$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^my game collections$/i })).toBeVisible()
 })
 
 test('the Features tile is hidden from a non-admin', async ({ page }) => {
   await login(page)
   await page.goto('/workshop')
-  await expect(page.getByRole('heading', { name: /^game collections$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^my game collections$/i })).toBeVisible()
   await expect(page.getByRole('heading', { name: /features/i })).toBeHidden()
 })
 
@@ -33,7 +33,7 @@ test('the hub Games tile opens the games surface', async ({ page }) => {
   await login(page)
   await page.goto('/workshop')
   await page.getByRole('button', { name: /create, edit, publish and share your 3d games/i }).click()
-  await expect(page).toHaveURL(/\/workshop\/games$/)
+  await expect(page).toHaveURL(/\/workshop\/my-games$/)
   await expect(page.getByRole('button', { name: 'New game' })).toBeVisible()
 })
 

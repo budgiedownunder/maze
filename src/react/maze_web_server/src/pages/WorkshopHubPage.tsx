@@ -14,15 +14,15 @@ export function WorkshopHubPage() {
       <AppHeader title="3D Game Workshop" />
       <main className="home-main">
         <section className="home-tiles">
-          <button type="button" className="home-tile" onClick={() => navigate('/workshop/games')}>
+          <button type="button" className="home-tile" onClick={() => navigate('/workshop/my-games')}>
             <div className="home-tile-text">
-              <h2 className="home-tile-title">Games</h2>
+              <h2 className="home-tile-title">My Games</h2>
               <p className="home-tile-desc">Create, edit, publish and share your 3D games</p>
             </div>
           </button>
-          <button type="button" className="home-tile" onClick={() => navigate('/workshop/game-collections')}>
+          <button type="button" className="home-tile" onClick={() => navigate('/workshop/my-game-collections')}>
             <div className="home-tile-text">
-              <h2 className="home-tile-title">Game Collections</h2>
+              <h2 className="home-tile-title">My Game Collections</h2>
               <p className="home-tile-desc">Group your games into ordered collections</p>
             </div>
           </button>

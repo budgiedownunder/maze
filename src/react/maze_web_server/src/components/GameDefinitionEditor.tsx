@@ -17,7 +17,7 @@ import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { validateMazeGenerationFields } from '../utils/validation'
-import { MAX_LEVEL_COUNT, FINISH_TYPES, type FinishType } from '../utils/gameDefinitions'
+import { MAX_LEVEL_COUNT, FINISH_TYPES, reshuffleConfirmMessage, type FinishType } from '../utils/gameDefinitions'
 import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import type { GameDefinitionRequest } from '../types/api'
@@ -157,12 +157,7 @@ export function GameDefinitionEditor({
     onPreview?.(buildFromForm().request.config)
   }
 
-  // Layout changes ⇒ the board is no longer comparable, so a reshuffle on an
-  // already-scored definition wipes its leaderboard — say so plainly, more
-  // strongly when scores exist.
-  const reshuffleMessage = hasScores
-    ? "This generates a new maze layout, replacing the current one, and permanently clears this game's leaderboard — every recorded score was set on the old layout. This can't be undone."
-    : "This generates a new maze layout for the game, replacing the current one. This can't be undone."
+  const reshuffleMessage = reshuffleConfirmMessage(hasScores)
 
   return (
     <>

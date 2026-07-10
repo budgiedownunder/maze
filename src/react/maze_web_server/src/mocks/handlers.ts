@@ -596,6 +596,14 @@ export const handlers = [
     return HttpResponse.json(reshuffled)
   }),
 
+  http.delete(`${BASE}/game-definitions/:id`, ({ params }) => {
+    const index = mockGameDefinitions.findIndex(d => d.id === params.id)
+    if (index === -1) return new HttpResponse(null, { status: 404 })
+    mockGameDefinitions = mockGameDefinitions.filter(d => d.id !== params.id)
+    saveGameDefinitions()
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.post(`${BASE}/game-definitions`, async ({ request }) => {
     const body = await request.json() as GameDefinitionRequest
     const now = new Date().toISOString()

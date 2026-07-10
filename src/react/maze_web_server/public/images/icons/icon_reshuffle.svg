@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Reshuffle" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M3 5h4l10 14h4"/>
+  <path d="M3 19h4L17 5h4"/>
+  <polyline points="18 2 21 5 18 8"/>
+  <polyline points="18 16 21 19 18 22"/>
+</svg>

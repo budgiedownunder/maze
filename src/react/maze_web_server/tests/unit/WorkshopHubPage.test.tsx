@@ -43,10 +43,10 @@ beforeEach(() => {
 })
 
 describe('WorkshopHubPage', () => {
-  it('renders the Games and Game Collections tiles', () => {
+  it('renders the My Games and My Game Collections tiles', () => {
     renderHub()
-    expect(screen.getByRole('heading', { name: /^games$/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /^game collections$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^my games$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^my game collections$/i })).toBeInTheDocument()
   })
 
   it('hides the Features tile for a non-admin', () => {
@@ -60,16 +60,16 @@ describe('WorkshopHubPage', () => {
     expect(screen.getByRole('heading', { name: /features \[admin\]/i })).toBeInTheDocument()
   })
 
-  it('clicking Games navigates to /workshop/games', async () => {
+  it('clicking My Games navigates to /workshop/my-games', async () => {
     renderHub()
     await userEvent.click(screen.getByRole('button', { name: /create, edit, publish/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/workshop/games')
+    expect(mockNavigate).toHaveBeenCalledWith('/workshop/my-games')
   })
 
-  it('clicking Game Collections navigates to /workshop/game-collections', async () => {
+  it('clicking My Game Collections navigates to /workshop/my-game-collections', async () => {
     renderHub()
     await userEvent.click(screen.getByRole('button', { name: /group your games/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/workshop/game-collections')
+    expect(mockNavigate).toHaveBeenCalledWith('/workshop/my-game-collections')
   })
 
   it('clicking Features navigates to /workshop/features', async () => {

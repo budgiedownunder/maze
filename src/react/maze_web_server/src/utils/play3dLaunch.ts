@@ -17,3 +17,10 @@ export function launchPlay3dWithSettings(mazeId: string, settings: MazeGameSetti
 export function launchPlay3dCurated(difficulty: string): void {
   window.location.href = '/game/?difficulty=' + encodeURIComponent(difficulty)
 }
+
+/// Launches a stored game definition by id — the host page fetches the
+/// definition and forwards its `config` as the StartConfig. No settings handoff
+/// (the config is server-owned, resolved from the definition).
+export function launchDefinition(id: string): void {
+  window.location.href = '/game/?def=' + encodeURIComponent(id)
+}
