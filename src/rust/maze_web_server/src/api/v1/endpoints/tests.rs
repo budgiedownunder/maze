@@ -8599,6 +8599,11 @@ mod test_definitions {
         let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
+        // Granting to the owner themselves is rejected (400) — you can't share with yourself.
+        let self_grant = GrantGameShareRequest { user_id: owner.id };
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &self_grant);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+
         // Only the owner may read the grantee list.
         let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
@@ -8614,8 +8619,10 @@ mod test_definitions {
         let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert!(shares.grantees.is_empty());
 
-        // A non-owner cannot grant on someone else's definition.
-        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None, &grant);
+        // A non-owner cannot grant on someone else's definition (grantee ≠ caller,
+        // so the ownership check — not the self-grant guard — is what rejects).
+        let foreign_grant = GrantGameShareRequest { user_id: Uuid::new_v4() };
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None, &foreign_grant);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 
@@ -8849,6 +8856,11 @@ mod test_definitions {
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
+
+        // Granting to the owner themselves is rejected (400) — you can't share with yourself.
+        let self_grant = GrantGameShareRequest { user_id: owner.id };
+        let req = create_test_put_request(&url, Some(owner.api_key), None, &self_grant);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
 
         // Only the owner may read the grantee list.
         let req = create_test_get_request(&url, Some(other.api_key), None);

@@ -710,13 +710,14 @@ pub async fn list_game_collection_shares(
     summary = "Grant a user access to a collection",
     description = "Grants the given user access to a collection owned by the caller (idempotent) \
                    and returns the updated grantee list. A collection owned by someone else \
-                   returns 404.",
+                   returns 404; granting to the caller themselves (the owner) returns 400.",
     put,
     path = "/api/v1/game-collections/{id}/shares",
     params(("id" = String, Path, description = "Collection id")),
     request_body = GrantGameShareRequest,
     responses(
         (status = 200, description = "Access granted", body = GameCollectionSharesResponse),
+        (status = 400, description = "Cannot share with yourself (the owner)"),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Collection not found")
     ),
@@ -733,6 +734,10 @@ pub async fn grant_game_collection_share(
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
     let grantee = body.into_inner().user_id;
+
+    if grantee == user.id {
+        return Err(ErrorBadRequest("You cannot share with yourself"));
+    }
     let mut store_lock = store.write().await;
 
     match store_lock.grant_game_collection_access(&user, id, grantee).await {

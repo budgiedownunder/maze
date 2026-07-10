@@ -712,13 +712,14 @@ pub async fn list_game_definition_shares(
     summary = "Grant a user access to a definition",
     description = "Grants the given user access to a definition owned by the caller (idempotent) \
                    and returns the updated grantee list. A definition owned by someone else \
-                   returns 404.",
+                   returns 404; granting to the caller themselves (the owner) returns 400.",
     put,
     path = "/api/v1/game-definitions/{id}/shares",
     params(("id" = String, Path, description = "Definition id")),
     request_body = GrantGameShareRequest,
     responses(
         (status = 200, description = "Access granted", body = GameDefinitionSharesResponse),
+        (status = 400, description = "Cannot share with yourself (the owner)"),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Definition not found")
     ),
@@ -735,6 +736,10 @@ pub async fn grant_game_definition_share(
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
     let grantee = body.into_inner().user_id;
+
+    if grantee == user.id {
+        return Err(ErrorBadRequest("You cannot share with yourself"));
+    }
     let mut store_lock = store.write().await;
 
     match store_lock.grant_game_definition_access(&user, id, grantee).await {
