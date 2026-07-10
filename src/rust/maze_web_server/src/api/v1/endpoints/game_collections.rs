@@ -240,6 +240,56 @@ async fn owned_collection(
     }
 }
 
+/// Keeps a collection's visibility tier in step with its grant list after a
+/// grant: the first grant promotes a `Private` collection to `Shared` (so the
+/// access badge reflects reality). Only `Private` is promoted; `Public`/`Curated`
+/// are left alone. Collections carry no leaderboard, so there is no board to
+/// reset. Best-effort: a failure is logged, not surfaced.
+async fn promote_collection_on_grant(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
+    let mut collection = match store.get_game_collection(id).await {
+        Ok(collection) => collection,
+        Err(err) => {
+            log::warn!("auto-promote: load collection {id} failed: {err}");
+            return;
+        }
+    };
+    if collection.visibility != Visibility::Private {
+        return;
+    }
+    collection.visibility = Visibility::Shared;
+    if let Err(err) = store.update_game_collection(owner, &mut collection).await {
+        log::warn!("auto-promote: promote collection {id} to shared failed: {err}");
+    }
+}
+
+/// Keeps a collection's visibility tier in step with its grant list after a
+/// revoke: removing the last grantee demotes a `Shared` collection back to
+/// `Private`. Only `Shared` is demoted. Best-effort.
+async fn demote_collection_on_revoke(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
+    match store.get_game_collection_grantees(id).await {
+        Ok(grantees) if grantees.is_empty() => {}
+        Ok(_) => return,
+        Err(err) => {
+            log::warn!("auto-demote: grantees for collection {id} failed: {err}");
+            return;
+        }
+    }
+    let mut collection = match store.get_game_collection(id).await {
+        Ok(collection) => collection,
+        Err(err) => {
+            log::warn!("auto-demote: load collection {id} failed: {err}");
+            return;
+        }
+    };
+    if collection.visibility != Visibility::Shared {
+        return;
+    }
+    collection.visibility = Visibility::Private;
+    if let Err(err) = store.update_game_collection(owner, &mut collection).await {
+        log::warn!("auto-demote: demote collection {id} to private failed: {err}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/v1/game-collections
 // ---------------------------------------------------------------------------
@@ -751,6 +801,10 @@ pub async fn grant_game_collection_share(
         }
     }
 
+    // Keep the access tier in step with the grant list: a first grant promotes a
+    // Private collection to Shared (so the access badge reflects reality).
+    promote_collection_on_grant(&mut **store_lock, &user, id).await;
+
     let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get collection grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load collection shares")
@@ -797,6 +851,9 @@ pub async fn revoke_game_collection_share(
             return Err(ErrorInternalServerError("Failed to revoke access"));
         }
     }
+
+    // Revoking the last grantee demotes a Shared collection back to Private.
+    demote_collection_on_revoke(&mut **store_lock, &user, id).await;
 
     let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get collection grantee summaries store error: {err}");

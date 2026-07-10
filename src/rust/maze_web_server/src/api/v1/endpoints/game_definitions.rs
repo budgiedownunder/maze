@@ -21,6 +21,11 @@
 //!     by clearing the definition's score rows; **deleting** likewise resets the
 //!     board. Unpublishing back to `Private` freezes the board (a later
 //!     re-publish starts fresh again).
+//!   * **Sharing keeps the tier honest.** Granting the first share auto-promotes
+//!     a `Private` definition to `Shared` (a publish — fresh board); revoking the
+//!     last grantee demotes it back to `Private` (a freeze). Only `Private`↔`Shared`
+//!     is toggled — `Public`/`Curated` are never narrowed by a grant/revoke — so
+//!     `visibility` stays the single source of truth for the access tier.
 //!
 //! `GET /{id}` is the **play-fetch**: it returns the definition with the
 //! *effective* seed spliced into `config` plus the computed `challengeKey`.
@@ -679,6 +684,63 @@ async fn owned_definition_grantees(
     })
 }
 
+/// Keeps a definition's visibility tier in step with its grant list after a
+/// grant: the first grant publishes a `Private` draft as `Shared`, which starts a
+/// fresh board (mirroring the PUT publish path — a re-publish must not inherit a
+/// prior board's rows). Only `Private` is promoted; `Public`/`Curated` are left
+/// alone (grantees are redundant there, and their tier must not be narrowed).
+/// Best-effort: a failure is logged, not surfaced, as the grant itself already
+/// succeeded.
+async fn publish_definition_on_grant(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
+    let mut def = match store.get_game_definition(id).await {
+        Ok(def) => def,
+        Err(err) => {
+            log::warn!("auto-publish: load definition {id} failed: {err}");
+            return;
+        }
+    };
+    if def.visibility != Visibility::Private {
+        return;
+    }
+    def.visibility = Visibility::Shared;
+    if let Err(err) = store.update_game_definition(owner, &mut def).await {
+        log::warn!("auto-publish: promote definition {id} to shared failed: {err}");
+        return;
+    }
+    if let Err(err) = store.clear_challenge_scores_prefix(&challenge_prefix(id)).await {
+        log::warn!("auto-publish: reset board for definition {id} failed: {err}");
+    }
+}
+
+/// Keeps a definition's visibility tier in step with its grant list after a
+/// revoke: removing the last grantee unpublishes a `Shared` definition back to
+/// `Private`, which freezes its board (no clear — unpublish freezes; a later
+/// re-publish starts fresh). Only `Shared` is demoted. Best-effort.
+async fn unpublish_definition_on_revoke(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
+    match store.get_game_definition_grantees(id).await {
+        Ok(grantees) if grantees.is_empty() => {}
+        Ok(_) => return,
+        Err(err) => {
+            log::warn!("auto-unpublish: grantees for definition {id} failed: {err}");
+            return;
+        }
+    }
+    let mut def = match store.get_game_definition(id).await {
+        Ok(def) => def,
+        Err(err) => {
+            log::warn!("auto-unpublish: load definition {id} failed: {err}");
+            return;
+        }
+    };
+    if def.visibility != Visibility::Shared {
+        return;
+    }
+    def.visibility = Visibility::Private;
+    if let Err(err) = store.update_game_definition(owner, &mut def).await {
+        log::warn!("auto-unpublish: demote definition {id} to private failed: {err}");
+    }
+}
+
 #[utoipa::path(
     summary = "List a definition's grantees",
     description = "Returns the users (id + username) granted access to a definition owned by the \
@@ -753,6 +815,10 @@ pub async fn grant_game_definition_share(
         }
     }
 
+    // Keep the access tier in step with the grant list: a first grant publishes a
+    // Private draft as Shared (so the access badge reflects reality).
+    publish_definition_on_grant(&mut **store_lock, &user, id).await;
+
     let grantees = store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get definition grantee summaries store error: {err}");
         ErrorInternalServerError("Failed to load definition shares")
@@ -799,6 +865,9 @@ pub async fn revoke_game_definition_share(
             return Err(ErrorInternalServerError("Failed to revoke access"));
         }
     }
+
+    // Revoking the last grantee unpublishes a Shared definition back to Private.
+    unpublish_definition_on_revoke(&mut **store_lock, &user, id).await;
 
     let grantees = store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get definition grantee summaries store error: {err}");
