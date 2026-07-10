@@ -162,6 +162,30 @@ test('Delete removes a game after confirmation', async ({ page }) => {
   await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
 })
 
+test('sharing a game updates its access badge from Just me to Specific people', async ({ page }) => {
+  await login(page)
+
+  const name = `Badged ${Date.now()}`
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+
+  const row = page.locator('.game-list-item', { hasText: name })
+  await expect(row.getByText('Just me')).toBeVisible()
+
+  await page.getByRole('button', { name: `Share ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: `Share: ${name}` })
+  await dialog.getByLabel('Add user').fill('bob')
+  await dialog.getByRole('button', { name: 'Add bob' }).click()
+  await expect(dialog.getByRole('button', { name: 'Remove bob' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+
+  // The list refreshed on the grant, so the badge reflects the shared tier.
+  await expect(row.getByText('Specific people')).toBeVisible()
+  await expect(row.getByText('Just me')).toBeHidden()
+})
+
 test('New game wizard steps through General → Layout and blocks an invalid size', async ({ page }) => {
   await login(page)
 

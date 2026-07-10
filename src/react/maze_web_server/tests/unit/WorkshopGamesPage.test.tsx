@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -261,6 +261,31 @@ describe('WorkshopGamesPage', () => {
     release()
     // Once the editor opens the busy cursor clears.
     await waitFor(() => expect(document.body).not.toHaveClass('is-busy'))
+  })
+
+  it('refreshes the access badge when a share is added (private → shared)', async () => {
+    // Use the default (mock-store-backed) create/list/share handlers so the grant
+    // handler mirrors B14 by mutating the same definition the list reads back.
+    renderPage()
+    await waitFor(() => expect(screen.getByText('No games yet.')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: '+ New game' }))
+    await userEvent.type(screen.getByLabelText('Name'), 'Tower')
+    await userEvent.click(screen.getByRole('button', { name: 'Finish' }))
+    await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
+    // A fresh game is private.
+    expect(screen.getByText('Just me')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Share Tower' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Share: Tower' })
+    await userEvent.type(within(dialog).getByLabelText('Add user'), 'bob')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Add bob' }))
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    // The list refetched on the grant, so the badge now reads the shared tier.
+    await waitFor(() => expect(screen.getByText('Specific people')).toBeInTheDocument())
+    expect(screen.queryByText('Just me')).toBeNull()
   })
 
   it('Share opens the manage-sharing modal for the row', async () => {

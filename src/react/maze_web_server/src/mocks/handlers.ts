@@ -655,11 +655,19 @@ export const handlers = [
     const id = String(params.id)
     const ids = mockDefinitionShares[id] ?? []
     if (!ids.includes(userId)) mockDefinitionShares[id] = [...ids, userId]
+    mockGameDefinitions = mockGameDefinitions.map(d =>
+      d.id === id && d.visibility === 'private' ? { ...d, visibility: 'shared' } : d)
+    saveGameDefinitions()
     return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id] ?? []) })
   }),
   http.delete(`${BASE}/game-definitions/:id/shares/:grantee`, ({ params }) => {
     const id = String(params.id)
     mockDefinitionShares[id] = (mockDefinitionShares[id] ?? []).filter(u => u !== String(params.grantee))
+    if (mockDefinitionShares[id].length === 0) {
+      mockGameDefinitions = mockGameDefinitions.map(d =>
+        d.id === id && d.visibility === 'shared' ? { ...d, visibility: 'private' } : d)
+      saveGameDefinitions()
+    }
     return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id]) })
   }),
 

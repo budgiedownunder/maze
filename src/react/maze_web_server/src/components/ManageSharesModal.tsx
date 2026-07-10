@@ -26,6 +26,7 @@ export interface ShareSubject {
 interface Props {
   subject: ShareSubject
   onClose: () => void
+  onVisibilityChange?: () => void
 }
 
 const LOOKUP_LIMIT = 8
@@ -34,7 +35,7 @@ const DEBOUNCE_MS = 250
 // Grant / revoke / list access for a definition or collection: a live grantee
 // list (resolved to usernames by the server) plus a username people-picker that
 // searches the B5 lookup as you type. Reused across the games + collections areas.
-export function ManageSharesModal({ subject, onClose }: Props) {
+export function ManageSharesModal({ subject, onClose, onVisibilityChange }: Props) {
   const token = useToken()
 
   // The share endpoints come in definition / collection pairs with identical
@@ -102,11 +103,13 @@ export function ManageSharesModal({ subject, onClose }: Props) {
   async function handleGrant(userId: string) {
     setBusy(true)
     setError(null)
+    const isFirstGrant = (grantees?.length ?? 0) === 0
     try {
       await api.grant(token!, subject.id, userId)
       setQuery('')
       setResults([])
       setRefresh(c => c + 1)
+      if (isFirstGrant) onVisibilityChange?.()
     } catch (ex: unknown) {
       setError((ex as { message?: string }).message ?? 'Failed to grant access.')
     } finally {
@@ -117,9 +120,11 @@ export function ManageSharesModal({ subject, onClose }: Props) {
   async function handleRevoke(userId: string) {
     setBusy(true)
     setError(null)
+    const isLastGrant = (grantees?.length ?? 0) === 1
     try {
       await api.revoke(token!, subject.id, userId)
       setRefresh(c => c + 1)
+      if (isLastGrant) onVisibilityChange?.()
     } catch (ex: unknown) {
       setError((ex as { message?: string }).message ?? 'Failed to revoke access.')
     } finally {

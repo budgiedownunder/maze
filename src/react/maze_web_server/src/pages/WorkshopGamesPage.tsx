@@ -77,6 +77,22 @@ export function WorkshopGamesPage() {
     setActionError(null)
   }
 
+  // Re-read one game's authoritative visibility and patch just its row — used when
+  // a share change may have flipped the tier (the server owns shared↔private, so
+  // we read it back rather than re-deriving it). Best-effort: on failure the row
+  // is left as-is and a manual Refresh still corrects it.
+  async function reloadRowVisibility(id: string) {
+    try {
+      const def = await getGameDefinition(token!, id)
+      setLoaded(prev =>
+        prev == null
+          ? prev
+          : { ...prev, definitions: prev.definitions.map(d => (d.id === id ? { ...d, visibility: def.visibility } : d)) })
+    } catch {
+      // Ignore — the badge stays until the next load/refresh.
+    }
+  }
+
   // Whether a definition's board already has scores drives the stronger
   // reshuffle-confirm wording; a tracked board that is empty (or an untracked
   // draft) is "no scores". The play-fetch computes the challenge key.
@@ -252,6 +268,7 @@ export function WorkshopGamesPage() {
         <ManageSharesModal
           subject={{ kind: 'definition', id: sharing.id, name: sharing.name, ownerId: sharing.ownerId }}
           onClose={() => setSharing(null)}
+          onVisibilityChange={() => void reloadRowVisibility(sharing.id)}
         />
       )}
       {viewingBoard && (
