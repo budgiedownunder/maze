@@ -104,7 +104,7 @@ export interface DefinitionConfig {
 // ── The editor's working form state ─────────────────────────────────────────
 
 // Level fields carry strings for the numeric input + loose strings for the enum
-// pickers (D2f tightens the enums to as-const unions when it builds the UI).
+// pickers (the level-editor UI tightens the enums to as-const unions).
 export interface DefinitionLevelsFormValue {
   count: string
   finishType: FinishType

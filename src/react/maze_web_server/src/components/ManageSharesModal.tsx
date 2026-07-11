@@ -34,7 +34,7 @@ const DEBOUNCE_MS = 250
 
 // Grant / revoke / list access for a definition or collection: a live grantee
 // list (resolved to usernames by the server) plus a username people-picker that
-// searches the B5 lookup as you type. Reused across the games + collections areas.
+// searches the username lookup as you type. Reused across the games + collections areas.
 export function ManageSharesModal({ subject, onClose, onVisibilityChange }: Props) {
   const token = useToken()
 

@@ -8,8 +8,8 @@ import { fetchUserAvatar } from '../api/client'
 //
 // The core is generic over the image kind; each kind gets a thin wrapper (a
 // namespaced key + a fetcher) at the bottom. Only `user` (avatars) is wired
-// today — the game-definition / game-collection images arrive with D5 by adding
-// a `fetchBlob` + wrapper, with no change to the cache itself.
+// today — game-definition / game-collection images would each add a `fetchBlob`
+// + wrapper, with no change to the cache itself.
 
 /** The kinds of guarded image the cache serves. */
 export type ImageSubjectKind = 'user' | 'game-definition' | 'game-collection'

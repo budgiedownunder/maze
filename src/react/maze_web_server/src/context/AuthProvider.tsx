@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     stopRenewalInterval()
     // Sign-out is client-side (no page reload), so drop the previous session's
     // cached guarded-image blobs — both for memory hygiene and so a later
-    // sign-in in the same tab can't reuse an access-controlled image (D5).
+    // sign-in in the same tab can't reuse an access-controlled image.
     resetImageCache()
     if (state) {
       try {

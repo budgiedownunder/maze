@@ -234,7 +234,7 @@ export function resetMockGameDefinitions(): void {
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(GAME_DEFINITION_STORAGE_KEY)
 }
 
-// The searchable user directory the share people-picker (B5 lookup) matches
+// The searchable user directory the share people-picker's username lookup matches
 // against, plus per-subject grantee state. The share endpoints store only ids;
 // the list handler resolves them back to `{ id, username }` via this directory,
 // ordered by username — mirroring the server. In-memory (reset between tests).
@@ -624,8 +624,8 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 })
   }),
 
-  // User lookup (B5) — username-prefix search for the share people-picker. A
-  // blank prefix returns an empty page (never enumerates every user).
+  // User lookup — username-prefix search for the share people-picker. A blank
+  // prefix returns an empty page (never enumerates every user).
   http.get(`${BASE}/users/lookup`, ({ request }) => {
     const url = new URL(request.url)
     const prefix = (url.searchParams.get('username') ?? '').trim().toLowerCase()
