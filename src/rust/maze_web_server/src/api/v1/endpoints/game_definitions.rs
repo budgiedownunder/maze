@@ -17,15 +17,21 @@
 //!     stays stable and its leaderboard fair.
 //!   * **Setting `Curated` requires an admin;** every other visibility is
 //!     owner-only (the mutations are already owner-scoped by storage).
-//!   * **Publishing** (a `Private` → published transition) starts a fresh board
-//!     by clearing the definition's score rows; **deleting** likewise resets the
-//!     board. Unpublishing back to `Private` freezes the board (a later
-//!     re-publish starts fresh again).
+//!   * **Every game is leaderboard-tracked.** A published game's board is shared
+//!     with everyone who can view it; a private game's board is the owner's own
+//!     (only they can reach the play-fetch). `GET /scores` enforces who may *read*
+//!     a `def:<id>` board (owner ∨ curated ∨ public ∨ granted).
+//!   * **The board resets only when the game changes how it plays** — a reshuffle,
+//!     or a PUT that alters a gameplay-affecting config field (structure, scene,
+//!     content, mechanics) or the rotation. Cosmetic edits (title, status label,
+//!     `levels.hideCompletedEnemies`, name, description) keep it; publishing /
+//!     unpublishing keeps it; **deleting** clears it.
 //!   * **Sharing keeps the tier honest.** Granting the first share auto-promotes
-//!     a `Private` definition to `Shared` (a publish — fresh board); revoking the
-//!     last grantee demotes it back to `Private` (a freeze). Only `Private`↔`Shared`
-//!     is toggled — `Public`/`Curated` are never narrowed by a grant/revoke — so
-//!     `visibility` stays the single source of truth for the access tier.
+//!     a `Private` definition to `Shared`; revoking the last grantee demotes it
+//!     back to `Private`. Only `Private`↔`Shared` is toggled — `Public`/`Curated`
+//!     are never narrowed — so `visibility` stays the single source of truth for
+//!     the access tier. A tier change is not a gameplay change, so the board is
+//!     untouched.
 //!
 //! `GET /{id}` is the **play-fetch**: it returns the definition with the
 //! *effective* seed spliced into `config` plus the computed `challengeKey`.
@@ -199,14 +205,47 @@ fn mint_seed() -> u64 {
     rand_core::OsRng.next_u64()
 }
 
-/// Whether a definition is *published* — accessible to anyone but the owner and
-/// therefore leaderboard-tracked. `Shared` counts only once it has a grantee.
-fn is_published(visibility: Visibility, grantees: &[Uuid]) -> bool {
-    match visibility {
-        Visibility::Public | Visibility::Curated => true,
-        Visibility::Shared => !grantees.is_empty(),
-        Visibility::Private => false,
+/// The gameplay-affecting projection of a config — the config minus the cosmetic
+/// keys. Two configs with the same projection produce the same run, so an edit
+/// that leaves the projection unchanged (splash `title`, status-bar `mode`,
+/// `levels.hideCompletedEnemies`, plus the server-owned `seed`) doesn't
+/// invalidate the leaderboard.
+fn gameplay_signature(config: &serde_json::Value) -> serde_json::Value {
+    let mut c = config.clone();
+    if let Some(obj) = c.as_object_mut() {
+        obj.remove("title");
+        obj.remove("mode");
+        obj.remove("seed");
+        if let Some(levels) = obj.get_mut("levels").and_then(|v| v.as_object_mut()) {
+            levels.remove("hideCompletedEnemies");
+        }
     }
+    c
+}
+
+/// The definition id behind a `def:<id>` (or `def:<id>:<date>`) leaderboard
+/// challenge, or `None` for any other challenge namespace.
+fn parse_definition_challenge(challenge: &str) -> Option<Uuid> {
+    Uuid::parse_str(challenge.strip_prefix("def:")?.split(':').next()?).ok()
+}
+
+/// Whether `user` may read the leaderboard behind `challenge`. A `def:<id>` board
+/// is gated by the same view rule as the game (owner ∨ public ∨ curated ∨ granted)
+/// so a private game's board stays owner-only; every other challenge namespace is
+/// readable by any authenticated caller (the difficulty boards are global).
+pub(crate) async fn can_read_challenge_board(
+    store: &dyn storage::Store,
+    user: &User,
+    challenge: &str,
+) -> bool {
+    let Some(id) = parse_definition_challenge(challenge) else {
+        return true;
+    };
+    let Ok(def) = store.get_game_definition(id).await else {
+        return false;
+    };
+    let grantees = store.get_game_definition_grantees(id).await.unwrap_or_default();
+    can_view(&def, user, &grantees)
 }
 
 /// Whether `viewer` may see/play `def`, composed from the storage primitives:
@@ -450,7 +489,11 @@ pub async fn get_game_definition(
     }
 
     let (challenge_key, effective_seed) = compute_play_subject(&definition, Utc::now().date_naive());
-    let leaderboard_tracked = is_published(definition.visibility, &grantees);
+    // Every game the caller can reach records scores: a published game's board is
+    // shared with everyone who can view it; a private game's board is the owner's
+    // own (only they can reach this fetch). The read side (GET /scores) enforces
+    // who may *see* a board.
+    let leaderboard_tracked = true;
     definition.config = splice_seed(definition.config, effective_seed);
 
     Ok(HttpResponse::Ok().json(GamePlayResponse {
@@ -468,9 +511,10 @@ pub async fn get_game_definition(
     summary = "Update a game definition",
     description = "Updates a definition owned by the caller. The seed and image are server-owned \
                    and preserved; name, description, visibility, rotation, and config are replaced. \
-                   Setting visibility to 'curated' requires an admin. Publishing (a private → \
-                   shared/public/curated transition) starts a fresh leaderboard by clearing the \
-                   definition's score rows; unpublishing back to private freezes the board.",
+                   Setting visibility to 'curated' requires an admin. If the edit changes a \
+                   gameplay-affecting field (structure/scene/content/mechanics) or the rotation, the \
+                   leaderboard is reset; cosmetic-only edits (title, status label, hide-cleared \
+                   enemies, name, description) and visibility changes keep it.",
     put,
     path = "/api/v1/game-definitions/{id}",
     params(("id" = String, Path, description = "Definition id")),
@@ -535,12 +579,15 @@ pub async fn update_game_definition(
         .await
         .map_err(map_write_error)?;
 
-    // Publishing an unpublished (Private) definition starts a fresh board — a
-    // re-publish must not inherit a prior board's rows (decision: unpublish
-    // freezes, re-publish starts fresh).
-    if existing.visibility == Visibility::Private && definition.visibility != Visibility::Private {
+    // A change that alters how the game plays makes past times incomparable, so
+    // its board is reset. Cosmetic-only edits (title / status label / hide-cleared
+    // enemies / name / description) keep it, and changing visibility on its own
+    // (publish / unpublish) never resets — only the run itself does.
+    if existing.rotation != definition.rotation
+        || gameplay_signature(&existing.config) != gameplay_signature(&definition.config)
+    {
         if let Err(err) = store_lock.clear_challenge_scores_prefix(&challenge_prefix(id)).await {
-            log::warn!("failed to reset board on publish for definition {id}: {err}");
+            log::warn!("failed to reset board on gameplay change for definition {id}: {err}");
         }
     }
 
@@ -685,12 +732,12 @@ async fn owned_definition_grantees(
 }
 
 /// Keeps a definition's visibility tier in step with its grant list after a
-/// grant: the first grant publishes a `Private` draft as `Shared`, which starts a
-/// fresh board (mirroring the PUT publish path — a re-publish must not inherit a
-/// prior board's rows). Only `Private` is promoted; `Public`/`Curated` are left
-/// alone (grantees are redundant there, and their tier must not be narrowed).
-/// Best-effort: a failure is logged, not surfaced, as the grant itself already
-/// succeeded.
+/// grant: the first grant promotes a `Private` draft to `Shared` so the access
+/// badge reflects reality. Only `Private` is promoted; `Public`/`Curated` are
+/// left alone (grantees are redundant there, and their tier must not be
+/// narrowed). Publishing keeps the board — only a gameplay change resets it —
+/// so no board reset here. Best-effort: a failure is logged, not surfaced, as
+/// the grant itself already succeeded.
 async fn publish_definition_on_grant(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
     let mut def = match store.get_game_definition(id).await {
         Ok(def) => def,
@@ -705,10 +752,6 @@ async fn publish_definition_on_grant(store: &mut dyn storage::Store, owner: &Use
     def.visibility = Visibility::Shared;
     if let Err(err) = store.update_game_definition(owner, &mut def).await {
         log::warn!("auto-publish: promote definition {id} to shared failed: {err}");
-        return;
-    }
-    if let Err(err) = store.clear_challenge_scores_prefix(&challenge_prefix(id)).await {
-        log::warn!("auto-publish: reset board for definition {id} failed: {err}");
     }
 }
 
@@ -1100,11 +1143,37 @@ mod tests {
     }
 
     #[test]
-    fn is_published_reflects_the_publish_rule() {
-        assert!(!is_published(Visibility::Private, &[]));
-        assert!(!is_published(Visibility::Shared, &[]));
-        assert!(is_published(Visibility::Shared, &[Uuid::nil()]));
-        assert!(is_published(Visibility::Public, &[]));
-        assert!(is_published(Visibility::Curated, &[]));
+    fn gameplay_signature_ignores_cosmetic_keys() {
+        let base = serde_json::json!({
+            "rows": 6, "cols": 6, "seed": 1, "title": "A", "mode": "B",
+            "levels": { "count": 2, "hideCompletedEnemies": true }
+        });
+        // Cosmetic-only edits leave the signature unchanged.
+        let cosmetic = serde_json::json!({
+            "rows": 6, "cols": 6, "seed": 999, "title": "Z", "mode": "Y",
+            "levels": { "count": 2, "hideCompletedEnemies": false }
+        });
+        assert_eq!(gameplay_signature(&base), gameplay_signature(&cosmetic));
+
+        // A gameplay field (grid, a level setting) changes the signature.
+        let structural = serde_json::json!({
+            "rows": 8, "cols": 6, "seed": 1, "title": "A", "mode": "B",
+            "levels": { "count": 2, "hideCompletedEnemies": true }
+        });
+        assert_ne!(gameplay_signature(&base), gameplay_signature(&structural));
+        let level_change = serde_json::json!({
+            "rows": 6, "cols": 6, "seed": 1, "title": "A", "mode": "B",
+            "levels": { "count": 3, "hideCompletedEnemies": true }
+        });
+        assert_ne!(gameplay_signature(&base), gameplay_signature(&level_change));
+    }
+
+    #[test]
+    fn parse_definition_challenge_extracts_the_id() {
+        let id = Uuid::from_u128(0xabc);
+        assert_eq!(parse_definition_challenge(&format!("def:{id}")), Some(id));
+        assert_eq!(parse_definition_challenge(&format!("def:{id}:2026-07-11")), Some(id));
+        assert_eq!(parse_definition_challenge("hard:12345"), None);
+        assert_eq!(parse_definition_challenge("def:not-a-uuid"), None);
     }
 }

@@ -8395,7 +8395,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn publishing_a_definition_resets_its_board() {
+    async fn publishing_a_definition_keeps_its_board() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
             create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
@@ -8408,11 +8408,79 @@ mod test_definitions {
         record_challenge_score(&store, &owner, &challenge).await;
         assert_eq!(challenge_board_len(&store, &challenge).await, 2);
 
-        // Private → public is a publish, which starts a fresh board.
+        // Private → public with no gameplay change is a pure publish — the board
+        // carries over (only a gameplay change resets it).
         let body = definition_request("Draft", Visibility::Public, Rotation::Static);
         let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        assert_eq!(challenge_board_len(&store, &challenge).await, 2);
+    }
+
+    #[actix_web::test]
+    async fn saving_a_gameplay_change_resets_the_board() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
+        let challenge = format!("def:{}", def.id);
+        record_challenge_score(&store, &owner, &challenge).await;
+        assert_eq!(challenge_board_len(&store, &challenge).await, 1);
+
+        // Changing the grid is a gameplay change → the board is reset.
+        let mut body = definition_request("Draft", Visibility::Private, Rotation::Static);
+        body.config = serde_json::json!({ "rows": 9, "cols": 6, "seed": 0, "levels": { "count": 2 } });
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
         assert_eq!(challenge_board_len(&store, &challenge).await, 0);
+    }
+
+    #[actix_web::test]
+    async fn saving_a_cosmetic_change_keeps_the_board() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
+        let challenge = format!("def:{}", def.id);
+        record_challenge_score(&store, &owner, &challenge).await;
+
+        // Only cosmetic keys change (title / status label) → the board is kept.
+        let mut body = definition_request("Renamed", Visibility::Private, Rotation::Static);
+        body.description = Some("A note".to_string());
+        body.config = serde_json::json!({ "rows": 6, "cols": 6, "seed": 0, "levels": { "count": 2 }, "title": "Splash", "mode": "Label" });
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        assert_eq!(challenge_board_len(&store, &challenge).await, 1);
+    }
+
+    #[actix_web::test]
+    async fn a_private_games_board_is_owner_only() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let def = seed_game_definition(&store, &owner, "Solo", Visibility::Private, Rotation::Static).await;
+        let challenge = format!("def:{}", def.id);
+        record_challenge_score(&store, &owner, &challenge).await;
+        let url = format!("/api/v1/scores?challenge={challenge}");
+
+        // The owner reads their private game's board; nobody else can.
+        let req = create_test_get_request(&url, Some(owner.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        let req = create_test_get_request(&url, Some(other.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
+
+        // Nor can a non-owner record a run on it.
+        let post = RecordScoreRequest { maze_id: None, challenge: Some(challenge.clone()), score: 5, elapsed_ms: 1000 };
+        let req = create_test_post_request("/api/v1/scores", Some(other.api_key), None, Some(&post));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::FORBIDDEN);
     }
 
     #[actix_web::test]
@@ -8632,7 +8700,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn granting_a_private_definition_publishes_it_as_shared_with_a_fresh_board() {
+    async fn granting_a_private_definition_publishes_it_as_shared_and_keeps_its_board() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
             create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
@@ -8640,7 +8708,7 @@ mod test_definitions {
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
 
         let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
-        // A stale board left frozen from a prior publish; promoting must start fresh.
+        // The owner's own runs on the private draft.
         let challenge = format!("def:{}", def.id);
         record_challenge_score(&store, &owner, &challenge).await;
         assert_eq!(challenge_board_len(&store, &challenge).await, 1);
@@ -8649,9 +8717,9 @@ mod test_definitions {
         let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
 
-        // The first grant promotes Private → Shared and resets the board.
+        // The first grant promotes Private → Shared; publishing keeps the board.
         assert_eq!(definition_visibility(&store, def.id).await, Visibility::Shared);
-        assert_eq!(challenge_board_len(&store, &challenge).await, 0, "publish starts a fresh board");
+        assert_eq!(challenge_board_len(&store, &challenge).await, 1, "publishing keeps the board");
     }
 
     #[actix_web::test]

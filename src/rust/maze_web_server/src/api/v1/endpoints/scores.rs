@@ -27,6 +27,8 @@ use storage::{Error as StoreError, ScoreEntry, ScoreMetric, ScoreOrdering, Score
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::api::v1::endpoints::game_definitions::can_read_challenge_board;
+
 // ---------------------------------------------------------------------------
 // Request / response shapes
 // ---------------------------------------------------------------------------
@@ -168,6 +170,11 @@ pub async fn record_score(
     };
 
     let mut store_lock = store.write().await;
+    if let Some(challenge) = entry.challenge.as_deref() {
+        if !can_read_challenge_board(&**store_lock, &user, challenge).await {
+            return Err(ErrorForbidden("Not authorized to record a score for this game"));
+        }
+    }
     match store_lock.record_score(&entry).await {
         Ok(_) => Ok(HttpResponse::Created().json(ScoreResponse::from(entry))),
         Err(StoreError::Other(msg)) => Err(ErrorBadRequest(msg)),
@@ -320,7 +327,7 @@ pub async fn get_leaderboard(
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
-    let _user = get_authorized_user(&req)?;
+    let user = get_authorized_user(&req)?;
     let q = query.into_inner();
 
     let metric = parse_metric(q.metric.as_deref())?;
@@ -340,6 +347,9 @@ pub async fn get_leaderboard(
             store_lock.maze_leaderboard(maze_id, ordering, fetch, offset, include_usernames).await
         }
         (None, Some(challenge)) => {
+            if !can_read_challenge_board(&**store_lock, &user, challenge).await {
+                return Err(ErrorForbidden("Not authorized to read this leaderboard"));
+            }
             store_lock
                 .challenge_leaderboard(challenge, ordering, fetch, offset, include_usernames)
                 .await
