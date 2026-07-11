@@ -559,7 +559,8 @@ export const handlers = [
       ...def,
       config: { ...def.config, seed: def.seed },
       challengeKey: `def:${def.id}`,
-      leaderboardTracked: def.visibility !== 'private',
+      // Every game is tracked; a private game's board is just owner-only.
+      leaderboardTracked: true,
     })
   }),
 

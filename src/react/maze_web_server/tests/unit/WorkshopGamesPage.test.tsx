@@ -145,20 +145,20 @@ describe('WorkshopGamesPage', () => {
     expect(locationStub.href).toBe('/game/?def=d1')
   })
 
-  it('Leaderboard opens the board modal; an unpublished game says it has none', async () => {
+  it('Leaderboard opens the board modal showing the game’s board', async () => {
     server.use(
       listOf(def({ id: 'd1', name: 'Tower', visibility: 'private' })),
       // The play-fetch reads the store; provide the single-definition response.
       http.get('/api/v1/game-definitions/d1', () =>
-        HttpResponse.json({ ...def({ id: 'd1', name: 'Tower', visibility: 'private' }), challengeKey: 'def:d1', leaderboardTracked: false })),
+        HttpResponse.json({ ...def({ id: 'd1', name: 'Tower', visibility: 'private' }), challengeKey: 'def:d1', leaderboardTracked: true })),
     )
     renderPage()
     await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Leaderboard for Tower' }))
     const dialog = await screen.findByRole('dialog', { name: 'Leaderboard: Tower' })
-    // Private ⇒ not tracked ⇒ the "no leaderboard" message, not a board.
-    await waitFor(() => expect(dialog).toHaveTextContent(/isn.t published/i))
+    // Every game has a board (a private game's is owner-only); the modal shows it.
+    await waitFor(() => expect(within(dialog).getByText('alice')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Leaderboard: Tower' })).toBeNull())

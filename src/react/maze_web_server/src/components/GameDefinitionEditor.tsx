@@ -17,7 +17,7 @@ import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { validateMazeGenerationFields } from '../utils/validation'
-import { MAX_LEVEL_COUNT, FINISH_TYPES, reshuffleConfirmMessage, type FinishType } from '../utils/gameDefinitions'
+import { MAX_LEVEL_COUNT, FINISH_TYPES, isGameplayChange, reshuffleConfirmMessage, type FinishType } from '../utils/gameDefinitions'
 import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import type { GameDefinitionRequest } from '../types/api'
@@ -42,6 +42,18 @@ const STEPS = [
 type EditorStep = (typeof STEPS)[number]['id']
 
 const ID_PREFIX = 'gamedef'
+
+// Fills the in-game splash title / status-bar label from the name when left
+// blank, so a definition always announces itself as something.
+function withNameDefaults(form: DefinitionFormState): DefinitionFormState {
+  const name = form.name.trim()
+  return {
+    ...form,
+    name,
+    title: form.title.trim() === '' ? name : form.title,
+    mode: form.mode.trim() === '' ? name : form.mode,
+  }
+}
 
 interface GameDefinitionEditorProps {
   mode: 'tabs' | 'wizard'
@@ -135,21 +147,28 @@ export function GameDefinitionEditor({
   // Preview only needs a generatable config — a name is a save-only requirement.
   const canPreview = generationError === null
 
+  // A pending save awaiting confirmation because it changes gameplay and would
+  // reset a scored board. Null when no confirmation is needed.
+  const [pendingSave, setPendingSave] = useState<GameDefinitionRequest | null>(null)
+
   // Build the config (+ request) from the live form, defaulting the in-game
   // splash title / status-bar label from the name when left blank, so a
   // definition always announces itself as something.
   function buildFromForm() {
-    const name = form.name.trim()
-    return buildDefinitionConfig({
-      ...form,
-      name,
-      title: form.title.trim() === '' ? name : form.title,
-      mode: form.mode.trim() === '' ? name : form.mode,
-    })
+    return buildDefinitionConfig(withNameDefaults(form))
   }
 
   function handleCommit() {
-    onSubmit(buildFromForm().request)
+    const request = buildFromForm().request
+    // A gameplay-affecting edit on a scored game wipes its board on save, so
+    // warn first; cosmetic-only edits (and unscored games) save straight away.
+    const before = buildDefinitionConfig(withNameDefaults(initialForm)).request.config
+    const changesGameplay = initialForm.rotation !== form.rotation || isGameplayChange(before, request.config)
+    if (hasScores && changesGameplay) {
+      setPendingSave(request)
+    } else {
+      onSubmit(request)
+    }
   }
 
   function handlePreview() {
@@ -321,6 +340,17 @@ export function GameDefinitionEditor({
         error={reshuffleError}
         onConfirm={() => void handleReshuffle()}
         onCancel={() => { setShowReshuffleConfirm(false); setReshuffleError(null) }}
+      />
+    )}
+
+    {pendingSave && (
+      <ConfirmModal
+        title="Save Changes"
+        message="These changes affect how the game plays, so its leaderboard will be reset — the current scores were set on the previous version. This can't be undone."
+        confirmLabel="Save and reset"
+        isDangerous
+        onConfirm={() => { const request = pendingSave; setPendingSave(null); onSubmit(request) }}
+        onCancel={() => setPendingSave(null)}
       />
     )}
     </>

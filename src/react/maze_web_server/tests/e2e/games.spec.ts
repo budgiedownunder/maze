@@ -121,7 +121,7 @@ test('Share adds and removes a grantee via the username people-picker', async ({
   await expect(dialog).toBeHidden()
 })
 
-test('Leaderboard opens the board modal for an unpublished game', async ({ page }) => {
+test('Leaderboard opens the board modal showing the board', async ({ page }) => {
   await login(page)
 
   const name = `Boarded ${Date.now()}`
@@ -134,8 +134,8 @@ test('Leaderboard opens the board modal for an unpublished game', async ({ page 
   await page.getByRole('button', { name: `Leaderboard for ${name}` }).click()
   const dialog = page.getByRole('dialog', { name: `Leaderboard: ${name}` })
   await expect(dialog).toBeVisible()
-  // A fresh game is private → not published → no board yet.
-  await expect(dialog.getByText(/isn.t published/i)).toBeVisible()
+  // Every game has a board (a private game's is owner-only); the modal shows it.
+  await expect(dialog.getByRole('tab', { name: /fastest time/i })).toBeVisible()
 
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect(dialog).toBeHidden()

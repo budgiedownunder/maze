@@ -437,6 +437,54 @@ describe('GameDefinitionEditor — reshuffle', () => {
   })
 })
 
+describe('GameDefinitionEditor — save reset warning', () => {
+  const scoredEdit = { mode: 'tabs' as const, hasScores: true, initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower', seed: 5 } }
+
+  it('a cosmetic-only save on a scored game does not warn', async () => {
+    const { onSubmit } = renderEditor(scoredEdit)
+    // The description is a non-config field — cosmetic.
+    await userEvent.type(screen.getByLabelText('Description'), 'Now with lore')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.queryByRole('dialog', { name: 'Save Changes' })).toBeNull()
+    expect(onSubmit).toHaveBeenCalledOnce()
+  })
+
+  it('a gameplay-affecting save on a scored game warns before submitting', async () => {
+    const { onSubmit } = renderEditor(scoredEdit)
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '10' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // The warning appears; nothing is saved yet.
+    const dialog = screen.getByRole('dialog', { name: 'Save Changes' })
+    expect(dialog).toHaveTextContent(/leaderboard will be reset/i)
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save and reset' }))
+    expect(onSubmit).toHaveBeenCalledOnce()
+    expect(onSubmit.mock.calls[0][0].config).toMatchObject({ rows: 10 })
+  })
+
+  it('cancelling the warning does not submit', async () => {
+    const { onSubmit } = renderEditor(scoredEdit)
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '10' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Save Changes' })).getByRole('button', { name: 'Cancel' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Save Changes' })).toBeNull()
+  })
+
+  it('a gameplay-affecting save on an unscored game does not warn', async () => {
+    const { onSubmit } = renderEditor({ ...scoredEdit, hasScores: false })
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '10' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.queryByRole('dialog', { name: 'Save Changes' })).toBeNull()
+    expect(onSubmit).toHaveBeenCalledOnce()
+  })
+})
+
 describe('GameDefinitionEditor — preview', () => {
   it('shows no Preview button without onPreview', () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })

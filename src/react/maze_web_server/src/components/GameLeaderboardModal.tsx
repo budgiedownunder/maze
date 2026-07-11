@@ -15,18 +15,19 @@ interface Props {
 // Read-only quick-view of a single game's leaderboard, for the workshop games
 // list. The board itself is the shared `<Leaderboard>` component; this only
 // resolves the game's challenge key (the play-fetch computes it) and frames it.
-// An unpublished (private) game has no tracked board yet, so we say so instead.
+// Every game has a board — a private game's is simply owner-only — so it shows
+// the board directly (empty when no one has scored yet).
 export function GameLeaderboardModal({ token, gameId, name, currentUserId, onClose }: Props) {
-  const [state, setState] = useState<{ challenge: string; tracked: boolean } | null>(null)
+  const [challenge, setChallenge] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const isLoading = state == null && error == null
+  const isLoading = challenge == null && error == null
   useBusyCursor(isLoading)
 
   useEffect(() => {
     let cancelled = false
     getGameDefinition(token, gameId)
-      .then(def => { if (!cancelled) setState({ challenge: def.challengeKey, tracked: def.leaderboardTracked }) })
+      .then(def => { if (!cancelled) setChallenge(def.challengeKey) })
       .catch((ex: unknown) => { if (!cancelled) setError((ex as Error).message || 'Failed to load leaderboard.') })
     return () => { cancelled = true }
   }, [token, gameId])
@@ -38,13 +39,10 @@ export function GameLeaderboardModal({ token, gameId, name, currentUserId, onClo
 
         {isLoading && <p aria-label="Loading">Loading…</p>}
         {error && <p role="alert" className="error-msg">{error}</p>}
-        {state != null && !state.tracked && (
-          <p>This game isn’t published, so it has no leaderboard yet.</p>
-        )}
-        {state != null && state.tracked && (
+        {challenge != null && (
           <Leaderboard
             token={token}
-            subject={{ challenge: state.challenge }}
+            subject={{ challenge }}
             currentUserId={currentUserId}
             showPlayer
           />

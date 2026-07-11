@@ -35,6 +35,28 @@ export function accessDescription(visibility: Visibility): string {
   return ACCESS_DESCRIPTIONS[visibility]
 }
 
+// The gameplay-affecting projection of a config — the config minus the cosmetic
+// keys the server also ignores when deciding whether an edit resets the board
+// (splash `title`, status-bar `mode`, the server-owned `seed`, and
+// `levels.hideCompletedEnemies`). Two configs with the same projection play the
+// same, so an edit between them doesn't invalidate the leaderboard.
+function gameplaySignature(config: Record<string, unknown>): string {
+  const clone = JSON.parse(JSON.stringify(config ?? {})) as Record<string, unknown>
+  delete clone.title
+  delete clone.mode
+  delete clone.seed
+  const levels = clone.levels
+  if (levels && typeof levels === 'object') delete (levels as Record<string, unknown>).hideCompletedEnemies
+  return JSON.stringify(clone)
+}
+
+// Whether an edit changes how the game plays — any non-cosmetic config field
+// differs. Mirrors the server's board-reset rule so the editor can warn before a
+// save that would wipe the leaderboard.
+export function isGameplayChange(before: Record<string, unknown>, after: Record<string, unknown>): boolean {
+  return gameplaySignature(before) !== gameplaySignature(after)
+}
+
 // Confirm-dialog body for a layout reshuffle. A reshuffle changes the generated
 // maze, so a definition that already has scores loses its (now-incomparable)
 // leaderboard — say so more strongly when scores exist. Shared by the editor's

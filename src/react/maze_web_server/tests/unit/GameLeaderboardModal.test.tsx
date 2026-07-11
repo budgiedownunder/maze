@@ -27,13 +27,13 @@ describe('GameLeaderboardModal', () => {
     expect(screen.getByRole('tab', { name: /fastest time/i })).toBeInTheDocument()
   })
 
-  it('says an unpublished game has no leaderboard yet', async () => {
+  it('shows the owner-only board for a private game', async () => {
     server.use(
       http.get('/api/v1/game-definitions/d1', () =>
-        HttpResponse.json({ id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'private', seed: 1, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x', challengeKey: 'def:d1', leaderboardTracked: false })),
+        HttpResponse.json({ id: 'd1', ownerId: 'o1', name: 'Tower', visibility: 'private', seed: 1, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x', challengeKey: 'def:d1', leaderboardTracked: true })),
     )
     renderModal()
-    await waitFor(() => expect(screen.getByText(/isn.t published/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('alice')).toBeInTheDocument())
   })
 
   it('surfaces a load failure', async () => {
