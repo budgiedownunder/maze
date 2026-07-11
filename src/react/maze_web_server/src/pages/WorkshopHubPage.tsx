@@ -15,12 +15,14 @@ export function WorkshopHubPage() {
       <main className="home-main">
         <section className="home-tiles">
           <button type="button" className="home-tile" onClick={() => navigate('/workshop/my-games')}>
+            <img src="/images/workshop/icon-games.svg" className="home-tile-img" alt="" aria-hidden="true" />
             <div className="home-tile-text">
               <h2 className="home-tile-title">My Games</h2>
               <p className="home-tile-desc">Create, edit, publish and share your 3D games</p>
             </div>
           </button>
           <button type="button" className="home-tile" onClick={() => navigate('/workshop/my-game-collections')}>
+            <img src="/images/workshop/icon-collections.svg" className="home-tile-img" alt="" aria-hidden="true" />
             <div className="home-tile-text">
               <h2 className="home-tile-title">My Game Collections</h2>
               <p className="home-tile-desc">Group your games into ordered collections</p>
@@ -28,6 +30,7 @@ export function WorkshopHubPage() {
           </button>
           {profile?.is_admin && (
             <button type="button" className="home-tile" onClick={() => navigate('/workshop/features')}>
+              <img src="/images/workshop/icon-features.svg" className="home-tile-img" alt="" aria-hidden="true" />
               <div className="home-tile-text">
                 <h2 className="home-tile-title">Features [Admin]</h2>
                 <p className="home-tile-desc">Manage the featured games and collections everyone sees</p>

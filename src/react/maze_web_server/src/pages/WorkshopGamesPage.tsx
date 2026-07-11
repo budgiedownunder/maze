@@ -19,8 +19,17 @@ import {
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import { launchDefinitionPreview } from '../utils/definitionPreview'
 import { launchDefinition } from '../utils/play3dLaunch'
-import { accessLabel, reshuffleConfirmMessage } from '../utils/gameDefinitions'
+import { accessDescription, accessLabel, reshuffleConfirmMessage } from '../utils/gameDefinitions'
 import type { GameDefinition, GameDefinitionRequest, GamePlayResponse } from '../types/api'
+
+// A one-line game summary — level count, rotation, and access tier — shown under
+// the name. Level count lives in the opaque config; missing/≤1 reads as single.
+function gameSummary(d: GameDefinition): string {
+  const count = Number((d.config.levels as { count?: number } | undefined)?.count) || 1
+  const levels = count <= 1 ? 'Single level' : `${count} levels`
+  const rotation = d.rotation === 'daily' ? 'Daily' : 'Static'
+  return `${levels} · ${rotation} · ${accessLabel(d.visibility)}`
+}
 
 // The workshop's Games area: the caller's own game definitions, each with the
 // full lifecycle of actions (play, leaderboard, edit, reshuffle, duplicate,
@@ -325,39 +334,51 @@ export function WorkshopGamesPage() {
         {!isLoading && !error && games.length > 0 && (
           <ul className="game-list">
             {games.map(d => (
-              <li key={d.id} className="game-list-item">
+              <li
+                key={d.id}
+                className="game-list-item"
+                role="button"
+                tabIndex={0}
+                aria-label={`Edit ${d.name}`}
+                onClick={() => void handleEdit(d.id)}
+                onKeyDown={e => {
+                  // Only the row itself (not a focused action button) edits on Enter/Space.
+                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault()
+                    void handleEdit(d.id)
+                  }
+                }}
+              >
+                <div className="game-thumb" title={accessDescription(d.visibility)}>
+                  <img className="game-thumb-base" src="/images/workshop/game.svg" alt="" aria-hidden="true" />
+                  <img className="game-thumb-marker" src={`/images/workshop/marker-${d.visibility}.svg`} alt="" aria-hidden="true" />
+                </div>
                 <div className="maze-item-text">
                   <span className="maze-item-name" title={d.name}>{d.name}</span>
-                  <span className="maze-item-subtitle">
-                    <span className="access-badge">{accessLabel(d.visibility)}</span>
-                  </span>
+                  <span className="maze-item-subtitle">{gameSummary(d)}</span>
                 </div>
                 <div className="game-item-actions">
-                  <button type="button" className="maze-item-action btn-secondary" onClick={() => launchDefinition(d.id)} aria-label={`Play ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); launchDefinition(d.id) }} aria-label={`Play ${d.name}`}>
                     <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Play</span>
                   </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={() => setViewingBoard(d)} aria-label={`Leaderboard for ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setViewingBoard(d) }} aria-label={`Leaderboard for ${d.name}`}>
                     <img src="/images/icons/icon_leaderboard.svg" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Leaderboard</span>
                   </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={() => void handleEdit(d.id)} aria-label={`Edit ${d.name}`}>
-                    <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Edit</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={() => void openReshuffle(d.id)} aria-label={`Reshuffle ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void openReshuffle(d.id) }} aria-label={`Reshuffle ${d.name}`}>
                     <img src="/images/icons/icon_reshuffle.svg" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Reshuffle</span>
                   </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={() => setDuplicating({ source: d, error: null, busy: false })} aria-label={`Duplicate ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setDuplicating({ source: d, error: null, busy: false }) }} aria-label={`Duplicate ${d.name}`}>
                     <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Duplicate</span>
                   </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={() => setSharing(d)} aria-label={`Share ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(d) }} aria-label={`Share ${d.name}`}>
                     <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Share</span>
                   </button>
-                  <button type="button" className="maze-item-action btn-danger-outline" onClick={() => setDeleting({ def: d, busy: false, error: null })} aria-label={`Delete ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ def: d, busy: false, error: null }) }} aria-label={`Delete ${d.name}`}>
                     <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Delete</span>
                   </button>

@@ -72,7 +72,8 @@ test('Edit opens the tabs editor over an existing game and Save persists the cha
   await wizard.getByRole('button', { name: 'Finish' }).click()
   await expect(page.getByText(name)).toBeVisible()
 
-  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  // Clicking the row (on its name, not an action button) opens the editor.
+  await page.locator('.game-list-item', { hasText: name }).getByText(name).click()
 
   // Tabs mode: no wizard navigation, Save instead of Finish, name hydrated.
   const editor = page.getByRole('dialog', { name: 'Edit Game' })

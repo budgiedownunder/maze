@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Game">
+  <defs>
+    <radialGradient id="orb" cx="38%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#fff6cc"/>
+      <stop offset="0.55" stop-color="#ffd21f"/>
+      <stop offset="1" stop-color="#c2740a"/>
+    </radialGradient>
+  </defs>
+  <!-- bottom tier (light blue) -->
+  <polygon points="32,31.5 55,43 32,54.5 9,43" fill="#bae6fd"/>
+  <g stroke="#0c4a6e" stroke-width="1" stroke-opacity=".22" stroke-linecap="round">
+    <line x1="9" y1="43" x2="55" y2="43"/>
+    <line x1="32" y1="31.5" x2="32" y2="54.5"/>
+  </g>
+  <polygon points="9,43 32,54.5 32,58.5 9,47" fill="#7dd3fc"/>
+  <polygon points="55,43 32,54.5 32,58.5 55,47" fill="#38bdf8"/>
+  <!-- lower-middle tier (indigo) -->
+  <polygon points="32,27.25 49.5,36 32,44.75 14.5,36" fill="#818cf8"/>
+  <g stroke="#ffffff" stroke-width="1" stroke-opacity=".4" stroke-linecap="round">
+    <line x1="14.5" y1="36" x2="49.5" y2="36"/>
+    <line x1="32" y1="27.25" x2="32" y2="44.75"/>
+  </g>
+  <polygon points="14.5,36 32,44.75 32,48.75 14.5,40" fill="#6366f1"/>
+  <polygon points="49.5,36 32,44.75 32,48.75 49.5,40" fill="#4338ca"/>
+  <!-- upper-middle tier (emerald) -->
+  <polygon points="32,23 44,29 32,35 20,29" fill="#34d399"/>
+  <g stroke="#ffffff" stroke-width="1" stroke-opacity=".45" stroke-linecap="round">
+    <line x1="20" y1="29" x2="44" y2="29"/>
+    <line x1="32" y1="23" x2="32" y2="35"/>
+  </g>
+  <polygon points="20,29 32,35 32,39 20,33" fill="#10b981"/>
+  <polygon points="44,29 32,35 32,39 44,33" fill="#047857"/>
+  <!-- top tier (amber) -->
+  <polygon points="32,18.5 39,22 32,25.5 25,22" fill="#fbbf24"/>
+  <g stroke="#ffffff" stroke-width="1" stroke-opacity=".5" stroke-linecap="round">
+    <line x1="25" y1="22" x2="39" y2="22"/>
+    <line x1="32" y1="18.5" x2="32" y2="25.5"/>
+  </g>
+  <polygon points="25,22 32,25.5 32,29.5 25,26" fill="#f59e0b"/>
+  <polygon points="39,22 32,25.5 32,29.5 39,26" fill="#b45309"/>
+  <!-- floating orb above the summit (warm gold, matching the finish orb) -->
+  <circle cx="32" cy="12" r="6" fill="#ffcc1a" opacity=".25"/>
+  <circle cx="32" cy="12" r="3.6" fill="url(#orb)"/>
+  <circle cx="30.7" cy="10.8" r="1.1" fill="#ffffff" opacity=".9"/>
+</svg>
+

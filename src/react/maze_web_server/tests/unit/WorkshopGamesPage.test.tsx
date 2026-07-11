@@ -77,15 +77,21 @@ describe('WorkshopGamesPage', () => {
     expect(screen.queryByText('Featured One')).toBeNull()
   })
 
-  it('shows the access badge for each game', async () => {
+  it('shows the visibility marker and tier in each game summary', async () => {
     server.use(listOf(
       def({ id: 'd1', name: 'Draft', visibility: 'private' }),
       def({ id: 'd2', name: 'Open', visibility: 'public' }),
     ))
     renderPage()
     await waitFor(() => expect(screen.getByText('Draft')).toBeInTheDocument())
-    expect(screen.getByText('Just me')).toBeInTheDocument()
-    expect(screen.getByText('Everyone')).toBeInTheDocument()
+    // Tier folded into the summary line.
+    expect(screen.getByText(/Just me/)).toBeInTheDocument()
+    expect(screen.getByText(/Everyone/)).toBeInTheDocument()
+    // Marker src reflects each game's visibility.
+    const draftRow = screen.getByText('Draft').closest('.game-list-item')!
+    expect(draftRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-private.svg')
+    const openRow = screen.getByText('Open').closest('.game-list-item')!
+    expect(openRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-public.svg')
   })
 
   it('surfaces a list failure', async () => {
@@ -274,7 +280,7 @@ describe('WorkshopGamesPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Finish' }))
     await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
     // A fresh game is private.
-    expect(screen.getByText('Just me')).toBeInTheDocument()
+    expect(screen.getByText(/Just me/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Share Tower' }))
     const dialog = await screen.findByRole('dialog', { name: 'Share: Tower' })
@@ -283,9 +289,12 @@ describe('WorkshopGamesPage', () => {
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
-    // The list refetched on the grant, so the badge now reads the shared tier.
-    await waitFor(() => expect(screen.getByText('Specific people')).toBeInTheDocument())
-    expect(screen.queryByText('Just me')).toBeNull()
+    // The row's visibility reloaded on the grant, so the summary now reads the
+    // shared tier and the marker updates.
+    await waitFor(() => expect(screen.getByText(/Specific people/)).toBeInTheDocument())
+    expect(screen.queryByText(/Just me/)).toBeNull()
+    const row = screen.getByText('Tower').closest('.game-list-item')!
+    expect(row.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-shared.svg')
   })
 
   it('Share opens the manage-sharing modal for the row', async () => {

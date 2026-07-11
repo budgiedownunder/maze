@@ -23,6 +23,18 @@ export function accessLabel(visibility: Visibility): string {
   return ACCESS_LABELS[visibility]
 }
 
+// Longer phrasing for the visibility marker's tooltip / accessible name.
+const ACCESS_DESCRIPTIONS: Record<Visibility, string> = {
+  private: 'Only you can see this game',
+  shared: 'Shared with specific people',
+  public: 'Visible to everyone',
+  curated: 'Featured for everyone',
+}
+
+export function accessDescription(visibility: Visibility): string {
+  return ACCESS_DESCRIPTIONS[visibility]
+}
+
 // Confirm-dialog body for a layout reshuffle. A reshuffle changes the generated
 // maze, so a definition that already has scores loses its (now-incomparable)
 // leaderboard — say so more strongly when scores exist. Shared by the editor's
