@@ -13,8 +13,8 @@
 
 use crate::store::{
     EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
-    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_item_order,
-    reordered_items,
+    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_grantees,
+    normalize_item_order, reordered_items,
 };
 use crate::{
     validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
@@ -5751,6 +5751,105 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
+    /// Replaces a definition's grantee list wholesale in one transaction. See
+    /// [`GameStore::set_game_definition_grantees`].
+    ///
+    /// # Examples
+    ///
+    /// Replace the grant list, then shrink it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// // Grantees must be real users (the share row has a FK to users).
+    /// let mut a = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "a".into(), full_name: "A".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("a@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut a).await.unwrap();
+    /// let mut b = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "b".into(), full_name: "B".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("b@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut b).await.unwrap();
+    /// store.set_game_definition_grantees(&owner, def.id, &[a.id, b.id]).await.unwrap();
+    /// assert_eq!(store.get_game_definition_grantees(def.id).await.unwrap().len(), 2);
+    /// store.set_game_definition_grantees(&owner, def.id, &[a.id]).await.unwrap();
+    /// assert_eq!(store.get_game_definition_grantees(def.id).await.unwrap(), vec![a.id]);
+    /// # });
+    /// ```
+    async fn set_game_definition_grantees(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error> {
+        let existing = self.get_game_definition(id).await?;
+        if existing.owner_id != owner.id {
+            return Err(Error::GameDefinitionIdNotFound(id.to_string()));
+        }
+        let cleaned = normalize_grantees(grantees, owner.id);
+        // Replace the whole set atomically so a concurrent read never sees a
+        // half-applied list.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_definition_shares WHERE definition_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        for grantee in &cleaned {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO game_definition_shares (definition_id, grantee_user_id) VALUES (?, ?)",
+            ))
+            .bind(id.to_string())
+            .bind(grantee.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
     /// All of `owner`'s own definitions, sorted by name. See
     /// [`GameStore::get_game_definitions_for_owner`].
     ///
@@ -6987,6 +7086,93 @@ impl GameStore for SqlStore {
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// Replaces a collection's grantee list wholesale in one transaction. See
+    /// [`GameStore::set_game_collection_grantees`].
+    ///
+    /// # Examples
+    ///
+    /// Replace the grant list, then clear it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
+    ///     full_name: "Owner".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut collection = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Set".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    ///
+    /// // The grantee must be a real user (the share row has a FK to users).
+    /// let mut a = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "a".into(), full_name: "A".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("a@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut a).await.unwrap();
+    /// store.set_game_collection_grantees(&owner, collection.id, &[a.id]).await.unwrap();
+    /// assert_eq!(store.get_game_collection_grantees(collection.id).await.unwrap(), vec![a.id]);
+    /// store.set_game_collection_grantees(&owner, collection.id, &[]).await.unwrap();
+    /// assert!(store.get_game_collection_grantees(collection.id).await.unwrap().is_empty());
+    /// # });
+    /// ```
+    async fn set_game_collection_grantees(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error> {
+        if self.collection_owner_id(id).await? != owner.id {
+            return Err(Error::GameCollectionIdNotFound(id.to_string()));
+        }
+        let cleaned = normalize_grantees(grantees, owner.id);
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_shares WHERE collection_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        for grantee in &cleaned {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO game_collection_shares (collection_id, grantee_user_id) VALUES (?, ?)",
+            ))
+            .bind(id.to_string())
+            .bind(grantee.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 

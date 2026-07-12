@@ -26,12 +26,11 @@
 //!     content, mechanics) or the rotation. Cosmetic edits (title, status label,
 //!     `levels.hideCompletedEnemies`, name, description) keep it; publishing /
 //!     unpublishing keeps it; **deleting** clears it.
-//!   * **Sharing keeps the tier honest.** Granting the first share auto-promotes
-//!     a `Private` definition to `Shared`; revoking the last grantee demotes it
-//!     back to `Private`. Only `Private`↔`Shared` is toggled — `Public`/`Curated`
-//!     are never narrowed — so `visibility` stays the single source of truth for
-//!     the access tier. A tier change is not a gameplay change, so the board is
-//!     untouched.
+//!   * **Access is set explicitly.** The owner sets a definition's tier
+//!     (`visibility`, a plain `PUT`) and its share list (`PUT /shares` replaces
+//!     the whole grantee list in one operation) directly — there is no implicit
+//!     coupling between them. Changing the tier is not a gameplay change, so the
+//!     board is untouched.
 //!
 //! `GET /{id}` is the **play-fetch**: it returns the definition with the
 //! *effective* seed spliced into `config` plus the computed `challengeKey`.
@@ -131,13 +130,16 @@ pub struct GamePlayResponse {
     pub leaderboard_tracked: bool,
 }
 
-/// Request body for granting a share.
+/// Request body for setting a share list — the complete set of users who should
+/// have access after the call. The server reconciles the stored list to match:
+/// anyone not listed is revoked, any new id granted, in one operation.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct GrantGameShareRequest {
-    /// The user to grant access to.
-    #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
-    pub user_id: Uuid,
+pub struct SetGameSharesRequest {
+    /// The complete desired grantee list. The owner's own id, if present, is
+    /// ignored (you can't share with yourself).
+    #[schema(value_type = Vec<String>)]
+    pub user_ids: Vec<Uuid>,
 }
 
 /// The current grantee list for a definition, returned by the share endpoints —
@@ -731,59 +733,6 @@ async fn owned_definition_grantees(
     })
 }
 
-/// Keeps a definition's visibility tier in step with its grant list after a
-/// grant: the first grant promotes a `Private` draft to `Shared` so the access
-/// badge reflects reality. Only `Private` is promoted; `Public`/`Curated` are
-/// left alone (grantees are redundant there, and their tier must not be
-/// narrowed). Publishing keeps the board — only a gameplay change resets it —
-/// so no board reset here. Best-effort: a failure is logged, not surfaced, as
-/// the grant itself already succeeded.
-async fn publish_definition_on_grant(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
-    let mut def = match store.get_game_definition(id).await {
-        Ok(def) => def,
-        Err(err) => {
-            log::warn!("auto-publish: load definition {id} failed: {err}");
-            return;
-        }
-    };
-    if def.visibility != Visibility::Private {
-        return;
-    }
-    def.visibility = Visibility::Shared;
-    if let Err(err) = store.update_game_definition(owner, &mut def).await {
-        log::warn!("auto-publish: promote definition {id} to shared failed: {err}");
-    }
-}
-
-/// Keeps a definition's visibility tier in step with its grant list after a
-/// revoke: removing the last grantee unpublishes a `Shared` definition back to
-/// `Private`, which freezes its board (no clear — unpublish freezes; a later
-/// re-publish starts fresh). Only `Shared` is demoted. Best-effort.
-async fn unpublish_definition_on_revoke(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
-    match store.get_game_definition_grantees(id).await {
-        Ok(grantees) if grantees.is_empty() => {}
-        Ok(_) => return,
-        Err(err) => {
-            log::warn!("auto-unpublish: grantees for definition {id} failed: {err}");
-            return;
-        }
-    }
-    let mut def = match store.get_game_definition(id).await {
-        Ok(def) => def,
-        Err(err) => {
-            log::warn!("auto-unpublish: load definition {id} failed: {err}");
-            return;
-        }
-    };
-    if def.visibility != Visibility::Shared {
-        return;
-    }
-    def.visibility = Visibility::Private;
-    if let Err(err) = store.update_game_definition(owner, &mut def).await {
-        log::warn!("auto-unpublish: demote definition {id} to private failed: {err}");
-    }
-}
-
 #[utoipa::path(
     summary = "List a definition's grantees",
     description = "Returns the users (id + username) granted access to a definition owned by the \
@@ -814,17 +763,17 @@ pub async fn list_game_definition_shares(
 }
 
 #[utoipa::path(
-    summary = "Grant a user access to a definition",
-    description = "Grants the given user access to a definition owned by the caller (idempotent) \
-                   and returns the updated grantee list. A definition owned by someone else \
-                   returns 404; granting to the caller themselves (the owner) returns 400.",
+    summary = "Set a definition's share list",
+    description = "Replaces the definition's grantee list with the supplied set in one operation — \
+                   anyone not listed is revoked, any new id granted — and returns the updated list. \
+                   Owner-only (a definition owned by someone else returns 404). The owner's own id \
+                   is ignored.",
     put,
     path = "/api/v1/game-definitions/{id}/shares",
     params(("id" = String, Path, description = "Definition id")),
-    request_body = GrantGameShareRequest,
+    request_body = SetGameSharesRequest,
     responses(
-        (status = 200, description = "Access granted", body = GameDefinitionSharesResponse),
-        (status = 400, description = "Cannot share with yourself (the owner)"),
+        (status = 200, description = "Share list updated", body = GameDefinitionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Definition not found")
     ),
@@ -832,85 +781,27 @@ pub async fn list_game_definition_shares(
     tags = ["v1"]
 )]
 #[put("/game-definitions/{id}/shares")]
-pub async fn grant_game_definition_share(
+pub async fn set_game_definition_shares(
     path: web::Path<Uuid>,
-    body: web::Json<GrantGameShareRequest>,
+    body: web::Json<SetGameSharesRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
-    let grantee = body.into_inner().user_id;
+    let user_ids = body.into_inner().user_ids;
 
-    if grantee == user.id {
-        return Err(ErrorBadRequest("You cannot share with yourself"));
-    }
     let mut store_lock = store.write().await;
-
-    match store_lock.grant_game_definition_access(&user, id, grantee).await {
+    match store_lock.set_game_definition_grantees(&user, id, &user_ids).await {
         Ok(()) => {}
         Err(StoreError::GameDefinitionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
         }
         Err(err) => {
-            log::warn!("grant definition access store error: {err}");
-            return Err(ErrorInternalServerError("Failed to grant access"));
+            log::warn!("set definition shares store error: {err}");
+            return Err(ErrorInternalServerError("Failed to update shares"));
         }
     }
-
-    // Keep the access tier in step with the grant list: a first grant publishes a
-    // Private draft as Shared (so the access badge reflects reality).
-    publish_definition_on_grant(&mut **store_lock, &user, id).await;
-
-    let grantees = store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
-        log::warn!("get definition grantee summaries store error: {err}");
-        ErrorInternalServerError("Failed to load definition shares")
-    })?;
-    Ok(HttpResponse::Ok().json(GameDefinitionSharesResponse { grantees }))
-}
-
-#[utoipa::path(
-    summary = "Revoke a user's access to a definition",
-    description = "Revokes the given user's access to a definition owned by the caller (idempotent) \
-                   and returns the updated grantee list. A definition owned by someone else \
-                   returns 404.",
-    delete,
-    path = "/api/v1/game-definitions/{id}/shares/{grantee}",
-    params(
-        ("id" = String, Path, description = "Definition id"),
-        ("grantee" = String, Path, description = "The user id to revoke")
-    ),
-    responses(
-        (status = 200, description = "Access revoked", body = GameDefinitionSharesResponse),
-        (status = 401, description = "Unauthorized request"),
-        (status = 404, description = "Definition not found")
-    ),
-    security(("api_key" = []), ("login_token" = [])),
-    tags = ["v1"]
-)]
-#[delete("/game-definitions/{id}/shares/{grantee}")]
-pub async fn revoke_game_definition_share(
-    path: web::Path<(Uuid, Uuid)>,
-    store: web::Data<SharedStore>,
-    req: HttpRequest,
-) -> Result<HttpResponse, Error> {
-    let user = get_authorized_user(&req, false)?;
-    let (id, grantee) = path.into_inner();
-    let mut store_lock = store.write().await;
-
-    match store_lock.revoke_game_definition_access(&user, id, grantee).await {
-        Ok(()) => {}
-        Err(StoreError::GameDefinitionIdNotFound(_)) => {
-            return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
-        }
-        Err(err) => {
-            log::warn!("revoke definition access store error: {err}");
-            return Err(ErrorInternalServerError("Failed to revoke access"));
-        }
-    }
-
-    // Revoking the last grantee unpublishes a Shared definition back to Private.
-    unpublish_definition_on_revoke(&mut **store_lock, &user, id).await;
 
     let grantees = store_lock.get_game_definition_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get definition grantee summaries store error: {err}");

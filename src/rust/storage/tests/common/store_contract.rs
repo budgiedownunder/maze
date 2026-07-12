@@ -2650,6 +2650,45 @@ pub async fn game_definition_grants_update_grantees(store: &mut Box<dyn Store>) 
     assert!(store.get_game_definition_grantees(def.id).await.expect("grantees").is_empty());
 }
 
+pub async fn game_definition_set_grantees_replaces_the_list(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "gsd_owner", "gsd_owner@example.com").await;
+    let a = fixture_user(store, "gsd_a", "gsd_a@example.com").await;
+    let b = fixture_user(store, "gsd_b", "gsd_b@example.com").await;
+    let c = fixture_user(store, "gsd_c", "gsd_c@example.com").await;
+    let mut def = make_game_definition("Shared", Visibility::Shared);
+    store.create_game_definition(&owner, &mut def).await.expect("create");
+
+    // A non-owner cannot set the list.
+    let err = store
+        .set_game_definition_grantees(&a, def.id, &[b.id])
+        .await
+        .expect_err("non-owner set must be rejected");
+    assert!(matches!(err, Error::GameDefinitionIdNotFound(_)), "got {err:?}");
+
+    // Set to {a, b}; a duplicate id and the owner's own id are normalised away.
+    store
+        .set_game_definition_grantees(&owner, def.id, &[a.id, b.id, a.id, owner.id])
+        .await
+        .expect("set");
+    let mut got = store.get_game_definition_grantees(def.id).await.expect("grantees");
+    got.sort();
+    let mut want = vec![a.id, b.id];
+    want.sort();
+    assert_eq!(got, want);
+
+    // Replace with {b, c} — a removed, c added, in one operation.
+    store.set_game_definition_grantees(&owner, def.id, &[b.id, c.id]).await.expect("replace");
+    let mut got = store.get_game_definition_grantees(def.id).await.expect("grantees");
+    got.sort();
+    let mut want = vec![b.id, c.id];
+    want.sort();
+    assert_eq!(got, want);
+
+    // Empty clears it.
+    store.set_game_definition_grantees(&owner, def.id, &[]).await.expect("clear");
+    assert!(store.get_game_definition_grantees(def.id).await.expect("grantees").is_empty());
+}
+
 pub async fn game_definition_grantee_summaries_resolve_usernames(store: &mut Box<dyn Store>) {
     let owner = fixture_user(store, "gds_owner", "gds_owner@example.com").await;
     let zeta = fixture_user(store, "gds_zeta", "gds_zeta@example.com").await;
@@ -2918,6 +2957,33 @@ pub async fn game_collection_grants_update_grantees(store: &mut Box<dyn Store>) 
     );
 
     store.revoke_game_collection_access(&owner, collection.id, friend.id).await.expect("revoke");
+    assert!(store.get_game_collection_grantees(collection.id).await.expect("grantees").is_empty());
+}
+
+pub async fn game_collection_set_grantees_replaces_the_list(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "csg_owner", "csg_owner@example.com").await;
+    let a = fixture_user(store, "csg_a", "csg_a@example.com").await;
+    let b = fixture_user(store, "csg_b", "csg_b@example.com").await;
+    let mut collection = make_game_collection("Shared", Visibility::Shared);
+    store.create_game_collection(&owner, &mut collection).await.expect("create");
+
+    let err = store
+        .set_game_collection_grantees(&a, collection.id, &[b.id])
+        .await
+        .expect_err("non-owner set must be rejected");
+    assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+
+    store.set_game_collection_grantees(&owner, collection.id, &[a.id, b.id]).await.expect("set");
+    let mut got = store.get_game_collection_grantees(collection.id).await.expect("grantees");
+    got.sort();
+    let mut want = vec![a.id, b.id];
+    want.sort();
+    assert_eq!(got, want);
+
+    // Replace with just {a}, then clear.
+    store.set_game_collection_grantees(&owner, collection.id, &[a.id]).await.expect("replace");
+    assert_eq!(store.get_game_collection_grantees(collection.id).await.expect("grantees"), vec![a.id]);
+    store.set_game_collection_grantees(&owner, collection.id, &[]).await.expect("clear");
     assert!(store.get_game_collection_grantees(collection.id).await.expect("grantees").is_empty());
 }
 

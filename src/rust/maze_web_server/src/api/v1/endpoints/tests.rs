@@ -18,7 +18,7 @@ mod test_definitions {
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
     use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
-    use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GrantGameShareRequest};
+    use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, SetGameSharesRequest};
     use crate::api::v1::endpoints::game_collections::{AddGameCollectionItemRequest, GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, ReorderGameCollectionItemsRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
@@ -1052,6 +1052,14 @@ mod test_definitions {
             Ok(())
         }
 
+        async fn set_game_definition_grantees(&mut self, owner: &User, id: Uuid, grantees: &[Uuid]) -> Result<(), StoreError> {
+            self.owned_def_or_not_found(owner, id)?;
+            let mut seen = std::collections::HashSet::new();
+            let cleaned: Vec<Uuid> = grantees.iter().copied().filter(|g| *g != owner.id && seen.insert(*g)).collect();
+            self.def_grantees.insert(id, cleaned);
+            Ok(())
+        }
+
         async fn get_game_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, StoreError> {
             let mut defs: Vec<GameDefinition> = self.game_definitions.iter().filter(|d| d.owner_id == owner.id).cloned().collect();
             sort_by_name_ci(&mut defs, |d| &d.name);
@@ -1220,6 +1228,14 @@ mod test_definitions {
             if let Some(grantees) = self.col_grantees.get_mut(&id) {
                 grantees.retain(|g| *g != grantee);
             }
+            Ok(())
+        }
+
+        async fn set_game_collection_grantees(&mut self, owner: &User, id: Uuid, grantees: &[Uuid]) -> Result<(), StoreError> {
+            self.owned_collection_or_not_found(owner, id)?;
+            let mut seen = std::collections::HashSet::new();
+            let cleaned: Vec<Uuid> = grantees.iter().copied().filter(|g| *g != owner.id && seen.insert(*g)).collect();
+            self.col_grantees.insert(id, cleaned);
             Ok(())
         }
 
@@ -8649,126 +8665,58 @@ mod test_definitions {
         assert!(!page.has_more);
     }
 
-    #[actix_web::test]
-    async fn definition_share_grant_revoke_and_owner_only_read() {
-        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
-        let (app, store, mock_users, _k, _l) =
-            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
-        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
-        let other = user_by_name(&mock_users, VALID_USERNAME_2);
-
-        let def = seed_game_definition(&store, &owner, "Shared", Visibility::Shared, Rotation::Static).await;
-        let grant = GrantGameShareRequest { user_id: other.id };
-
-        // Grant → grantees include the target.
-        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
-
-        // Granting to the owner themselves is rejected (400) — you can't share with yourself.
-        let self_grant = GrantGameShareRequest { user_id: owner.id };
-        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &self_grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
-
-        // Only the owner may read the grantee list.
-        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
-        let req = create_test_get_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None);
-        let resp = test::call_service(&app, req).await;
-        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
-
-        // Revoke → empty.
-        let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, other.id), Some(owner.api_key), None);
-        let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert!(shares.grantees.is_empty());
-
-        // A non-owner cannot grant on someone else's definition (grantee ≠ caller,
-        // so the ownership check — not the self-grant guard — is what rejects).
-        let foreign_grant = GrantGameShareRequest { user_id: Uuid::new_v4() };
-        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(other.api_key), None, &foreign_grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
-    }
-
     /// Reads a definition's current visibility straight from the store.
     async fn definition_visibility(store: &SharedStore, id: Uuid) -> Visibility {
         store.read().await.get_game_definition(id).await.expect("definition").visibility
     }
 
     #[actix_web::test]
-    async fn granting_a_private_definition_publishes_it_as_shared_and_keeps_its_board() {
+    async fn definition_shares_set_reconciles_the_list_and_is_owner_only() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
             create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
         let owner = user_by_name(&mock_users, VALID_USERNAME_1);
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let def = seed_game_definition(&store, &owner, "Shared", Visibility::Shared, Rotation::Static).await;
+        let url = format!("/api/v1/game-definitions/{}/shares", def.id);
 
-        let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
-        // The owner's own runs on the private draft.
-        let challenge = format!("def:{}", def.id);
-        record_challenge_score(&store, &owner, &challenge).await;
-        assert_eq!(challenge_board_len(&store, &challenge).await, 1);
+        // Set the list to {other} — plus the owner's own id, which is ignored.
+        let body = SetGameSharesRequest { user_ids: vec![other.id, owner.id] };
+        let req = create_test_put_request(&url, Some(owner.api_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
-        let grant = GrantGameShareRequest { user_id: other.id };
-        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        // Replace with an empty list — clears it.
+        let body = SetGameSharesRequest { user_ids: vec![] };
+        let req = create_test_put_request(&url, Some(owner.api_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let shares: GameDefinitionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert!(shares.grantees.is_empty());
 
-        // The first grant promotes Private → Shared; publishing keeps the board.
-        assert_eq!(definition_visibility(&store, def.id).await, Visibility::Shared);
-        assert_eq!(challenge_board_len(&store, &challenge).await, 1, "publishing keeps the board");
+        // A non-owner cannot read or set the list.
+        let req = create_test_get_request(&url, Some(other.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+        let body = SetGameSharesRequest { user_ids: vec![Uuid::new_v4()] };
+        let req = create_test_put_request(&url, Some(other.api_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 
     #[actix_web::test]
-    async fn granting_a_public_definition_leaves_its_tier_and_board_untouched() {
+    async fn setting_a_definitions_shares_leaves_its_tier_untouched() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
             create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
         let owner = user_by_name(&mock_users, VALID_USERNAME_1);
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
 
-        let def = seed_game_definition(&store, &owner, "Open", Visibility::Public, Rotation::Static).await;
-        let challenge = format!("def:{}", def.id);
-        record_challenge_score(&store, &owner, &challenge).await;
-
-        let grant = GrantGameShareRequest { user_id: other.id };
-        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-
-        // A broader tier is never narrowed, and its live board is untouched.
-        assert_eq!(definition_visibility(&store, def.id).await, Visibility::Public);
-        assert_eq!(challenge_board_len(&store, &challenge).await, 1);
-    }
-
-    #[actix_web::test]
-    async fn revoking_the_last_grantee_unpublishes_a_shared_definition_to_private() {
-        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
-        let (app, store, mock_users, _k, _l) =
-            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
-        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
-        let other = user_by_name(&mock_users, VALID_USERNAME_2);
-        let extra = Uuid::new_v4();
-
+        // A private game keeps its tier when a share list is set — visibility is
+        // set explicitly, not inferred from the grant list.
         let def = seed_game_definition(&store, &owner, "Draft", Visibility::Private, Rotation::Static).await;
-
-        // Two grants → published as Shared.
-        for grantee in [other.id, extra] {
-            let grant = GrantGameShareRequest { user_id: grantee };
-            let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &grant);
-            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-        }
-        assert_eq!(definition_visibility(&store, def.id).await, Visibility::Shared);
-
-        // Revoking a non-last grantee leaves it Shared (one remains).
-        let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, extra), Some(owner.api_key), None);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-        assert_eq!(definition_visibility(&store, def.id).await, Visibility::Shared);
-
-        // Revoking the last grantee unpublishes it back to Private.
-        let req = create_test_delete_request(&format!("/api/v1/game-definitions/{}/shares/{}", def.id, other.id), Some(owner.api_key), None);
+        let body = SetGameSharesRequest { user_ids: vec![other.id] };
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}/shares", def.id), Some(owner.api_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
         assert_eq!(definition_visibility(&store, def.id).await, Visibility::Private);
     }
@@ -8986,7 +8934,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn collection_share_grant_revoke_and_owner_only_read() {
+    async fn collection_shares_set_reconciles_the_list_and_is_owner_only() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
             create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
@@ -8994,103 +8942,29 @@ mod test_definitions {
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
 
         let collection = seed_game_collection(&store, &owner, "Shared", Visibility::Shared).await;
-        let grant = GrantGameShareRequest { user_id: other.id };
         let url = format!("/api/v1/game-collections/{}/shares", collection.id);
 
-        // Grant → grantees include the target.
-        let req = create_test_put_request(&url, Some(owner.api_key), None, &grant);
+        let body = SetGameSharesRequest { user_ids: vec![other.id, owner.id] };
+        let req = create_test_put_request(&url, Some(owner.api_key), None, &body);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
 
-        // Granting to the owner themselves is rejected (400) — you can't share with yourself.
-        let self_grant = GrantGameShareRequest { user_id: owner.id };
-        let req = create_test_put_request(&url, Some(owner.api_key), None, &self_grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
-
-        // Only the owner may read the grantee list.
-        let req = create_test_get_request(&url, Some(other.api_key), None);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
-        let req = create_test_get_request(&url, Some(owner.api_key), None);
-        let resp = test::call_service(&app, req).await;
-        let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(shares.grantees, vec![GranteeSummary { id: other.id, username: VALID_USERNAME_2.to_string(), avatar_updated_at: None }]);
-
-        // Revoke → empty.
-        let req = create_test_delete_request(&format!("{url}/{}", other.id), Some(owner.api_key), None);
+        // Empty clears it.
+        let body = SetGameSharesRequest { user_ids: vec![] };
+        let req = create_test_put_request(&url, Some(owner.api_key), None, &body);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let shares: GameCollectionSharesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert!(shares.grantees.is_empty());
-    }
 
-    /// Reads a collection's current visibility straight from the store.
-    async fn collection_visibility(store: &SharedStore, id: Uuid) -> Visibility {
-        store.read().await.get_game_collection(id).await.expect("collection").visibility
-    }
-
-    #[actix_web::test]
-    async fn granting_a_private_collection_promotes_it_to_shared() {
-        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
-        let (app, store, mock_users, _k, _l) =
-            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
-        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
-        let other = user_by_name(&mock_users, VALID_USERNAME_2);
-
-        let collection = seed_game_collection(&store, &owner, "Draft", Visibility::Private).await;
-        let grant = GrantGameShareRequest { user_id: other.id };
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/shares", collection.id), Some(owner.api_key), None, &grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-
-        assert_eq!(collection_visibility(&store, collection.id).await, Visibility::Shared);
-    }
-
-    #[actix_web::test]
-    async fn granting_a_public_collection_leaves_its_tier_untouched() {
-        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
-        let (app, store, mock_users, _k, _l) =
-            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
-        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
-        let other = user_by_name(&mock_users, VALID_USERNAME_2);
-
-        let collection = seed_game_collection(&store, &owner, "Open", Visibility::Public).await;
-        let grant = GrantGameShareRequest { user_id: other.id };
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/shares", collection.id), Some(owner.api_key), None, &grant);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-
-        assert_eq!(collection_visibility(&store, collection.id).await, Visibility::Public);
-    }
-
-    #[actix_web::test]
-    async fn revoking_the_last_grantee_demotes_a_shared_collection_to_private() {
-        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
-        let (app, store, mock_users, _k, _l) =
-            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
-        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
-        let other = user_by_name(&mock_users, VALID_USERNAME_2);
-        let extra = Uuid::new_v4();
-
-        let collection = seed_game_collection(&store, &owner, "Draft", Visibility::Private).await;
-        let url = format!("/api/v1/game-collections/{}/shares", collection.id);
-
-        // Two grants → promoted to Shared.
-        for grantee in [other.id, extra] {
-            let grant = GrantGameShareRequest { user_id: grantee };
-            let req = create_test_put_request(&url, Some(owner.api_key), None, &grant);
-            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-        }
-        assert_eq!(collection_visibility(&store, collection.id).await, Visibility::Shared);
-
-        // Revoking a non-last grantee leaves it Shared.
-        let req = create_test_delete_request(&format!("{url}/{extra}"), Some(owner.api_key), None);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-        assert_eq!(collection_visibility(&store, collection.id).await, Visibility::Shared);
-
-        // Revoking the last grantee demotes it back to Private.
-        let req = create_test_delete_request(&format!("{url}/{}", other.id), Some(owner.api_key), None);
-        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
-        assert_eq!(collection_visibility(&store, collection.id).await, Visibility::Private);
+        // Owner-only: a non-owner can neither read nor set.
+        let req = create_test_get_request(&url, Some(other.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+        let body = SetGameSharesRequest { user_ids: vec![Uuid::new_v4()] };
+        let req = create_test_put_request(&url, Some(other.api_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 
     // ****************************************************************************

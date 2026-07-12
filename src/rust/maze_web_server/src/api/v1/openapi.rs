@@ -23,7 +23,7 @@ use crate::api::v1::endpoints::game_collections::{
 };
 use crate::api::v1::endpoints::game_definitions::{
     GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
-    GrantGameShareRequest, ImageUpdatedResponse,
+    SetGameSharesRequest, ImageUpdatedResponse,
 };
 use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
@@ -126,8 +126,7 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_definitions::reshuffle_game_definition,
         crate::api::v1::endpoints::game_definitions::delete_game_definition,
         crate::api::v1::endpoints::game_definitions::list_game_definition_shares,
-        crate::api::v1::endpoints::game_definitions::grant_game_definition_share,
-        crate::api::v1::endpoints::game_definitions::revoke_game_definition_share,
+        crate::api::v1::endpoints::game_definitions::set_game_definition_shares,
         crate::api::v1::endpoints::game_definitions::upload_game_definition_image,
         crate::api::v1::endpoints::game_definitions::delete_game_definition_image,
         crate::api::v1::endpoints::game_definitions::serve_game_definition_image,
@@ -141,8 +140,7 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_collections::remove_game_collection_item,
         crate::api::v1::endpoints::game_collections::reorder_game_collection_items,
         crate::api::v1::endpoints::game_collections::list_game_collection_shares,
-        crate::api::v1::endpoints::game_collections::grant_game_collection_share,
-        crate::api::v1::endpoints::game_collections::revoke_game_collection_share,
+        crate::api::v1::endpoints::game_collections::set_game_collection_shares,
         crate::api::v1::endpoints::game_collections::upload_game_collection_image,
         crate::api::v1::endpoints::game_collections::delete_game_collection_image,
         crate::api::v1::endpoints::game_collections::serve_game_collection_image,
@@ -175,7 +173,7 @@ impl utoipa::Modify for LoginTokenAuth {
             GeneratorOptions, GenerationAlgorithm,
             RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
             GameDefinition, GameDefinitionRequest, GameDefinitionListResponse, GamePlayResponse,
-            GrantGameShareRequest, GameDefinitionSharesResponse, GranteeSummary,
+            SetGameSharesRequest, GameDefinitionSharesResponse, GranteeSummary,
             GameCollection, CollectionItem, GameCollectionRequest, GameCollectionListResponse,
             GameCollectionDetailResponse, AddGameCollectionItemRequest, ReorderGameCollectionItemsRequest,
             GameCollectionSharesResponse, ImageUpdatedResponse,

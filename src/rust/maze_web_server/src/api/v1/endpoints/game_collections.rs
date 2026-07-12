@@ -40,7 +40,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
-use super::game_definitions::{GrantGameShareRequest, ImageUpdatedResponse, ImageUploadForm};
+use super::game_definitions::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -237,56 +237,6 @@ async fn owned_collection(
             log::warn!("get game collection store error: {err}");
             Err(ErrorInternalServerError("Failed to load game collection"))
         }
-    }
-}
-
-/// Keeps a collection's visibility tier in step with its grant list after a
-/// grant: the first grant promotes a `Private` collection to `Shared` (so the
-/// access badge reflects reality). Only `Private` is promoted; `Public`/`Curated`
-/// are left alone. Collections carry no leaderboard, so there is no board to
-/// reset. Best-effort: a failure is logged, not surfaced.
-async fn promote_collection_on_grant(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
-    let mut collection = match store.get_game_collection(id).await {
-        Ok(collection) => collection,
-        Err(err) => {
-            log::warn!("auto-promote: load collection {id} failed: {err}");
-            return;
-        }
-    };
-    if collection.visibility != Visibility::Private {
-        return;
-    }
-    collection.visibility = Visibility::Shared;
-    if let Err(err) = store.update_game_collection(owner, &mut collection).await {
-        log::warn!("auto-promote: promote collection {id} to shared failed: {err}");
-    }
-}
-
-/// Keeps a collection's visibility tier in step with its grant list after a
-/// revoke: removing the last grantee demotes a `Shared` collection back to
-/// `Private`. Only `Shared` is demoted. Best-effort.
-async fn demote_collection_on_revoke(store: &mut dyn storage::Store, owner: &User, id: Uuid) {
-    match store.get_game_collection_grantees(id).await {
-        Ok(grantees) if grantees.is_empty() => {}
-        Ok(_) => return,
-        Err(err) => {
-            log::warn!("auto-demote: grantees for collection {id} failed: {err}");
-            return;
-        }
-    }
-    let mut collection = match store.get_game_collection(id).await {
-        Ok(collection) => collection,
-        Err(err) => {
-            log::warn!("auto-demote: load collection {id} failed: {err}");
-            return;
-        }
-    };
-    if collection.visibility != Visibility::Shared {
-        return;
-    }
-    collection.visibility = Visibility::Private;
-    if let Err(err) = store.update_game_collection(owner, &mut collection).await {
-        log::warn!("auto-demote: demote collection {id} to private failed: {err}");
     }
 }
 
@@ -757,17 +707,17 @@ pub async fn list_game_collection_shares(
 }
 
 #[utoipa::path(
-    summary = "Grant a user access to a collection",
-    description = "Grants the given user access to a collection owned by the caller (idempotent) \
-                   and returns the updated grantee list. A collection owned by someone else \
-                   returns 404; granting to the caller themselves (the owner) returns 400.",
+    summary = "Set a collection's share list",
+    description = "Replaces the collection's grantee list with the supplied set in one operation — \
+                   anyone not listed is revoked, any new id granted — and returns the updated list. \
+                   Owner-only (a collection owned by someone else returns 404). The owner's own id \
+                   is ignored.",
     put,
     path = "/api/v1/game-collections/{id}/shares",
     params(("id" = String, Path, description = "Collection id")),
-    request_body = GrantGameShareRequest,
+    request_body = SetGameSharesRequest,
     responses(
-        (status = 200, description = "Access granted", body = GameCollectionSharesResponse),
-        (status = 400, description = "Cannot share with yourself (the owner)"),
+        (status = 200, description = "Share list updated", body = GameCollectionSharesResponse),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Collection not found")
     ),
@@ -775,85 +725,27 @@ pub async fn list_game_collection_shares(
     tags = ["v1"]
 )]
 #[put("/game-collections/{id}/shares")]
-pub async fn grant_game_collection_share(
+pub async fn set_game_collection_shares(
     path: web::Path<Uuid>,
-    body: web::Json<GrantGameShareRequest>,
+    body: web::Json<SetGameSharesRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
-    let grantee = body.into_inner().user_id;
+    let user_ids = body.into_inner().user_ids;
 
-    if grantee == user.id {
-        return Err(ErrorBadRequest("You cannot share with yourself"));
-    }
     let mut store_lock = store.write().await;
-
-    match store_lock.grant_game_collection_access(&user, id, grantee).await {
+    match store_lock.set_game_collection_grantees(&user, id, &user_ids).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
         }
         Err(err) => {
-            log::warn!("grant collection access store error: {err}");
-            return Err(ErrorInternalServerError("Failed to grant access"));
+            log::warn!("set collection shares store error: {err}");
+            return Err(ErrorInternalServerError("Failed to update shares"));
         }
     }
-
-    // Keep the access tier in step with the grant list: a first grant promotes a
-    // Private collection to Shared (so the access badge reflects reality).
-    promote_collection_on_grant(&mut **store_lock, &user, id).await;
-
-    let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
-        log::warn!("get collection grantee summaries store error: {err}");
-        ErrorInternalServerError("Failed to load collection shares")
-    })?;
-    Ok(HttpResponse::Ok().json(GameCollectionSharesResponse { grantees }))
-}
-
-#[utoipa::path(
-    summary = "Revoke a user's access to a collection",
-    description = "Revokes the given user's access to a collection owned by the caller (idempotent) \
-                   and returns the updated grantee list. A collection owned by someone else \
-                   returns 404.",
-    delete,
-    path = "/api/v1/game-collections/{id}/shares/{grantee}",
-    params(
-        ("id" = String, Path, description = "Collection id"),
-        ("grantee" = String, Path, description = "The user id to revoke")
-    ),
-    responses(
-        (status = 200, description = "Access revoked", body = GameCollectionSharesResponse),
-        (status = 401, description = "Unauthorized request"),
-        (status = 404, description = "Collection not found")
-    ),
-    security(("api_key" = []), ("login_token" = [])),
-    tags = ["v1"]
-)]
-#[delete("/game-collections/{id}/shares/{grantee}")]
-pub async fn revoke_game_collection_share(
-    path: web::Path<(Uuid, Uuid)>,
-    store: web::Data<SharedStore>,
-    req: HttpRequest,
-) -> Result<HttpResponse, Error> {
-    let user = get_authorized_user(&req, false)?;
-    let (id, grantee) = path.into_inner();
-    let mut store_lock = store.write().await;
-
-    match store_lock.revoke_game_collection_access(&user, id, grantee).await {
-        Ok(()) => {}
-        Err(StoreError::GameCollectionIdNotFound(_)) => {
-            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
-        }
-        Err(err) => {
-            log::warn!("revoke collection access store error: {err}");
-            return Err(ErrorInternalServerError("Failed to revoke access"));
-        }
-    }
-
-    // Revoking the last grantee demotes a Shared collection back to Private.
-    demote_collection_on_revoke(&mut **store_lock, &user, id).await;
 
     let grantees = store_lock.get_game_collection_grantee_summaries(id).await.map_err(|err| {
         log::warn!("get collection grantee summaries store error: {err}");

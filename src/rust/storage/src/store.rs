@@ -11,6 +11,18 @@ use tokio::sync::RwLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+/// Dedups `grantees` and drops `owner_id` (an owner can't grant access to
+/// themselves). Used by the `set_*_grantees` replace primitives so the stored
+/// grant list is always clean regardless of what the caller supplied.
+pub(crate) fn normalize_grantees(grantees: &[Uuid], owner_id: Uuid) -> Vec<Uuid> {
+    let mut seen = std::collections::HashSet::new();
+    grantees
+        .iter()
+        .copied()
+        .filter(|g| *g != owner_id && seen.insert(*g))
+        .collect()
+}
+
 /// Represents a store for holding users
 #[async_trait]
 pub trait UserStore {
@@ -542,6 +554,17 @@ pub trait GameStore {
         id: Uuid,
         grantee: Uuid,
     ) -> Result<(), Error>;
+    /// Replaces a definition's entire grantee list with `grantees` in one
+    /// operation (atomic in the SQL backend) — anyone not listed is removed, any
+    /// new id is added. Owner-scoped: a definition not owned by `owner` is
+    /// [`Error::GameDefinitionIdNotFound`]. `owner`'s own id is ignored if
+    /// present. Duplicate ids collapse to one grant.
+    async fn set_game_definition_grantees(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error>;
     /// All of `owner`'s own definitions (every visibility, drafts included),
     /// sorted alphabetically by name.
     async fn get_game_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error>;
@@ -658,6 +681,16 @@ pub trait GameStore {
         owner: &User,
         id: Uuid,
         grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Replaces a collection's entire grantee list with `grantees` in one
+    /// operation (atomic in the SQL backend). Owner-scoped: a collection not
+    /// owned by `owner` is [`Error::GameCollectionIdNotFound`]. `owner`'s own id
+    /// is ignored if present. Duplicate ids collapse to one grant.
+    async fn set_game_collection_grantees(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantees: &[Uuid],
     ) -> Result<(), Error>;
     /// All of `owner`'s own collections, sorted alphabetically by name.
     async fn get_game_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error>;
