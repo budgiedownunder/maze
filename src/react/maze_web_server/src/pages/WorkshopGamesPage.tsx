@@ -64,7 +64,7 @@ export function WorkshopGamesPage() {
   const current = loaded != null && loaded.key === refreshCount ? loaded : null
   // The caller's own definitions, minus any they've featured: a curated game is
   // managed from the admin Features area, not here — otherwise the default
-  // admin's seeded curated games would leak into their My Games list.
+  // admin's seeded curated games would leak into their Manage Games list.
   const games = (current?.definitions ?? []).filter(d => d.ownerId === profile?.id && d.visibility !== 'curated')
   const isLoading = current == null && error == null
 
@@ -327,7 +327,7 @@ export function WorkshopGamesPage() {
           onCancel={() => setDeleting(null)}
         />
       )}
-      <AppHeader title="My Games">
+      <AppHeader title="Manage Games">
         <button type="button" className="btn-primary" onClick={() => setIsCreating(true)}>
           + New game
         </button>

@@ -6,7 +6,7 @@ async function login(page: Page) {
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign in/i }).click()
   await expect(page).toHaveURL(/\/$/)
-  await page.goto('/workshop/my-games')
+  await page.goto('/workshop/games')
 }
 
 test('Preview stashes the config and opens the game host in a new tab', async ({ page, context }) => {

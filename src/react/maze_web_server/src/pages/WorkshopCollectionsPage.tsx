@@ -5,7 +5,7 @@ import { AppHeader } from '../components/AppHeader'
 export function WorkshopCollectionsPage() {
   return (
     <div className="games-page">
-      <AppHeader title="My Game Collections" />
+      <AppHeader title="Manage Game Collections" />
       <main>
         <p>Coming soon.</p>
       </main>

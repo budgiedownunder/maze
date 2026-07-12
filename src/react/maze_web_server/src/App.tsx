@@ -40,8 +40,8 @@ const router = createBrowserRouter([
   { path: '/mazes/:id', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/play/:id', element: <ProtectedRoute><MazeGamePage /></ProtectedRoute> },
   { path: '/workshop', element: <ProtectedRoute><WorkshopHubPage /></ProtectedRoute> },
-  { path: '/workshop/my-games', element: <ProtectedRoute><WorkshopGamesPage /></ProtectedRoute> },
-  { path: '/workshop/my-game-collections', element: <ProtectedRoute><WorkshopCollectionsPage /></ProtectedRoute> },
+  { path: '/workshop/games', element: <ProtectedRoute><WorkshopGamesPage /></ProtectedRoute> },
+  { path: '/workshop/game-collections', element: <ProtectedRoute><WorkshopCollectionsPage /></ProtectedRoute> },
   { path: '/workshop/features', element: <ProtectedRoute><WorkshopFeaturesPage /></ProtectedRoute> },
   // The bare stub route is retired; its surface now lives under the workshop hub.
   { path: '/games', element: <Navigate to="/workshop" replace /> },
