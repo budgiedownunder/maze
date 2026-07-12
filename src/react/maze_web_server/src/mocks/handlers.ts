@@ -646,29 +646,16 @@ export const handlers = [
     })
   }),
 
-  // Definition shares — list / grant / revoke. Grant is idempotent; every verb
-  // returns the updated grantee list resolved to `{ id, username }`.
+  // Definition shares — list / set. PUT replaces the whole grantee list with the
+  // supplied set (owner's own id filtered); visibility is set separately.
   http.get(`${BASE}/game-definitions/:id/shares`, ({ params }) =>
     HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[String(params.id)] ?? []) }),
   ),
   http.put(`${BASE}/game-definitions/:id/shares`, async ({ params, request }) => {
-    const { userId } = await request.json() as { userId: string }
+    const { userIds } = await request.json() as { userIds: string[] }
     const id = String(params.id)
-    const ids = mockDefinitionShares[id] ?? []
-    if (!ids.includes(userId)) mockDefinitionShares[id] = [...ids, userId]
-    mockGameDefinitions = mockGameDefinitions.map(d =>
-      d.id === id && d.visibility === 'private' ? { ...d, visibility: 'shared' } : d)
-    saveGameDefinitions()
-    return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id] ?? []) })
-  }),
-  http.delete(`${BASE}/game-definitions/:id/shares/:grantee`, ({ params }) => {
-    const id = String(params.id)
-    mockDefinitionShares[id] = (mockDefinitionShares[id] ?? []).filter(u => u !== String(params.grantee))
-    if (mockDefinitionShares[id].length === 0) {
-      mockGameDefinitions = mockGameDefinitions.map(d =>
-        d.id === id && d.visibility === 'shared' ? { ...d, visibility: 'private' } : d)
-      saveGameDefinitions()
-    }
+    const owner = mockGameDefinitions.find(d => d.id === id)?.ownerId
+    mockDefinitionShares[id] = [...new Set(userIds.filter(u => u !== owner))]
     return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id]) })
   }),
 
@@ -677,15 +664,9 @@ export const handlers = [
     HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[String(params.id)] ?? []) }),
   ),
   http.put(`${BASE}/game-collections/:id/shares`, async ({ params, request }) => {
-    const { userId } = await request.json() as { userId: string }
+    const { userIds } = await request.json() as { userIds: string[] }
     const id = String(params.id)
-    const ids = mockCollectionShares[id] ?? []
-    if (!ids.includes(userId)) mockCollectionShares[id] = [...ids, userId]
-    return HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[id] ?? []) })
-  }),
-  http.delete(`${BASE}/game-collections/:id/shares/:grantee`, ({ params }) => {
-    const id = String(params.id)
-    mockCollectionShares[id] = (mockCollectionShares[id] ?? []).filter(u => u !== String(params.grantee))
+    mockCollectionShares[id] = [...new Set(userIds)]
     return HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[id]) })
   }),
 

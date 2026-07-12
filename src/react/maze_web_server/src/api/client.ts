@@ -462,9 +462,10 @@ export function reorderGameCollectionItems(token: string, collectionId: string, 
 
 // --- Sharing & user lookup --------------------------------------------------
 
-// The share endpoints (definition + collection) all return the updated grantee
-// list; grant/revoke are idempotent server-side, and a subject owned by someone
-// else returns 404. The grant body key is `userId`.
+// The share endpoints (definition + collection) return the updated grantee list.
+// `setGame*Shares` replaces the whole list with the supplied set (the server
+// reconciles — revoke absent, grant new — in one operation); a subject owned by
+// someone else returns 404, and the owner's own id is ignored.
 
 export function listGameDefinitionShares(token: string, id: string): Promise<GameDefinitionSharesResponse> {
   return request<GameDefinitionSharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
@@ -472,19 +473,12 @@ export function listGameDefinitionShares(token: string, id: string): Promise<Gam
   })
 }
 
-export function grantGameDefinitionShare(token: string, id: string, userId: string): Promise<GameDefinitionSharesResponse> {
+export function setGameDefinitionShares(token: string, id: string, userIds: string[]): Promise<GameDefinitionSharesResponse> {
   return request<GameDefinitionSharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
     method: 'PUT',
     headers: authHeaders(token),
-    body: JSON.stringify({ userId }),
+    body: JSON.stringify({ userIds }),
   })
-}
-
-export function revokeGameDefinitionShare(token: string, id: string, granteeId: string): Promise<GameDefinitionSharesResponse> {
-  return request<GameDefinitionSharesResponse>(
-    `/game-definitions/${encodeURIComponent(id)}/shares/${encodeURIComponent(granteeId)}`,
-    { method: 'DELETE', headers: authHeaders(token) },
-  )
 }
 
 export function listGameCollectionShares(token: string, id: string): Promise<GameCollectionSharesResponse> {
@@ -493,19 +487,12 @@ export function listGameCollectionShares(token: string, id: string): Promise<Gam
   })
 }
 
-export function grantGameCollectionShare(token: string, id: string, userId: string): Promise<GameCollectionSharesResponse> {
+export function setGameCollectionShares(token: string, id: string, userIds: string[]): Promise<GameCollectionSharesResponse> {
   return request<GameCollectionSharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
     method: 'PUT',
     headers: authHeaders(token),
-    body: JSON.stringify({ userId }),
+    body: JSON.stringify({ userIds }),
   })
-}
-
-export function revokeGameCollectionShare(token: string, id: string, granteeId: string): Promise<GameCollectionSharesResponse> {
-  return request<GameCollectionSharesResponse>(
-    `/game-collections/${encodeURIComponent(id)}/shares/${encodeURIComponent(granteeId)}`,
-    { method: 'DELETE', headers: authHeaders(token) },
-  )
 }
 
 export interface UserLookupQuery {

@@ -19,7 +19,7 @@ import {
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import { launchDefinitionPreview } from '../utils/definitionPreview'
 import { launchDefinition } from '../utils/play3dLaunch'
-import { accessDescription, accessLabel, reshuffleConfirmMessage } from '../utils/gameDefinitions'
+import { accessDescription, accessLabel, reshuffleConfirmMessage, type Visibility } from '../utils/gameDefinitions'
 import type { GameDefinition, GameDefinitionRequest, GamePlayResponse } from '../types/api'
 
 // A one-line game summary — level count, rotation, and access tier — shown under
@@ -86,10 +86,21 @@ export function WorkshopGamesPage() {
     setActionError(null)
   }
 
+  // Persist a game's access tier — a visibility-only change (the stored config is
+  // sent unchanged, so the board is not reset). Driven by the access modal.
+  async function setDefinitionVisibility(def: GameDefinition, visibility: Visibility): Promise<void> {
+    await updateGameDefinition(token!, def.id, {
+      name: def.name,
+      description: def.description ?? null,
+      visibility,
+      rotation: def.rotation,
+      config: def.config,
+    })
+  }
+
   // Re-read one game's authoritative visibility and patch just its row — used when
-  // a share change may have flipped the tier (the server owns shared↔private, so
-  // we read it back rather than re-deriving it). Best-effort: on failure the row
-  // is left as-is and a manual Refresh still corrects it.
+  // the access modal saves. Best-effort: on failure the row is left as-is and a
+  // manual Refresh still corrects it.
   async function reloadRowVisibility(id: string) {
     try {
       const def = await getGameDefinition(token!, id)
@@ -276,8 +287,11 @@ export function WorkshopGamesPage() {
       {sharing && (
         <ManageSharesModal
           subject={{ kind: 'definition', id: sharing.id, name: sharing.name, ownerId: sharing.ownerId }}
+          visibility={sharing.visibility}
+          isAdmin={!!profile?.is_admin}
+          onSetVisibility={v => setDefinitionVisibility(sharing, v)}
+          onSaved={() => { const id = sharing.id; setSharing(null); void reloadRowVisibility(id) }}
           onClose={() => setSharing(null)}
-          onVisibilityChange={() => void reloadRowVisibility(sharing.id)}
         />
       )}
       {viewingBoard && (
@@ -374,9 +388,9 @@ export function WorkshopGamesPage() {
                     <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Duplicate</span>
                   </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(d) }} aria-label={`Share ${d.name}`}>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(d) }} aria-label={`Access for ${d.name}`}>
                     <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Share</span>
+                    <span className="maze-item-action-label">Access</span>
                   </button>
                   <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ def: d, busy: false, error: null }) }} aria-label={`Delete ${d.name}`}>
                     <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />

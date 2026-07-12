@@ -17,11 +17,9 @@ import {
   removeGameCollectionItem,
   reorderGameCollectionItems,
   listGameDefinitionShares,
-  grantGameDefinitionShare,
-  revokeGameDefinitionShare,
+  setGameDefinitionShares,
   listGameCollectionShares,
-  grantGameCollectionShare,
-  revokeGameCollectionShare,
+  setGameCollectionShares,
   lookupUsers,
 } from '../../src/api/client'
 import type { GameCollection, GameDefinition, GamePlayResponse } from '../../src/types/api'
@@ -274,7 +272,7 @@ describe('share client', () => {
     expect(shares.grantees).toEqual([{ id: 'u1', username: 'alice' }, { id: 'u2', username: 'bob' }])
   })
 
-  it('grantGameDefinitionShare PUTs { userId } and returns the updated grantees', async () => {
+  it('setGameDefinitionShares PUTs { userIds } and returns the updated grantees', async () => {
     let method: string | undefined
     let path: string | null = null
     let body: unknown
@@ -286,27 +284,11 @@ describe('share client', () => {
         return HttpResponse.json({ grantees: [{ id: 'u9', username: 'nine' }] })
       }),
     )
-    const shares = await grantGameDefinitionShare(TOKEN, 'd1', 'u9')
+    const shares = await setGameDefinitionShares(TOKEN, 'd1', ['u9', 'u10'])
     expect(method).toBe('PUT')
     expect(path).toBe('/api/v1/game-definitions/d1/shares')
-    expect(body).toEqual({ userId: 'u9' })
+    expect(body).toEqual({ userIds: ['u9', 'u10'] })
     expect(shares.grantees).toEqual([{ id: 'u9', username: 'nine' }])
-  })
-
-  it('revokeGameDefinitionShare DELETEs the grantee-scoped path (id encoded)', async () => {
-    let method: string | undefined
-    let path: string | null = null
-    server.use(
-      http.delete('/api/v1/game-definitions/:id/shares/:grantee', ({ request }) => {
-        method = request.method
-        path = new URL(request.url).pathname
-        return HttpResponse.json({ grantees: [] })
-      }),
-    )
-    await revokeGameDefinitionShare(TOKEN, 'd1', 'u 9')
-    expect(method).toBe('DELETE')
-    // The grantee id is URL-encoded into the path segment.
-    expect(path).toBe('/api/v1/game-definitions/d1/shares/u%209')
   })
 
   it('listGameCollectionShares GETs the collection shares path', async () => {
@@ -322,31 +304,19 @@ describe('share client', () => {
     expect(shares.grantees).toEqual([{ id: 'u1', username: 'alice' }])
   })
 
-  it('grantGameCollectionShare PUTs { userId } to the collection shares path', async () => {
+  it('setGameCollectionShares PUTs { userIds } to the collection shares path', async () => {
     let path: string | null = null
     let body: unknown
     server.use(
       http.put('/api/v1/game-collections/:id/shares', async ({ request }) => {
         path = new URL(request.url).pathname
         body = await request.json()
-        return HttpResponse.json({ grantees: [{ id: 'u9', username: 'nine' }] })
-      }),
-    )
-    await grantGameCollectionShare(TOKEN, 'c1', 'u9')
-    expect(path).toBe('/api/v1/game-collections/c1/shares')
-    expect(body).toEqual({ userId: 'u9' })
-  })
-
-  it('revokeGameCollectionShare DELETEs the collection grantee path', async () => {
-    let path: string | null = null
-    server.use(
-      http.delete('/api/v1/game-collections/:id/shares/:grantee', ({ request }) => {
-        path = new URL(request.url).pathname
         return HttpResponse.json({ grantees: [] })
       }),
     )
-    await revokeGameCollectionShare(TOKEN, 'c1', 'u9')
-    expect(path).toBe('/api/v1/game-collections/c1/shares/u9')
+    await setGameCollectionShares(TOKEN, 'c1', ['u9'])
+    expect(path).toBe('/api/v1/game-collections/c1/shares')
+    expect(body).toEqual({ userIds: ['u9'] })
   })
 })
 

@@ -399,6 +399,47 @@
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 1rem;
+  /* The tier radios, picker and grantee list together can outgrow a short
+     viewport; scroll the body so the title and Cancel/Save footer stay put. */
+  max-height: 65dvh;
+  overflow-y: auto;
+}
+
+/* Access-tier radio group (Just me / Specific people / Everyone / Featured). */
+.access-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.access-tier {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+.access-tier:hover {
+  background: var(--surface-hover);
+}
+.access-tier input {
+  /* Undo the global full-width text-input sizing for this native radio. */
+  width: auto;
+  padding: 0;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+.access-tier-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.access-tier-label {
+  font-weight: 500;
+}
+.access-tier-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 .share-picker-results,
 .share-grantees {

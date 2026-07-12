@@ -92,7 +92,7 @@ test('Edit opens the tabs editor over an existing game and Save persists the cha
   await expect(page.getByText(renamed)).toBeVisible()
 })
 
-test('Share adds and removes a grantee via the username people-picker', async ({ page }) => {
+test('Access stages and un-stages a grantee via the username people-picker', async ({ page }) => {
   await login(page)
 
   const name = `Shareable ${Date.now()}`
@@ -102,22 +102,25 @@ test('Share adds and removes a grantee via the username people-picker', async ({
   await wizard.getByRole('button', { name: 'Finish' }).click()
   await expect(page.getByText(name)).toBeVisible()
 
-  await page.getByRole('button', { name: `Share ${name}` }).click()
-  const dialog = page.getByRole('dialog', { name: /^Share:/ })
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: /^Access:/ })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByText('No one has access yet.')).toBeVisible()
+  // A fresh game is private; the people-picker only appears once the "Specific
+  // people" tier is chosen.
+  await dialog.getByRole('radio', { name: /Specific people/ }).click()
+  await expect(dialog.getByText('No one added yet.')).toBeVisible()
 
   // Search the username lookup ("bob" is not a prefix of any other mock user, so
-  // the Add/Remove button names stay unambiguous) and grant.
+  // the Add/Remove button names stay unambiguous) and stage.
   await dialog.getByLabel('Add user').fill('bob')
   await dialog.getByRole('button', { name: 'Add bob' }).click()
   await expect(dialog.getByRole('button', { name: 'Remove bob' })).toBeVisible()
 
-  // Revoke returns to the empty state.
+  // Un-staging returns to the empty state (nothing persists until Save).
   await dialog.getByRole('button', { name: 'Remove bob' }).click()
-  await expect(dialog.getByText('No one has access yet.')).toBeVisible()
+  await expect(dialog.getByText('No one added yet.')).toBeVisible()
 
-  await dialog.getByRole('button', { name: 'Close' }).click()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog).toBeHidden()
 })
 
@@ -163,7 +166,7 @@ test('Delete removes a game after confirmation', async ({ page }) => {
   await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
 })
 
-test('sharing a game updates its access badge from Just me to Specific people', async ({ page }) => {
+test('the access modal updates a game badge from Just me to Specific people', async ({ page }) => {
   await login(page)
 
   const name = `Badged ${Date.now()}`
@@ -175,14 +178,15 @@ test('sharing a game updates its access badge from Just me to Specific people', 
   const row = page.locator('.game-list-item', { hasText: name })
   await expect(row.getByText('Just me')).toBeVisible()
 
-  await page.getByRole('button', { name: `Share ${name}` }).click()
-  const dialog = page.getByRole('dialog', { name: `Share: ${name}` })
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: `Access: ${name}` })
+  await dialog.getByRole('radio', { name: /Specific people/ }).click()
   await dialog.getByLabel('Add user').fill('bob')
   await dialog.getByRole('button', { name: 'Add bob' }).click()
   await expect(dialog.getByRole('button', { name: 'Remove bob' })).toBeVisible()
-  await dialog.getByRole('button', { name: 'Close' }).click()
+  await dialog.getByRole('button', { name: 'Save' }).click()
 
-  // The list refreshed on the grant, so the badge reflects the shared tier.
+  // Save committed the tier + list, and the row reloaded to the shared tier.
   await expect(row.getByText('Specific people')).toBeVisible()
   await expect(row.getByText('Just me')).toBeHidden()
 })

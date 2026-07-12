@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { ManageSharesModal } from '../../src/components/ManageSharesModal'
+import { ManageSharesModal, type ShareSubject } from '../../src/components/ManageSharesModal'
 import { resetMockShares } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
+import type { Visibility } from '../../src/utils/gameDefinitions'
 
 vi.mock('../../src/context/AuthContext', async () => {
   const actual = await vi.importActual('../../src/context/AuthContext')
@@ -24,80 +25,168 @@ beforeEach(() => {
   resetMockShares()
 })
 
-const defSubject = { kind: 'definition' as const, id: 'd1', name: 'Tower', ownerId: 'owner-1' }
+const defSubject: ShareSubject = { kind: 'definition', id: 'd1', name: 'Tower', ownerId: 'owner-1' }
+
+function renderModal(over: { subject?: ShareSubject; visibility?: Visibility; isAdmin?: boolean } = {}) {
+  const onSetVisibility = vi.fn<(v: Visibility) => Promise<void>>().mockResolvedValue(undefined)
+  const onSaved = vi.fn()
+  const onClose = vi.fn()
+  render(
+    <ManageSharesModal
+      subject={over.subject ?? defSubject}
+      visibility={over.visibility ?? 'shared'}
+      isAdmin={over.isAdmin ?? false}
+      onSetVisibility={onSetVisibility}
+      onSaved={onSaved}
+      onClose={onClose}
+    />,
+  )
+  return { onSetVisibility, onSaved, onClose }
+}
 
 describe('ManageSharesModal', () => {
-  it('shows the empty state, then a searched user can be added and is no longer offered', async () => {
-    render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
+  it('shows the access tiers (current one checked); Featured only for admins', () => {
+    renderModal({ visibility: 'private' })
+    expect(screen.getByRole('heading', { name: /^Access:/ })).toHaveTextContent('Tower')
+    expect(screen.getByRole('radio', { name: /Just me/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /Specific people/ })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Everyone/ })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Featured/ })).toBeNull()
+  })
 
-    // The title names the subject; the grantee group starts empty.
-    expect(screen.getByRole('heading', { name: /^Share:/ })).toHaveTextContent('Tower')
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
+  it('offers the Featured tier to an admin', () => {
+    renderModal({ isAdmin: true })
+    expect(screen.getByRole('radio', { name: /Featured/ })).toBeInTheDocument()
+  })
 
-    // Typing a prefix searches the lookup; "an" matches ann + anna.
+  it('stages an added user and drops them from the picker; removing un-stages', async () => {
+    renderModal() // Specific people
+    await waitFor(() => expect(screen.getByText('No one added yet.')).toBeInTheDocument())
+
     await userEvent.type(screen.getByLabelText('Add user'), 'an')
     expect(await screen.findByRole('button', { name: 'Add ann' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add anna' })).toBeInTheDocument()
-
-    // Grant ann → it appears in the grantee list and the picker input clears.
     await userEvent.click(screen.getByRole('button', { name: 'Add ann' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove ann' })).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Remove ann' })).toBeInTheDocument()
     expect(screen.getByLabelText('Add user')).toHaveValue('')
-    expect(screen.queryByText('No one has access yet.')).toBeNull()
 
-    // Searching "an" again offers anna but not the already-granted ann.
+    // Searching again offers anna but not the already-staged ann.
+    await userEvent.type(screen.getByLabelText('Add user'), 'an')
+    expect(await screen.findByRole('button', { name: 'Add anna' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add ann' })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove ann' }))
+    await waitFor(() => expect(screen.getByText('No one added yet.')).toBeInTheDocument())
+  })
+
+  it("excludes the game's owner from the picker", async () => {
+    renderModal({ subject: { kind: 'definition', id: 'd1', name: 'Tower', ownerId: 'user-ann' } })
     await userEvent.type(screen.getByLabelText('Add user'), 'an')
     expect(await screen.findByRole('button', { name: 'Add anna' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add ann' })).toBeNull()
   })
 
-  it("does not offer the game's owner in the picker (you can't share with yourself)", async () => {
-    // The owner (user-ann) is a real user the lookup would return; the picker
-    // must exclude them.
-    render(<ManageSharesModal subject={{ kind: 'definition', id: 'd1', name: 'Tower', ownerId: 'user-ann' }} onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
-
-    // "an" matches ann + anna; ann is the owner → filtered out, anna remains.
-    await userEvent.type(screen.getByLabelText('Add user'), 'an')
-    expect(await screen.findByRole('button', { name: 'Add anna' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add ann' })).toBeNull()
-  })
-
-  it('revokes a grantee', async () => {
-    render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
-
+  it('Save commits the staged share list and the tier, then calls onSaved', async () => {
+    let putBody: unknown
+    server.use(
+      http.put('/api/v1/game-definitions/:id/shares', async ({ request }) => {
+        putBody = await request.json()
+        return HttpResponse.json({ grantees: [] })
+      }),
+    )
+    const { onSetVisibility, onSaved } = renderModal()
+    await waitFor(() => expect(screen.getByText('No one added yet.')).toBeInTheDocument())
     await userEvent.type(screen.getByLabelText('Add user'), 'bob')
     await userEvent.click(await screen.findByRole('button', { name: 'Add bob' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove bob' }))
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(putBody).toEqual({ userIds: ['user-bob'] })
+    expect(onSetVisibility).toHaveBeenCalledWith('shared')
   })
 
-  it('drives the collection share endpoints for a collection subject', async () => {
-    render(<ManageSharesModal subject={{ kind: 'collection', id: 'c1', name: 'Campaign', ownerId: 'owner-1' }} onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
+  it('switching to Everyone hides the picker; Save clears the list and sets public', async () => {
+    let putBody: unknown
+    server.use(
+      http.put('/api/v1/game-definitions/:id/shares', async ({ request }) => {
+        putBody = await request.json()
+        return HttpResponse.json({ grantees: [] })
+      }),
+    )
+    const { onSetVisibility } = renderModal({ visibility: 'private' })
+    await userEvent.click(screen.getByRole('radio', { name: /Everyone/ }))
+    expect(screen.queryByLabelText('Add user')).toBeNull()
 
-    await userEvent.type(screen.getByLabelText('Add user'), 'cleo')
-    await userEvent.click(await screen.findByRole('button', { name: 'Add cleo' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove cleo' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onSetVisibility).toHaveBeenCalledWith('public'))
+    expect(putBody).toEqual({ userIds: [] })
   })
 
-  it('renders an avatar per grantee, carrying the marker only when they have one', async () => {
-    render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
+  it('saving Specific people with no one staged persists it as private', async () => {
+    let putBody: unknown
+    server.use(
+      http.get('/api/v1/game-definitions/:id/shares', () =>
+        HttpResponse.json({ grantees: [{ id: 'user-bob', username: 'bob' }] }),
+      ),
+      http.put('/api/v1/game-definitions/:id/shares', async ({ request }) => {
+        putBody = await request.json()
+        return HttpResponse.json({ grantees: [] })
+      }),
+    )
+    const { onSetVisibility } = renderModal()
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove bob' }))
+    await waitFor(() => expect(screen.getByText('No one added yet.')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // bob (user-bob) has a seeded avatar in the mock directory; ann (user-ann) does not.
-    await userEvent.type(screen.getByLabelText('Add user'), 'bob')
-    await userEvent.click(await screen.findByRole('button', { name: 'Add bob' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
+    await waitFor(() => expect(onSetVisibility).toHaveBeenCalledWith('private'))
+    expect(putBody).toEqual({ userIds: [] })
+  })
+
+  it('Cancel dismisses without saving', async () => {
+    const { onClose, onSetVisibility } = renderModal()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalled()
+    expect(onSetVisibility).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a save failure and keeps the modal open', async () => {
+    server.use(
+      http.put('/api/v1/game-definitions/:id/shares', () => new HttpResponse('nope', { status: 500 })),
+    )
+    const { onSaved } = renderModal()
     await userEvent.type(screen.getByLabelText('Add user'), 'ann')
     await userEvent.click(await screen.findByRole('button', { name: 'Add ann' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove ann' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // Each grantee row shows an avatar keyed to their id; the marker is passed
-    // through only for the grantee who has one.
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('nope'))
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('drives the collection share endpoint for a collection subject', async () => {
+    let putPath: string | null = null
+    server.use(
+      http.put('/api/v1/game-collections/:id/shares', async ({ request }) => {
+        putPath = new URL(request.url).pathname
+        return HttpResponse.json({ grantees: [] })
+      }),
+    )
+    renderModal({ subject: { kind: 'collection', id: 'c1', name: 'Campaign', ownerId: 'owner-1' } })
+    await userEvent.type(screen.getByLabelText('Add user'), 'cleo')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add cleo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putPath).toBe('/api/v1/game-collections/c1/shares'))
+  })
+
+  it('renders an avatar per loaded grantee, carrying the marker only when present', async () => {
+    server.use(
+      http.get('/api/v1/game-definitions/:id/shares', () =>
+        HttpResponse.json({ grantees: [
+          { id: 'user-bob', username: 'bob', avatar_updated_at: '2026-01-01T00:00:00Z' },
+          { id: 'user-ann', username: 'ann' },
+        ] }),
+      ),
+    )
+    renderModal()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
     expect(screen.getByTestId('avatar-user-bob').getAttribute('data-marker')).not.toBe('')
     expect(screen.getByTestId('avatar-user-ann').getAttribute('data-marker')).toBe('')
   })
@@ -108,29 +197,8 @@ describe('ManageSharesModal', () => {
         HttpResponse.json({ users: [{ id: 'u1', username: 'aaa' }], limit: 8, offset: 0, has_more: true }),
       ),
     )
-    render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
+    renderModal()
     await userEvent.type(screen.getByLabelText('Add user'), 'a')
     expect(await screen.findByText('More matches — keep typing to narrow.')).toBeInTheDocument()
-  })
-
-  it('surfaces a grant failure and keeps the modal open', async () => {
-    server.use(
-      http.put('/api/v1/game-definitions/:id/shares', () => new HttpResponse('nope', { status: 500 })),
-    )
-    render(<ManageSharesModal subject={defSubject} onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('No one has access yet.')).toBeInTheDocument())
-
-    await userEvent.type(screen.getByLabelText('Add user'), 'ann')
-    await userEvent.click(await screen.findByRole('button', { name: 'Add ann' }))
-
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('nope'))
-    expect(screen.queryByRole('button', { name: 'Remove ann' })).toBeNull()
-  })
-
-  it('Close dismisses the modal', async () => {
-    const onClose = vi.fn()
-    render(<ManageSharesModal subject={defSubject} onClose={onClose} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
-    expect(onClose).toHaveBeenCalled()
   })
 })

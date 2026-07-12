@@ -269,9 +269,9 @@ describe('WorkshopGamesPage', () => {
     await waitFor(() => expect(document.body).not.toHaveClass('is-busy'))
   })
 
-  it('refreshes the access badge when a share is added (private → shared)', async () => {
-    // Use the default (mock-store-backed) create/list/share handlers so the grant
-    // handler mirrors B14 by mutating the same definition the list reads back.
+  it('setting a game to Specific people via the access modal updates its badge', async () => {
+    // The default (mock-store-backed) handlers persist the share list + the
+    // visibility PUT so the reloaded row reflects the new tier.
     renderPage()
     await waitFor(() => expect(screen.getByText('No games yet.')).toBeInTheDocument())
 
@@ -282,29 +282,29 @@ describe('WorkshopGamesPage', () => {
     // A fresh game is private.
     expect(screen.getByText(/Just me/)).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Share Tower' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Share: Tower' })
+    await userEvent.click(screen.getByRole('button', { name: 'Access for Tower' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Access: Tower' })
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Specific people/ }))
     await userEvent.type(within(dialog).getByLabelText('Add user'), 'bob')
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Add bob' }))
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Remove bob' })).toBeInTheDocument())
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
-    // The row's visibility reloaded on the grant, so the summary now reads the
-    // shared tier and the marker updates.
+    // Save committed the tier + list; the row reloaded to the shared tier.
     await waitFor(() => expect(screen.getByText(/Specific people/)).toBeInTheDocument())
     expect(screen.queryByText(/Just me/)).toBeNull()
     const row = screen.getByText('Tower').closest('.game-list-item')!
     expect(row.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-shared.svg')
   })
 
-  it('Share opens the manage-sharing modal for the row', async () => {
+  it('Access opens the access modal for the row', async () => {
     server.use(listOf(def({ id: 'd1', name: 'Tower', visibility: 'shared' })))
     renderPage()
     await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Share Tower' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Share: Tower' })
+    await userEvent.click(screen.getByRole('button', { name: 'Access for Tower' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Access: Tower' })
     expect(dialog).toHaveTextContent('Tower')
-    expect(screen.getByLabelText('Add user')).toBeInTheDocument()
+    // A shared game opens with the people-picker shown.
+    expect(within(dialog).getByLabelText('Add user')).toBeInTheDocument()
   })
 })

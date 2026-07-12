@@ -3,19 +3,17 @@ import { useToken } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { Avatar } from './Avatar'
 import {
-  grantGameCollectionShare,
-  grantGameDefinitionShare,
   listGameCollectionShares,
   listGameDefinitionShares,
   lookupUsers,
-  revokeGameCollectionShare,
-  revokeGameDefinitionShare,
+  setGameCollectionShares,
+  setGameDefinitionShares,
 } from '../api/client'
+import { VISIBILITIES, accessDescription, accessLabel, type Visibility } from '../utils/gameDefinitions'
 import type { GranteeSummary, UserLookupEntry } from '../types/api'
 
-// The thing being shared. `kind` selects which set of share endpoints to call;
-// `name` is shown in the modal so the owner knows what they are granting;
-// `ownerId` is excluded from the people-picker (you can't share with yourself).
+// The thing whose access is being managed. `kind` selects which endpoints to
+// call; `name` titles the modal; `ownerId` is excluded from the people-picker.
 export interface ShareSubject {
   kind: 'definition' | 'collection'
   id: string
@@ -25,60 +23,59 @@ export interface ShareSubject {
 
 interface Props {
   subject: ShareSubject
+  // The current access tier when the modal opens.
+  visibility: Visibility
+  // Whether to offer the admin-only Featured tier.
+  isAdmin: boolean
+  // Persists the chosen tier (the parent PUTs the entity, config preserved).
+  onSetVisibility: (visibility: Visibility) => Promise<void>
+  // Called after a successful Save (the parent closes + refreshes the row).
+  onSaved: () => void
+  // Cancel — discards staged edits.
   onClose: () => void
-  onVisibilityChange?: () => void
 }
 
 const LOOKUP_LIMIT = 8
 const DEBOUNCE_MS = 250
 
-// Grant / revoke / list access for a definition or collection: a live grantee
-// list (resolved to usernames by the server) plus a username people-picker that
-// searches the username lookup as you type. Reused across the games + collections areas.
-export function ManageSharesModal({ subject, onClose, onVisibilityChange }: Props) {
+// Manage a game's access in one place: an access-tier control (Just me / Specific
+// people / Everyone / Featured[admin]) plus, when "Specific people" is chosen, a
+// username people-picker. Edits are staged locally and committed together on
+// Save (reconcile the share list + set the tier); Cancel discards.
+export function ManageSharesModal({ subject, visibility, isAdmin, onSetVisibility, onSaved, onClose }: Props) {
   const token = useToken()
 
-  // The share endpoints come in definition / collection pairs with identical
-  // shapes; bind the trio to the subject's kind.
   const api = useMemo(
     () =>
       subject.kind === 'definition'
-        ? { list: listGameDefinitionShares, grant: grantGameDefinitionShare, revoke: revokeGameDefinitionShare }
-        : { list: listGameCollectionShares, grant: grantGameCollectionShare, revoke: revokeGameCollectionShare },
+        ? { list: listGameDefinitionShares, set: setGameDefinitionShares }
+        : { list: listGameCollectionShares, set: setGameCollectionShares },
     [subject.kind],
   )
 
-  // Grantee list keyed by a refresh counter, so a reload re-derives the view
-  // rather than setting state mid-effect (a grant/revoke bumps the counter).
-  const [refresh, setRefresh] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: number; grantees: GranteeSummary[] } | null>(null)
+  // The stored grantee list (loaded once) and the staged, in-progress edit.
+  const [original, setOriginal] = useState<GranteeSummary[] | null>(null)
+  const [staged, setStaged] = useState<GranteeSummary[]>([])
+  const [tier, setTier] = useState<Visibility>(visibility)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!token) return
     let cancelled = false
-    const key = refresh
     api.list(token, subject.id)
-      .then(r => { if (!cancelled) setLoaded({ key, grantees: r.grantees }) })
-      .catch((ex: unknown) => { if (!cancelled) setError((ex as Error).message || 'Failed to load shares.') })
+      .then(r => { if (!cancelled) { setOriginal(r.grantees); setStaged(r.grantees) } })
+      .catch((ex: unknown) => { if (!cancelled) setError((ex as Error).message || 'Failed to load access.') })
     return () => { cancelled = true }
-  }, [token, subject.id, api, refresh])
+  }, [token, subject.id, api])
 
-  const grantees = loaded != null && loaded.key === refresh ? loaded.grantees : null
-  const isLoadingGrantees = grantees == null && error == null
+  const isLoading = original == null && error == null
+  useBusyCursor(busy || isLoading)
 
-  // Global wait cursor while the grantee list is loading and while a grant/revoke
-  // is in flight (a mutation also re-loads the list, so this covers the reload).
-  useBusyCursor(busy || isLoadingGrantees)
-
-  // People-picker: debounce the query, then search the username lookup. Results
-  // for an empty query are derived (never fetched), so nothing is set in the
-  // effect body synchronously.
+  // People-picker: debounced username lookup (results for a blank query are
+  // derived, never fetched).
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<UserLookupEntry[]>([])
-  // Whether the server has further matches beyond the page we fetched — drives a
-  // "narrow your search" hint, since the picker pages rather than scrolling all.
   const [hasMore, setHasMore] = useState(false)
 
   useEffect(() => {
@@ -93,104 +90,133 @@ export function ManageSharesModal({ subject, onClose, onVisibilityChange }: Prop
     return () => { cancelled = true; clearTimeout(handle) }
   }, [token, query])
 
-  // Hide the owner (you can't share with yourself — they already have access) and
-  // already-granted users.
-  const grantedIds = new Set((grantees ?? []).map(g => g.id))
+  const stagedIds = new Set(staged.map(g => g.id))
   const pickable = query.trim() === ''
     ? []
-    : results.filter(u => u.id !== subject.ownerId && !grantedIds.has(u.id))
+    : results.filter(u => u.id !== subject.ownerId && !stagedIds.has(u.id))
 
-  async function handleGrant(userId: string) {
+  function stageAdd(user: UserLookupEntry) {
+    setStaged(prev => [...prev, { id: user.id, username: user.username }])
+    setQuery('')
+    setResults([])
+  }
+
+  function stageRemove(id: string) {
+    setStaged(prev => prev.filter(g => g.id !== id))
+  }
+
+  // A save is offered only when something changed.
+  const originalIds = useMemo(() => new Set((original ?? []).map(g => g.id)), [original])
+  const granteesChanged = original != null
+    && (staged.length !== original.length || staged.some(g => !originalIds.has(g.id)))
+  const dirty = tier !== visibility || granteesChanged
+
+  async function handleSave() {
     setBusy(true)
     setError(null)
-    const isFirstGrant = (grantees?.length ?? 0) === 0
     try {
-      await api.grant(token!, subject.id, userId)
-      setQuery('')
-      setResults([])
-      setRefresh(c => c + 1)
-      if (isFirstGrant) onVisibilityChange?.()
+      // "Specific people" with no one staged is functionally private, so persist
+      // it as such — otherwise the game reads back as shared with an empty list.
+      const effectiveTier: Visibility = tier === 'shared' && staged.length === 0 ? 'private' : tier
+      // A non-shared tier keeps no grantee list, so clear it; shared commits the
+      // staged set. The server reconciles the stored list to match in one call.
+      const userIds = effectiveTier === 'shared' ? staged.map(g => g.id) : []
+      await api.set(token!, subject.id, userIds)
+      // The chosen tier is authoritative and set explicitly.
+      await onSetVisibility(effectiveTier)
+      onSaved()
     } catch (ex: unknown) {
-      setError((ex as { message?: string }).message ?? 'Failed to grant access.')
-    } finally {
+      setError((ex as { message?: string }).message ?? 'Failed to save access.')
       setBusy(false)
     }
   }
 
-  async function handleRevoke(userId: string) {
-    setBusy(true)
-    setError(null)
-    const isLastGrant = (grantees?.length ?? 0) === 1
-    try {
-      await api.revoke(token!, subject.id, userId)
-      setRefresh(c => c + 1)
-      if (isLastGrant) onVisibilityChange?.()
-    } catch (ex: unknown) {
-      setError((ex as { message?: string }).message ?? 'Failed to revoke access.')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const tiers = VISIBILITIES.filter(v => v !== 'curated' || isAdmin)
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Share: ${subject.name}`} className="modal-overlay" style={{ zIndex: 1200 }}>
+    <div role="dialog" aria-modal="true" aria-label={`Access: ${subject.name}`} className="modal-overlay" style={{ zIndex: 1200 }}>
       <div className="modal modal-sm">
-        <h2 className="modal-title">Share: {subject.name}</h2>
+        <h2 className="modal-title">Access: {subject.name}</h2>
 
         <div className="share-body">
           <div className="field-group">
-            <p className="field-group-title">Add User</p>
-            <input
-              type="text"
-              className="input"
-              aria-label="Add user"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Start typing a username…"
-              autoFocus
-            />
-            {pickable.length > 0 && (
-              <ul className="share-picker-results">
-                {pickable.map(u => (
-                  <li key={u.id}>
-                    <button type="button" className="btn-secondary" disabled={busy} onClick={() => void handleGrant(u.id)} aria-label={`Add ${u.username}`}>
-                      {u.username}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {query.trim() !== '' && hasMore && (
-              <p className="share-picker-hint">More matches — keep typing to narrow.</p>
-            )}
+            <p className="field-group-title">Who can access this</p>
+            <div role="radiogroup" aria-label="Access tier" className="access-tiers">
+              {tiers.map(v => (
+                <label key={v} className="access-tier">
+                  <input
+                    type="radio"
+                    name="access-tier"
+                    checked={tier === v}
+                    disabled={busy}
+                    onChange={() => setTier(v)}
+                  />
+                  <span className="access-tier-text">
+                    <span className="access-tier-label">{accessLabel(v)}{v === 'curated' ? ' [Admin]' : ''}</span>
+                    <span className="access-tier-desc">{accessDescription(v)}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
+
+          {tier === 'shared' && (
+            <>
+              <div className="field-group">
+                <p className="field-group-title">Add User</p>
+                <input
+                  type="text"
+                  className="input"
+                  aria-label="Add user"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Start typing a username…"
+                />
+                {pickable.length > 0 && (
+                  <ul className="share-picker-results">
+                    {pickable.map(u => (
+                      <li key={u.id}>
+                        <button type="button" className="btn-secondary" disabled={busy} onClick={() => stageAdd(u)} aria-label={`Add ${u.username}`}>
+                          {u.username}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {query.trim() !== '' && hasMore && (
+                  <p className="share-picker-hint">More matches — keep typing to narrow.</p>
+                )}
+              </div>
+
+              <div className="field-group">
+                <p className="field-group-title">Shared with</p>
+                {isLoading && <p aria-label="Loading">Loading…</p>}
+                {!isLoading && staged.length === 0 && <p>No one added yet.</p>}
+                {staged.length > 0 && (
+                  <ul className="share-grantees">
+                    {staged.map(g => (
+                      <li key={g.id}>
+                        <span className="share-grantee-user">
+                          <Avatar userId={g.id} avatarUpdatedAt={g.avatar_updated_at} size={24} />
+                          <span>{g.username}</span>
+                        </span>
+                        <button type="button" className="btn-icon" disabled={busy} onClick={() => stageRemove(g.id)} aria-label={`Remove ${g.username}`}>
+                          <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" width={18} height={18} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
 
           {error && <p role="alert" className="error-msg">{error}</p>}
-
-          <div className="field-group">
-            <p className="field-group-title">Shared with</p>
-            {isLoadingGrantees && <p aria-label="Loading">Loading…</p>}
-            {grantees != null && grantees.length === 0 && <p>No one has access yet.</p>}
-            {grantees != null && grantees.length > 0 && (
-              <ul className="share-grantees">
-                {grantees.map(g => (
-                  <li key={g.id}>
-                    <span className="share-grantee-user">
-                      <Avatar userId={g.id} avatarUpdatedAt={g.avatar_updated_at} size={24} />
-                      <span>{g.username}</span>
-                    </span>
-                    <button type="button" className="btn-icon" disabled={busy} onClick={() => void handleRevoke(g.id)} aria-label={`Remove ${g.username}`}>
-                      <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" width={18} height={18} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
         </div>
 
         <div className="modal-actions-row" style={{ marginTop: '1.25rem' }}>
-          <button type="button" className="btn-gray" onClick={onClose}>Close</button>
+          <button type="button" className="btn-gray" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="btn-primary" onClick={() => void handleSave()} disabled={!dirty || busy || isLoading}>Save</button>
         </div>
       </div>
     </div>
