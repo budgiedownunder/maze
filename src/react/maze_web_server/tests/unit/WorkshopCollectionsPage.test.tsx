@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -91,6 +91,41 @@ describe('WorkshopCollectionsPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New Collection' })).toBeNull())
     expect(screen.getByText('Campaign')).toBeInTheDocument()
     expect(dialog).not.toBeInTheDocument()
+  })
+
+  it('Edit renames a collection and refreshes the list', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.type(screen.getByLabelText('Name'), 'Campaign')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    expect(within(dialog).getByLabelText('Name')).toHaveValue('Campaign')
+    await userEvent.clear(within(dialog).getByLabelText('Name'))
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Season 1')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByText('Season 1')).toBeInTheDocument())
+    expect(screen.queryByText('Campaign')).toBeNull()
+  })
+
+  it('Delete confirms and removes the collection from the list', async () => {
+    renderPage()
+    await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.type(screen.getByLabelText('Name'), 'Doomed')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(screen.getByText('Doomed')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Doomed' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete Collection' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
+    expect(screen.queryByText('Doomed')).toBeNull()
   })
 
   it('blocks an empty name and surfaces a create failure', async () => {

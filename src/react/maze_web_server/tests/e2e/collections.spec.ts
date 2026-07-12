@@ -36,3 +36,45 @@ test('New collection creates a collection that appears in the list', async ({ pa
   await page.reload()
   await expect(page.locator('.game-list-item', { hasText: name })).toBeVisible()
 })
+
+test('Edit renames a collection', async ({ page }) => {
+  await login(page)
+
+  const name = `Renamable ${Date.now()}`
+  await page.getByRole('button', { name: '+ New collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await create.getByLabel('Name').fill(name)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(page.locator('.game-list-item', { hasText: name })).toBeVisible()
+
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  const renamed = `${name} v2`
+  await edit.getByLabel('Name').fill(renamed)
+  await edit.getByRole('button', { name: 'Save' }).click()
+
+  await expect(page.locator('.game-list-item', { hasText: renamed })).toBeVisible()
+  await page.reload()
+  await expect(page.locator('.game-list-item', { hasText: renamed })).toBeVisible()
+})
+
+test('Delete removes a collection after confirmation', async ({ page }) => {
+  await login(page)
+
+  const name = `Doomed ${Date.now()}`
+  await page.getByRole('button', { name: '+ New collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await create.getByLabel('Name').fill(name)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeVisible()
+
+  await page.getByRole('button', { name: `Delete ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: 'Delete Collection' })
+  await dialog.getByRole('button', { name: 'Delete' }).click()
+
+  // Assert on the row's own action button (unambiguous — the name also appears
+  // transiently in the confirm dialog's message text).
+  await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
+  await page.reload()
+  await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
+})

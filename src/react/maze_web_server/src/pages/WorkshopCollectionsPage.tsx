@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { GameCollectionFormModal } from '../components/GameCollectionFormModal'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { useToken, useAuth } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
-import { createGameCollection, listGameCollections } from '../api/client'
+import { createGameCollection, deleteGameCollection, listGameCollections, updateGameCollection } from '../api/client'
 import { accessLabel } from '../utils/gameDefinitions'
 import type { GameCollection } from '../types/api'
 
@@ -30,6 +31,8 @@ export function WorkshopCollectionsPage() {
   const [errorFor, setErrorFor] = useState<{ key: number; message: string } | null>(null)
 
   const [creating, setCreating] = useState<{ busy: boolean; error: string | null } | null>(null)
+  const [editing, setEditing] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
+  const [deleting, setDeleting] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -48,7 +51,7 @@ export function WorkshopCollectionsPage() {
   const collections = (current?.collections ?? []).filter(c => c.ownerId === profile?.id)
   const isLoading = current == null && error == null
 
-  useBusyCursor(!!creating?.busy)
+  useBusyCursor(!!creating?.busy || !!editing?.busy || !!deleting?.busy)
 
   async function handleCreate(name: string, description: string | null) {
     setCreating({ busy: true, error: null })
@@ -58,6 +61,31 @@ export function WorkshopCollectionsPage() {
       setRefreshCount(c => c + 1)
     } catch (ex) {
       setCreating({ busy: false, error: (ex as Error).message || 'Failed to create collection' })
+    }
+  }
+
+  async function handleEdit(collection: GameCollection, name: string, description: string | null) {
+    setEditing({ collection, busy: true, error: null })
+    try {
+      // Membership + visibility are managed elsewhere; the edit form only touches
+      // the name/description, so the stored visibility is preserved.
+      await updateGameCollection(token!, collection.id, { name, description, visibility: collection.visibility })
+      setEditing(null)
+      setRefreshCount(c => c + 1)
+    } catch (ex) {
+      setEditing({ collection, busy: false, error: (ex as Error).message || 'Failed to save collection' })
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleting) return
+    setDeleting({ ...deleting, busy: true, error: null })
+    try {
+      await deleteGameCollection(token!, deleting.collection.id)
+      setDeleting(null)
+      setRefreshCount(c => c + 1)
+    } catch (ex) {
+      setDeleting({ ...deleting, busy: false, error: (ex as Error).message || 'Failed to delete collection' })
     }
   }
 
@@ -71,6 +99,30 @@ export function WorkshopCollectionsPage() {
           error={creating.error}
           onSubmit={(name, description) => void handleCreate(name, description)}
           onCancel={() => setCreating(null)}
+        />
+      )}
+      {editing && (
+        <GameCollectionFormModal
+          title="Edit Collection"
+          confirmLabel="Save"
+          initialName={editing.collection.name}
+          initialDescription={editing.collection.description ?? ''}
+          isLoading={editing.busy}
+          error={editing.error}
+          onSubmit={(name, description) => void handleEdit(editing.collection, name, description)}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+      {deleting && (
+        <ConfirmModal
+          title="Delete Collection"
+          message={`Delete “${deleting.collection.name}”? This removes the collection only — the games in it are not deleted. This cannot be undone.`}
+          confirmLabel="Delete"
+          isDangerous
+          isLoading={deleting.busy}
+          error={deleting.error}
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setDeleting(null)}
         />
       )}
       <AppHeader title="Manage Game Collections">
@@ -93,10 +145,24 @@ export function WorkshopCollectionsPage() {
         {!isLoading && !error && collections.length > 0 && (
           <ul className="game-list">
             {collections.map(c => (
-              <li key={c.id} className="game-list-item" style={{ cursor: 'default' }}>
+              <li
+                key={c.id}
+                className="game-list-item"
+                onClick={() => setEditing({ collection: c, busy: false, error: null })}
+              >
                 <div className="maze-item-text">
                   <span className="maze-item-name" title={c.name}>{c.name}</span>
                   <span className="maze-item-subtitle">{collectionSummary(c)}</span>
+                </div>
+                <div className="game-item-actions">
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setEditing({ collection: c, busy: false, error: null }) }} aria-label={`Edit ${c.name}`}>
+                    <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
+                    <span className="maze-item-action-label">Edit</span>
+                  </button>
+                  <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ collection: c, busy: false, error: null }) }} aria-label={`Delete ${c.name}`}>
+                    <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
+                    <span className="maze-item-action-label">Delete</span>
+                  </button>
                 </div>
               </li>
             ))}

@@ -716,6 +716,31 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 })
   }),
 
+  http.put(`${BASE}/game-collections/:id`, async ({ params, request }) => {
+    const body = await request.json() as GameCollectionRequest
+    const index = mockGameCollections.findIndex(c => c.id === params.id)
+    if (index === -1) return new HttpResponse(null, { status: 404 })
+    // `ownerId`, `items` and `createdAt` are server-owned / managed elsewhere.
+    const updated: GameCollection = {
+      ...mockGameCollections[index],
+      name: body.name,
+      description: body.description ?? undefined,
+      visibility: body.visibility ?? mockGameCollections[index].visibility,
+      updatedAt: new Date().toISOString(),
+    }
+    mockGameCollections = mockGameCollections.map((c, i) => (i === index ? updated : c))
+    saveGameCollections()
+    return HttpResponse.json(updated)
+  }),
+
+  http.delete(`${BASE}/game-collections/:id`, ({ params }) => {
+    const index = mockGameCollections.findIndex(c => c.id === params.id)
+    if (index === -1) return new HttpResponse(null, { status: 404 })
+    mockGameCollections = mockGameCollections.filter(c => c.id !== params.id)
+    saveGameCollections()
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   // Collection shares — mirror of the definition share endpoints.
   http.get(`${BASE}/game-collections/:id/shares`, ({ params }) =>
     HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[String(params.id)] ?? []) }),

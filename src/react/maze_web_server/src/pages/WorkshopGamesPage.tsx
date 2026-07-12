@@ -351,17 +351,7 @@ export function WorkshopGamesPage() {
               <li
                 key={d.id}
                 className="game-list-item"
-                role="button"
-                tabIndex={0}
-                aria-label={`Edit ${d.name}`}
                 onClick={() => void handleEdit(d.id)}
-                onKeyDown={e => {
-                  // Only the row itself (not a focused action button) edits on Enter/Space.
-                  if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-                    e.preventDefault()
-                    void handleEdit(d.id)
-                  }
-                }}
               >
                 <div className="game-thumb" title={accessDescription(d.visibility)}>
                   <img className="game-thumb-base" src="/images/workshop/game.svg" alt="" aria-hidden="true" />
@@ -372,6 +362,10 @@ export function WorkshopGamesPage() {
                   <span className="maze-item-subtitle">{gameSummary(d)}</span>
                 </div>
                 <div className="game-item-actions">
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void handleEdit(d.id) }} aria-label={`Edit ${d.name}`}>
+                    <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
+                    <span className="maze-item-action-label">Edit</span>
+                  </button>
                   <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); launchDefinition(d.id) }} aria-label={`Play ${d.name}`}>
                     <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Play</span>
