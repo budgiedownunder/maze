@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { GameCollectionFormModal } from '../components/GameCollectionFormModal'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { ManageSharesModal } from '../components/ManageSharesModal'
 import { useToken, useAuth } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
-import { createGameCollection, deleteGameCollection, listGameCollections, updateGameCollection } from '../api/client'
-import { accessLabel } from '../utils/gameDefinitions'
+import { createGameCollection, deleteGameCollection, getGameCollection, listGameCollections, updateGameCollection } from '../api/client'
+import { accessLabel, type Visibility } from '../utils/gameDefinitions'
 import type { GameCollection } from '../types/api'
 
 // A one-line collection summary — game count and access tier — shown under the
@@ -16,10 +17,10 @@ function collectionSummary(c: GameCollection): string {
   return `${games} · ${accessLabel(c.visibility)}`
 }
 
-// The workshop's Collections area: the caller's own game collections. The list
-// endpoint merges own + shared + public + curated, so we filter to the caller's
-// own here. Membership editing (open/reorder) and the row actions
-// (edit/access/delete) land in the following steps.
+// The workshop's Collections area: the caller's own game collections, each with
+// edit / access / delete plus a New collection create flow. The list endpoint
+// merges own + shared + public + curated, so we filter to the caller's own here.
+// Membership editing (open/reorder) lands in the following step.
 export function WorkshopCollectionsPage() {
   const token = useToken()
   const { profile } = useAuth()
@@ -33,6 +34,7 @@ export function WorkshopCollectionsPage() {
   const [creating, setCreating] = useState<{ busy: boolean; error: string | null } | null>(null)
   const [editing, setEditing] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
   const [deleting, setDeleting] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
+  const [sharing, setSharing] = useState<GameCollection | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -89,6 +91,31 @@ export function WorkshopCollectionsPage() {
     }
   }
 
+  // Persist a collection's access tier — a visibility-only change (name +
+  // description sent unchanged). Driven by the access modal.
+  async function setCollectionVisibility(collection: GameCollection, visibility: Visibility): Promise<void> {
+    await updateGameCollection(token!, collection.id, {
+      name: collection.name,
+      description: collection.description ?? null,
+      visibility,
+    })
+  }
+
+  // Re-read one collection's authoritative visibility and patch just its row —
+  // used when the access modal saves. Best-effort: on failure the row is left
+  // as-is and a manual Refresh still corrects it.
+  async function reloadRowVisibility(id: string) {
+    try {
+      const detail = await getGameCollection(token!, id)
+      setLoaded(prev =>
+        prev == null
+          ? prev
+          : { ...prev, collections: prev.collections.map(c => (c.id === id ? { ...c, visibility: detail.visibility } : c)) })
+    } catch {
+      // Ignore — the summary stays until the next load/refresh.
+    }
+  }
+
   return (
     <div className="games-page">
       {creating && (
@@ -125,6 +152,16 @@ export function WorkshopCollectionsPage() {
           onCancel={() => setDeleting(null)}
         />
       )}
+      {sharing && (
+        <ManageSharesModal
+          subject={{ kind: 'collection', id: sharing.id, name: sharing.name, ownerId: sharing.ownerId }}
+          visibility={sharing.visibility}
+          isAdmin={!!profile?.is_admin}
+          onSetVisibility={v => setCollectionVisibility(sharing, v)}
+          onSaved={() => { const id = sharing.id; setSharing(null); void reloadRowVisibility(id) }}
+          onClose={() => setSharing(null)}
+        />
+      )}
       <AppHeader title="Manage Game Collections">
         <button type="button" className="btn-primary" onClick={() => setCreating({ busy: false, error: null })}>
           + New collection
@@ -158,6 +195,10 @@ export function WorkshopCollectionsPage() {
                   <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setEditing({ collection: c, busy: false, error: null }) }} aria-label={`Edit ${c.name}`}>
                     <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
                     <span className="maze-item-action-label">Edit</span>
+                  </button>
+                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(c) }} aria-label={`Access for ${c.name}`}>
+                    <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
+                    <span className="maze-item-action-label">Access</span>
                   </button>
                   <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ collection: c, busy: false, error: null }) }} aria-label={`Delete ${c.name}`}>
                     <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { WorkshopCollectionsPage } from '../../src/pages/WorkshopCollectionsPage'
-import { mockProfile, resetMockGameCollections } from '../../src/mocks/handlers'
+import { mockProfile, resetMockGameCollections, resetMockShares } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
 import type { GameCollection } from '../../src/types/api'
 
@@ -43,6 +43,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   resetMockGameCollections()
+  resetMockShares()
 })
 
 describe('WorkshopCollectionsPage', () => {
@@ -126,6 +127,37 @@ describe('WorkshopCollectionsPage', () => {
 
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
     expect(screen.queryByText('Doomed')).toBeNull()
+  })
+
+  it('Access opens the access modal for a collection', async () => {
+    server.use(listOf(col({ id: 'c1', name: 'Campaign', visibility: 'shared' })))
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Access for Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Access: Campaign' })
+    expect(dialog).toHaveTextContent('Campaign')
+    // A shared collection opens with the people-picker shown.
+    expect(within(dialog).getByLabelText('Add user')).toBeInTheDocument()
+  })
+
+  it('setting a collection to Everyone via the access modal updates its summary', async () => {
+    // The default (store-backed) handlers persist the share list + the
+    // visibility PUT so the reloaded row reflects the new tier.
+    renderPage()
+    await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.type(screen.getByLabelText('Name'), 'Campaign')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(screen.getByText('0 games · Just me')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Access for Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Access: Campaign' })
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Everyone/ }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByText('0 games · Everyone')).toBeInTheDocument())
+    expect(screen.queryByText('0 games · Just me')).toBeNull()
   })
 
   it('blocks an empty name and surfaces a create failure', async () => {

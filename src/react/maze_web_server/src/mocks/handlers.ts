@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, GameCollection, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -714,6 +714,28 @@ export const handlers = [
     mockGameCollections = [...mockGameCollections, created]
     saveGameCollections()
     return HttpResponse.json(created, { status: 201 })
+  }),
+
+  // Collection detail — metadata plus its member definitions, hydrated in order
+  // from the definition store (missing refs dropped, mirroring the server).
+  http.get(`${BASE}/game-collections/:id`, ({ params }) => {
+    const collection = mockGameCollections.find(c => c.id === params.id)
+    if (!collection) return new HttpResponse(null, { status: 404 })
+    const definitions = [...collection.items]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map(item => mockGameDefinitions.find(d => d.id === item.definitionId))
+      .filter((d): d is GameDefinition => d !== undefined)
+    return HttpResponse.json<GameCollectionDetailResponse>({
+      id: collection.id,
+      ownerId: collection.ownerId,
+      name: collection.name,
+      description: collection.description,
+      visibility: collection.visibility,
+      imageUpdatedAt: collection.imageUpdatedAt,
+      createdAt: collection.createdAt,
+      updatedAt: collection.updatedAt,
+      definitions,
+    })
   }),
 
   http.put(`${BASE}/game-collections/:id`, async ({ params, request }) => {

@@ -58,6 +58,28 @@ test('Edit renames a collection', async ({ page }) => {
   await expect(page.locator('.game-list-item', { hasText: renamed })).toBeVisible()
 })
 
+test('the access modal updates a collection summary from Just me to Everyone', async ({ page }) => {
+  await login(page)
+
+  const name = `Accessible ${Date.now()}`
+  await page.getByRole('button', { name: '+ New collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await create.getByLabel('Name').fill(name)
+  await create.getByRole('button', { name: 'Create' }).click()
+
+  const row = page.locator('.game-list-item', { hasText: name })
+  await expect(row.getByText(/Just me/)).toBeVisible()
+
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: `Access: ${name}` })
+  await dialog.getByRole('radio', { name: /Everyone/ }).click()
+  await dialog.getByRole('button', { name: 'Save' }).click()
+
+  // Save committed the tier; the row reloaded to the public tier.
+  await expect(row.getByText(/Everyone/)).toBeVisible()
+  await expect(row.getByText(/Just me/)).toBeHidden()
+})
+
 test('Delete removes a collection after confirmation', async ({ page }) => {
   await login(page)
 
