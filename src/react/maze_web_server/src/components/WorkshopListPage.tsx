@@ -14,6 +14,62 @@ export interface WorkshopListContext<T> {
   getItems: () => T[]
 }
 
+// One button in a row's action cluster. `variant` picks the danger styling for a
+// destructive action; everything else is a secondary button.
+export interface RowAction {
+  key: string
+  label: string
+  ariaLabel: string
+  icon: string
+  onClick: () => void
+  variant?: 'secondary' | 'danger'
+}
+
+// A declarative description of one list row: the base renders the shared
+// `.game-list-item` shell (thumbnail + name/subtitle + action buttons) from it.
+export interface WorkshopRow {
+  name: string
+  subtitle: string
+  // Optional row thumbnail (e.g. the game/collection art + visibility marker).
+  thumbnail?: ReactNode
+  // Mouse-click-on-row convenience (usually the same as the Edit action); the
+  // action buttons stop propagation so they never also trigger it.
+  onOpen?: () => void
+  actions: RowAction[]
+}
+
+// The shared row: the `.game-list-item` structure both workshop lists use, driven
+// entirely by a `WorkshopRow` descriptor.
+function WorkshopListRow({ name, subtitle, thumbnail, onOpen, actions }: WorkshopRow) {
+  return (
+    <li
+      className="game-list-item"
+      onClick={onOpen}
+      style={onOpen ? undefined : { cursor: 'default' }}
+    >
+      {thumbnail}
+      <div className="maze-item-text">
+        <span className="maze-item-name" title={name}>{name}</span>
+        <span className="maze-item-subtitle">{subtitle}</span>
+      </div>
+      <div className="game-item-actions">
+        {actions.map(a => (
+          <button
+            key={a.key}
+            type="button"
+            className={`maze-item-action ${a.variant === 'danger' ? 'btn-danger-outline' : 'btn-secondary'}`}
+            onClick={e => { e.stopPropagation(); a.onClick() }}
+            aria-label={a.ariaLabel}
+          >
+            <img src={a.icon} alt="" aria-hidden="true" />
+            <span className="maze-item-action-label">{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </li>
+  )
+}
+
 interface Props<T> {
   title: string
   newLabel: string
@@ -25,7 +81,8 @@ interface Props<T> {
   getId: (item: T) => string
   emptyText: string
   errorText: string
-  renderItem: (item: T) => ReactNode
+  // Maps an item to its row descriptor (name/subtitle/thumbnail/actions).
+  row: (item: T) => WorkshopRow
   // The parent's modals/dialogs, rendered at the top of the page container.
   overlays?: ReactNode
   // Optional banner shown above the list (e.g. an action error).
@@ -40,7 +97,7 @@ interface Props<T> {
 // scaffold). Each page supplies its own rows (`renderItem`) and modals
 // (`overlays`); the divergent action sets stay in the parent.
 export function WorkshopListPage<T>({
-  title, newLabel, onNew, load, filter, getId, emptyText, errorText, renderItem, overlays, banner, onReady,
+  title, newLabel, onNew, load, filter, getId, emptyText, errorText, row, overlays, banner, onReady,
 }: Props<T>) {
   const token = useToken()
 
@@ -113,7 +170,7 @@ export function WorkshopListPage<T>({
         {!isLoading && !error && items.length === 0 && <p>{emptyText}</p>}
         {!isLoading && !error && items.length > 0 && (
           <ul className="game-list">
-            {items.map(item => renderItem(item))}
+            {items.map(item => <WorkshopListRow key={getId(item)} {...row(item)} />)}
           </ul>
         )}
       </main>

@@ -322,52 +322,26 @@ export function WorkshopGamesPage() {
       onReady={ctx => { listRef.current = ctx }}
       banner={actionError ? <p className="error-msg" role="alert">{actionError}</p> : null}
       overlays={overlays}
-      renderItem={d => (
-        <li
-          key={d.id}
-          className="game-list-item"
-          onClick={() => void handleEdit(d.id)}
-        >
+      row={d => ({
+        name: d.name,
+        subtitle: gameSummary(d),
+        thumbnail: (
           <div className="game-thumb" title={accessDescription(d.visibility)}>
             <img className="game-thumb-base" src="/images/workshop/game.svg" alt="" aria-hidden="true" />
             <img className="game-thumb-marker" src={`/images/workshop/marker-${d.visibility}.svg`} alt="" aria-hidden="true" />
           </div>
-          <div className="maze-item-text">
-            <span className="maze-item-name" title={d.name}>{d.name}</span>
-            <span className="maze-item-subtitle">{gameSummary(d)}</span>
-          </div>
-          <div className="game-item-actions">
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void handleEdit(d.id) }} aria-label={`Edit ${d.name}`}>
-              <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Edit</span>
-            </button>
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); launchDefinition(d.id) }} aria-label={`Play ${d.name}`}>
-              <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Play</span>
-            </button>
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setViewingBoard(d) }} aria-label={`Leaderboard for ${d.name}`}>
-              <img src="/images/icons/icon_leaderboard.svg" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Leaderboard</span>
-            </button>
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void openReshuffle(d.id) }} aria-label={`Reshuffle ${d.name}`}>
-              <img src="/images/icons/icon_reshuffle.svg" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Reshuffle</span>
-            </button>
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setDuplicating({ source: d, error: null, busy: false }) }} aria-label={`Duplicate ${d.name}`}>
-              <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Duplicate</span>
-            </button>
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(d) }} aria-label={`Access for ${d.name}`}>
-              <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Access</span>
-            </button>
-            <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ def: d, busy: false, error: null }) }} aria-label={`Delete ${d.name}`}>
-              <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Delete</span>
-            </button>
-          </div>
-        </li>
-      )}
+        ),
+        onOpen: () => void handleEdit(d.id),
+        actions: [
+          { key: 'edit', label: 'Edit', ariaLabel: `Edit ${d.name}`, icon: '/images/icons/icon_rename.png', onClick: () => void handleEdit(d.id) },
+          { key: 'play', label: 'Play', ariaLabel: `Play ${d.name}`, icon: '/images/icons/icon_play_3d.png', onClick: () => launchDefinition(d.id) },
+          { key: 'leaderboard', label: 'Leaderboard', ariaLabel: `Leaderboard for ${d.name}`, icon: '/images/icons/icon_leaderboard.svg', onClick: () => setViewingBoard(d) },
+          { key: 'reshuffle', label: 'Reshuffle', ariaLabel: `Reshuffle ${d.name}`, icon: '/images/icons/icon_reshuffle.svg', onClick: () => void openReshuffle(d.id) },
+          { key: 'duplicate', label: 'Duplicate', ariaLabel: `Duplicate ${d.name}`, icon: '/images/icons/icon_duplicate.png', onClick: () => setDuplicating({ source: d, error: null, busy: false }) },
+          { key: 'access', label: 'Access', ariaLabel: `Access for ${d.name}`, icon: '/images/icons/icon_share.svg', onClick: () => setSharing(d) },
+          { key: 'delete', label: 'Delete', ariaLabel: `Delete ${d.name}`, icon: '/images/icons/icon_delete.png', onClick: () => setDeleting({ def: d, busy: false, error: null }), variant: 'danger' },
+        ],
+      })}
     />
   )
 }

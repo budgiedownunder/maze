@@ -155,35 +155,19 @@ export function WorkshopCollectionsPage() {
       errorText="Failed to load collections"
       onReady={ctx => { listRef.current = ctx }}
       overlays={overlays}
-      renderItem={c => (
-        <li
-          key={c.id}
-          className="game-list-item"
-          // The whole row edits on mouse-click as a convenience; keyboard /
-          // screen-reader users use the explicit Edit button (so the row is
-          // not a button containing buttons). Action buttons stop propagation.
-          onClick={() => setEditing({ collection: c, busy: false, error: null })}
-        >
-          <div className="maze-item-text">
-            <span className="maze-item-name" title={c.name}>{c.name}</span>
-            <span className="maze-item-subtitle">{collectionSummary(c)}</span>
-          </div>
-          <div className="game-item-actions">
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setEditing({ collection: c, busy: false, error: null }) }} aria-label={`Edit ${c.name}`}>
-              <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Edit</span>
-            </button>
-            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(c) }} aria-label={`Access for ${c.name}`}>
-              <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Access</span>
-            </button>
-            <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ collection: c, busy: false, error: null }) }} aria-label={`Delete ${c.name}`}>
-              <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
-              <span className="maze-item-action-label">Delete</span>
-            </button>
-          </div>
-        </li>
-      )}
+      // The whole row edits on mouse-click as a convenience; keyboard /
+      // screen-reader users use the explicit Edit action (the row is not a button
+      // containing buttons).
+      row={c => ({
+        name: c.name,
+        subtitle: collectionSummary(c),
+        onOpen: () => setEditing({ collection: c, busy: false, error: null }),
+        actions: [
+          { key: 'edit', label: 'Edit', ariaLabel: `Edit ${c.name}`, icon: '/images/icons/icon_rename.png', onClick: () => setEditing({ collection: c, busy: false, error: null }) },
+          { key: 'access', label: 'Access', ariaLabel: `Access for ${c.name}`, icon: '/images/icons/icon_share.svg', onClick: () => setSharing(c) },
+          { key: 'delete', label: 'Delete', ariaLabel: `Delete ${c.name}`, icon: '/images/icons/icon_delete.png', onClick: () => setDeleting({ collection: c, busy: false, error: null }), variant: 'danger' },
+        ],
+      })}
     />
   )
 }
