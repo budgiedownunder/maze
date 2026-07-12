@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, GameCollection, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -232,6 +232,34 @@ export let mockGameDefinitions: GameDefinition[] = loadGameDefinitions()
 export function resetMockGameDefinitions(): void {
   mockGameDefinitions = []
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(GAME_DEFINITION_STORAGE_KEY)
+}
+
+// Mock game collections — same sessionStorage-mirrored store as definitions, so a
+// created collection survives an e2e reload.
+const GAME_COLLECTION_STORAGE_KEY = '__msw_mock_game_collections'
+
+function loadGameCollections(): GameCollection[] {
+  if (typeof sessionStorage === 'undefined') return []
+  try {
+    const raw = sessionStorage.getItem(GAME_COLLECTION_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as GameCollection[]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveGameCollections(): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(GAME_COLLECTION_STORAGE_KEY, JSON.stringify(mockGameCollections))
+  } catch { /* ignore quota / serialization errors */ }
+}
+
+export let mockGameCollections: GameCollection[] = loadGameCollections()
+
+export function resetMockGameCollections(): void {
+  mockGameCollections = []
+  if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(GAME_COLLECTION_STORAGE_KEY)
 }
 
 // The searchable user directory the share people-picker's username lookup matches
@@ -657,6 +685,35 @@ export const handlers = [
     const owner = mockGameDefinitions.find(d => d.id === id)?.ownerId
     mockDefinitionShares[id] = [...new Set(userIds.filter(u => u !== owner))]
     return HttpResponse.json({ grantees: granteeSummaries(mockDefinitionShares[id]) })
+  }),
+
+  // Collections — list (own + accessible) and create. Membership item + detail
+  // endpoints land with the membership editor step.
+  http.get(`${BASE}/game-collections`, () => {
+    return HttpResponse.json<GameCollectionListResponse>({
+      collections: mockGameCollections,
+      limit: 20,
+      offset: 0,
+      hasMore: false,
+    })
+  }),
+
+  http.post(`${BASE}/game-collections`, async ({ request }) => {
+    const body = await request.json() as GameCollectionRequest
+    const now = new Date().toISOString()
+    const created: GameCollection = {
+      id: `col-${Date.now()}`,
+      ownerId: mockProfile.id,
+      name: body.name,
+      description: body.description ?? undefined,
+      visibility: body.visibility ?? 'private',
+      items: [],
+      createdAt: now,
+      updatedAt: now,
+    }
+    mockGameCollections = [...mockGameCollections, created]
+    saveGameCollections()
+    return HttpResponse.json(created, { status: 201 })
   }),
 
   // Collection shares — mirror of the definition share endpoints.
