@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AppHeader } from '../components/AppHeader'
+import { useRef, useState } from 'react'
+import { WorkshopListPage, type WorkshopListContext } from '../components/WorkshopListPage'
 import { GameCollectionFormModal } from '../components/GameCollectionFormModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { ManageSharesModal } from '../components/ManageSharesModal'
@@ -18,40 +18,21 @@ function collectionSummary(c: GameCollection): string {
 }
 
 // The workshop's Collections area: the caller's own game collections, each with
-// edit / access / delete plus a New collection create flow. The list endpoint
-// merges own + shared + public + curated, so we filter to the caller's own here.
-// Membership editing (open/reorder) lands in the following step.
+// edit / access / delete plus a New collection create flow, rendered through the
+// shared WorkshopListPage shell. Membership editing (the games modal) lands in
+// the following step.
 export function WorkshopCollectionsPage() {
   const token = useToken()
   const { profile } = useAuth()
 
-  // Load state keyed by the refresh counter, so a refresh resets the view by
-  // derivation rather than by setState in an effect.
-  const [refreshCount, setRefreshCount] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: number; collections: GameCollection[] } | null>(null)
-  const [errorFor, setErrorFor] = useState<{ key: number; message: string } | null>(null)
+  // The shared list's context (refresh / patch), captured once it is ready.
+  const listRef = useRef<WorkshopListContext<GameCollection> | null>(null)
+  const refresh = () => listRef.current?.refresh()
 
   const [creating, setCreating] = useState<{ busy: boolean; error: string | null } | null>(null)
   const [editing, setEditing] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
   const [deleting, setDeleting] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
   const [sharing, setSharing] = useState<GameCollection | null>(null)
-
-  useEffect(() => {
-    if (!token) return
-    let cancelled = false
-    const key = refreshCount
-    listGameCollections(token)
-      .then(page => { if (!cancelled) setLoaded({ key, collections: page.collections }) })
-      .catch(ex => {
-        if (!cancelled) setErrorFor({ key, message: (ex as Error).message || 'Failed to load collections' })
-      })
-    return () => { cancelled = true }
-  }, [token, refreshCount])
-
-  const error = errorFor != null && errorFor.key === refreshCount ? errorFor.message : null
-  const current = loaded != null && loaded.key === refreshCount ? loaded : null
-  const collections = (current?.collections ?? []).filter(c => c.ownerId === profile?.id)
-  const isLoading = current == null && error == null
 
   useBusyCursor(!!creating?.busy || !!editing?.busy || !!deleting?.busy)
 
@@ -60,7 +41,7 @@ export function WorkshopCollectionsPage() {
     try {
       await createGameCollection(token!, { name, description })
       setCreating(null)
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex) {
       setCreating({ busy: false, error: (ex as Error).message || 'Failed to create collection' })
     }
@@ -73,7 +54,7 @@ export function WorkshopCollectionsPage() {
       // the name/description, so the stored visibility is preserved.
       await updateGameCollection(token!, collection.id, { name, description, visibility: collection.visibility })
       setEditing(null)
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex) {
       setEditing({ collection, busy: false, error: (ex as Error).message || 'Failed to save collection' })
     }
@@ -85,7 +66,7 @@ export function WorkshopCollectionsPage() {
     try {
       await deleteGameCollection(token!, deleting.collection.id)
       setDeleting(null)
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex) {
       setDeleting({ ...deleting, busy: false, error: (ex as Error).message || 'Failed to delete collection' })
     }
@@ -107,17 +88,14 @@ export function WorkshopCollectionsPage() {
   async function reloadRowVisibility(id: string) {
     try {
       const detail = await getGameCollection(token!, id)
-      setLoaded(prev =>
-        prev == null
-          ? prev
-          : { ...prev, collections: prev.collections.map(c => (c.id === id ? { ...c, visibility: detail.visibility } : c)) })
+      listRef.current?.patchItem(id, { visibility: detail.visibility })
     } catch {
       // Ignore — the summary stays until the next load/refresh.
     }
   }
 
-  return (
-    <div className="games-page">
+  const overlays = (
+    <>
       {creating && (
         <GameCollectionFormModal
           title="New Collection"
@@ -162,54 +140,50 @@ export function WorkshopCollectionsPage() {
           onClose={() => setSharing(null)}
         />
       )}
-      <AppHeader title="Manage Game Collections">
-        <button type="button" className="btn-primary" onClick={() => setCreating({ busy: false, error: null })}>
-          + New collection
-        </button>
-        <button
-          className="btn-icon"
-          onClick={() => setRefreshCount(c => c + 1)}
-          aria-label="Refresh"
-          title="Refresh"
+    </>
+  )
+
+  return (
+    <WorkshopListPage<GameCollection>
+      title="Manage Game Collections"
+      newLabel="+ New collection"
+      onNew={() => setCreating({ busy: false, error: null })}
+      load={t => listGameCollections(t).then(page => page.collections)}
+      filter={c => c.ownerId === profile?.id}
+      getId={c => c.id}
+      emptyText="No collections yet."
+      errorText="Failed to load collections"
+      onReady={ctx => { listRef.current = ctx }}
+      overlays={overlays}
+      renderItem={c => (
+        <li
+          key={c.id}
+          className="game-list-item"
+          // The whole row edits on mouse-click as a convenience; keyboard /
+          // screen-reader users use the explicit Edit button (so the row is
+          // not a button containing buttons). Action buttons stop propagation.
+          onClick={() => setEditing({ collection: c, busy: false, error: null })}
         >
-          <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
-        </button>
-      </AppHeader>
-      <main className="maze-list-page">
-        {isLoading && <p aria-label="Loading">Loading…</p>}
-        {!isLoading && error && <p className="error-msg" role="alert">{error}</p>}
-        {!isLoading && !error && collections.length === 0 && <p>No collections yet.</p>}
-        {!isLoading && !error && collections.length > 0 && (
-          <ul className="game-list">
-            {collections.map(c => (
-              <li
-                key={c.id}
-                className="game-list-item"
-                onClick={() => setEditing({ collection: c, busy: false, error: null })}
-              >
-                <div className="maze-item-text">
-                  <span className="maze-item-name" title={c.name}>{c.name}</span>
-                  <span className="maze-item-subtitle">{collectionSummary(c)}</span>
-                </div>
-                <div className="game-item-actions">
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setEditing({ collection: c, busy: false, error: null }) }} aria-label={`Edit ${c.name}`}>
-                    <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Edit</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(c) }} aria-label={`Access for ${c.name}`}>
-                    <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Access</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ collection: c, busy: false, error: null }) }} aria-label={`Delete ${c.name}`}>
-                    <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Delete</span>
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
-    </div>
+          <div className="maze-item-text">
+            <span className="maze-item-name" title={c.name}>{c.name}</span>
+            <span className="maze-item-subtitle">{collectionSummary(c)}</span>
+          </div>
+          <div className="game-item-actions">
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setEditing({ collection: c, busy: false, error: null }) }} aria-label={`Edit ${c.name}`}>
+              <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Edit</span>
+            </button>
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(c) }} aria-label={`Access for ${c.name}`}>
+              <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Access</span>
+            </button>
+            <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ collection: c, busy: false, error: null }) }} aria-label={`Delete ${c.name}`}>
+              <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Delete</span>
+            </button>
+          </div>
+        </li>
+      )}
+    />
   )
 }

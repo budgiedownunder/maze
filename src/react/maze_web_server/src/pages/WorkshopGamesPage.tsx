@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { AppHeader } from '../components/AppHeader'
+import { useRef, useState } from 'react'
+import { WorkshopListPage, type WorkshopListContext } from '../components/WorkshopListPage'
 import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
 import { PromptModal } from '../components/PromptModal'
 import { ManageSharesModal } from '../components/ManageSharesModal'
@@ -39,11 +39,9 @@ export function WorkshopGamesPage() {
   const token = useToken()
   const { profile } = useAuth()
 
-  // The fetched list and any load failure are keyed by the refresh counter, so a
-  // refresh resets the view by derivation rather than by setState in an effect.
-  const [refreshCount, setRefreshCount] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: number; definitions: GameDefinition[] } | null>(null)
-  const [errorFor, setErrorFor] = useState<{ key: number; message: string } | null>(null)
+  // The shared list's context (refresh / patch), captured once it is ready.
+  const listRef = useRef<WorkshopListContext<GameDefinition> | null>(null)
+  const refresh = () => listRef.current?.refresh()
 
   const [isCreating, setIsCreating] = useState(false)
   const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
@@ -59,26 +57,6 @@ export function WorkshopGamesPage() {
   // busy cursor so the page never looks frozen.
   const [actionBusy, setActionBusy] = useState(false)
   useBusyCursor(actionBusy)
-
-  const error = errorFor != null && errorFor.key === refreshCount ? errorFor.message : null
-  const current = loaded != null && loaded.key === refreshCount ? loaded : null
-  // The caller's own definitions, minus any they've featured: a curated game is
-  // managed from the admin Features area, not here — otherwise the default
-  // admin's seeded curated games would leak into their Manage Games list.
-  const games = (current?.definitions ?? []).filter(d => d.ownerId === profile?.id && d.visibility !== 'curated')
-  const isLoading = current == null && error == null
-
-  useEffect(() => {
-    if (!token) return
-    let cancelled = false
-    const key = refreshCount
-    listGameDefinitions(token)
-      .then(page => { if (!cancelled) setLoaded({ key, definitions: page.definitions }) })
-      .catch(ex => {
-        if (!cancelled) setErrorFor({ key, message: (ex as Error).message || 'Failed to load games' })
-      })
-    return () => { cancelled = true }
-  }, [token, refreshCount])
 
   function closeEditor() {
     setIsCreating(false)
@@ -104,10 +82,7 @@ export function WorkshopGamesPage() {
   async function reloadRowVisibility(id: string) {
     try {
       const def = await getGameDefinition(token!, id)
-      setLoaded(prev =>
-        prev == null
-          ? prev
-          : { ...prev, definitions: prev.definitions.map(d => (d.id === id ? { ...d, visibility: def.visibility } : d)) })
+      listRef.current?.patchItem(id, { visibility: def.visibility })
     } catch {
       // Ignore — the badge stays until the next load/refresh.
     }
@@ -128,7 +103,7 @@ export function WorkshopGamesPage() {
     try {
       await createGameDefinition(token!, request)
       closeEditor()
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex: unknown) {
       setActionError((ex as { message?: string }).message ?? 'Failed to create game.')
     } finally {
@@ -164,7 +139,7 @@ export function WorkshopGamesPage() {
     try {
       await updateGameDefinition(token!, editing.id, request)
       closeEditor()
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex: unknown) {
       setActionError((ex as { message?: string }).message ?? 'Failed to save game.')
     } finally {
@@ -193,7 +168,7 @@ export function WorkshopGamesPage() {
     try {
       await reshuffleGameDefinition(token!, reshuffling.def.id)
       setReshuffling(null)
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex: unknown) {
       const message = (ex as { message?: string }).message ?? 'Failed to reshuffle.'
       setReshuffling(r => (r ? { ...r, busy: false, error: message } : r))
@@ -206,7 +181,7 @@ export function WorkshopGamesPage() {
     try {
       await deleteGameDefinition(token!, deleting.def.id)
       setDeleting(null)
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex: unknown) {
       const message = (ex as { message?: string }).message ?? 'Failed to delete game.'
       setDeleting(d => (d ? { ...d, busy: false, error: message } : d))
@@ -216,6 +191,7 @@ export function WorkshopGamesPage() {
   // A copy can't reuse an existing name (the server enforces unique per-owner and
   // would 409); pre-check against the visible list for a friendlier message.
   function validateDuplicateName(name: string): string | null {
+    const games = listRef.current?.getItems() ?? []
     return games.some(d => d.name.toLowerCase() === name.toLowerCase())
       ? 'A game with that name already exists.'
       : null
@@ -238,15 +214,15 @@ export function WorkshopGamesPage() {
         config: source.config,
       })
       setDuplicating(null)
-      setRefreshCount(c => c + 1)
+      refresh()
     } catch (ex: unknown) {
       const message = (ex as { message?: string }).message ?? 'Failed to duplicate game.'
       setDuplicating(d => (d ? { ...d, busy: false, error: message } : d))
     }
   }
 
-  return (
-    <div className="games-page">
+  const overlays = (
+    <>
       {isCreating && (
         <GameDefinitionEditor
           mode="wizard"
@@ -327,75 +303,71 @@ export function WorkshopGamesPage() {
           onCancel={() => setDeleting(null)}
         />
       )}
-      <AppHeader title="Manage Games">
-        <button type="button" className="btn-primary" onClick={() => setIsCreating(true)}>
-          + New game
-        </button>
-        <button
-          className="btn-icon"
-          onClick={() => setRefreshCount(c => c + 1)}
-          aria-label="Refresh"
-          title="Refresh"
+    </>
+  )
+
+  return (
+    <WorkshopListPage<GameDefinition>
+      title="Manage Games"
+      newLabel="+ New game"
+      onNew={() => setIsCreating(true)}
+      load={t => listGameDefinitions(t).then(page => page.definitions)}
+      // The caller's own definitions, minus any they've featured: a curated game
+      // is managed from the admin Features area, not here — otherwise the default
+      // admin's seeded curated games would leak into their Manage Games list.
+      filter={d => d.ownerId === profile?.id && d.visibility !== 'curated'}
+      getId={d => d.id}
+      emptyText="No games yet."
+      errorText="Failed to load games"
+      onReady={ctx => { listRef.current = ctx }}
+      banner={actionError ? <p className="error-msg" role="alert">{actionError}</p> : null}
+      overlays={overlays}
+      renderItem={d => (
+        <li
+          key={d.id}
+          className="game-list-item"
+          onClick={() => void handleEdit(d.id)}
         >
-          <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
-        </button>
-      </AppHeader>
-      <main className="maze-list-page">
-        {actionError && <p className="error-msg" role="alert">{actionError}</p>}
-        {isLoading && <p aria-label="Loading">Loading…</p>}
-        {!isLoading && error && <p className="error-msg" role="alert">{error}</p>}
-        {!isLoading && !error && games.length === 0 && <p>No games yet.</p>}
-        {!isLoading && !error && games.length > 0 && (
-          <ul className="game-list">
-            {games.map(d => (
-              <li
-                key={d.id}
-                className="game-list-item"
-                onClick={() => void handleEdit(d.id)}
-              >
-                <div className="game-thumb" title={accessDescription(d.visibility)}>
-                  <img className="game-thumb-base" src="/images/workshop/game.svg" alt="" aria-hidden="true" />
-                  <img className="game-thumb-marker" src={`/images/workshop/marker-${d.visibility}.svg`} alt="" aria-hidden="true" />
-                </div>
-                <div className="maze-item-text">
-                  <span className="maze-item-name" title={d.name}>{d.name}</span>
-                  <span className="maze-item-subtitle">{gameSummary(d)}</span>
-                </div>
-                <div className="game-item-actions">
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void handleEdit(d.id) }} aria-label={`Edit ${d.name}`}>
-                    <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Edit</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); launchDefinition(d.id) }} aria-label={`Play ${d.name}`}>
-                    <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Play</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setViewingBoard(d) }} aria-label={`Leaderboard for ${d.name}`}>
-                    <img src="/images/icons/icon_leaderboard.svg" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Leaderboard</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void openReshuffle(d.id) }} aria-label={`Reshuffle ${d.name}`}>
-                    <img src="/images/icons/icon_reshuffle.svg" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Reshuffle</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setDuplicating({ source: d, error: null, busy: false }) }} aria-label={`Duplicate ${d.name}`}>
-                    <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Duplicate</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(d) }} aria-label={`Access for ${d.name}`}>
-                    <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Access</span>
-                  </button>
-                  <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ def: d, busy: false, error: null }) }} aria-label={`Delete ${d.name}`}>
-                    <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
-                    <span className="maze-item-action-label">Delete</span>
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
-    </div>
+          <div className="game-thumb" title={accessDescription(d.visibility)}>
+            <img className="game-thumb-base" src="/images/workshop/game.svg" alt="" aria-hidden="true" />
+            <img className="game-thumb-marker" src={`/images/workshop/marker-${d.visibility}.svg`} alt="" aria-hidden="true" />
+          </div>
+          <div className="maze-item-text">
+            <span className="maze-item-name" title={d.name}>{d.name}</span>
+            <span className="maze-item-subtitle">{gameSummary(d)}</span>
+          </div>
+          <div className="game-item-actions">
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void handleEdit(d.id) }} aria-label={`Edit ${d.name}`}>
+              <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Edit</span>
+            </button>
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); launchDefinition(d.id) }} aria-label={`Play ${d.name}`}>
+              <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Play</span>
+            </button>
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setViewingBoard(d) }} aria-label={`Leaderboard for ${d.name}`}>
+              <img src="/images/icons/icon_leaderboard.svg" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Leaderboard</span>
+            </button>
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); void openReshuffle(d.id) }} aria-label={`Reshuffle ${d.name}`}>
+              <img src="/images/icons/icon_reshuffle.svg" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Reshuffle</span>
+            </button>
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setDuplicating({ source: d, error: null, busy: false }) }} aria-label={`Duplicate ${d.name}`}>
+              <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Duplicate</span>
+            </button>
+            <button type="button" className="maze-item-action btn-secondary" onClick={e => { e.stopPropagation(); setSharing(d) }} aria-label={`Access for ${d.name}`}>
+              <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Access</span>
+            </button>
+            <button type="button" className="maze-item-action btn-danger-outline" onClick={e => { e.stopPropagation(); setDeleting({ def: d, busy: false, error: null }) }} aria-label={`Delete ${d.name}`}>
+              <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
+              <span className="maze-item-action-label">Delete</span>
+            </button>
+          </div>
+        </li>
+      )}
+    />
   )
 }
