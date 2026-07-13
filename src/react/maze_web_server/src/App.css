@@ -399,9 +399,11 @@
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 1rem;
-  /* The tier radios, picker and grantee list together can outgrow a short
-     viewport; scroll the body so the title and Cancel/Save footer stay put. */
-  max-height: 65dvh;
+  /* The scrolling body: the tier radios, picker and grantee list scroll here
+     when the (viewport-capped) modal is too short, so the title and Cancel/Save
+     footer stay pinned to the window edges. See .modal-capped. */
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -485,17 +487,20 @@
   overflow-y: auto;
 }
 
-/* Collection membership editor (Edit Collection modal): the ordered member
-   games with reorder/remove, and a filter-to-add picker below. The modal is
-   capped to the viewport (flex column, max-height) and the two lists shrink +
-   scroll independently as the window shortens, so the Cancel/Save buttons stay
-   visible. */
-.collection-form-modal {
+/* A modal capped to the viewport with a pinned footer: a flex column with a
+   max-height whose designated body region (flex: 1, overflow-y: auto) shrinks
+   and scrolls as the window shortens, so the title and Cancel/Save footer stay
+   on-screen at all times. Shared by the Edit Collection and Access modals. */
+.modal-capped {
   display: flex;
   flex-direction: column;
   max-height: 90dvh;
   box-sizing: border-box;
 }
+
+/* Collection membership editor (Edit Collection modal): the ordered member
+   games with reorder/remove, and a filter-to-add picker below. The two lists
+   shrink + scroll independently as the window shortens (see .modal-capped). */
 .collection-form-modal .modal-form {
   flex: 1;
   min-height: 0;

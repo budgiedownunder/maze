@@ -135,6 +135,29 @@ test('the Edit modal keeps Cancel/Save on-screen on a short window', async ({ pa
   expect(box!.y + box!.height).toBeLessThanOrEqual(340)
 })
 
+test('the Access modal keeps Cancel/Save on-screen on a short window', async ({ page }) => {
+  await page.setViewportSize({ width: 520, height: 340 })
+  await login(page)
+
+  const name = `Shorty ${Date.now()}`
+  await page.getByRole('button', { name: '+ New collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await create.getByLabel('Name').fill(name)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(page.locator('.game-list-item', { hasText: name })).toBeVisible()
+
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const dialog = page.getByRole('dialog', { name: `Access: ${name}` })
+  // "Specific people" reveals the picker + grantee list, adding enough height to
+  // exercise the scrolling body; the footer must still stay above the fold.
+  await dialog.getByRole('radio', { name: /Specific people/ }).click()
+  const save = dialog.getByRole('button', { name: 'Save' })
+  await expect(save).toBeVisible()
+  const box = await save.boundingBox()
+  expect(box).not.toBeNull()
+  expect(box!.y + box!.height).toBeLessThanOrEqual(340)
+})
+
 test('Delete removes a collection after confirmation', async ({ page }) => {
   await login(page)
 

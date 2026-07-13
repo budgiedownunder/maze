@@ -135,7 +135,7 @@ export function ManageSharesModal({ subject, visibility, isAdmin, onSetVisibilit
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Access: ${subject.name}`} className="modal-overlay" style={{ zIndex: 1200 }}>
-      <div className="modal modal-sm">
+      <div className="modal modal-sm modal-capped">
         <h2 className="modal-title">Access: {subject.name}</h2>
 
         <div className="share-body">
