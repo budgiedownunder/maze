@@ -56,6 +56,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
+use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -86,13 +87,18 @@ pub struct GameDefinitionRequest {
     pub config: serde_json::Value,
 }
 
-/// Query parameters for the list endpoint — a page of the merged result.
+/// Query parameters for the list endpoint — a page of the scoped result.
 #[derive(Deserialize, Debug)]
 pub struct ListGameDefinitionsQuery {
-    /// Page size (defaults to [`DEFAULT_PAGE_SIZE`], capped at [`MAX_PAGE_SIZE`]).
+    /// Page size (server default when omitted, capped at the server maximum).
     pub limit: Option<u32>,
     /// Zero-based page offset (defaults to 0).
     pub offset: Option<u32>,
+    /// Result scope: `visible` (default — everything the caller may see) or
+    /// `mine` (only the caller's own definitions, any visibility).
+    pub scope: Option<String>,
+    /// Case-insensitive name substring filter (honoured with `scope=mine`).
+    pub q: Option<String>,
 }
 
 /// A page of the game definitions the caller may see — the merge of their own,
@@ -174,18 +180,6 @@ pub struct ImageUpdatedResponse {
 // ---------------------------------------------------------------------------
 // Local helpers
 // ---------------------------------------------------------------------------
-
-/// Page size used when the caller omits `limit` (mirrors the scores endpoint).
-const DEFAULT_PAGE_SIZE: u32 = 20;
-/// Hard server cap on `limit` — a caller asking for more is silently capped to
-/// this, and the effective value is echoed back so the client can page correctly.
-const MAX_PAGE_SIZE: u32 = 100;
-
-/// Resolves the effective page size: the caller's `limit` (or the default when
-/// omitted), capped at [`MAX_PAGE_SIZE`].
-fn effective_limit(requested: Option<u32>) -> u32 {
-    requested.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE)
-}
 
 /// The `challenge` prefix under which a definition's leaderboard rows live —
 /// `def:<id>` for the `Static` board, and the parent of every `def:<id>:<date>`
@@ -386,16 +380,20 @@ pub async fn create_game_definition(
 // ---------------------------------------------------------------------------
 
 #[utoipa::path(
-    summary = "List visible game definitions",
-    description = "Returns a page of the game definitions the caller may see — their own (all \
-                   visibilities, drafts included), those shared with them, and all public and \
-                   curated definitions — de-duplicated and ordered by name. Paged via limit \
-                   (server-capped) and offset.",
+    summary = "List game definitions",
+    description = "Returns a page of game definitions ordered by name. With scope=visible (the \
+                   default) it is the caller's visible set — their own (all visibilities, drafts \
+                   included), those shared with them, and all public and curated definitions, \
+                   de-duplicated. With scope=mine it is only the caller's own definitions (any \
+                   visibility), optionally filtered by a case-insensitive name substring q. Paged \
+                   via limit (server-capped) and offset.",
     get,
     path = "/api/v1/game-definitions",
     params(
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
-        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
+        ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default) or 'mine' (the caller's own definitions)"),
+        ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine)")
     ),
     responses(
         (status = 200, description = "A page of visible definitions", body = GameDefinitionListResponse),
@@ -412,21 +410,39 @@ pub async fn list_game_definitions(
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let q = query.into_inner();
+    let scope = parse_scope(q.scope.as_deref())?;
     let limit = effective_limit(q.limit);
     let offset = q.offset.unwrap_or(0);
     let store_lock = store.read().await;
 
-    // Storage composes + pages the "visible to me" set. Over-fetch one row so
-    // `has_more` needs no separate count.
-    let mut definitions = store_lock
-        .get_visible_game_definitions(&user, limit + 1, offset)
-        .await
-        .map_err(|err| {
-            log::warn!("list game definitions store error: {err}");
-            ErrorInternalServerError("Failed to list game definitions")
-        })?;
-    let has_more = definitions.len() as u32 > limit;
-    definitions.truncate(limit as usize);
+    let (definitions, has_more) = match scope {
+        ListScope::Visible => {
+            // Storage composes + pages the "visible to me" set. Over-fetch one row
+            // so `has_more` needs no separate count.
+            let mut defs = store_lock
+                .get_visible_game_definitions(&user, limit + 1, offset)
+                .await
+                .map_err(|err| {
+                    log::warn!("list game definitions store error: {err}");
+                    ErrorInternalServerError("Failed to list game definitions")
+                })?;
+            let has_more = defs.len() as u32 > limit;
+            defs.truncate(limit as usize);
+            (defs, has_more)
+        }
+        ListScope::Mine => {
+            // The caller's own set is capped, so page it here (with the name
+            // filter) over the owner read rather than a DB-paged owner query.
+            let all = store_lock
+                .get_game_definitions_for_owner(&user)
+                .await
+                .map_err(|err| {
+                    log::warn!("list game definitions store error: {err}");
+                    ErrorInternalServerError("Failed to list game definitions")
+                })?;
+            page_owned(all, q.q.as_deref(), |d| d.name.as_str(), limit, offset)
+        }
+    };
 
     Ok(HttpResponse::Ok().json(GameDefinitionListResponse {
         definitions,

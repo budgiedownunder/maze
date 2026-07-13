@@ -28,6 +28,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::game_definitions::can_read_challenge_board;
+use crate::api::v1::endpoints::listing::effective_limit;
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -188,19 +189,6 @@ pub async fn record_score(
 // ---------------------------------------------------------------------------
 // Paging + ordering
 // ---------------------------------------------------------------------------
-
-/// Page size used when the caller omits `limit`.
-const DEFAULT_PAGE_SIZE: u32 = 20;
-/// Hard server cap on `limit` — a caller asking for more is silently capped to
-/// this, and the effective value is echoed back in the response so the client
-/// can page correctly.
-const MAX_PAGE_SIZE: u32 = 100;
-
-/// Resolves the effective page size: the caller's `limit` (or the default when
-/// omitted), capped at [`MAX_PAGE_SIZE`].
-fn effective_limit(requested: Option<u32>) -> u32 {
-    requested.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE)
-}
 
 /// Parses the `metric` query value into a [`ScoreMetric`], defaulting to
 /// `Time` when omitted.

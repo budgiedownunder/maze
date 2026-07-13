@@ -41,6 +41,7 @@ use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
 use super::game_definitions::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
+use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -62,13 +63,18 @@ pub struct GameCollectionRequest {
     pub visibility: Visibility,
 }
 
-/// Query parameters for the list endpoint — a page of the merged result.
+/// Query parameters for the list endpoint — a page of the scoped result.
 #[derive(Deserialize, Debug)]
 pub struct ListGameCollectionsQuery {
-    /// Page size (defaults to [`DEFAULT_PAGE_SIZE`], capped at [`MAX_PAGE_SIZE`]).
+    /// Page size (server default when omitted, capped at the server maximum).
     pub limit: Option<u32>,
     /// Zero-based page offset (defaults to 0).
     pub offset: Option<u32>,
+    /// Result scope: `visible` (default — everything the caller may see) or
+    /// `mine` (only the caller's own collections, any visibility).
+    pub scope: Option<String>,
+    /// Case-insensitive name substring filter (honoured with `scope=mine`).
+    pub q: Option<String>,
 }
 
 /// A page of the collections the caller may see — the merge of their own, those
@@ -160,18 +166,6 @@ pub struct GameCollectionSharesResponse {
 // ---------------------------------------------------------------------------
 // Local helpers
 // ---------------------------------------------------------------------------
-
-/// Page size used when the caller omits `limit` (mirrors the scores endpoint).
-const DEFAULT_PAGE_SIZE: u32 = 20;
-/// Hard server cap on `limit` — a caller asking for more is silently capped to
-/// this, and the effective value is echoed back so the client can page correctly.
-const MAX_PAGE_SIZE: u32 = 100;
-
-/// Resolves the effective page size: the caller's `limit` (or the default when
-/// omitted), capped at [`MAX_PAGE_SIZE`].
-fn effective_limit(requested: Option<u32>) -> u32 {
-    requested.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE)
-}
 
 fn get_authorized_user(req: &HttpRequest, admin_required: bool) -> Result<User, Error> {
     match req.extensions().get::<User>() {
@@ -295,15 +289,20 @@ pub async fn create_game_collection(
 // ---------------------------------------------------------------------------
 
 #[utoipa::path(
-    summary = "List visible game collections",
-    description = "Returns a page of the collections the caller may see — their own (all \
-                   visibilities), those shared with them, and all public and curated collections \
-                   — de-duplicated and ordered by name. Paged via limit (server-capped) and offset.",
+    summary = "List game collections",
+    description = "Returns a page of game collections ordered by name. With scope=visible (the \
+                   default) it is the caller's visible set — their own (all visibilities), those \
+                   shared with them, and all public and curated collections, de-duplicated. With \
+                   scope=mine it is only the caller's own collections (any visibility), optionally \
+                   filtered by a case-insensitive name substring q. Paged via limit (server-capped) \
+                   and offset.",
     get,
     path = "/api/v1/game-collections",
     params(
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
-        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
+        ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default) or 'mine' (the caller's own collections)"),
+        ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine)")
     ),
     responses(
         (status = 200, description = "A page of visible collections", body = GameCollectionListResponse),
@@ -320,21 +319,39 @@ pub async fn list_game_collections(
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let q = query.into_inner();
+    let scope = parse_scope(q.scope.as_deref())?;
     let limit = effective_limit(q.limit);
     let offset = q.offset.unwrap_or(0);
     let store_lock = store.read().await;
 
-    // Storage composes + pages the "visible to me" set; over-fetch one row for
-    // `has_more`.
-    let mut collections = store_lock
-        .get_visible_game_collections(&user, limit + 1, offset)
-        .await
-        .map_err(|err| {
-            log::warn!("list game collections store error: {err}");
-            ErrorInternalServerError("Failed to list game collections")
-        })?;
-    let has_more = collections.len() as u32 > limit;
-    collections.truncate(limit as usize);
+    let (collections, has_more) = match scope {
+        ListScope::Visible => {
+            // Storage composes + pages the "visible to me" set; over-fetch one row
+            // for `has_more`.
+            let mut cols = store_lock
+                .get_visible_game_collections(&user, limit + 1, offset)
+                .await
+                .map_err(|err| {
+                    log::warn!("list game collections store error: {err}");
+                    ErrorInternalServerError("Failed to list game collections")
+                })?;
+            let has_more = cols.len() as u32 > limit;
+            cols.truncate(limit as usize);
+            (cols, has_more)
+        }
+        ListScope::Mine => {
+            // The caller's own set is capped, so page it here (with the name
+            // filter) over the owner read rather than a DB-paged owner query.
+            let all = store_lock
+                .get_game_collections_for_owner(&user)
+                .await
+                .map_err(|err| {
+                    log::warn!("list game collections store error: {err}");
+                    ErrorInternalServerError("Failed to list game collections")
+                })?;
+            page_owned(all, q.q.as_deref(), |c| c.name.as_str(), limit, offset)
+        }
+    };
 
     Ok(HttpResponse::Ok().json(GameCollectionListResponse {
         collections,

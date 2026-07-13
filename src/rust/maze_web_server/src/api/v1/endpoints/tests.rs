@@ -8638,6 +8638,62 @@ mod test_definitions {
         assert!(!page.has_more);
     }
 
+    #[actix_web::test]
+    async fn list_game_definitions_scope_mine_returns_only_own_filters_and_pages() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        // Mine (any visibility, curated included) + others' visible ones that
+        // scope=mine must exclude.
+        seed_game_definition(&store, &me, "Alpha", Visibility::Private, Rotation::Static).await;
+        seed_game_definition(&store, &me, "Beta", Visibility::Public, Rotation::Static).await;
+        seed_game_definition(&store, &me, "Gamma", Visibility::Curated, Rotation::Static).await;
+        let others_public = seed_game_definition(&store, &other, "Others public", Visibility::Public, Rotation::Static).await;
+        let shared = seed_game_definition(&store, &other, "Shared to me", Visibility::Shared, Rotation::Static).await;
+        store.write().await.grant_game_definition_access(&other, shared.id, me.id).await.expect("grant");
+
+        // scope=mine → only my three (curated included), name-ordered; none of the others'.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=mine", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameDefinitionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(list.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Alpha", "Beta", "Gamma"]);
+        let ids: Vec<Uuid> = list.definitions.iter().map(|d| d.id).collect();
+        assert!(!ids.contains(&others_public.id));
+        assert!(!ids.contains(&shared.id));
+
+        // q filters by case-insensitive name substring within scope=mine.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=mine&q=ET", Some(me.api_key), None);
+        let page: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Beta"]);
+
+        // Paging over the own set: first two, then the remainder.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=mine&limit=2&offset=0", Some(me.api_key), None);
+        let page: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Alpha", "Beta"]);
+        assert!(page.has_more);
+        let req = create_test_get_request("/api/v1/game-definitions?scope=mine&limit=2&offset=2", Some(me.api_key), None);
+        let page: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Gamma"]);
+        assert!(!page.has_more);
+    }
+
+    #[actix_web::test]
+    async fn list_game_definitions_rejects_an_unknown_scope() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let req = create_test_get_request("/api/v1/game-definitions?scope=bogus", Some(me.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
     /// Reads a definition's current visibility straight from the store.
     async fn definition_visibility(store: &SharedStore, id: Uuid) -> Visibility {
         store.read().await.get_game_definition(id).await.expect("definition").visibility
@@ -8899,6 +8955,41 @@ mod test_definitions {
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(page.limit, 100);
         assert!(!page.has_more);
+    }
+
+    #[actix_web::test]
+    async fn list_game_collections_scope_mine_returns_only_own_and_filters() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        seed_game_collection(&store, &me, "Alpha", Visibility::Private).await;
+        seed_game_collection(&store, &me, "Beta", Visibility::Public).await;
+        let others_public = seed_game_collection(&store, &other, "Others public", Visibility::Public).await;
+        let shared = seed_game_collection(&store, &other, "Shared to me", Visibility::Shared).await;
+        store.write().await.grant_game_collection_access(&other, shared.id, me.id).await.expect("grant");
+
+        // scope=mine → only my two, name-ordered; none of the others'.
+        let req = create_test_get_request("/api/v1/game-collections?scope=mine", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(list.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Alpha", "Beta"]);
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
+        assert!(!ids.contains(&others_public.id));
+        assert!(!ids.contains(&shared.id));
+
+        // q filters case-insensitively within scope=mine.
+        let req = create_test_get_request("/api/v1/game-collections?scope=mine&q=ALPHA", Some(me.api_key), None);
+        let page: GameCollectionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Alpha"]);
+
+        // Invalid scope → 400.
+        let req = create_test_get_request("/api/v1/game-collections?scope=bogus", Some(me.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
     }
 
     #[actix_web::test]
