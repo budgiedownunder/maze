@@ -104,7 +104,7 @@ describe('WorkshopGamesPage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No games yet.')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: '+ New game' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Tower')
     await userEvent.click(screen.getByRole('button', { name: 'Finish' }))
 
@@ -115,7 +115,7 @@ describe('WorkshopGamesPage', () => {
   it('Edit opens the tabs editor hydrated from the definition, and Save refreshes the list', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No games yet.')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: '+ New game' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Tower')
     await userEvent.click(screen.getByRole('button', { name: 'Finish' }))
     await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
@@ -275,7 +275,7 @@ describe('WorkshopGamesPage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No games yet.')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: '+ New game' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Tower')
     await userEvent.click(screen.getByRole('button', { name: 'Finish' }))
     await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())

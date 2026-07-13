@@ -8,7 +8,7 @@ export function HamburgerMenu() {
   const [open, setOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showDifficultyModal, setShowDifficultyModal] = useState(false)
-  const { logout } = useAuth()
+  const { logout, profile } = useAuth()
   const navigate = useNavigate()
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -68,6 +68,23 @@ export function HamburgerMenu() {
                 3D Game Workshop
               </button>
             </li>
+            <li role="none">
+              <button role="menuitem" className="menu-item menu-subitem" onClick={() => { setOpen(false); navigate('/workshop/games') }}>
+                Manage Games
+              </button>
+            </li>
+            <li role="none">
+              <button role="menuitem" className="menu-item menu-subitem" onClick={() => { setOpen(false); navigate('/workshop/game-collections') }}>
+                Manage Game Collections
+              </button>
+            </li>
+            {profile?.is_admin && (
+              <li role="none">
+                <button role="menuitem" className="menu-item menu-subitem" onClick={() => { setOpen(false); navigate('/workshop/features') }}>
+                  Manage Features
+                </button>
+              </li>
+            )}
             <li role="none">
               <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/mazes') }}>
                 Mazes

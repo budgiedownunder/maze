@@ -32,7 +32,7 @@ export function WorkshopHubPage() {
             <button type="button" className="home-tile" onClick={() => navigate('/workshop/features')}>
               <img src="/images/workshop/workshop-features.svg" className="home-tile-img" alt="" aria-hidden="true" />
               <div className="home-tile-text">
-                <h2 className="home-tile-title">Manage Features [Admin]</h2>
+                <h2 className="home-tile-title">Manage Features</h2>
                 <p className="home-tile-desc">Manage the featured games and collections everyone sees</p>
               </div>
             </button>

@@ -11,7 +11,7 @@ async function login(page: Page) {
 
 test('the collections page shows the empty state before any collection exists', async ({ page }) => {
   await login(page)
-  await expect(page.getByRole('button', { name: '+ New collection' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '+ New Game Collection' })).toBeVisible()
   await expect(page.getByText('No collections yet.')).toBeVisible()
 })
 
@@ -19,8 +19,8 @@ test('New collection creates a collection that appears in the list', async ({ pa
   await login(page)
 
   const name = `Campaign ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const dialog = page.getByRole('dialog', { name: 'New Game Collection' })
   await expect(dialog).toBeVisible()
   await dialog.getByLabel('Name').fill(name)
   await dialog.getByLabel('Description (optional)').fill('My best levels')
@@ -41,8 +41,8 @@ test('Edit renames a collection', async ({ page }) => {
   await login(page)
 
   const name = `Renamable ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
   await create.getByLabel('Name').fill(name)
   await create.getByRole('button', { name: 'Create' }).click()
   await expect(page.locator('.game-list-item', { hasText: name })).toBeVisible()
@@ -62,8 +62,8 @@ test('the access modal updates a collection summary from Just me to Everyone', a
   await login(page)
 
   const name = `Accessible ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
   await create.getByLabel('Name').fill(name)
   await create.getByRole('button', { name: 'Create' }).click()
 
@@ -95,8 +95,8 @@ test('Edit adds a game to a collection and updates its count', async ({ page }) 
   // Create a collection (starts empty).
   await page.goto('/workshop/game-collections')
   const colName = `Campaign ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
   await create.getByLabel('Name').fill(colName)
   await create.getByRole('button', { name: 'Create' }).click()
   const row = page.locator('.game-list-item', { hasText: colName })
@@ -119,8 +119,8 @@ test('the Edit modal keeps Cancel/Save on-screen on a short window', async ({ pa
   await login(page)
 
   const colName = `Short ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
   await create.getByLabel('Name').fill(colName)
   await create.getByRole('button', { name: 'Create' }).click()
   await expect(page.locator('.game-list-item', { hasText: colName })).toBeVisible()
@@ -140,8 +140,8 @@ test('the Access modal keeps Cancel/Save on-screen on a short window', async ({ 
   await login(page)
 
   const name = `Shorty ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
   await create.getByLabel('Name').fill(name)
   await create.getByRole('button', { name: 'Create' }).click()
   await expect(page.locator('.game-list-item', { hasText: name })).toBeVisible()
@@ -162,8 +162,8 @@ test('Delete removes a collection after confirmation', async ({ page }) => {
   await login(page)
 
   const name = `Doomed ${Date.now()}`
-  await page.getByRole('button', { name: '+ New collection' }).click()
-  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
   await create.getByLabel('Name').fill(name)
   await create.getByRole('button', { name: 'Create' }).click()
   await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeVisible()

@@ -103,7 +103,7 @@ export function WorkshopCollectionsPage() {
     <>
       {creating && (
         <GameCollectionFormModal
-          title="New Collection"
+          title="New Game Collection"
           confirmLabel="Create"
           isLoading={creating.busy}
           error={creating.error}
@@ -153,7 +153,7 @@ export function WorkshopCollectionsPage() {
   return (
     <WorkshopListPage<GameCollection>
       title="Manage Game Collections"
-      newLabel="+ New collection"
+      newLabel="+ New Game Collection"
       onNew={() => setCreating({ busy: false, error: null })}
       load={t => listGameCollections(t).then(page => page.collections)}
       filter={c => c.ownerId === profile?.id}

@@ -96,6 +96,26 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/workshop')
   })
 
+  it('navigates to /workshop/games from the Manage Games sub-item', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^manage games$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/workshop/games')
+  })
+
+  it('navigates to /workshop/game-collections from the Manage Game Collections sub-item', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^manage game collections$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/workshop/game-collections')
+  })
+
+  it('hides the admin Manage Features sub-item for a non-admin', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    expect(screen.queryByRole('menuitem', { name: /^manage features$/i })).not.toBeInTheDocument()
+  })
+
   it('Play 3D opens the difficulty modal (no navigation yet)', async () => {
     const locationStub = { href: '' }
     vi.stubGlobal('location', locationStub)

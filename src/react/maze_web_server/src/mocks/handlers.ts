@@ -596,6 +596,10 @@ export const handlers = [
     const body = await request.json() as GameDefinitionRequest
     const index = mockGameDefinitions.findIndex(d => d.id === params.id)
     if (index === -1) return new HttpResponse(null, { status: 404 })
+    // A rename can't collide with another game's name (per-owner uniqueness).
+    if (mockGameDefinitions.some(d => d.id !== params.id && d.name.toLowerCase() === body.name.toLowerCase())) {
+      return new HttpResponse(`A game definition named '${body.name}' already exists`, { status: 409 })
+    }
     // `seed`, `ownerId` and `createdAt` are server-owned and preserved.
     const updated: GameDefinition = {
       ...mockGameDefinitions[index],
@@ -635,6 +639,11 @@ export const handlers = [
 
   http.post(`${BASE}/game-definitions`, async ({ request }) => {
     const body = await request.json() as GameDefinitionRequest
+    // Names are unique per owner (all mock definitions share one owner), matching
+    // the server's 409 so dev:mock can't create colliding games.
+    if (mockGameDefinitions.some(d => d.name.toLowerCase() === body.name.toLowerCase())) {
+      return new HttpResponse(`A game definition named '${body.name}' already exists`, { status: 409 })
+    }
     const now = new Date().toISOString()
     const created: GameDefinition = {
       id: `def-${Date.now()}`,

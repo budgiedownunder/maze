@@ -309,7 +309,7 @@ export function WorkshopGamesPage() {
   return (
     <WorkshopListPage<GameDefinition>
       title="Manage Games"
-      newLabel="+ New game"
+      newLabel="+ New Game"
       onNew={() => setIsCreating(true)}
       load={t => listGameDefinitions(t).then(page => page.definitions)}
       // The caller's own definitions, minus any they've featured: a curated game

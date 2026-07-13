@@ -35,6 +35,28 @@ test('Preview stashes the config and opens the game host in a new tab', async ({
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 })
 
+test('creating a game with a duplicate name is rejected', async ({ page }) => {
+  await login(page)
+
+  const name = `Dup ${Date.now()}`
+  await page.getByRole('button', { name: 'New game' }).click()
+  let wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(wizard).toBeHidden()
+  await expect(page.locator('.game-list-item', { hasText: name })).toHaveCount(1)
+
+  // A second game with the same name is refused (the server / mock 409s), so the
+  // create wizard stays open and no duplicate row is added.
+  await page.getByRole('button', { name: 'New game' }).click()
+  wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(wizard).toBeVisible()
+  await wizard.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.locator('.game-list-item', { hasText: name })).toHaveCount(1)
+})
+
 test('New game wizard creates a definition that survives a reload', async ({ page }) => {
   await login(page)
 

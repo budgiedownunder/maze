@@ -57,7 +57,7 @@ describe('WorkshopHubPage', () => {
   it('shows the Features tile for an admin', () => {
     isAdmin = true
     renderHub()
-    expect(screen.getByRole('heading', { name: /manage features \[admin\]/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /^manage features$/i })).toBeInTheDocument()
   })
 
   it('clicking Manage Games navigates to /workshop/games', async () => {

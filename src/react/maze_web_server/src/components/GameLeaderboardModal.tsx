@@ -34,19 +34,21 @@ export function GameLeaderboardModal({ token, gameId, name, currentUserId, onClo
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Leaderboard: ${name}`} className="modal-overlay" style={{ zIndex: 1200 }}>
-      <div className="modal modal-sm">
+      <div className="modal modal-sm modal-capped">
         <h2 className="modal-title">Leaderboard: {name}</h2>
 
-        {isLoading && <p aria-label="Loading">Loading…</p>}
-        {error && <p role="alert" className="error-msg">{error}</p>}
-        {challenge != null && (
-          <Leaderboard
-            token={token}
-            subject={{ challenge }}
-            currentUserId={currentUserId}
-            showPlayer
-          />
-        )}
+        <div className="leaderboard-modal-body">
+          {isLoading && <p aria-label="Loading">Loading…</p>}
+          {error && <p role="alert" className="error-msg">{error}</p>}
+          {challenge != null && (
+            <Leaderboard
+              token={token}
+              subject={{ challenge }}
+              currentUserId={currentUserId}
+              showPlayer
+            />
+          )}
+        </div>
 
         <div className="modal-actions-row" style={{ marginTop: '1.25rem' }}>
           <button type="button" className="btn-gray" onClick={onClose}>Close</button>

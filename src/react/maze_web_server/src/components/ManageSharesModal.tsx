@@ -152,7 +152,7 @@ export function ManageSharesModal({ subject, visibility, isAdmin, onSetVisibilit
                     onChange={() => setTier(v)}
                   />
                   <span className="access-tier-text">
-                    <span className="access-tier-label">{accessLabel(v)}{v === 'curated' ? ' [Admin]' : ''}</span>
+                    <span className="access-tier-label">{accessLabel(v)}</span>
                     <span className="access-tier-desc">{accessDescription(v)}</span>
                   </span>
                 </label>
@@ -168,6 +168,13 @@ export function ManageSharesModal({ subject, visibility, isAdmin, onSetVisibilit
                   type="text"
                   className="input"
                   aria-label="Add user"
+                  // This is a search field, not a credential entry — stop mobile
+                  // OS / password managers offering to fill or save a login here.
+                  name="share-user-search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Start typing a username…"

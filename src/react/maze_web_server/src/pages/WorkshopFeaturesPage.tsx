@@ -12,7 +12,7 @@ export function WorkshopFeaturesPage() {
 
   return (
     <div className="games-page">
-      <AppHeader title="Manage Features [Admin]" />
+      <AppHeader title="Manage Features" />
       <main>
         <p>Coming soon.</p>
       </main>

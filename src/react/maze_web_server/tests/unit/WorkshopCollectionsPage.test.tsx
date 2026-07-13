@@ -103,6 +103,7 @@ describe('WorkshopCollectionsPage', () => {
     server.use(listOf(
       col({ id: 'c1', name: 'Private one' }),
       col({ id: 'c2', name: 'Public one', visibility: 'public' }),
+      col({ id: 'c3', name: 'Featured one', visibility: 'curated' }),
     ))
     renderPage()
     await waitFor(() => expect(screen.getByText('Private one')).toBeInTheDocument())
@@ -113,6 +114,10 @@ describe('WorkshopCollectionsPage', () => {
 
     const publicRow = screen.getByText('Public one').closest('.game-list-item')!
     expect(publicRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-public.svg')
+
+    // A Featured (curated) row shows the star marker.
+    const featuredRow = screen.getByText('Featured one').closest('.game-list-item')!
+    expect(featuredRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-curated.svg')
   })
 
   it('creates a collection and shows it in the list', async () => {
@@ -121,13 +126,13 @@ describe('WorkshopCollectionsPage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
-    const dialog = await screen.findByRole('dialog', { name: 'New Collection' })
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New Game Collection' })
     await userEvent.type(screen.getByLabelText('Name'), 'Campaign')
     await userEvent.type(screen.getByLabelText('Description (optional)'), 'My best levels')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New Collection' })).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New Game Collection' })).toBeNull())
     expect(screen.getByText('Campaign')).toBeInTheDocument()
     expect(dialog).not.toBeInTheDocument()
   })
@@ -135,7 +140,7 @@ describe('WorkshopCollectionsPage', () => {
   it('Edit renames a collection and refreshes the list', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Campaign')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
@@ -154,7 +159,7 @@ describe('WorkshopCollectionsPage', () => {
   it('Delete confirms and removes the collection from the list', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Doomed')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(screen.getByText('Doomed')).toBeInTheDocument())
@@ -292,7 +297,7 @@ describe('WorkshopCollectionsPage', () => {
     // visibility PUT so the reloaded row reflects the new tier.
     renderPage()
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Campaign')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(screen.getByText('0 games · Just me')).toBeInTheDocument())
@@ -313,7 +318,7 @@ describe('WorkshopCollectionsPage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: '+ New collection' }))
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
     // Empty name is rejected client-side before any request.
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     expect(await screen.findByText('Name cannot be empty.')).toBeInTheDocument()
@@ -322,6 +327,6 @@ describe('WorkshopCollectionsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     // The server error keeps the modal open with the message shown.
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('nope'))
-    expect(screen.getByRole('dialog', { name: 'New Collection' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'New Game Collection' })).toBeInTheDocument()
   })
 })

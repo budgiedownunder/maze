@@ -497,6 +497,16 @@
   max-height: 90dvh;
   box-sizing: border-box;
 }
+/* The Leaderboard modal's body: a flex column that gives the board's flex:1
+   chain a definite height, so the table scrolls internally (its own
+   overflow) while the metric tabs, the Load more button and the modal's Close
+   stay put — the same behaviour as the Leaderboards page. */
+.leaderboard-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 /* Collection membership editor (Edit Collection modal): the ordered member
    games with reorder/remove, and a filter-to-add picker below. The two lists
@@ -1155,6 +1165,13 @@ textarea.input {
 
 .menu-item:hover {
   background: var(--surface-hover);
+}
+
+/* Workshop sub-items nested under "3D Game Workshop": indented + smaller. */
+.menu-subitem {
+  padding-left: 2rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
 }
 
 .menu-separator {
