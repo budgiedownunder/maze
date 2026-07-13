@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { WorkshopListPage, type WorkshopListContext } from '../components/WorkshopListPage'
+import { WorkshopListPage, WorkshopThumbnail, type WorkshopListContext } from '../components/WorkshopListPage'
 import { GameCollectionFormModal } from '../components/GameCollectionFormModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { ManageSharesModal } from '../components/ManageSharesModal'
@@ -161,6 +161,7 @@ export function WorkshopCollectionsPage() {
       row={c => ({
         name: c.name,
         subtitle: collectionSummary(c),
+        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/collection.svg" visibility={c.visibility} />,
         onOpen: () => setEditing({ collection: c, busy: false, error: null }),
         actions: [
           { key: 'edit', label: 'Edit', ariaLabel: `Edit ${c.name}`, icon: '/images/icons/icon_rename.png', onClick: () => setEditing({ collection: c, busy: false, error: null }) },

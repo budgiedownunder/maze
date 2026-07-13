@@ -77,6 +77,22 @@ describe('WorkshopCollectionsPage', () => {
     expect(screen.getByText('3 games · Everyone')).toBeInTheDocument()
   })
 
+  it('shows the base thumbnail and the visibility marker per row', async () => {
+    server.use(listOf(
+      col({ id: 'c1', name: 'Private one' }),
+      col({ id: 'c2', name: 'Public one', visibility: 'public' }),
+    ))
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Private one')).toBeInTheDocument())
+
+    const privateRow = screen.getByText('Private one').closest('.game-list-item')!
+    expect(privateRow.querySelector('.game-thumb-base')).toHaveAttribute('src', '/images/workshop/collection.svg')
+    expect(privateRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-private.svg')
+
+    const publicRow = screen.getByText('Public one').closest('.game-list-item')!
+    expect(publicRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-public.svg')
+  })
+
   it('creates a collection and shows it in the list', async () => {
     // The default (mock-store-backed) create + list handlers persist the new
     // collection so the post-create refresh reads it back.

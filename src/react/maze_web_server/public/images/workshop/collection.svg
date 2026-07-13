@@ -1,5 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Game">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Collection">
+  <!-- The front card of the hub's collection stack: a card with one game. -->
   <defs>
+    <linearGradient id="c" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/><stop offset="1" stop-color="#e2e8f0"/>
+    </linearGradient>
     <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#0d9488"/>
     </linearGradient>
@@ -13,5 +17,6 @@
     </symbol>
   </defs>
   <!-- raised + enlarged; the bottom-right corner is left clear for the marker -->
-  <use href="#pad" x="-8" y="4" width="80" height="40"/>
+  <rect x="1" y="2" width="62" height="48" rx="7" fill="url(#c)" stroke="#c7d0dc" stroke-width="1.5"/>
+  <use href="#pad" x="-4" y="8" width="72" height="36"/>
 </svg>

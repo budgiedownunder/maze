@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { WorkshopListPage, type WorkshopListContext } from '../components/WorkshopListPage'
+import { WorkshopListPage, WorkshopThumbnail, type WorkshopListContext } from '../components/WorkshopListPage'
 import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
 import { PromptModal } from '../components/PromptModal'
 import { ManageSharesModal } from '../components/ManageSharesModal'
@@ -19,7 +19,7 @@ import {
 import { DEFINITION_DEFAULTS, parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import { launchDefinitionPreview } from '../utils/definitionPreview'
 import { launchDefinition } from '../utils/play3dLaunch'
-import { accessDescription, accessLabel, reshuffleConfirmMessage, type Visibility } from '../utils/gameDefinitions'
+import { accessLabel, reshuffleConfirmMessage, type Visibility } from '../utils/gameDefinitions'
 import type { GameDefinition, GameDefinitionRequest, GamePlayResponse } from '../types/api'
 
 // A one-line game summary — level count, rotation, and access tier — shown under
@@ -325,12 +325,7 @@ export function WorkshopGamesPage() {
       row={d => ({
         name: d.name,
         subtitle: gameSummary(d),
-        thumbnail: (
-          <div className="game-thumb" title={accessDescription(d.visibility)}>
-            <img className="game-thumb-base" src="/images/workshop/game.svg" alt="" aria-hidden="true" />
-            <img className="game-thumb-marker" src={`/images/workshop/marker-${d.visibility}.svg`} alt="" aria-hidden="true" />
-          </div>
-        ),
+        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/game.svg" visibility={d.visibility} />,
         onOpen: () => void handleEdit(d.id),
         actions: [
           { key: 'edit', label: 'Edit', ariaLabel: `Edit ${d.name}`, icon: '/images/icons/icon_rename.png', onClick: () => void handleEdit(d.id) },

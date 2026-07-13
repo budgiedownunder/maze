@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AppHeader } from './AppHeader'
 import { useToken } from '../context/AuthContext'
+import { accessDescription, type Visibility } from '../utils/gameDefinitions'
+
+// A workshop row thumbnail: the base art with the visibility marker overhanging
+// its corner, titled with the access description. Shared by the Games and
+// Collections rows (each supplies its own base art).
+export function WorkshopThumbnail({ baseSrc, visibility }: { baseSrc: string; visibility: Visibility }) {
+  return (
+    <div className="game-thumb" title={accessDescription(visibility)}>
+      <img className="game-thumb-base" src={baseSrc} alt="" aria-hidden="true" />
+      <img className="game-thumb-marker" src={`/images/workshop/marker-${visibility}.svg`} alt="" aria-hidden="true" />
+    </div>
+  )
+}
 
 // The context a workshop list page hands back to its parent so the parent's
 // create / edit / delete / access handlers can drive the shared list state.
