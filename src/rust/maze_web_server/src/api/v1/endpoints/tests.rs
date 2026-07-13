@@ -18,7 +18,8 @@ mod test_definitions {
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
     use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
-    use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, SetGameSharesRequest};
+    use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest};
+    use crate::api::v1::endpoints::game_shared::SetGameSharesRequest;
     use crate::api::v1::endpoints::game_collections::{GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;

@@ -40,7 +40,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
-use super::game_definitions::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
+use super::game_shared::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
 use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
 
 // ---------------------------------------------------------------------------

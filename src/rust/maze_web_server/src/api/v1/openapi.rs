@@ -23,8 +23,8 @@ use crate::api::v1::endpoints::game_collections::{
 };
 use crate::api::v1::endpoints::game_definitions::{
     GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
-    SetGameSharesRequest, ImageUpdatedResponse,
 };
+use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, SetGameSharesRequest};
 use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;

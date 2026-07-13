@@ -38,7 +38,7 @@
 //! definition folds today's UTC date into both, giving a fresh, comparable board
 //! each day (`def:<id>:<yyyy-mm-dd>`).
 
-use actix_multipart::form::{bytes::Bytes as MultipartBytes, MultipartForm};
+use actix_multipart::form::MultipartForm;
 use actix_web::{
     delete, get, post, put, web, HttpMessage, HttpRequest, HttpResponse, Error,
     error::{
@@ -47,7 +47,7 @@ use actix_web::{
     },
     http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
 use data_model::{GameDefinition, GranteeSummary, Rotation, User, Visibility};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
@@ -57,6 +57,7 @@ use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
 use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
+use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -136,18 +137,6 @@ pub struct GamePlayResponse {
     pub leaderboard_tracked: bool,
 }
 
-/// Request body for setting a share list — the complete set of users who should
-/// have access after the call. The server reconciles the stored list to match:
-/// anyone not listed is revoked, any new id granted, in one operation.
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct SetGameSharesRequest {
-    /// The complete desired grantee list. The owner's own id, if present, is
-    /// ignored (you can't share with yourself).
-    #[schema(value_type = Vec<String>)]
-    pub user_ids: Vec<Uuid>,
-}
-
 /// The current grantee list for a definition, returned by the share endpoints —
 /// each grantee resolved to `{id, username}` for the owner's manage-shares view.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
@@ -155,26 +144,6 @@ pub struct SetGameSharesRequest {
 pub struct GameDefinitionSharesResponse {
     /// The users currently granted access (id + username).
     pub grantees: Vec<GranteeSummary>,
-}
-
-/// Multipart upload form for a definition / collection image — a single `file`
-/// part, oversize-rejected during extraction. Shared with the collection
-/// endpoints (identical shape to the avatar upload).
-#[derive(MultipartForm)]
-pub struct ImageUploadForm {
-    #[multipart(limit = "2 MiB")]
-    pub file: MultipartBytes,
-}
-
-/// `200` response for a successful image upload — the freshly-stamped
-/// `image_updated_at` the client uses to cache-bust the image URL. Shared by the
-/// definition + collection image endpoints.
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ImageUpdatedResponse {
-    /// The new image cache-buster (RFC 3339).
-    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
-    pub image_updated_at: DateTime<Utc>,
 }
 
 // ---------------------------------------------------------------------------
