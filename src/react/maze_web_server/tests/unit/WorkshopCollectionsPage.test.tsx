@@ -86,7 +86,7 @@ describe('WorkshopCollectionsPage', () => {
     await waitFor(() => expect(screen.getByText('Private one')).toBeInTheDocument())
 
     const privateRow = screen.getByText('Private one').closest('.game-list-item')!
-    expect(privateRow.querySelector('.game-thumb-base')).toHaveAttribute('src', '/images/workshop/collection.svg')
+    expect(privateRow.querySelector('.game-thumb-base')).toHaveAttribute('src', '/images/workshop/workshop-game-collection.svg')
     expect(privateRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-private.svg')
 
     const publicRow = screen.getByText('Public one').closest('.game-list-item')!
