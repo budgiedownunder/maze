@@ -19,7 +19,7 @@ mod test_definitions {
     use chrono::{DateTime, Utc};
     use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
     use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, SetGameSharesRequest};
-    use crate::api::v1::endpoints::game_collections::{AddGameCollectionItemRequest, GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, ReorderGameCollectionItemsRequest};
+    use crate::api::v1::endpoints::game_collections::{GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
@@ -1173,43 +1173,16 @@ mod test_definitions {
             Ok(())
         }
 
-        async fn add_game_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
+        async fn set_game_collection_items(&mut self, owner: &User, collection_id: Uuid, ordered: &[Uuid]) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, collection_id)?;
             let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
-            if collection.items.iter().any(|i| i.definition_id == definition_id) {
-                return Ok(());
-            }
-            let sort_order = collection.items.len() as u32;
-            collection.items.push(CollectionItem { definition_id, sort_order });
-            collection.updated_at = Utc::now();
-            Ok(())
-        }
-
-        async fn remove_game_collection_item(&mut self, owner: &User, collection_id: Uuid, definition_id: Uuid) -> Result<(), StoreError> {
-            self.owned_collection_or_not_found(owner, collection_id)?;
-            let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
-            let before = collection.items.len();
-            collection.items.retain(|i| i.definition_id != definition_id);
-            if collection.items.len() != before {
-                renumber_items(&mut collection.items);
-                collection.updated_at = Utc::now();
-            }
-            Ok(())
-        }
-
-        async fn reorder_game_collection_items(&mut self, owner: &User, collection_id: Uuid, ordered: &[Uuid]) -> Result<(), StoreError> {
-            self.owned_collection_or_not_found(owner, collection_id)?;
-            let collection = self.game_collection_mut(collection_id).expect("owned collection exists");
-            let mut remaining = std::mem::take(&mut collection.items);
-            let mut reordered: Vec<CollectionItem> = Vec::with_capacity(remaining.len());
-            for id in ordered {
-                if let Some(pos) = remaining.iter().position(|i| i.definition_id == *id) {
-                    reordered.push(remaining.remove(pos));
-                }
-            }
-            reordered.extend(remaining);
-            renumber_items(&mut reordered);
-            collection.items = reordered;
+            let mut seen = std::collections::HashSet::new();
+            collection.items = ordered
+                .iter()
+                .filter(|id| seen.insert(**id))
+                .enumerate()
+                .map(|(index, id)| CollectionItem { definition_id: *id, sort_order: index as u32 })
+                .collect();
             collection.updated_at = Utc::now();
             Ok(())
         }
@@ -8757,10 +8730,6 @@ mod test_definitions {
         collection
     }
 
-    async fn add_collection_member(store: &SharedStore, owner: &User, collection_id: Uuid, definition_id: Uuid) {
-        store.write().await.add_game_collection_item(owner, collection_id, definition_id).await.expect("add item");
-    }
-
     /// The ordered member ids of a `GameCollection` JSON response body.
     fn collection_item_ids(collection: &GameCollection) -> Vec<Uuid> {
         collection.items.iter().map(|i| i.definition_id).collect()
@@ -8820,9 +8789,16 @@ mod test_definitions {
         let def_public = seed_game_definition(&store, &owner, "Pub", Visibility::Public, Rotation::Static).await;
         let def_owner_private = seed_game_definition(&store, &owner, "OwnerPriv", Visibility::Private, Rotation::Static).await;
         let def_other_private = seed_game_definition(&store, &other, "OtherPriv", Visibility::Private, Rotation::Static).await;
-        for def_id in [def_public.id, def_owner_private.id, def_other_private.id, Uuid::new_v4()] {
-            add_collection_member(&store, &owner, collection.id, def_id).await;
-        }
+        store
+            .write()
+            .await
+            .set_game_collection_items(
+                &owner,
+                collection.id,
+                &[def_public.id, def_owner_private.id, def_other_private.id, Uuid::new_v4()],
+            )
+            .await
+            .expect("set members");
 
         // The owner sees the public member + their own private one (not the other
         // user's private, not the dangling ref), in insertion order.
@@ -8845,7 +8821,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn game_collection_membership_add_reorder_remove() {
+    async fn game_collection_membership_reconcile() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
             create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
@@ -8858,33 +8834,25 @@ mod test_definitions {
         let d3 = seed_game_definition(&store, &owner, "D3", Visibility::Public, Rotation::Static).await;
         let url = format!("/api/v1/game-collections/{}", collection.id);
 
-        // Add three members → appended in order.
-        for def in [d1.id, d2.id, d3.id] {
-            let body = AddGameCollectionItemRequest { definition_id: def };
-            let req = create_test_post_request(&format!("{url}/items"), Some(owner.api_key), None, Some(&body));
-            let resp = test::call_service(&app, req).await;
-            assert_eq!(resp.status(), StatusCode::OK);
-            let _: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        }
-
-        // Reorder → d3, d1, d2.
-        let reorder = ReorderGameCollectionItemsRequest { ordered: vec![d3.id, d1.id, d2.id] };
-        let req = create_test_put_request(&format!("{url}/items/reorder"), Some(owner.api_key), None, &reorder);
+        // Set the membership in one call → stored in the given order.
+        let body = SetGameCollectionItemsRequest { definition_ids: vec![d1.id, d2.id, d3.id] };
+        let req = create_test_put_request(&format!("{url}/items"), Some(owner.api_key), None, &body);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
-        let after_reorder: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(collection_item_ids(&after_reorder), vec![d3.id, d1.id, d2.id]);
+        let set: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(collection_item_ids(&set), vec![d1.id, d2.id, d3.id]);
 
-        // Remove d1 → d3, d2.
-        let req = create_test_delete_request(&format!("{url}/items/{}", d1.id), Some(owner.api_key), None);
+        // Reconcile in one call: drop d1, reorder to d3, d2.
+        let body = SetGameCollectionItemsRequest { definition_ids: vec![d3.id, d2.id] };
+        let req = create_test_put_request(&format!("{url}/items"), Some(owner.api_key), None, &body);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
-        let after_remove: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(collection_item_ids(&after_remove), vec![d3.id, d2.id]);
+        let after: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(collection_item_ids(&after), vec![d3.id, d2.id]);
 
         // A non-owner cannot mutate membership.
-        let body = AddGameCollectionItemRequest { definition_id: d1.id };
-        let req = create_test_post_request(&format!("{url}/items"), Some(other.api_key), None, Some(&body));
+        let body = SetGameCollectionItemsRequest { definition_ids: vec![d1.id] };
+        let req = create_test_put_request(&format!("{url}/items"), Some(other.api_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 

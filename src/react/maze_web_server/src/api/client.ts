@@ -431,32 +431,14 @@ export function deleteGameCollection(token: string, id: string): Promise<void> {
   })
 }
 
-// Appends a definition to a collection (idempotent). Returns the updated
-// collection with its raw membership (`items`), not the hydrated detail.
-export function addGameCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
+// Replaces a collection's whole membership with `definitionIds` (in order) in
+// one operation — the server reconciles (drop absent, add new, reorder, dedupe).
+// Returns the updated collection with its raw membership (`items`).
+export function setGameCollectionItems(token: string, collectionId: string, definitionIds: string[]): Promise<GameCollection> {
   return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify({ definitionId }),
-  })
-}
-
-// Removes a definition from a collection (idempotent). Returns the updated
-// collection.
-export function removeGameCollectionItem(token: string, collectionId: string, definitionId: string): Promise<GameCollection> {
-  return request<GameCollection>(
-    `/game-collections/${encodeURIComponent(collectionId)}/items/${encodeURIComponent(definitionId)}`,
-    { method: 'DELETE', headers: authHeaders(token) },
-  )
-}
-
-// Rewrites the member order to `ordered` (non-members ignored; members omitted
-// from `ordered` keep their prior relative order after the listed ones).
-export function reorderGameCollectionItems(token: string, collectionId: string, ordered: string[]): Promise<GameCollection> {
-  return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items/reorder`, {
     method: 'PUT',
     headers: authHeaders(token),
-    body: JSON.stringify({ ordered }),
+    body: JSON.stringify({ definitionIds }),
   })
 }
 

@@ -18,8 +18,8 @@ use crate::api::v1::endpoints::handlers::{
     UserLookupEntry, UserLookupResponse, UsersListResponse};
 use crate::api::v1::endpoints::avatar::AvatarUpdatedResponse;
 use crate::api::v1::endpoints::game_collections::{
-    AddGameCollectionItemRequest, GameCollectionSharesResponse, GameCollectionDetailResponse,
-    GameCollectionListResponse, GameCollectionRequest, ReorderGameCollectionItemsRequest,
+    GameCollectionSharesResponse, GameCollectionDetailResponse,
+    GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest,
 };
 use crate::api::v1::endpoints::game_definitions::{
     GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
@@ -136,9 +136,7 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_collections::get_game_collection,
         crate::api::v1::endpoints::game_collections::update_game_collection,
         crate::api::v1::endpoints::game_collections::delete_game_collection,
-        crate::api::v1::endpoints::game_collections::add_game_collection_item,
-        crate::api::v1::endpoints::game_collections::remove_game_collection_item,
-        crate::api::v1::endpoints::game_collections::reorder_game_collection_items,
+        crate::api::v1::endpoints::game_collections::set_game_collection_items,
         crate::api::v1::endpoints::game_collections::list_game_collection_shares,
         crate::api::v1::endpoints::game_collections::set_game_collection_shares,
         crate::api::v1::endpoints::game_collections::upload_game_collection_image,
@@ -175,7 +173,7 @@ impl utoipa::Modify for LoginTokenAuth {
             GameDefinition, GameDefinitionRequest, GameDefinitionListResponse, GamePlayResponse,
             SetGameSharesRequest, GameDefinitionSharesResponse, GranteeSummary,
             GameCollection, CollectionItem, GameCollectionRequest, GameCollectionListResponse,
-            GameCollectionDetailResponse, AddGameCollectionItemRequest, ReorderGameCollectionItemsRequest,
+            GameCollectionDetailResponse, SetGameCollectionItemsRequest,
             GameCollectionSharesResponse, ImageUpdatedResponse,
             AvatarUpdatedResponse),
 

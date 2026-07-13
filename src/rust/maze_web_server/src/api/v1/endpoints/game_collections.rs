@@ -136,24 +136,16 @@ impl GameCollectionDetailResponse {
     }
 }
 
-/// Request body for adding a game to a collection.
+/// Request body for setting a collection's whole membership in one operation.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct AddGameCollectionItemRequest {
-    /// The definition to append (idempotent — re-adding is a no-op).
-    #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
-    pub definition_id: Uuid,
-}
-
-/// Request body for re-ordering a collection's members.
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ReorderGameCollectionItemsRequest {
-    /// The member definition ids in the desired order. Ids that are not members
-    /// are ignored; members omitted here keep their prior relative order after
-    /// the listed ones.
+pub struct SetGameCollectionItemsRequest {
+    /// The member definition ids, in the desired order. Replaces the current
+    /// membership wholesale (duplicates collapse; anyone absent is dropped, any
+    /// new id added). Only references are stored — a ref to an inaccessible or
+    /// since-deleted definition is filtered at detail time.
     #[schema(value_type = Vec<String>)]
-    pub ordered: Vec<Uuid>,
+    pub definition_ids: Vec<Uuid>,
 }
 
 /// The current grantee list for a collection, returned by the share endpoints —
@@ -536,133 +528,48 @@ pub async fn delete_game_collection(
 }
 
 // ---------------------------------------------------------------------------
-// Membership — POST/DELETE /items, PUT /items/reorder
+// Membership — PUT /items (reconcile the whole ordered list in one operation)
 // ---------------------------------------------------------------------------
 
 #[utoipa::path(
-    summary = "Add a game to a collection",
-    description = "Appends a definition to a collection owned by the caller (idempotent — re-adding \
-                   is a no-op) and returns the updated collection. Only the reference is stored; a \
+    summary = "Set a collection's games",
+    description = "Replaces a collection's whole membership with the supplied ordered list in one \
+                   operation — duplicates collapse, anyone absent is dropped, any new id added, and \
+                   the sequence reordered to match — and returns the updated collection. Owner-only \
+                   (a collection owned by someone else returns 404). Only references are stored; a \
                    ref to an inaccessible or since-deleted definition is filtered at detail time.",
-    post,
+    put,
     path = "/api/v1/game-collections/{id}/items",
     params(("id" = String, Path, description = "Collection id")),
-    request_body = AddGameCollectionItemRequest,
+    request_body = SetGameCollectionItemsRequest,
     responses(
-        (status = 200, description = "Item added", body = GameCollection),
+        (status = 200, description = "Membership updated", body = GameCollection),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Collection not found")
     ),
     security(("api_key" = []), ("login_token" = [])),
     tags = ["v1"]
 )]
-#[post("/game-collections/{id}/items")]
-pub async fn add_game_collection_item(
+#[put("/game-collections/{id}/items")]
+pub async fn set_game_collection_items(
     path: web::Path<Uuid>,
-    body: web::Json<AddGameCollectionItemRequest>,
+    body: web::Json<SetGameCollectionItemsRequest>,
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
-    let definition_id = body.into_inner().definition_id;
+    let definition_ids = body.into_inner().definition_ids;
     let mut store_lock = store.write().await;
 
-    match store_lock.add_game_collection_item(&user, id, definition_id).await {
+    match store_lock.set_game_collection_items(&user, id, &definition_ids).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
         }
         Err(err) => {
-            log::warn!("add collection item store error: {err}");
-            return Err(ErrorInternalServerError("Failed to add collection item"));
-        }
-    }
-
-    let updated = owned_collection(&**store_lock, &user, id).await?;
-    Ok(HttpResponse::Ok().json(updated))
-}
-
-#[utoipa::path(
-    summary = "Remove a game from a collection",
-    description = "Removes a definition from a collection owned by the caller (idempotent) and \
-                   returns the updated collection.",
-    delete,
-    path = "/api/v1/game-collections/{id}/items/{definition_id}",
-    params(
-        ("id" = String, Path, description = "Collection id"),
-        ("definition_id" = String, Path, description = "The member definition id to remove")
-    ),
-    responses(
-        (status = 200, description = "Item removed", body = GameCollection),
-        (status = 401, description = "Unauthorized request"),
-        (status = 404, description = "Collection not found")
-    ),
-    security(("api_key" = []), ("login_token" = [])),
-    tags = ["v1"]
-)]
-#[delete("/game-collections/{id}/items/{definition_id}")]
-pub async fn remove_game_collection_item(
-    path: web::Path<(Uuid, Uuid)>,
-    store: web::Data<SharedStore>,
-    req: HttpRequest,
-) -> Result<HttpResponse, Error> {
-    let user = get_authorized_user(&req, false)?;
-    let (id, definition_id) = path.into_inner();
-    let mut store_lock = store.write().await;
-
-    match store_lock.remove_game_collection_item(&user, id, definition_id).await {
-        Ok(()) => {}
-        Err(StoreError::GameCollectionIdNotFound(_)) => {
-            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
-        }
-        Err(err) => {
-            log::warn!("remove collection item store error: {err}");
-            return Err(ErrorInternalServerError("Failed to remove collection item"));
-        }
-    }
-
-    let updated = owned_collection(&**store_lock, &user, id).await?;
-    Ok(HttpResponse::Ok().json(updated))
-}
-
-#[utoipa::path(
-    summary = "Reorder a collection's members",
-    description = "Rewrites the member order of a collection owned by the caller to the given \
-                   sequence (ids not members are ignored; omitted members keep their prior relative \
-                   order after the listed ones) and returns the updated collection.",
-    put,
-    path = "/api/v1/game-collections/{id}/items/reorder",
-    params(("id" = String, Path, description = "Collection id")),
-    request_body = ReorderGameCollectionItemsRequest,
-    responses(
-        (status = 200, description = "Members reordered", body = GameCollection),
-        (status = 401, description = "Unauthorized request"),
-        (status = 404, description = "Collection not found")
-    ),
-    security(("api_key" = []), ("login_token" = [])),
-    tags = ["v1"]
-)]
-#[put("/game-collections/{id}/items/reorder")]
-pub async fn reorder_game_collection_items(
-    path: web::Path<Uuid>,
-    body: web::Json<ReorderGameCollectionItemsRequest>,
-    store: web::Data<SharedStore>,
-    req: HttpRequest,
-) -> Result<HttpResponse, Error> {
-    let user = get_authorized_user(&req, false)?;
-    let id = path.into_inner();
-    let ordered = body.into_inner().ordered;
-    let mut store_lock = store.write().await;
-
-    match store_lock.reorder_game_collection_items(&user, id, &ordered).await {
-        Ok(()) => {}
-        Err(StoreError::GameCollectionIdNotFound(_)) => {
-            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
-        }
-        Err(err) => {
-            log::warn!("reorder collection items store error: {err}");
-            return Err(ErrorInternalServerError("Failed to reorder collection items"));
+            log::warn!("set collection items store error: {err}");
+            return Err(ErrorInternalServerError("Failed to update collection games"));
         }
     }
 

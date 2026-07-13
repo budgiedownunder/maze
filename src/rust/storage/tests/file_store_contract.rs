@@ -993,9 +993,9 @@ async fn game_collection_delete_is_owner_scoped() {
 }
 
 #[tokio::test]
-async fn game_collection_items_add_remove_and_reorder() {
+async fn game_collection_items_reconcile() {
     let (mut s, _temp) = fresh_store().await;
-    contract::game_collection_items_add_remove_and_reorder(&mut s).await;
+    contract::game_collection_items_reconcile(&mut s).await;
 }
 
 #[tokio::test]

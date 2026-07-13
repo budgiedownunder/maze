@@ -640,29 +640,14 @@ pub trait GameStore {
     /// Deletes a collection owned by `owner`, removing it, its items, and its
     /// share grants.
     async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
-    /// Appends `definition_id` to the owner's collection (after the current last
-    /// item). Idempotent — re-adding an existing member is a no-op. Stores only
-    /// the reference; the definition's existence/accessibility is the server's
-    /// concern (a dangling ref to a since-deleted definition is filtered at
-    /// display).
-    async fn add_game_collection_item(
-        &mut self,
-        owner: &User,
-        collection_id: Uuid,
-        definition_id: Uuid,
-    ) -> Result<(), Error>;
-    /// Removes `definition_id` from the owner's collection. Idempotent.
-    async fn remove_game_collection_item(
-        &mut self,
-        owner: &User,
-        collection_id: Uuid,
-        definition_id: Uuid,
-    ) -> Result<(), Error>;
-    /// Re-orders the owner's collection so its members appear in `ordered`
-    /// (`sort_order` becomes each id's index). Ids in `ordered` that aren't
-    /// members are ignored; members omitted from `ordered` keep their prior
-    /// relative order after the listed ones.
-    async fn reorder_game_collection_items(
+    /// Replaces the owner's collection membership with `ordered` in one operation
+    /// (atomic in the SQL backend): the members become exactly `ordered`
+    /// (de-duplicated, first occurrence wins) with `sort_order` its index — any
+    /// prior member absent from `ordered` is dropped, any new id added, and the
+    /// sequence reordered to match. Owner-scoped: a collection not owned by
+    /// `owner` is [`Error::GameCollectionIdNotFound`]. Only references are stored;
+    /// a ref to an inaccessible/since-deleted definition is filtered at display.
+    async fn set_game_collection_items(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -741,26 +726,6 @@ pub(crate) fn normalize_item_order(items: &mut [CollectionItem]) {
     for (index, item) in items.iter_mut().enumerate() {
         item.sort_order = index as u32;
     }
-}
-
-/// Reorders `items` so members whose `definition_id` appears in `ordered` lead,
-/// in that order, followed by any members not listed (keeping their prior
-/// relative order), then re-normalises `sort_order`. Ids in `ordered` that are
-/// not members are ignored.
-pub(crate) fn reordered_items(
-    items: Vec<CollectionItem>,
-    ordered: &[Uuid],
-) -> Vec<CollectionItem> {
-    let mut remaining = items;
-    let mut result: Vec<CollectionItem> = Vec::with_capacity(remaining.len());
-    for id in ordered {
-        if let Some(pos) = remaining.iter().position(|i| i.definition_id == *id) {
-            result.push(remaining.remove(pos));
-        }
-    }
-    result.extend(remaining);
-    normalize_item_order(&mut result);
-    result
 }
 
 // Store management

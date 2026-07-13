@@ -2827,7 +2827,7 @@ pub async fn update_game_collection_is_metadata_only_and_scoped_to_owner(
     store.create_game_collection(&owner, &mut collection).await.expect("create");
     // Add an item so we can prove update leaves membership untouched.
     let member = Uuid::new_v4();
-    store.add_game_collection_item(&owner, collection.id, member).await.expect("add");
+    store.set_game_collection_items(&owner, collection.id, &[member]).await.expect("set items");
 
     // Owner updates metadata — and even if the caller passes empty items, the
     // persisted membership is preserved.
@@ -2875,39 +2875,36 @@ pub async fn delete_game_collection_is_owner_scoped(store: &mut Box<dyn Store>) 
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 
-pub async fn game_collection_items_add_remove_and_reorder(store: &mut Box<dyn Store>) {
+pub async fn game_collection_items_reconcile(store: &mut Box<dyn Store>) {
     let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
     let other = fixture_user(store, "col_other", "col_other@example.com").await;
     let mut collection = make_game_collection("Bundle", Visibility::Private);
     store.create_game_collection(&owner, &mut collection).await.expect("create");
     let (a, b, c) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
 
-    for id in [a, b, c] {
-        store.add_game_collection_item(&owner, collection.id, id).await.expect("add");
-    }
-    // Idempotent re-add.
-    store.add_game_collection_item(&owner, collection.id, a).await.expect("re-add");
+    // Set the initial membership in one call; a duplicate collapses (first wins),
+    // order is preserved, sort_order is dense.
+    store.set_game_collection_items(&owner, collection.id, &[a, b, c, a]).await.expect("set");
     let loaded = store.get_game_collection(collection.id).await.expect("get");
-    assert_eq!(item_ids(&loaded), vec![a, b, c], "insertion order, no duplicate");
+    assert_eq!(item_ids(&loaded), vec![a, b, c], "deduped, in order");
     assert_eq!(item_orders(&loaded), vec![0, 1, 2]);
 
-    // Reorder to c, a, b.
-    store.reorder_game_collection_items(&owner, collection.id, &[c, a, b]).await.expect("reorder");
+    // Reconcile to a new set in one call: drop b, add d, reorder.
+    let d = Uuid::new_v4();
+    store.set_game_collection_items(&owner, collection.id, &[c, d, a]).await.expect("reconcile");
     let loaded = store.get_game_collection(collection.id).await.expect("get2");
-    assert_eq!(item_ids(&loaded), vec![c, a, b]);
+    assert_eq!(item_ids(&loaded), vec![c, d, a]);
     assert_eq!(item_orders(&loaded), vec![0, 1, 2], "sort_order re-normalised");
 
-    // Remove a → the rest re-normalise.
-    store.remove_game_collection_item(&owner, collection.id, a).await.expect("remove");
-    let loaded = store.get_game_collection(collection.id).await.expect("get3");
-    assert_eq!(item_ids(&loaded), vec![c, b]);
-    assert_eq!(item_orders(&loaded), vec![0, 1]);
+    // An empty set clears the membership.
+    store.set_game_collection_items(&owner, collection.id, &[]).await.expect("clear");
+    assert!(store.get_game_collection(collection.id).await.expect("get3").items.is_empty());
 
     // A non-owner cannot mutate membership.
     let err = store
-        .add_game_collection_item(&other, collection.id, Uuid::new_v4())
+        .set_game_collection_items(&other, collection.id, &[Uuid::new_v4()])
         .await
-        .expect_err("non-owner add must be rejected");
+        .expect_err("non-owner set must be rejected");
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
 }
 

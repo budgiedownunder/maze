@@ -14,7 +14,7 @@
 use crate::store::{
     EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
     ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_grantees,
-    normalize_item_order, reordered_items,
+    normalize_item_order,
 };
 use crate::{
     validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
@@ -5198,21 +5198,6 @@ impl SqlStore {
         Ok(())
     }
 
-    /// Stamps a collection's `updated_at` to now (called after item mutations,
-    /// matching FileStore's whole-collection rewrite).
-    async fn touch_collection(&self, collection_id: Uuid) -> Result<(), Error> {
-        sqlx::query(&q(
-            self.kind,
-            "UPDATE game_collections SET updated_at = ? WHERE id = ?",
-        ))
-        .bind(datetime_to_sql(Utc::now().trunc_subsecs(3)))
-        .bind(collection_id.to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        Ok(())
-    }
-
     /// Runs a `SELECT … FROM game_collections …` query and hydrates each row's
     /// `items`. Shared by the owner / curated / public / shared-with list reads.
     async fn query_game_collections(
@@ -6711,158 +6696,15 @@ impl GameStore for SqlStore {
         Ok(())
     }
 
-    /// Appends a definition to the end of the owner's collection (idempotent).
-    /// See [`GameStore::add_game_collection_item`].
+    /// Replaces the owner's collection membership with `ordered` (de-duplicated)
+    /// in one transaction. See [`GameStore::set_game_collection_items`].
     ///
     /// # Examples
     ///
-    /// Add a definition to a collection and read the membership back
+    /// Set two members, then reconcile to a new set (drop one, add one, reorder)
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, GameDefinition, Rotation, User, UserEmail, Visibility};
-    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
-    /// use uuid::Uuid;
-    ///
-    /// let mut store = SqlStore::new(SqlStoreConfig {
-    ///     url: "sqlite::memory:".to_string(),
-    ///     max_connections: 1,
-    ///     auto_create_database: true,
-    ///     ..SqlStoreConfig::default()
-    /// })
-    /// .await
-    /// .expect("create in-memory SqlStore");
-    ///
-    /// let mut owner = User {
-    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
-    ///     full_name: "Owner".into(),
-    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
-    ///     password_hash: "h".into(), api_key: Uuid::nil(),
-    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
-    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
-    ///     avatar_updated_at: None,
-    /// };
-    /// store.create_user(&mut owner).await.unwrap();
-    /// let mut def = GameDefinition {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
-    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
-    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
-    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    /// };
-    /// store.create_game_definition(&owner, &mut def).await.unwrap();
-    /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    /// };
-    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    ///
-    /// store.add_game_collection_item(&owner, collection.id, def.id).await.unwrap();
-    /// let items = store.get_game_collection(collection.id).await.unwrap().items;
-    /// assert_eq!(items.len(), 1);
-    /// assert_eq!(items[0].definition_id, def.id);
-    /// # });
-    /// ```
-    async fn add_game_collection_item(
-        &mut self,
-        owner: &User,
-        collection_id: Uuid,
-        definition_id: Uuid,
-    ) -> Result<(), Error> {
-        if self.collection_owner_id(collection_id).await? != owner.id {
-            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
-        }
-        let mut items = self.load_collection_items(collection_id).await?;
-        if items.iter().any(|i| i.definition_id == definition_id) {
-            return Ok(());
-        }
-        items.push(CollectionItem {
-            definition_id,
-            sort_order: items.len() as u32,
-        });
-        self.replace_collection_items(collection_id, &items).await?;
-        self.touch_collection(collection_id).await?;
-        Ok(())
-    }
-
-    /// Removes a definition from the owner's collection and closes the resulting
-    /// order gap (idempotent). See [`GameStore::remove_game_collection_item`].
-    ///
-    /// # Examples
-    ///
-    /// Remove a previously added item
-    /// ```
-    /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, GameDefinition, Rotation, User, UserEmail, Visibility};
-    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
-    /// use uuid::Uuid;
-    ///
-    /// let mut store = SqlStore::new(SqlStoreConfig {
-    ///     url: "sqlite::memory:".to_string(),
-    ///     max_connections: 1,
-    ///     auto_create_database: true,
-    ///     ..SqlStoreConfig::default()
-    /// })
-    /// .await
-    /// .expect("create in-memory SqlStore");
-    ///
-    /// let mut owner = User {
-    ///     id: Uuid::nil(), is_admin: false, username: "owner".into(),
-    ///     full_name: "Owner".into(),
-    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
-    ///     password_hash: "h".into(), api_key: Uuid::nil(),
-    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
-    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
-    ///     avatar_updated_at: None,
-    /// };
-    /// store.create_user(&mut owner).await.unwrap();
-    /// let mut def = GameDefinition {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Tower".to_string(),
-    ///     description: None, image_updated_at: None, visibility: Visibility::Private,
-    ///     seed: 7, rotation: Rotation::Static, config: serde_json::json!({}),
-    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    /// };
-    /// store.create_game_definition(&owner, &mut def).await.unwrap();
-    /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    /// };
-    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.add_game_collection_item(&owner, collection.id, def.id).await.unwrap();
-    ///
-    /// store.remove_game_collection_item(&owner, collection.id, def.id).await.unwrap();
-    /// assert!(store.get_game_collection(collection.id).await.unwrap().items.is_empty());
-    /// # });
-    /// ```
-    async fn remove_game_collection_item(
-        &mut self,
-        owner: &User,
-        collection_id: Uuid,
-        definition_id: Uuid,
-    ) -> Result<(), Error> {
-        if self.collection_owner_id(collection_id).await? != owner.id {
-            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
-        }
-        let mut items = self.load_collection_items(collection_id).await?;
-        let before = items.len();
-        items.retain(|i| i.definition_id != definition_id);
-        if items.len() != before {
-            normalize_item_order(&mut items);
-            self.replace_collection_items(collection_id, &items).await?;
-            self.touch_collection(collection_id).await?;
-        }
-        Ok(())
-    }
-
-    /// Reorders the owner's collection so its items follow `ordered`. See
-    /// [`GameStore::reorder_game_collection_items`].
-    ///
-    /// # Examples
-    ///
-    /// Reverse the order of two collection items
-    /// ```
-    /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6891,32 +6733,17 @@ impl GameStore for SqlStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// let mut ids = Vec::new();
-    /// for name in ["First", "Second"] {
-    ///     let mut def = GameDefinition {
-    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
-    ///         description: None, image_updated_at: None, visibility: Visibility::Private,
-    ///         seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
-    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    ///     };
-    ///     store.create_game_definition(&owner, &mut def).await.unwrap();
-    ///     store.add_game_collection_item(&owner, collection.id, def.id).await.unwrap();
-    ///     ids.push(def.id);
-    /// }
+    /// let (a, b, c) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    /// store.set_game_collection_items(&owner, collection.id, &[a, b]).await.unwrap();
+    /// store.set_game_collection_items(&owner, collection.id, &[c, a]).await.unwrap();
     ///
-    /// store.reorder_game_collection_items(&owner, collection.id, &[ids[1], ids[0]]).await.unwrap();
     /// let order: Vec<Uuid> = store
-    ///     .get_game_collection(collection.id)
-    ///     .await
-    ///     .unwrap()
-    ///     .items
-    ///     .into_iter()
-    ///     .map(|i| i.definition_id)
-    ///     .collect();
-    /// assert_eq!(order, vec![ids[1], ids[0]]);
+    ///     .get_game_collection(collection.id).await.unwrap()
+    ///     .items.into_iter().map(|i| i.definition_id).collect();
+    /// assert_eq!(order, vec![c, a]);
     /// # });
     /// ```
-    async fn reorder_game_collection_items(
+    async fn set_game_collection_items(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -6925,9 +6752,41 @@ impl GameStore for SqlStore {
         if self.collection_owner_id(collection_id).await? != owner.id {
             return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
         }
-        let items = reordered_items(self.load_collection_items(collection_id).await?, ordered);
-        self.replace_collection_items(collection_id, &items).await?;
-        self.touch_collection(collection_id).await?;
+        let mut seen = std::collections::HashSet::new();
+        let deduped: Vec<Uuid> = ordered.iter().copied().filter(|id| seen.insert(*id)).collect();
+
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_items WHERE collection_id = ?",
+        ))
+        .bind(collection_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        for (index, definition_id) in deduped.iter().enumerate() {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO game_collection_items (collection_id, definition_id, sort_order) \
+                 VALUES (?, ?, ?)",
+            ))
+            .bind(collection_id.to_string())
+            .bind(definition_id.to_string())
+            .bind(index as i32)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE game_collections SET updated_at = ? WHERE id = ?",
+        ))
+        .bind(datetime_to_sql(Utc::now().trunc_subsecs(3)))
+        .bind(collection_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 

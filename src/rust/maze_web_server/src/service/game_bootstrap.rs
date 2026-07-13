@@ -241,9 +241,7 @@ pub async fn init_difficulty_collection(
         updated_at: now,
     };
     store.create_game_collection(&admin, &mut collection).await?;
-    for definition_id in definition_ids {
-        store.add_game_collection_item(&admin, collection.id, definition_id).await?;
-    }
+    store.set_game_collection_items(&admin, collection.id, &definition_ids).await?;
 
     Ok(())
 }

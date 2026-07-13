@@ -13,9 +13,7 @@ import {
   listGameCollections,
   updateGameCollection,
   deleteGameCollection,
-  addGameCollectionItem,
-  removeGameCollectionItem,
-  reorderGameCollectionItems,
+  setGameCollectionItems,
   listGameDefinitionShares,
   setGameDefinitionShares,
   listGameCollectionShares,
@@ -211,47 +209,29 @@ describe('game-collection client', () => {
     await expect(deleteGameCollection(TOKEN, 'c1')).resolves.toBeUndefined()
   })
 
-  it('addGameCollectionItem POSTs { definitionId } and returns the updated collection', async () => {
+  it('setGameCollectionItems PUTs { definitionIds } and returns the updated collection', async () => {
     let path: string | null = null
+    let method: string | null = null
     let body: unknown
     server.use(
-      http.post('/api/v1/game-collections/:id/items', async ({ request }) => {
+      http.put('/api/v1/game-collections/:id/items', async ({ request }) => {
         path = new URL(request.url).pathname
+        method = request.method
         body = await request.json()
-        return HttpResponse.json(coll({ items: [{ definitionId: 'd9', sortOrder: 0 }] }))
+        return HttpResponse.json(coll({ items: [
+          { definitionId: 'd3', sortOrder: 0 },
+          { definitionId: 'd1', sortOrder: 1 },
+        ] }))
       }),
     )
-    const updated = await addGameCollectionItem(TOKEN, 'c1', 'd9')
+    const updated = await setGameCollectionItems(TOKEN, 'c1', ['d3', 'd1'])
     expect(path).toBe('/api/v1/game-collections/c1/items')
-    expect(body).toEqual({ definitionId: 'd9' })
-    expect(updated.items).toEqual([{ definitionId: 'd9', sortOrder: 0 }])
-  })
-
-  it('removeGameCollectionItem DELETEs the nested item path', async () => {
-    let path: string | null = null
-    server.use(
-      http.delete('/api/v1/game-collections/:id/items/:definitionId', ({ request }) => {
-        path = new URL(request.url).pathname
-        return HttpResponse.json(coll())
-      }),
-    )
-    await removeGameCollectionItem(TOKEN, 'c1', 'd9')
-    expect(path).toBe('/api/v1/game-collections/c1/items/d9')
-  })
-
-  it('reorderGameCollectionItems PUTs { ordered } to the reorder path', async () => {
-    let path: string | null = null
-    let body: unknown
-    server.use(
-      http.put('/api/v1/game-collections/:id/items/reorder', async ({ request }) => {
-        path = new URL(request.url).pathname
-        body = await request.json()
-        return HttpResponse.json(coll())
-      }),
-    )
-    await reorderGameCollectionItems(TOKEN, 'c1', ['d3', 'd1', 'd2'])
-    expect(path).toBe('/api/v1/game-collections/c1/items/reorder')
-    expect(body).toEqual({ ordered: ['d3', 'd1', 'd2'] })
+    expect(method).toBe('PUT')
+    expect(body).toEqual({ definitionIds: ['d3', 'd1'] })
+    expect(updated.items).toEqual([
+      { definitionId: 'd3', sortOrder: 0 },
+      { definitionId: 'd1', sortOrder: 1 },
+    ])
   })
 })
 

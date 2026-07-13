@@ -17,7 +17,7 @@ use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 use crate::store::{
     EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
     ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_grantees,
-    normalize_item_order, reordered_items,
+    normalize_item_order,
 };
 use crate::{
     file_store_migration,
@@ -5423,12 +5423,12 @@ impl GameStore for FileStore {
         Ok(())
     }
 
-    /// Appends a definition to the end of the owner's collection (idempotent).
-    /// See [`GameStore::add_game_collection_item`].
+    /// Replaces the owner's collection membership with `ordered` (de-duplicated).
+    /// See [`GameStore::set_game_collection_items`].
     ///
     /// # Examples
     ///
-    /// Add an item and confirm it lands in the collection
+    /// Set two members, then reconcile to a new set (drop one, add one, reorder)
     /// ```
     /// # tokio_test::block_on(async {
     /// use data_model::{GameCollection, User, UserEmail, Visibility};
@@ -5454,137 +5454,17 @@ impl GameStore for FileStore {
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
+    /// let (a, b, c) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    /// store.set_game_collection_items(&owner, collection.id, &[a, b]).await.unwrap();
+    /// store.set_game_collection_items(&owner, collection.id, &[c, a]).await.unwrap();
     ///
-    /// let def_id = Uuid::new_v4();
-    /// store.add_game_collection_item(&owner, collection.id, def_id).await.unwrap();
-    /// let items = store.get_game_collection(collection.id).await.unwrap().items;
-    /// assert_eq!(items.iter().map(|i| i.definition_id).collect::<Vec<_>>(), vec![def_id]);
-    /// # });
-    /// ```
-    async fn add_game_collection_item(
-        &mut self,
-        owner: &User,
-        collection_id: Uuid,
-        definition_id: Uuid,
-    ) -> Result<(), Error> {
-        let mut collection = self.read_game_collection_raw(collection_id)?;
-        if collection.owner_id != owner.id {
-            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
-        }
-        if collection.items.iter().any(|i| i.definition_id == definition_id) {
-            return Ok(());
-        }
-        let sort_order = collection.items.len() as u32;
-        collection.items.push(CollectionItem {
-            definition_id,
-            sort_order,
-        });
-        collection.updated_at = generate_now_millis();
-        self.write_game_collection_file(&collection, true)?;
-        Ok(())
-    }
-
-    /// Removes a definition from the owner's collection and closes the resulting
-    /// order gap (idempotent). See [`GameStore::remove_game_collection_item`].
-    ///
-    /// # Examples
-    ///
-    /// Add then remove an item; the collection is empty afterwards
-    /// ```
-    /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
-    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
-    /// use uuid::Uuid;
-    ///
-    /// let temp = tempfile::tempdir().unwrap();
-    /// let mut store = FileStore::new(&FileStoreConfig {
-    ///     data_dir: temp.path().to_string_lossy().to_string(),
-    /// });
-    /// let mut owner = User {
-    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
-    ///     full_name: "Owner".to_string(),
-    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
-    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
-    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
-    ///     last_sign_in_at: None, avatar_updated_at: None,
-    /// };
-    /// store.create_user(&mut owner).await.unwrap();
-    /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    /// };
-    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// let def_id = Uuid::new_v4();
-    /// store.add_game_collection_item(&owner, collection.id, def_id).await.unwrap();
-    ///
-    /// store.remove_game_collection_item(&owner, collection.id, def_id).await.unwrap();
-    /// assert!(store.get_game_collection(collection.id).await.unwrap().items.is_empty());
-    /// # });
-    /// ```
-    async fn remove_game_collection_item(
-        &mut self,
-        owner: &User,
-        collection_id: Uuid,
-        definition_id: Uuid,
-    ) -> Result<(), Error> {
-        let mut collection = self.read_game_collection_raw(collection_id)?;
-        if collection.owner_id != owner.id {
-            return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
-        }
-        let before = collection.items.len();
-        collection.items.retain(|i| i.definition_id != definition_id);
-        if collection.items.len() != before {
-            normalize_item_order(&mut collection.items);
-            collection.updated_at = generate_now_millis();
-            self.write_game_collection_file(&collection, true)?;
-        }
-        Ok(())
-    }
-
-    /// Reorders the owner's collection so its items follow `ordered`. See
-    /// [`GameStore::reorder_game_collection_items`].
-    ///
-    /// # Examples
-    ///
-    /// Add two items, reverse their order, and confirm the new sequence
-    /// ```
-    /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
-    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
-    /// use uuid::Uuid;
-    ///
-    /// let temp = tempfile::tempdir().unwrap();
-    /// let mut store = FileStore::new(&FileStoreConfig {
-    ///     data_dir: temp.path().to_string_lossy().to_string(),
-    /// });
-    /// let mut owner = User {
-    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
-    ///     full_name: "Owner".to_string(),
-    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
-    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
-    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
-    ///     last_sign_in_at: None, avatar_updated_at: None,
-    /// };
-    /// store.create_user(&mut owner).await.unwrap();
-    /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
-    /// };
-    /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// let (first, second) = (Uuid::new_v4(), Uuid::new_v4());
-    /// store.add_game_collection_item(&owner, collection.id, first).await.unwrap();
-    /// store.add_game_collection_item(&owner, collection.id, second).await.unwrap();
-    ///
-    /// store.reorder_game_collection_items(&owner, collection.id, &[second, first]).await.unwrap();
     /// let order: Vec<Uuid> = store
     ///     .get_game_collection(collection.id).await.unwrap()
     ///     .items.iter().map(|i| i.definition_id).collect();
-    /// assert_eq!(order, vec![second, first]);
+    /// assert_eq!(order, vec![c, a]);
     /// # });
     /// ```
-    async fn reorder_game_collection_items(
+    async fn set_game_collection_items(
         &mut self,
         owner: &User,
         collection_id: Uuid,
@@ -5594,7 +5474,16 @@ impl GameStore for FileStore {
         if collection.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
         }
-        collection.items = reordered_items(std::mem::take(&mut collection.items), ordered);
+        let mut seen = std::collections::HashSet::new();
+        collection.items = ordered
+            .iter()
+            .filter(|id| seen.insert(**id))
+            .enumerate()
+            .map(|(index, id)| CollectionItem {
+                definition_id: *id,
+                sort_order: index as u32,
+            })
+            .collect();
         collection.updated_at = generate_now_millis();
         self.write_game_collection_file(&collection, true)?;
         Ok(())
