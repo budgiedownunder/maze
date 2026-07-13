@@ -7,7 +7,7 @@ import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { WorkshopCollectionsPage } from '../../src/pages/WorkshopCollectionsPage'
 import { mockProfile, resetMockGameCollections, resetMockShares } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
-import type { GameCollection } from '../../src/types/api'
+import type { GameCollection, GameDefinition } from '../../src/types/api'
 
 // The page filters to the caller's own collections (ownerId === profile.id).
 const OWNER = mockProfile.id
@@ -28,6 +28,28 @@ function col(overrides: Partial<GameCollection> & { id: string; name: string }):
 function listOf(...cols: GameCollection[]) {
   return http.get('/api/v1/game-collections', () =>
     HttpResponse.json({ collections: cols, limit: 20, offset: 0, hasMore: false }))
+}
+
+function def(overrides: Partial<GameDefinition> & { id: string; name: string }): GameDefinition {
+  return { ownerId: OWNER, visibility: 'private', seed: 1, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x', ...overrides }
+}
+
+// Seeds a collection `c1` whose members are `members`, an Add-picker drawn from
+// `ownGames`, and captures the reconcile PUT body. Returns a getter for it.
+function seedForEdit(members: GameDefinition[], ownGames: GameDefinition[]) {
+  const collection = col({ id: 'c1', name: 'Campaign', items: members.map((d, i) => ({ definitionId: d.id, sortOrder: i })) })
+  const captured: { body?: { definitionIds: string[] } } = {}
+  server.use(
+    listOf(collection),
+    http.get('/api/v1/game-collections/c1', () => HttpResponse.json({ ...collection, definitions: members })),
+    http.get('/api/v1/game-definitions', () => HttpResponse.json({ definitions: ownGames, limit: 20, offset: 0, hasMore: false })),
+    http.put('/api/v1/game-collections/c1/items', async ({ request }) => {
+      captured.body = await request.json() as { definitionIds: string[] }
+      const items = captured.body.definitionIds.map((definitionId, sortOrder) => ({ definitionId, sortOrder }))
+      return HttpResponse.json({ ...collection, items })
+    }),
+  )
+  return captured
 }
 
 function renderPage() {
@@ -143,6 +165,114 @@ describe('WorkshopCollectionsPage', () => {
 
     await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
     expect(screen.queryByText('Doomed')).toBeNull()
+  })
+
+  it('Edit lists the member games and adding one reconciles on Save', async () => {
+    const g1 = def({ id: 'g1', name: 'Alpha' })
+    const g2 = def({ id: 'g2', name: 'Beta' })
+    const g3 = def({ id: 'g3', name: 'Gamma' })
+    const captured = seedForEdit([g1, g2], [g1, g2, g3])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+    expect(within(dialog).getByText('Beta')).toBeInTheDocument()
+
+    // Save is idle until something changes.
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
+
+    // The picker offers the owner's other game; add it.
+    await userEvent.type(within(dialog).getByLabelText('Add game'), 'Gam')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Add Gamma' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Collection' })).toBeNull())
+    expect(captured.body).toEqual({ definitionIds: ['g1', 'g2', 'g3'] })
+  })
+
+  it('Edit reorders and removes members, sending the new order on Save', async () => {
+    const g1 = def({ id: 'g1', name: 'Alpha' })
+    const g2 = def({ id: 'g2', name: 'Beta' })
+    const g3 = def({ id: 'g3', name: 'Gamma' })
+    const captured = seedForEdit([g1, g2, g3], [g1, g2, g3])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+
+    // Alpha down (→ Beta, Alpha, Gamma), then remove Gamma (→ Beta, Alpha).
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move Alpha down' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Remove Gamma' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Collection' })).toBeNull())
+    expect(captured.body).toEqual({ definitionIds: ['g2', 'g1'] })
+  })
+
+  it('adds a game after the selected row and selects the new one', async () => {
+    const g1 = def({ id: 'g1', name: 'Alpha' })
+    const g2 = def({ id: 'g2', name: 'Beta' })
+    const g3 = def({ id: 'g3', name: 'Gamma' })
+    const captured = seedForEdit([g1, g2], [g1, g2, g3])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+
+    // Select the first row (Alpha), then add Gamma — it lands right after Alpha.
+    await userEvent.click(within(dialog).getByText('Alpha'))
+    await userEvent.type(within(dialog).getByLabelText('Add game'), 'Gam')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Add Gamma' }))
+
+    // Gamma becomes the selected row.
+    expect(within(dialog).getByText('Gamma').closest('.collection-member')).toHaveClass('selected')
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit Collection' })).toBeNull())
+    expect(captured.body).toEqual({ definitionIds: ['g1', 'g3', 'g2'] })
+  })
+
+  it('highlights a clicked source (available games) row under its heading', async () => {
+    const g1 = def({ id: 'g1', name: 'Alpha' })
+    const g2 = def({ id: 'g2', name: 'Beta' })
+    seedForEdit([g1], [g1, g2])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+
+    expect(within(dialog).getByText('Available Games')).toBeInTheDocument()
+    // Beta is the only available game; click its row to highlight it (no add).
+    await userEvent.click(within(dialog).getByText('Beta'))
+    expect(within(dialog).getByText('Beta').closest('.collection-picker-item')).toHaveClass('selected')
+    // Clicking the row did not add it — Beta is still an available game, not a member.
+    expect(within(dialog).getByRole('button', { name: 'Add Beta' })).toBeInTheDocument()
+  })
+
+  it('selecting a member row keeps the highlight on it after a move', async () => {
+    const g1 = def({ id: 'g1', name: 'Alpha' })
+    const g2 = def({ id: 'g2', name: 'Beta' })
+    seedForEdit([g1, g2], [g1, g2])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+
+    // Click Alpha's row to select it.
+    await userEvent.click(within(dialog).getByText('Alpha'))
+    expect(within(dialog).getByText('Alpha').closest('.collection-member')).toHaveClass('selected')
+
+    // Move it down; the highlight stays on Alpha, not on the row it swapped with.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move Alpha down' }))
+    expect(within(dialog).getByText('Alpha').closest('.collection-member')).toHaveClass('selected')
+    expect(within(dialog).getByText('Beta').closest('.collection-member')).not.toHaveClass('selected')
   })
 
   it('Access opens the access modal for a collection', async () => {

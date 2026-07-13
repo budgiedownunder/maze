@@ -80,6 +80,61 @@ test('the access modal updates a collection summary from Just me to Everyone', a
   await expect(row.getByText(/Just me/)).toBeHidden()
 })
 
+test('Edit adds a game to a collection and updates its count', async ({ page }) => {
+  await login(page)
+
+  // Create a game so the Edit modal's picker has something to offer.
+  const gameName = `Tower ${Date.now()}`
+  await page.goto('/workshop/games')
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(gameName)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(page.getByText(gameName)).toBeVisible()
+
+  // Create a collection (starts empty).
+  await page.goto('/workshop/game-collections')
+  const colName = `Campaign ${Date.now()}`
+  await page.getByRole('button', { name: '+ New collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByRole('button', { name: 'Create' }).click()
+  const row = page.locator('.game-list-item', { hasText: colName })
+  await expect(row.getByText('0 games · Just me')).toBeVisible()
+
+  // Edit → add the game via the picker → Save.
+  await page.getByRole('button', { name: `Edit ${colName}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  await edit.getByLabel('Add game').fill(gameName)
+  await edit.getByRole('button', { name: `Add ${gameName}` }).click()
+  await edit.getByRole('button', { name: 'Save' }).click()
+  await expect(edit).toBeHidden()
+
+  // The row's game count reflects the added member.
+  await expect(row.getByText('1 game · Just me')).toBeVisible()
+})
+
+test('the Edit modal keeps Cancel/Save on-screen on a short window', async ({ page }) => {
+  await page.setViewportSize({ width: 520, height: 340 })
+  await login(page)
+
+  const colName = `Short ${Date.now()}`
+  await page.getByRole('button', { name: '+ New collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(page.locator('.game-list-item', { hasText: colName })).toBeVisible()
+
+  await page.getByRole('button', { name: `Edit ${colName}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  const save = edit.getByRole('button', { name: 'Save' })
+  await expect(save).toBeVisible()
+  // The footer stays within the viewport rather than being pushed below the fold.
+  const box = await save.boundingBox()
+  expect(box).not.toBeNull()
+  expect(box!.y + box!.height).toBeLessThanOrEqual(340)
+})
+
 test('Delete removes a collection after confirmation', async ({ page }) => {
   await login(page)
 

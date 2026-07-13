@@ -5,7 +5,7 @@ import { ConfirmModal } from '../components/ConfirmModal'
 import { ManageSharesModal } from '../components/ManageSharesModal'
 import { useToken, useAuth } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
-import { createGameCollection, deleteGameCollection, getGameCollection, listGameCollections, updateGameCollection } from '../api/client'
+import { createGameCollection, deleteGameCollection, getGameCollection, listGameCollections, setGameCollectionItems, updateGameCollection } from '../api/client'
 import { accessLabel, type Visibility } from '../utils/gameDefinitions'
 import type { GameCollection } from '../types/api'
 
@@ -18,9 +18,8 @@ function collectionSummary(c: GameCollection): string {
 }
 
 // The workshop's Collections area: the caller's own game collections, each with
-// edit / access / delete plus a New collection create flow, rendered through the
-// shared WorkshopListPage shell. Membership editing (the games modal) lands in
-// the following step.
+// edit (name/description + membership) / access / delete plus a New collection
+// create flow, rendered through the shared WorkshopListPage shell.
 export function WorkshopCollectionsPage() {
   const token = useToken()
   const { profile } = useAuth()
@@ -47,12 +46,18 @@ export function WorkshopCollectionsPage() {
     }
   }
 
-  async function handleEdit(collection: GameCollection, name: string, description: string | null) {
+  async function handleEdit(collection: GameCollection, name: string, description: string | null, memberIds?: string[]) {
     setEditing({ collection, busy: true, error: null })
     try {
-      // Membership + visibility are managed elsewhere; the edit form only touches
-      // the name/description, so the stored visibility is preserved.
-      await updateGameCollection(token!, collection.id, { name, description, visibility: collection.visibility })
+      // Commit only what changed: metadata (visibility preserved) and, when the
+      // membership was edited, reconcile it in one call.
+      const metaDirty = name !== collection.name || (description ?? null) !== (collection.description ?? null)
+      if (metaDirty) {
+        await updateGameCollection(token!, collection.id, { name, description, visibility: collection.visibility })
+      }
+      if (memberIds) {
+        await setGameCollectionItems(token!, collection.id, memberIds)
+      }
       setEditing(null)
       refresh()
     } catch (ex) {
@@ -112,9 +117,11 @@ export function WorkshopCollectionsPage() {
           confirmLabel="Save"
           initialName={editing.collection.name}
           initialDescription={editing.collection.description ?? ''}
+          collectionId={editing.collection.id}
+          ownerId={editing.collection.ownerId}
           isLoading={editing.busy}
           error={editing.error}
-          onSubmit={(name, description) => void handleEdit(editing.collection, name, description)}
+          onSubmit={(name, description, memberIds) => void handleEdit(editing.collection, name, description, memberIds)}
           onCancel={() => setEditing(null)}
         />
       )}

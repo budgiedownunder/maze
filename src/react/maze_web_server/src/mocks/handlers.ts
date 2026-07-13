@@ -763,6 +763,22 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  // Membership reconcile — replaces the whole ordered list (deduped) in one op.
+  http.put(`${BASE}/game-collections/:id/items`, async ({ params, request }) => {
+    const { definitionIds } = await request.json() as { definitionIds: string[] }
+    const index = mockGameCollections.findIndex(c => c.id === params.id)
+    if (index === -1) return new HttpResponse(null, { status: 404 })
+    const items = [...new Set(definitionIds)].map((definitionId, sortOrder) => ({ definitionId, sortOrder }))
+    const updated: GameCollection = {
+      ...mockGameCollections[index],
+      items,
+      updatedAt: new Date().toISOString(),
+    }
+    mockGameCollections = mockGameCollections.map((c, i) => (i === index ? updated : c))
+    saveGameCollections()
+    return HttpResponse.json(updated)
+  }),
+
   // Collection shares — mirror of the definition share endpoints.
   http.get(`${BASE}/game-collections/:id/shares`, ({ params }) =>
     HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[String(params.id)] ?? []) }),

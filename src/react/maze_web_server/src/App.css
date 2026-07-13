@@ -485,6 +485,79 @@
   overflow-y: auto;
 }
 
+/* Collection membership editor (Edit Collection modal): the ordered member
+   games with reorder/remove, and a filter-to-add picker below. The modal is
+   capped to the viewport (flex column, max-height) and the two lists shrink +
+   scroll independently as the window shortens, so the Cancel/Save buttons stay
+   visible. */
+.collection-form-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  box-sizing: border-box;
+}
+.collection-form-modal .modal-form {
+  flex: 1;
+  min-height: 0;
+}
+/* The scrolling body: everything above the footer scrolls when the modal is too
+   short for it; the error + Cancel/Save below it stay pinned to the bottom edge
+   of the window at all times. */
+.collection-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.collection-members,
+.collection-member-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* Cap each list so a long one scrolls internally; never below one full row so
+     a single item stays fully visible. The body scrolls for the rest. */
+  min-height: 4rem;
+  max-height: 30dvh;
+  overflow-y: auto;
+}
+.collection-member,
+.collection-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+/* Both lists highlight the clicked row; a source row still only adds via its +. */
+.collection-member.selected,
+.collection-picker-item.selected {
+  background: var(--surface-hover);
+}
+.collection-member-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collection-member-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+.collection-add-btn {
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 600;
+}
+
 /* Tabbed modal body: a tab strip above a set of panels, only the active
    one shown. Lets a form with many controls read as a few short panels
    instead of one long scrolling list. The tab strip sits above the
@@ -1228,7 +1301,8 @@ textarea.input {
    Maze list (MazesPage)
 ────────────────────────────────────────────────────────── */
 
-.mazes-page {
+.mazes-page,
+.games-page {
   flex: 1;
   display: flex;
   flex-direction: column;
