@@ -118,7 +118,6 @@ export function WorkshopCollectionsPage() {
           initialName={editing.collection.name}
           initialDescription={editing.collection.description ?? ''}
           collectionId={editing.collection.id}
-          ownerId={editing.collection.ownerId}
           isLoading={editing.busy}
           error={editing.error}
           onSubmit={(name, description, memberIds) => void handleEdit(editing.collection, name, description, memberIds)}
@@ -155,8 +154,8 @@ export function WorkshopCollectionsPage() {
       title="Manage Game Collections"
       newLabel="+ New Game Collection"
       onNew={() => setCreating({ busy: false, error: null })}
-      load={t => listGameCollections(t).then(page => page.collections)}
-      filter={c => c.ownerId === profile?.id}
+      // Own collections only (server-scoped, paged).
+      fetchPage={(t, limit, offset) => listGameCollections(t, { scope: 'mine', limit, offset }).then(p => ({ items: p.collections, hasMore: p.hasMore }))}
       getId={c => c.id}
       emptyText="No collections yet."
       errorText="Failed to load collections"

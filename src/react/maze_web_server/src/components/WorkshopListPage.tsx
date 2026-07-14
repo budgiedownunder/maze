@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AppHeader } from './AppHeader'
 import { useToken } from '../context/AuthContext'
+import { usePagedList } from '../hooks/usePagedList'
 import { accessDescription, type Visibility } from '../utils/gameDefinitions'
 
 // A workshop row thumbnail: the base art with the visibility marker overhanging
@@ -89,9 +90,10 @@ interface Props<T> {
   title: string
   newLabel: string
   onNew: () => void
-  // Fetches the raw list; the parent's `filter` is applied at render time so a
-  // profile / derived change re-filters without a refetch.
-  load: (token: string) => Promise<T[]>
+  // Fetches one page of the list. The parent's `filter` is applied at render
+  // time over the accumulated pages, so a derived change re-filters without a
+  // refetch; `hasMore` drives the Load more button.
+  fetchPage: (token: string, limit: number, offset: number) => Promise<{ items: T[]; hasMore: boolean }>
   filter?: (item: T) => boolean
   getId: (item: T) => string
   emptyText: string
@@ -107,61 +109,40 @@ interface Props<T> {
 }
 
 // The shared shell for the workshop's Manage Games / Manage Game Collections
-// pages: it owns the keyed load/refresh state machine and the page chrome
-// (header with a New button + Refresh, then the loading / error / empty / list
-// scaffold). Each page supplies its own rows (`renderItem`) and modals
-// (`overlays`); the divergent action sets stay in the parent.
+// pages: it owns the keyed paged-load/refresh state machine (via `usePagedList`)
+// and the page chrome (header with a New button + Refresh, then the loading /
+// error / empty / list / Load more scaffold). Each page supplies its own rows
+// (`row`) and modals (`overlays`); the divergent action sets stay in the parent.
 export function WorkshopListPage<T>({
-  title, newLabel, onNew, load, filter, getId, emptyText, errorText, row, overlays, banner, onReady,
+  title, newLabel, onNew, fetchPage, filter, getId, emptyText, errorText, row, overlays, banner, onReady,
 }: Props<T>) {
   const token = useToken()
-
-  // Load state keyed by the refresh counter, so a refresh resets the view by
-  // derivation rather than by setState in an effect.
   const [refreshCount, setRefreshCount] = useState(0)
-  const [loaded, setLoaded] = useState<{ key: number; items: T[] } | null>(null)
-  const [errorFor, setErrorFor] = useState<{ key: number; message: string } | null>(null)
 
-  const error = errorFor != null && errorFor.key === refreshCount ? errorFor.message : null
-  const current = loaded != null && loaded.key === refreshCount ? loaded : null
-  const rawItems = current?.items ?? []
-  const items = filter ? rawItems.filter(filter) : rawItems
-  const isLoading = current == null && error == null
+  // Key the paged list by token + refresh counter, so a refresh (or sign-in)
+  // resets the view by derivation. `fetchPage`'s identity may churn; the hook
+  // reads it through a ref and only the key drives reloads.
+  const key = token ? `${token}:${refreshCount}` : null
+  const doFetch = useCallback(
+    (limit: number, offset: number) => fetchPage(token!, limit, offset),
+    [token, fetchPage],
+  )
+  const list = usePagedList<T>(key, doFetch, getId, errorText)
 
-  // The latest `load` / `getId` closures and derived `items` are kept in refs so
-  // the fetch effect and the stable context callbacks can read current values —
-  // without `load` identity re-triggering the fetch, and without accessing refs
-  // during render. Synced after each commit; the fetch re-runs only on token /
-  // refresh change, matching the pre-refactor pages.
-  const loadRef = useRef(load)
-  const getIdRef = useRef(getId)
+  // `filter` narrows the accumulated pages for display (e.g. Manage Games hides
+  // curated); Load more / `hasMore` stay driven by the unfiltered server page.
+  const items = filter ? list.items.filter(filter) : list.items
+
+  // Live accessor for the parent's handlers.
   const itemsRef = useRef<T[]>(items)
-  useEffect(() => {
-    loadRef.current = load
-    getIdRef.current = getId
-    itemsRef.current = items
-  })
-
-  useEffect(() => {
-    if (!token) return
-    let cancelled = false
-    const key = refreshCount
-    loadRef.current(token)
-      .then(fetched => { if (!cancelled) setLoaded({ key, items: fetched }) })
-      .catch(ex => { if (!cancelled) setErrorFor({ key, message: (ex as Error).message || errorText }) })
-    return () => { cancelled = true }
-  }, [token, refreshCount, errorText])
-
-  const refresh = useCallback(() => setRefreshCount(c => c + 1), [])
-  const patchItem = useCallback((id: string, patch: Partial<T>) => {
-    setLoaded(prev =>
-      prev == null
-        ? prev
-        : { ...prev, items: prev.items.map(it => (getIdRef.current(it) === id ? { ...it, ...patch } : it)) })
-  }, [])
+  useEffect(() => { itemsRef.current = items })
   const getItems = useCallback(() => itemsRef.current, [])
 
-  const ctx = useMemo<WorkshopListContext<T>>(() => ({ refresh, patchItem, getItems }), [refresh, patchItem, getItems])
+  const refresh = useCallback(() => setRefreshCount(c => c + 1), [])
+  const ctx = useMemo<WorkshopListContext<T>>(
+    () => ({ refresh, patchItem: list.patchItem, getItems }),
+    [refresh, list.patchItem, getItems],
+  )
   useEffect(() => { onReady(ctx) }, [ctx, onReady])
 
   return (
@@ -180,13 +161,25 @@ export function WorkshopListPage<T>({
       </AppHeader>
       <main className="maze-list-page">
         {banner}
-        {isLoading && <p aria-label="Loading">Loading…</p>}
-        {!isLoading && error && <p className="error-msg" role="alert">{error}</p>}
-        {!isLoading && !error && items.length === 0 && <p>{emptyText}</p>}
-        {!isLoading && !error && items.length > 0 && (
-          <ul className="game-list">
-            {items.map(item => <WorkshopListRow key={getId(item)} {...row(item)} />)}
-          </ul>
+        {list.isLoading && <p aria-label="Loading">Loading…</p>}
+        {!list.isLoading && list.error && <p className="error-msg" role="alert">{list.error}</p>}
+        {!list.isLoading && !list.error && items.length === 0 && <p>{emptyText}</p>}
+        {!list.isLoading && !list.error && items.length > 0 && (
+          <>
+            <ul className="game-list">
+              {items.map(item => <WorkshopListRow key={getId(item)} {...row(item)} />)}
+            </ul>
+            {list.hasMore && (
+              <button
+                type="button"
+                className="btn-secondary workshop-load-more"
+                onClick={list.loadMore}
+                disabled={list.isLoadingMore}
+              >
+                {list.isLoadingMore ? 'Loading…' : 'Load more'}
+              </button>
+            )}
+          </>
         )}
       </main>
     </div>

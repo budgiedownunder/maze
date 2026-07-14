@@ -4,6 +4,14 @@ import { WorkshopThumbnail } from './WorkshopListPage'
 import { getGameCollection, listGameDefinitions } from '../api/client'
 import type { GameDefinition } from '../types/api'
 
+// The Add picker searches the owner's games server-side, debounced. It fetches
+// up to the server's max page so its (scrollable) list holds all the owner's
+// available games — as members are added they drop out and the next available
+// ones stay visible; the "keep typing to narrow" hint appears only when there
+// are more matches than that (i.e. a broad query worth narrowing).
+const PICK_LIMIT = 100
+const PICK_DEBOUNCE_MS = 250
+
 interface Props {
   title: string
   confirmLabel: string
@@ -12,8 +20,6 @@ interface Props {
   // Edit mode: the collection whose membership this modal also manages. Omitted
   // for Create (a new collection has no id to attach members to yet).
   collectionId?: string
-  // The caller's own id — the Add picker offers only games this user owns.
-  ownerId?: string
   isLoading?: boolean
   error?: string | null
   // `memberIds` is supplied (Edit only) when the membership changed — the parent
@@ -32,7 +38,6 @@ export function GameCollectionFormModal({
   initialName = '',
   initialDescription = '',
   collectionId,
-  ownerId,
   isLoading = false,
   error,
   onSubmit,
@@ -44,10 +49,11 @@ export function GameCollectionFormModal({
   const [validationError, setValidationError] = useState<string | null>(null)
 
   // Membership (Edit mode only). `members` is null while loading; the picker
-  // draws from the owner's other games.
+  // searches the owner's games server-side into `pickerResults`.
   const [members, setMembers] = useState<GameDefinition[] | null>(null)
   const [originalIds, setOriginalIds] = useState<string[]>([])
-  const [ownGames, setOwnGames] = useState<GameDefinition[]>([])
+  const [pickerResults, setPickerResults] = useState<GameDefinition[]>([])
+  const [pickerHasMore, setPickerHasMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   // The clicked member row; the highlight follows the game (by id) when moved.
@@ -69,16 +75,27 @@ export function GameCollectionFormModal({
   useEffect(() => {
     if (!token || !collectionId) return
     let cancelled = false
-    Promise.all([getGameCollection(token, collectionId), listGameDefinitions(token)])
-      .then(([detail, page]) => {
+    getGameCollection(token, collectionId)
+      .then(detail => {
         if (cancelled) return
         setMembers(detail.definitions)
         setOriginalIds(detail.definitions.map(d => d.id))
-        setOwnGames(page.definitions.filter(d => d.ownerId === ownerId))
       })
       .catch((ex: unknown) => { if (!cancelled) setLoadError((ex as Error).message || 'Failed to load games') })
     return () => { cancelled = true }
-  }, [token, collectionId, ownerId])
+  }, [token, collectionId])
+
+  // Debounced server-side search of the owner's own games for the Add picker.
+  useEffect(() => {
+    if (!token || !collectionId) return
+    let cancelled = false
+    const handle = setTimeout(() => {
+      listGameDefinitions(token, { scope: 'mine', q: query, limit: PICK_LIMIT })
+        .then(page => { if (!cancelled) { setPickerResults(page.definitions); setPickerHasMore(page.hasMore) } })
+        .catch(() => { if (!cancelled) { setPickerResults([]); setPickerHasMore(false) } })
+    }, PICK_DEBOUNCE_MS)
+    return () => { cancelled = true; clearTimeout(handle) }
+  }, [token, collectionId, query])
 
   const memberIds = members?.map(m => m.id) ?? []
   const membersDirty = members != null
@@ -116,9 +133,8 @@ export function GameCollectionFormModal({
   }
 
   const stagedIds = new Set(memberIds)
-  const q = query.trim().toLowerCase()
-  const pickable = ownGames
-    .filter(g => !stagedIds.has(g.id) && (q === '' || g.name.toLowerCase().includes(q)))
+  // The server already applied the name filter (q); just drop already-staged games.
+  const pickable = pickerResults.filter(g => !stagedIds.has(g.id))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -215,6 +231,9 @@ export function GameCollectionFormModal({
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {pickerHasMore && (
+                    <p className="share-picker-hint">More matches — keep typing to narrow.</p>
                   )}
                 </>
               )}

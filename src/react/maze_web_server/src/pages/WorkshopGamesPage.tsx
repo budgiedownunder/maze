@@ -311,11 +311,10 @@ export function WorkshopGamesPage() {
       title="Manage Games"
       newLabel="+ New Game"
       onNew={() => setIsCreating(true)}
-      load={t => listGameDefinitions(t).then(page => page.definitions)}
-      // The caller's own definitions, minus any they've featured: a curated game
-      // is managed from the admin Features area, not here — otherwise the default
-      // admin's seeded curated games would leak into their Manage Games list.
-      filter={d => d.ownerId === profile?.id && d.visibility !== 'curated'}
+      // Own definitions only (server-scoped, paged); a curated game is managed
+      // from the admin Features area, so it is filtered out of this list.
+      fetchPage={(t, limit, offset) => listGameDefinitions(t, { scope: 'mine', limit, offset }).then(p => ({ items: p.definitions, hasMore: p.hasMore }))}
+      filter={d => d.visibility !== 'curated'}
       getId={d => d.id}
       emptyText="No games yet."
       errorText="Failed to load games"

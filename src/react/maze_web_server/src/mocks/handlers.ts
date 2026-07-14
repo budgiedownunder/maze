@@ -569,12 +569,20 @@ export const handlers = [
 
   // Game definitions — the list the caller may see, and create. `seed` is
   // server-minted, so the create handler stamps one.
-  http.get(`${BASE}/game-definitions`, () => {
+  http.get(`${BASE}/game-definitions`, ({ request }) => {
+    const url = new URL(request.url)
+    const scope = url.searchParams.get('scope')
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? '20')
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    let defs = [...mockGameDefinitions].sort((a, b) => a.name.localeCompare(b.name))
+    if (scope === 'mine') defs = defs.filter(d => d.ownerId === mockProfile.id)
+    if (q !== '') defs = defs.filter(d => d.name.toLowerCase().includes(q))
     return HttpResponse.json<GameDefinitionListResponse>({
-      definitions: mockGameDefinitions,
-      limit: 20,
-      offset: 0,
-      hasMore: false,
+      definitions: defs.slice(offset, offset + limit),
+      limit,
+      offset,
+      hasMore: offset + limit < defs.length,
     })
   }),
 
@@ -698,12 +706,20 @@ export const handlers = [
 
   // Collections — list (own + accessible) and create. Membership item + detail
   // endpoints land with the membership editor step.
-  http.get(`${BASE}/game-collections`, () => {
+  http.get(`${BASE}/game-collections`, ({ request }) => {
+    const url = new URL(request.url)
+    const scope = url.searchParams.get('scope')
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? '20')
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    let cols = [...mockGameCollections].sort((a, b) => a.name.localeCompare(b.name))
+    if (scope === 'mine') cols = cols.filter(c => c.ownerId === mockProfile.id)
+    if (q !== '') cols = cols.filter(c => c.name.toLowerCase().includes(q))
     return HttpResponse.json<GameCollectionListResponse>({
-      collections: mockGameCollections,
-      limit: 20,
-      offset: 0,
-      hasMore: false,
+      collections: cols.slice(offset, offset + limit),
+      limit,
+      offset,
+      hasMore: offset + limit < cols.length,
     })
   }),
 

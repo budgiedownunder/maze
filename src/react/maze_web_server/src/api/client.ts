@@ -334,12 +334,19 @@ export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
 interface PageQuery {
   limit?: number
   offset?: number
+  // 'visible' (default) or 'mine' (the caller's own items); honoured by the
+  // game definition / collection list endpoints.
+  scope?: 'visible' | 'mine'
+  // Case-insensitive name substring filter (honoured with scope=mine).
+  q?: string
 }
 
 function pageQuery(query: PageQuery): string {
   const params = new URLSearchParams()
   if (query.limit != null) params.set('limit', String(query.limit))
   if (query.offset != null) params.set('offset', String(query.offset))
+  if (query.scope != null) params.set('scope', query.scope)
+  if (query.q != null && query.q !== '') params.set('q', query.q)
   const qs = params.toString()
   return qs ? `?${qs}` : ''
 }

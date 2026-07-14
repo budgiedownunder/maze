@@ -25,9 +25,34 @@ function col(overrides: Partial<GameCollection> & { id: string; name: string }):
   return { ownerId: OWNER, visibility: 'private', items: [], createdAt: 'x', updatedAt: 'x', ...overrides }
 }
 
+// Mirrors the server list endpoint: name-ordered, scope=mine → own only, q name
+// filter, limit/offset paging (the page now relies on the server to scope/page).
 function listOf(...cols: GameCollection[]) {
-  return http.get('/api/v1/game-collections', () =>
-    HttpResponse.json({ collections: cols, limit: 20, offset: 0, hasMore: false }))
+  return http.get('/api/v1/game-collections', ({ request }) => {
+    const url = new URL(request.url)
+    const scope = url.searchParams.get('scope')
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? '20')
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    let items = [...cols].sort((a, b) => a.name.localeCompare(b.name))
+    if (scope === 'mine') items = items.filter(c => c.ownerId === OWNER)
+    if (q !== '') items = items.filter(c => c.name.toLowerCase().includes(q))
+    return HttpResponse.json({ collections: items.slice(offset, offset + limit), limit, offset, hasMore: offset + limit < items.length })
+  })
+}
+
+// Mirrors the definition list endpoint (scope=mine → own only, q name filter) —
+// used to back the Edit-Collection Add-a-game picker's server-side search.
+function defsOf(...defs: GameDefinition[]) {
+  return http.get('/api/v1/game-definitions', ({ request }) => {
+    const url = new URL(request.url)
+    const scope = url.searchParams.get('scope')
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+    let items = [...defs].sort((a, b) => a.name.localeCompare(b.name))
+    if (scope === 'mine') items = items.filter(d => d.ownerId === OWNER)
+    if (q !== '') items = items.filter(d => d.name.toLowerCase().includes(q))
+    return HttpResponse.json({ definitions: items, limit: 20, offset: 0, hasMore: false })
+  })
 }
 
 function def(overrides: Partial<GameDefinition> & { id: string; name: string }): GameDefinition {
@@ -42,7 +67,7 @@ function seedForEdit(members: GameDefinition[], ownGames: GameDefinition[]) {
   server.use(
     listOf(collection),
     http.get('/api/v1/game-collections/c1', () => HttpResponse.json({ ...collection, definitions: members })),
-    http.get('/api/v1/game-definitions', () => HttpResponse.json({ definitions: ownGames, limit: 20, offset: 0, hasMore: false })),
+    defsOf(...ownGames),
     http.put('/api/v1/game-collections/c1/items', async ({ request }) => {
       captured.body = await request.json() as { definitionIds: string[] }
       const items = captured.body.definitionIds.map((definitionId, sortOrder) => ({ definitionId, sortOrder }))
@@ -254,10 +279,29 @@ describe('WorkshopCollectionsPage', () => {
 
     expect(within(dialog).getByText('Available Games')).toBeInTheDocument()
     // Beta is the only available game; click its row to highlight it (no add).
-    await userEvent.click(within(dialog).getByText('Beta'))
+    // The picker searches server-side (debounced), so wait for the row.
+    await userEvent.click(await within(dialog).findByText('Beta'))
     expect(within(dialog).getByText('Beta').closest('.collection-picker-item')).toHaveClass('selected')
     // Clicking the row did not add it — Beta is still an available game, not a member.
     expect(within(dialog).getByRole('button', { name: 'Add Beta' })).toBeInTheDocument()
+  })
+
+  it('the Add picker searches the owner’s games server-side', async () => {
+    const alpha = def({ id: 'g1', name: 'Alpha' })
+    const beta = def({ id: 'g2', name: 'Beta' })
+    const gamma = def({ id: 'g3', name: 'Gamma' })
+    seedForEdit([], [alpha, beta, gamma])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+
+    // Empty query lists all the owner's games (first page).
+    expect(await within(dialog).findByRole('button', { name: 'Add Beta' })).toBeInTheDocument()
+    // Typing narrows to server-side name matches.
+    await userEvent.type(within(dialog).getByLabelText('Add game'), 'gam')
+    expect(await within(dialog).findByRole('button', { name: 'Add Gamma' })).toBeInTheDocument()
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Add Beta' })).toBeNull())
   })
 
   it('selecting a member row keeps the highlight on it after a move', async () => {

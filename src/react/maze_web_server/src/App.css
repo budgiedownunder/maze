@@ -1449,6 +1449,12 @@ textarea.input {
   gap: 0.5rem;
 }
 
+/* The Manage-pages "Load more" button spans the full list width. */
+.workshop-load-more {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
 .game-list-item {
   display: flex;
   flex-direction: row;

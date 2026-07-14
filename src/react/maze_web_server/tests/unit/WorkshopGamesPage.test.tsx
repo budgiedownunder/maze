@@ -26,9 +26,20 @@ function def(overrides: Partial<GameDefinition> & { id: string; name: string }):
   return { ownerId: OWNER, visibility: 'private', seed: 1, rotation: 'static', config: {}, createdAt: 'x', updatedAt: 'x', ...overrides }
 }
 
+// Mirrors the server list endpoint: name-ordered, scope=mine → own only, q name
+// filter, limit/offset paging (the page relies on the server to scope/page).
 function listOf(...defs: GameDefinition[]) {
-  return http.get('/api/v1/game-definitions', () =>
-    HttpResponse.json({ definitions: defs, limit: 20, offset: 0, hasMore: false }))
+  return http.get('/api/v1/game-definitions', ({ request }) => {
+    const url = new URL(request.url)
+    const scope = url.searchParams.get('scope')
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
+    const limit = Number(url.searchParams.get('limit') ?? '20')
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    let items = [...defs].sort((a, b) => a.name.localeCompare(b.name))
+    if (scope === 'mine') items = items.filter(d => d.ownerId === OWNER)
+    if (q !== '') items = items.filter(d => d.name.toLowerCase().includes(q))
+    return HttpResponse.json({ definitions: items.slice(offset, offset + limit), limit, offset, hasMore: offset + limit < items.length })
+  })
 }
 
 function renderPage() {
@@ -92,6 +103,21 @@ describe('WorkshopGamesPage', () => {
     expect(draftRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-private.svg')
     const openRow = screen.getByText('Open').closest('.game-list-item')!
     expect(openRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-public.svg')
+  })
+
+  it('pages a long list behind a Load more button', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => def({ id: `d${i}`, name: `Game ${String(i).padStart(2, '0')}` }))
+    server.use(listOf(...many))
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Game 00')).toBeInTheDocument())
+    // First page is 20 (name-ordered), so the 21st isn't shown yet.
+    expect(screen.queryByText('Game 20')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: /load more/i }))
+    await waitFor(() => expect(screen.getByText('Game 20')).toBeInTheDocument())
+    // All 25 shown; nothing left to load.
+    expect(screen.getByText('Game 24')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /load more/i })).toBeNull()
   })
 
   it('surfaces a list failure', async () => {
