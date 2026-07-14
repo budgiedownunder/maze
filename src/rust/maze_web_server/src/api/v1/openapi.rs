@@ -24,6 +24,10 @@ use crate::api::v1::endpoints::game_collections::{
 use crate::api::v1::endpoints::game_definitions::{
     GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
 };
+use crate::api::v1::endpoints::featured_game_items::{
+    FeaturedGameItemEntry, FeaturedGameItemResponse, FeaturedGameItemsListResponse,
+    ReorderFeaturedGameItemsRequest,
+};
 use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, SetGameSharesRequest};
 use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
@@ -142,6 +146,9 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::game_collections::upload_game_collection_image,
         crate::api::v1::endpoints::game_collections::delete_game_collection_image,
         crate::api::v1::endpoints::game_collections::serve_game_collection_image,
+        // Featured catalogue
+        crate::api::v1::endpoints::featured_game_items::get_featured_game_items,
+        crate::api::v1::endpoints::featured_game_items::set_featured_game_items_order,
         // Scores
         crate::api::v1::endpoints::scores::record_score,
         crate::api::v1::endpoints::scores::get_leaderboard,
@@ -175,6 +182,8 @@ impl utoipa::Modify for LoginTokenAuth {
             GameCollection, CollectionItem, GameCollectionRequest, GameCollectionListResponse,
             GameCollectionDetailResponse, SetGameCollectionItemsRequest,
             GameCollectionSharesResponse, ImageUpdatedResponse,
+            FeaturedGameItemResponse, FeaturedGameItemsListResponse,
+            FeaturedGameItemEntry, ReorderFeaturedGameItemsRequest,
             AvatarUpdatedResponse),
 
     ),

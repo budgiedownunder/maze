@@ -1,10 +1,13 @@
-//! Request/response types shared by the game-definition and game-collection
-//! endpoints: the share-list request body and the image upload form/response.
-//! Kept here so `game_collections.rs` doesn't import them from
-//! `game_definitions.rs` — they're not definition-specific.
+//! Request/response types and small helpers shared by the game-definition and
+//! game-collection endpoints: the share-list request body, the image upload
+//! form/response, and the admin-override owner resolver. Kept here so
+//! `game_collections.rs` doesn't import them from `game_definitions.rs` — they're
+//! not definition-specific.
 
 use actix_multipart::form::{bytes::Bytes as MultipartBytes, MultipartForm};
+use actix_web::{error::ErrorInternalServerError, Error};
 use chrono::{DateTime, Utc};
+use data_model::User;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -39,4 +42,27 @@ pub struct ImageUpdatedResponse {
     /// The new image cache-buster (RFC 3339).
     #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
     pub image_updated_at: DateTime<Utc>,
+}
+
+/// Resolves the owner to pass to an owner-scoped storage `update_*` call, given
+/// the `caller` and the item's real `owner_id`. When the caller owns the item
+/// this is the caller themselves; when an **admin** is editing an item they
+/// don't own (the admin-override on the update / set-visibility handlers), it
+/// loads the item's real owner so the owner-scoped update keeps ownership with
+/// the original owner rather than transferring it to the admin.
+///
+/// The handler must have already authorized the caller (owner ∨ admin) before
+/// calling this — it does not itself gate access.
+pub(crate) async fn resolve_owner(
+    store: &dyn storage::Store,
+    caller: &User,
+    owner_id: Uuid,
+) -> Result<User, Error> {
+    if caller.id == owner_id {
+        return Ok(caller.clone());
+    }
+    store.get_user(owner_id).await.map_err(|err| {
+        log::warn!("resolve owner {owner_id} for admin override: {err}");
+        ErrorInternalServerError("Failed to load item owner")
+    })
 }

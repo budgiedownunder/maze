@@ -57,7 +57,7 @@ use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
 use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
-use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
+use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, ImageUploadForm, resolve_owner, SetGameSharesRequest};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -496,12 +496,13 @@ pub async fn get_game_definition(
 
 #[utoipa::path(
     summary = "Update a game definition",
-    description = "Updates a definition owned by the caller. The seed and image are server-owned \
-                   and preserved; name, description, visibility, rotation, and config are replaced. \
-                   Setting visibility to 'curated' requires an admin. If the edit changes a \
-                   gameplay-affecting field (structure/scene/content/mechanics) or the rotation, the \
-                   leaderboard is reset; cosmetic-only edits (title, status label, hide-cleared \
-                   enemies, name, description) and visibility changes keep it.",
+    description = "Updates a definition owned by the caller — or, for an admin, any definition \
+                   (admin-override; ownership is preserved, not transferred). The seed and image are \
+                   server-owned and preserved; name, description, visibility, rotation, and config \
+                   are replaced. Setting visibility to 'curated' requires an admin. If the edit \
+                   changes a gameplay-affecting field (structure/scene/content/mechanics) or the \
+                   rotation, the leaderboard is reset; cosmetic-only edits (title, status label, \
+                   hide-cleared enemies, name, description) and visibility changes keep it.",
     put,
     path = "/api/v1/game-definitions/{id}",
     params(("id" = String, Path, description = "Definition id")),
@@ -535,10 +536,12 @@ pub async fn update_game_definition(
     let mut store_lock = store.write().await;
 
     // Load the existing record to preserve the server-owned fields and to detect
-    // a publish transition. A record owned by someone else is reported as absent.
+    // a gameplay change. The owner may edit it; an admin may edit any definition
+    // (admin-override — lets an admin feature / un-feature / fix content they
+    // don't own). A non-owner non-admin is told it's absent.
     let existing = match store_lock.get_game_definition(id).await {
-        Ok(def) if def.owner_id == user.id => def,
-        Ok(_) | Err(StoreError::GameDefinitionIdNotFound(_)) => {
+        Ok(def) => def,
+        Err(StoreError::GameDefinitionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
         }
         Err(err) => {
@@ -546,10 +549,16 @@ pub async fn update_game_definition(
             return Err(ErrorInternalServerError("Failed to load game definition"));
         }
     };
+    if existing.owner_id != user.id && !user.is_admin {
+        return Err(ErrorNotFound(format!("Game definition '{id}' not found")));
+    }
+    // The owner-scoped storage update keys on the definition's own owner, so an
+    // admin editing someone else's game preserves its ownership (no transfer).
+    let owner = resolve_owner(&**store_lock, &user, existing.owner_id).await?;
 
     let mut definition = GameDefinition {
         id: existing.id,
-        owner_id: user.id,
+        owner_id: owner.id,
         name: body.name,
         description: body.description,
         visibility: body.visibility,
@@ -562,7 +571,7 @@ pub async fn update_game_definition(
     };
 
     store_lock
-        .update_game_definition(&user, &mut definition)
+        .update_game_definition(&owner, &mut definition)
         .await
         .map_err(map_write_error)?;
 

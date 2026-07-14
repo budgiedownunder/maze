@@ -1,6 +1,7 @@
 pub mod auth_reset;
 pub mod avatar;
 pub mod email_verification;
+pub mod featured_game_items;
 pub mod game_collections;
 pub mod game_definitions;
 pub mod game_shared;

@@ -9389,4 +9389,183 @@ mod test_definitions {
         let req = create_test_post_request("/api/v1/game-collections", Some(owner.api_key), None, Some(&body));
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CONFLICT);
     }
+
+    // ── Admin-override on update + the featured catalogue endpoints ──────────
+
+    /// The ordered `(kind, id)` pairs of a featured-list JSON body.
+    fn featured_game_item_ids(body: &serde_json::Value) -> Vec<String> {
+        body["items"]
+            .as_array()
+            .expect("items array")
+            .iter()
+            .map(|item| {
+                let entity = item.get("definition").or_else(|| item.get("collection")).expect("entity");
+                entity["id"].as_str().expect("id").to_string()
+            })
+            .collect()
+    }
+
+    #[actix_web::test]
+    async fn admin_override_update_game_definition_features_and_preserves_owner() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+
+        let def = seed_game_definition(&store, &owner, "Owned", Visibility::Private, Rotation::Static).await;
+
+        // A non-owner non-admin cannot edit it — reported as absent (404).
+        let stranger_key = api_key_for(&mock_users, VALID_USERNAME_2);
+        let body = definition_request("Owned", Visibility::Public, Rotation::Static);
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(stranger_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+
+        // An admin may edit + feature it; ownership stays with the original owner.
+        let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let body = definition_request("Owned", Visibility::Curated, Rotation::Static);
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(admin_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let updated: GameDefinition = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(updated.owner_id, owner.id, "admin edit preserves ownership, no transfer");
+        assert_eq!(updated.visibility, Visibility::Curated);
+
+        // It now shows in the featured catalogue.
+        let req = create_test_get_request("/api/v1/featured-game-items", Some(admin_key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(body["items"][0]["kind"], serde_json::json!("definition"));
+        assert_eq!(featured_game_item_ids(&body), vec![def.id.to_string()]);
+    }
+
+    #[actix_web::test]
+    async fn admin_override_update_game_collection_features_and_preserves_owner() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+
+        let col = seed_game_collection(&store, &owner, "Owned Set", Visibility::Private).await;
+
+        // Non-owner non-admin → 404.
+        let stranger_key = api_key_for(&mock_users, VALID_USERNAME_2);
+        let body = collection_request("Owned Set", Visibility::Public);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(stranger_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+
+        // Admin features it; ownership preserved.
+        let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let body = collection_request("Owned Set", Visibility::Curated);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let updated: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(updated.owner_id, owner.id, "admin edit preserves ownership");
+        assert_eq!(updated.visibility, Visibility::Curated);
+
+        let req = create_test_get_request("/api/v1/featured-game-items", Some(admin_key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(body["items"][0]["kind"], serde_json::json!("collection"));
+        assert_eq!(featured_game_item_ids(&body), vec![col.id.to_string()]);
+    }
+
+    #[actix_web::test]
+    async fn featured_game_items_list_is_ordered_and_paged() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let admin = user_by_name(&mock_users, VALID_ADMIN_USERNAME_1);
+        let key = admin.api_key;
+
+        // Featured order = the order they became curated: def A, collection B, def C.
+        let a = seed_game_definition(&store, &admin, "A", Visibility::Curated, Rotation::Static).await;
+        let b = seed_game_collection(&store, &admin, "B", Visibility::Curated).await;
+        let c = seed_game_definition(&store, &admin, "C", Visibility::Curated, Rotation::Static).await;
+
+        // Page 1 (limit 2): A, B — more remain.
+        let req = create_test_get_request("/api/v1/featured-game-items?limit=2&offset=0", Some(key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(featured_game_item_ids(&body), vec![a.id.to_string(), b.id.to_string()]);
+        assert_eq!(body["items"][1]["kind"], serde_json::json!("collection"));
+        assert_eq!(body["limit"], serde_json::json!(2));
+        assert_eq!(body["hasMore"], serde_json::json!(true));
+
+        // Page 2 (offset 2): C — none remain.
+        let req = create_test_get_request("/api/v1/featured-game-items?limit=2&offset=2", Some(key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(featured_game_item_ids(&body), vec![c.id.to_string()]);
+        assert_eq!(body["hasMore"], serde_json::json!(false));
+
+        // Readable by any signed-in user (the catalogue is not per-viewer filtered).
+        let user_key = api_key_for(&mock_users, VALID_USERNAME_1);
+        let req = create_test_get_request("/api/v1/featured-game-items", Some(user_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(body["items"].as_array().expect("items").len(), 3);
+    }
+
+    #[actix_web::test]
+    async fn reorder_featured_game_items_reorders_and_requires_admin() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let admin = user_by_name(&mock_users, VALID_ADMIN_USERNAME_1);
+
+        let a = seed_game_definition(&store, &admin, "A", Visibility::Curated, Rotation::Static).await;
+        let b = seed_game_collection(&store, &admin, "B", Visibility::Curated).await;
+        let c = seed_game_definition(&store, &admin, "C", Visibility::Curated, Rotation::Static).await;
+
+        let reorder = serde_json::json!({ "entries": [
+            { "kind": "definition", "id": c.id.to_string() },
+            { "kind": "collection", "id": b.id.to_string() },
+            { "kind": "definition", "id": a.id.to_string() },
+        ]});
+
+        // A non-admin cannot reorder (admin-gated → 401).
+        let user_key = api_key_for(&mock_users, VALID_USERNAME_1);
+        let req = create_test_put_request("/api/v1/featured-game-items/order", Some(user_key), None, &reorder);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::UNAUTHORIZED);
+
+        // The admin reorders → 200, returns the catalogue in its new order.
+        let req = create_test_put_request("/api/v1/featured-game-items/order", Some(admin.api_key), None, &reorder);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(
+            featured_game_item_ids(&body),
+            vec![c.id.to_string(), b.id.to_string(), a.id.to_string()]
+        );
+
+        // A subsequent GET reflects the persisted new order.
+        let req = create_test_get_request("/api/v1/featured-game-items", Some(admin.api_key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(
+            featured_game_item_ids(&body),
+            vec![c.id.to_string(), b.id.to_string(), a.id.to_string()]
+        );
+    }
+
+    #[actix_web::test]
+    async fn reorder_featured_game_items_rejects_non_curated() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let admin = user_by_name(&mock_users, VALID_ADMIN_USERNAME_1);
+
+        let curated = seed_game_definition(&store, &admin, "Curated", Visibility::Curated, Rotation::Static).await;
+        let plain = seed_game_definition(&store, &admin, "Plain", Visibility::Public, Rotation::Static).await;
+
+        // A reorder that includes a non-curated id is rejected wholesale (400).
+        let reorder = serde_json::json!({ "entries": [
+            { "kind": "definition", "id": curated.id.to_string() },
+            { "kind": "definition", "id": plain.id.to_string() },
+        ]});
+        let req = create_test_put_request("/api/v1/featured-game-items/order", Some(admin.api_key), None, &reorder);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
 }

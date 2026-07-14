@@ -40,7 +40,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
-use super::game_shared::{ImageUpdatedResponse, ImageUploadForm, SetGameSharesRequest};
+use super::game_shared::{ImageUpdatedResponse, ImageUploadForm, resolve_owner, SetGameSharesRequest};
 use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
 
 // ---------------------------------------------------------------------------
@@ -445,8 +445,9 @@ pub async fn get_game_collection(
 #[utoipa::path(
     summary = "Update a collection's metadata",
     description = "Updates the name, description, and visibility of a collection owned by the \
-                   caller. Membership and the collection image are left unchanged. Setting \
-                   visibility to 'curated' requires an admin.",
+                   caller — or, for an admin, any collection (admin-override; ownership is \
+                   preserved, not transferred). Membership and the collection image are left \
+                   unchanged. Setting visibility to 'curated' requires an admin.",
     put,
     path = "/api/v1/game-collections/{id}",
     params(("id" = String, Path, description = "Collection id")),
@@ -478,11 +479,30 @@ pub async fn update_game_collection(
     }
 
     let mut store_lock = store.write().await;
-    let existing = owned_collection(&**store_lock, &user, id).await?;
+
+    // The owner may edit it; an admin may edit any collection (admin-override —
+    // feature / un-feature / fix content they don't own). A non-owner non-admin
+    // is told it's absent.
+    let existing = match store_lock.get_game_collection(id).await {
+        Ok(collection) => collection,
+        Err(StoreError::GameCollectionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("get game collection store error: {err}");
+            return Err(ErrorInternalServerError("Failed to load game collection"));
+        }
+    };
+    if existing.owner_id != user.id && !user.is_admin {
+        return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
+    }
+    // Owner-scoped update keys on the collection's own owner, so an admin editing
+    // someone else's collection preserves its ownership (no transfer).
+    let owner = resolve_owner(&**store_lock, &user, existing.owner_id).await?;
 
     let mut collection = GameCollection {
         id: existing.id,
-        owner_id: user.id,
+        owner_id: owner.id,
         name: body.name,
         visibility: body.visibility,
         description: body.description,
@@ -493,12 +513,12 @@ pub async fn update_game_collection(
     };
 
     store_lock
-        .update_game_collection(&user, &mut collection)
+        .update_game_collection(&owner, &mut collection)
         .await
         .map_err(map_write_error)?;
 
     // Re-load so the response reflects the canonical stored state across backends.
-    let updated = owned_collection(&**store_lock, &user, id).await?;
+    let updated = owned_collection(&**store_lock, &owner, id).await?;
     Ok(HttpResponse::Ok().json(updated))
 }
 
