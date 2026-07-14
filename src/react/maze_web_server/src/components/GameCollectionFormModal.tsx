@@ -152,7 +152,7 @@ export function GameCollectionFormModal({
 
   return (
     <div role="dialog" aria-modal="true" aria-label={title} className="modal-overlay" style={{ zIndex: 1200, cursor: isLoading ? 'wait' : undefined }}>
-      <div className="modal modal-md collection-form-modal modal-capped">
+      <div className="modal collection-form-modal modal-capped">
         <h2 className="modal-title">{title}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <div className="collection-form-body">

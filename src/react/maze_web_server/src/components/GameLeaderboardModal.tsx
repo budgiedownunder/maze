@@ -34,7 +34,7 @@ export function GameLeaderboardModal({ token, gameId, name, currentUserId, onClo
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Leaderboard: ${name}`} className="modal-overlay" style={{ zIndex: 1200 }}>
-      <div className="modal modal-sm modal-capped">
+      <div className="modal leaderboard-modal modal-capped">
         <h2 className="modal-title">Leaderboard: {name}</h2>
 
         <div className="leaderboard-modal-body">

@@ -497,6 +497,12 @@
   max-height: 90dvh;
   box-sizing: border-box;
 }
+/* The Leaderboard modal: twice the small-modal width so the board has room, but
+   never wider than the viewport (a small margin each side on narrow screens). */
+.leaderboard-modal {
+  max-width: min(720px, calc(100vw - 2rem));
+  min-width: 280px;
+}
 /* The Leaderboard modal's body: a flex column that gives the board's flex:1
    chain a definite height, so the table scrolls internally (its own
    overflow) while the metric tabs, the Load more button and the modal's Close
@@ -508,9 +514,16 @@
   flex-direction: column;
 }
 
-/* Collection membership editor (Edit Collection modal): the ordered member
-   games with reorder/remove, and a filter-to-add picker below. The two lists
-   shrink + scroll independently as the window shortens (see .modal-capped). */
+/* Collection membership editor (Edit Collection modal): twice the medium-modal
+   width to fit the member + add-game lists side of things comfortably, capped
+   just under the viewport width on small screens. */
+.collection-form-modal {
+  max-width: min(840px, calc(100vw - 2rem));
+  min-width: 300px;
+}
+/* The ordered member games with reorder/remove, and a filter-to-add picker
+   below. The two lists shrink + scroll independently as the window shortens
+   (see .modal-capped). */
 .collection-form-modal .modal-form {
   flex: 1;
   min-height: 0;
