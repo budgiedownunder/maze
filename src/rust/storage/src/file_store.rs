@@ -9,8 +9,9 @@ use unicase::UniCase;
 use uuid::Uuid;
 
 use data_model::{
-    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
-    Maze, OneTimeToken, User, UserEmail, Visibility, truncate_email_audit_error_message,
+    AuditOutcome, CollectionItem, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
+    GameDefinition, GranteeSummary, Maze, OneTimeToken, User, UserEmail, Visibility,
+    truncate_email_audit_error_message,
 };
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
@@ -59,6 +60,15 @@ impl FileStoreConfig {
             data_dir: "data".to_string(),
         }
     }
+}
+
+/// One row of the FileStore featured list (`featured_game_items.json`) — a
+/// `(kind, id)` reference to a curated definition or collection. The array
+/// index within the file carries the `sort_order`, so it is not stored here.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FeaturedGameItemRef {
+    entity_kind: FeaturedGameItemKind,
+    entity_id: Uuid,
 }
 
 /// A file store that implements the [`Store`] trait
@@ -822,6 +832,91 @@ impl FileStore {
         }
         fs::rename(&tmp, &target)?;
         Ok(())
+    }
+
+    // ── featured catalogue (a single ordered root file) ──────────────────────
+    //
+    // The featured list lives in one root file `featured_game_items.json`: an
+    // ordered array whose index *is* the `sort_order`, so it is always a dense
+    // `0..n` (append = push, remove = retain, reorder = rebuild). FileStore is
+    // dev-only and single-process behind the store write-lock, so the same
+    // "curated flag and featured row never disagree" invariant the SqlStore
+    // enforces with a transaction holds here by virtue of the lock.
+
+    // Path to the single `featured_game_items.json` file at the data-dir root.
+    fn featured_game_items_file_path(&self) -> String {
+        Path::new(&self.data_dir)
+            .join("featured_game_items.json")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads the ordered featured references (empty when the file is absent).
+    fn read_featured_game_item_refs(&self) -> Result<Vec<FeaturedGameItemRef>, Error> {
+        let path = self.featured_game_items_file_path();
+        if !file_exists(&path) {
+            return Ok(Vec::new());
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, Vec<FeaturedGameItemRef>>(reader).map_err(Error::from)
+    }
+
+    // Atomically writes the ordered featured references; an empty list removes
+    // the file so no empty record lingers.
+    fn write_featured_game_item_refs(&self, refs: &[FeaturedGameItemRef]) -> Result<(), Error> {
+        let target = self.featured_game_items_file_path();
+        if refs.is_empty() {
+            delete_file(&target);
+            return Ok(());
+        }
+        let json = serde_json::to_string(refs)?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // Appends `(kind, id)` to the featured list unless already present (dense
+    // ordering is implicit in the array index).
+    fn featured_game_items_append(&self, kind: FeaturedGameItemKind, id: Uuid) -> Result<(), Error> {
+        let mut refs = self.read_featured_game_item_refs()?;
+        if !refs.iter().any(|r| r.entity_kind == kind && r.entity_id == id) {
+            refs.push(FeaturedGameItemRef { entity_kind: kind, entity_id: id });
+            self.write_featured_game_item_refs(&refs)?;
+        }
+        Ok(())
+    }
+
+    // Removes `(kind, id)` from the featured list if present (the surviving
+    // entries stay a dense `0..n` because order is the array index).
+    fn featured_game_items_remove(&self, kind: FeaturedGameItemKind, id: Uuid) -> Result<(), Error> {
+        let mut refs = self.read_featured_game_item_refs()?;
+        let before = refs.len();
+        refs.retain(|r| !(r.entity_kind == kind && r.entity_id == id));
+        if refs.len() != before {
+            self.write_featured_game_item_refs(&refs)?;
+        }
+        Ok(())
+    }
+
+    // Reconciles the featured row for an entity whose visibility changed from
+    // `old` to `new`: append into `Curated`, remove out of it, nothing else.
+    fn featured_game_items_reconcile_visibility(
+        &self,
+        kind: FeaturedGameItemKind,
+        id: Uuid,
+        old: Visibility,
+        new: Visibility,
+    ) -> Result<(), Error> {
+        match (old == Visibility::Curated, new == Visibility::Curated) {
+            (false, true) => self.featured_game_items_append(kind, id),
+            (true, false) => self.featured_game_items_remove(kind, id),
+            _ => Ok(()),
+        }
     }
 
     // Walks the audit log and clears `recipient_user_id` and
@@ -4501,6 +4596,9 @@ impl GameStore for FileStore {
         definition.created_at = now;
         definition.updated_at = now;
         self.write_game_definition_file(definition, false)?;
+        if definition.visibility == Visibility::Curated {
+            self.featured_game_items_append(FeaturedGameItemKind::Definition, definition.id)?;
+        }
         Ok(())
     }
 
@@ -4610,6 +4708,12 @@ impl GameStore for FileStore {
         definition.created_at = existing.created_at;
         definition.updated_at = generate_now_millis();
         self.write_game_definition_file(definition, true)?;
+        self.featured_game_items_reconcile_visibility(
+            FeaturedGameItemKind::Definition,
+            definition.id,
+            existing.visibility,
+            definition.visibility,
+        )?;
         Ok(())
     }
 
@@ -4656,6 +4760,8 @@ impl GameStore for FileStore {
             return Err(Error::GameDefinitionIdNotFound(id.to_string()));
         }
         delete_dir(&self.game_definition_dir_path(id));
+        // Drop the featured row (no-op when the definition was never featured).
+        self.featured_game_items_remove(FeaturedGameItemKind::Definition, id)?;
         Ok(())
     }
 
@@ -5270,6 +5376,9 @@ impl GameStore for FileStore {
         collection.updated_at = now;
         normalize_item_order(&mut collection.items);
         self.write_game_collection_file(collection, false)?;
+        if collection.visibility == Visibility::Curated {
+            self.featured_game_items_append(FeaturedGameItemKind::Collection, collection.id)?;
+        }
         Ok(())
     }
 
@@ -5375,6 +5484,12 @@ impl GameStore for FileStore {
         collection.updated_at = generate_now_millis();
         collection.items = existing.items;
         self.write_game_collection_file(collection, true)?;
+        self.featured_game_items_reconcile_visibility(
+            FeaturedGameItemKind::Collection,
+            collection.id,
+            existing.visibility,
+            collection.visibility,
+        )?;
         Ok(())
     }
 
@@ -5420,6 +5535,8 @@ impl GameStore for FileStore {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         delete_dir(&self.game_collection_dir_path(id));
+        // Drop the featured row (no-op when the collection was never featured).
+        self.featured_game_items_remove(FeaturedGameItemKind::Collection, id)?;
         Ok(())
     }
 
@@ -6009,6 +6126,136 @@ impl GameStore for FileStore {
             self.write_game_collection_file(&collection, true)?;
         }
         Ok(())
+    }
+
+    /// Rewrites the featured order to `ordered` (order-only). See
+    /// [`GameStore::reorder_featured_game_items`].
+    ///
+    /// # Examples
+    ///
+    /// Feature two definitions, then reorder them
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{FeaturedGameItemKind, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: true, username: "admin".to_string(),
+    ///     full_name: "Admin".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("admin@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut make = |name: &str| GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Curated,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// let (mut a, mut b) = (make("A"), make("B"));
+    /// store.create_game_definition(&owner, &mut a).await.unwrap();
+    /// store.create_game_definition(&owner, &mut b).await.unwrap();
+    ///
+    /// store.reorder_featured_game_items(&[
+    ///     (FeaturedGameItemKind::Definition, b.id),
+    ///     (FeaturedGameItemKind::Definition, a.id),
+    /// ]).await.unwrap();
+    /// let ids: Vec<Uuid> = store.list_featured_game_items().await.unwrap()
+    ///     .iter().map(|i| i.id()).collect();
+    /// assert_eq!(ids, vec![b.id, a.id]);
+    /// # });
+    /// ```
+    async fn reorder_featured_game_items(
+        &mut self,
+        ordered: &[(FeaturedGameItemKind, Uuid)],
+    ) -> Result<(), Error> {
+        let mut seen = std::collections::HashSet::new();
+        let deduped: Vec<(FeaturedGameItemKind, Uuid)> =
+            ordered.iter().copied().filter(|entry| seen.insert(*entry)).collect();
+        // Membership stays owned by the curated tier: reject any id that isn't
+        // currently curated.
+        for (kind, id) in &deduped {
+            let visibility = match kind {
+                FeaturedGameItemKind::Definition => self.read_game_definition_raw(*id)?.visibility,
+                FeaturedGameItemKind::Collection => self.read_game_collection_raw(*id)?.visibility,
+            };
+            if visibility != Visibility::Curated {
+                return Err(Error::FeaturedGameItemNotCurated {
+                    kind: kind.as_wire_str(),
+                    id: id.to_string(),
+                });
+            }
+        }
+        let refs: Vec<FeaturedGameItemRef> = deduped
+            .into_iter()
+            .map(|(entity_kind, entity_id)| FeaturedGameItemRef { entity_kind, entity_id })
+            .collect();
+        self.write_featured_game_item_refs(&refs)?;
+        Ok(())
+    }
+
+    /// The featured catalogue, hydrated in `sort_order`. See
+    /// [`GameStore::list_featured_game_items`].
+    ///
+    /// # Examples
+    ///
+    /// A curated definition appears in the featured list
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{FeaturedGameItem, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: true, username: "admin".to_string(),
+    ///     full_name: "Admin".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("admin@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Featured".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Curated,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// let featured = store.list_featured_game_items().await.unwrap();
+    /// assert!(matches!(featured.as_slice(), [FeaturedGameItem::Definition(d)] if d.id == def.id));
+    /// # });
+    /// ```
+    async fn list_featured_game_items(&self) -> Result<Vec<FeaturedGameItem>, Error> {
+        let mut items = Vec::new();
+        for r in self.read_featured_game_item_refs()? {
+            // A row whose entity has vanished is skipped, not fatal.
+            match r.entity_kind {
+                FeaturedGameItemKind::Definition => match self.read_game_definition_raw(r.entity_id) {
+                    Ok(def) => items.push(FeaturedGameItem::Definition(def)),
+                    Err(Error::GameDefinitionIdNotFound(_)) => {}
+                    Err(error) => return Err(error),
+                },
+                FeaturedGameItemKind::Collection => match self.read_game_collection_raw(r.entity_id) {
+                    Ok(collection) => items.push(FeaturedGameItem::Collection(collection)),
+                    Err(Error::GameCollectionIdNotFound(_)) => {}
+                    Err(error) => return Err(error),
+                },
+            }
+        }
+        Ok(items)
     }
 }
 

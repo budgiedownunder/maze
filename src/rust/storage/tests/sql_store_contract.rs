@@ -1131,3 +1131,27 @@ async fn game_collection_create_enforces_per_user_cap() {
     let mut s = fresh_store().await;
     contract::create_game_collection_enforces_per_user_cap(&mut s).await;
 }
+
+#[tokio::test]
+async fn featured_game_items_append_on_curate_and_ordered_read() {
+    let mut s = fresh_store().await;
+    contract::featured_game_items_append_on_curate_and_ordered_read(&mut s).await;
+}
+
+#[tokio::test]
+async fn featured_game_items_remove_and_recompact_on_uncurate() {
+    let mut s = fresh_store().await;
+    contract::featured_game_items_remove_and_recompact_on_uncurate(&mut s).await;
+}
+
+#[tokio::test]
+async fn featured_game_items_remove_and_recompact_on_delete() {
+    let mut s = fresh_store().await;
+    contract::featured_game_items_remove_and_recompact_on_delete(&mut s).await;
+}
+
+#[tokio::test]
+async fn featured_game_items_reorder_in_one_and_rejects_non_curated() {
+    let mut s = fresh_store().await;
+    contract::featured_game_items_reorder_in_one_and_rejects_non_curated(&mut s).await;
+}

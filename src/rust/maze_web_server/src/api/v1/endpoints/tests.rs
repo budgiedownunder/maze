@@ -17,7 +17,7 @@ mod test_definitions {
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
-    use data_model::{CollectionItem, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
+    use data_model::{CollectionItem, FeaturedGameItem, FeaturedGameItemKind, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
     use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest};
     use crate::api::v1::endpoints::game_shared::SetGameSharesRequest;
     use crate::api::v1::endpoints::game_collections::{GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest};
@@ -133,6 +133,7 @@ mod test_definitions {
         col_grantees: HashMap<Uuid, Vec<Uuid>>,
         def_images: HashMap<Uuid, Vec<u8>>,
         col_images: HashMap<Uuid, Vec<u8>>,
+        featured_game_items: Vec<(FeaturedGameItemKind, Uuid)>,
     }
 
     impl MockStore {
@@ -148,6 +149,7 @@ mod test_definitions {
                 col_grantees: HashMap::new(),
                 def_images: HashMap::new(),
                 col_images: HashMap::new(),
+                featured_game_items: Vec::new(),
             }
         }
 
@@ -184,6 +186,28 @@ mod test_definitions {
 
         fn game_collection_mut(&mut self, id: Uuid) -> Option<&mut GameCollection> {
             self.game_collections.iter_mut().find(|c| c.id == id)
+        }
+
+        /// Appends `(kind, id)` to the featured list unless already present.
+        fn featured_game_items_append(&mut self, kind: FeaturedGameItemKind, id: Uuid) {
+            if !self.featured_game_items.iter().any(|(k, i)| *k == kind && *i == id) {
+                self.featured_game_items.push((kind, id));
+            }
+        }
+
+        /// Removes `(kind, id)` from the featured list; the survivors stay dense
+        /// (the index is the sort_order).
+        fn featured_game_items_remove(&mut self, kind: FeaturedGameItemKind, id: Uuid) {
+            self.featured_game_items.retain(|(k, i)| !(*k == kind && *i == id));
+        }
+
+        /// Reconciles the featured row for a visibility transition.
+        fn featured_game_items_reconcile(&mut self, kind: FeaturedGameItemKind, id: Uuid, old: Visibility, new: Visibility) {
+            match (old == Visibility::Curated, new == Visibility::Curated) {
+                (false, true) => self.featured_game_items_append(kind, id),
+                (true, false) => self.featured_game_items_remove(kind, id),
+                _ => {}
+            }
         }
 
         /// Wraps a board page into `ScoreboardEntry`s, resolving each row's
@@ -1000,6 +1024,9 @@ mod test_definitions {
             definition.created_at = now;
             definition.updated_at = now;
             self.game_definitions.push(definition.clone());
+            if definition.visibility == Visibility::Curated {
+                self.featured_game_items_append(FeaturedGameItemKind::Definition, definition.id);
+            }
             Ok(())
         }
 
@@ -1026,6 +1053,7 @@ mod test_definitions {
             if let Some(slot) = self.game_definitions.iter_mut().find(|d| d.id == definition.id) {
                 *slot = definition.clone();
             }
+            self.featured_game_items_reconcile(FeaturedGameItemKind::Definition, definition.id, existing.visibility, definition.visibility);
             Ok(())
         }
 
@@ -1033,6 +1061,7 @@ mod test_definitions {
             self.owned_def_or_not_found(owner, id)?;
             self.game_definitions.retain(|d| d.id != id);
             self.def_grantees.remove(&id);
+            self.featured_game_items_remove(FeaturedGameItemKind::Definition, id);
             Ok(())
         }
 
@@ -1134,6 +1163,9 @@ mod test_definitions {
             collection.updated_at = now;
             renumber_items(&mut collection.items);
             self.game_collections.push(collection.clone());
+            if collection.visibility == Visibility::Curated {
+                self.featured_game_items_append(FeaturedGameItemKind::Collection, collection.id);
+            }
             Ok(())
         }
 
@@ -1164,6 +1196,7 @@ mod test_definitions {
             if let Some(slot) = self.game_collection_mut(collection.id) {
                 *slot = collection.clone();
             }
+            self.featured_game_items_reconcile(FeaturedGameItemKind::Collection, collection.id, existing.visibility, collection.visibility);
             Ok(())
         }
 
@@ -1171,6 +1204,7 @@ mod test_definitions {
             self.owned_collection_or_not_found(owner, id)?;
             self.game_collections.retain(|c| c.id != id);
             self.col_grantees.remove(&id);
+            self.featured_game_items_remove(FeaturedGameItemKind::Collection, id);
             Ok(())
         }
 
@@ -1262,6 +1296,41 @@ mod test_definitions {
                 self.col_images.remove(&id);
             }
             Ok(())
+        }
+
+        async fn reorder_featured_game_items(&mut self, ordered: &[(FeaturedGameItemKind, Uuid)]) -> Result<(), StoreError> {
+            let mut seen = std::collections::HashSet::new();
+            let deduped: Vec<(FeaturedGameItemKind, Uuid)> = ordered.iter().copied().filter(|entry| seen.insert(*entry)).collect();
+            for (kind, id) in &deduped {
+                let visibility = match kind {
+                    FeaturedGameItemKind::Definition => self.get_game_definition(*id).await?.visibility,
+                    FeaturedGameItemKind::Collection => self.get_game_collection(*id).await?.visibility,
+                };
+                if visibility != Visibility::Curated {
+                    return Err(StoreError::FeaturedGameItemNotCurated { kind: kind.as_wire_str(), id: id.to_string() });
+                }
+            }
+            self.featured_game_items = deduped;
+            Ok(())
+        }
+
+        async fn list_featured_game_items(&self) -> Result<Vec<FeaturedGameItem>, StoreError> {
+            let mut items = Vec::new();
+            for (kind, id) in &self.featured_game_items {
+                match kind {
+                    FeaturedGameItemKind::Definition => {
+                        if let Some(def) = self.game_definitions.iter().find(|d| d.id == *id) {
+                            items.push(FeaturedGameItem::Definition(def.clone()));
+                        }
+                    }
+                    FeaturedGameItemKind::Collection => {
+                        if let Some(collection) = self.game_collections.iter().find(|c| c.id == *id) {
+                            items.push(FeaturedGameItem::Collection(collection.clone()));
+                        }
+                    }
+                }
+            }
+            Ok(items)
         }
     }
 

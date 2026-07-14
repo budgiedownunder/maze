@@ -46,6 +46,7 @@ pub enum Error {
     GameCollectionNameMissing(),
     GameCollectionNameAlreadyExists(String),
     GameCollectionCountLimitReached { count: usize, max: usize },
+    FeaturedGameItemNotCurated { kind: &'static str, id: String },
     DataModelError(DataModelError),
     Io(std::io::Error),
     SerdeJson(serde_json::Error),
@@ -135,6 +136,10 @@ impl std::fmt::Display for Error {
             Error::GameCollectionCountLimitReached { count, max } => write!(
                 f,
                 "Game collection limit reached: you already own {count} collections (max {max})"
+            ),
+            Error::FeaturedGameItemNotCurated { kind, id } => write!(
+                f,
+                "Cannot feature a non-curated {kind} '{id}'"
             ),
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),

@@ -239,6 +239,11 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// **Version 12** creates the `<data_dir>/game_collections/` parent directory
 /// used by the FileStore `GameStore` collection impl (each collection owns an
 /// `<id>/` sub-folder, created lazily on write). Idempotent.
+///
+/// **Version 13** is a no-op that aligns the counter with the SQL
+/// `0013_featured_game_items.sql` migration. The FileStore keeps the featured
+/// list in a single root file `featured_game_items.json`, created lazily on the
+/// first feature — there is no directory to pre-create.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -251,6 +256,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (9, migrate_0009_create_score_history_dir),
     (11, migrate_0011_create_game_definitions_dir),
     (12, migrate_0012_create_game_collections_dir),
+    (13, no_op_migration),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {

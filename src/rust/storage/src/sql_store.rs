@@ -23,9 +23,9 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
-    Maze, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail, UserLogin,
-    Visibility, truncate_email_audit_error_message,
+    AuditOutcome, CollectionItem, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
+    GameDefinition, GranteeSummary, Maze, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User,
+    UserEmail, UserLogin, Visibility, truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
@@ -3813,6 +3813,7 @@ impl Manage for SqlStore {
             "DELETE FROM user_avatars",
             "DELETE FROM game_definition_images",
             "DELETE FROM game_collection_images",
+            "DELETE FROM featured_game_items",
             "DELETE FROM users",
         ] {
             sqlx::query(sql)
@@ -5220,6 +5221,107 @@ impl SqlStore {
     }
 }
 
+// ── featured_game_items maintenance (runs inside the caller's transaction) ────
+//
+// Every mutation derives `sort_order` in-SQL so two concurrent transactions
+// can't read the same value and write it back into a collision, and shares the
+// caller's transaction so the featured row commits atomically with the entity's
+// visibility change.
+
+/// Appends `(entity_kind, id)` with `sort_order` = current max + 1, computed in
+/// one statement. The `MAX(...)` lives in a derived table so MySQL materialises
+/// it (an aggregate subquery can't be merged) and therefore allows the
+/// `INSERT … SELECT` to read the same table it inserts into — MySQL error 1093
+/// otherwise; SQLite / PostgreSQL accept the direct form too.
+async fn featured_game_items_append(
+    tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+    kind: SqlBackend,
+    entity_kind: FeaturedGameItemKind,
+    id: Uuid,
+) -> Result<(), Error> {
+    sqlx::query(&q(
+        kind,
+        "INSERT INTO featured_game_items (entity_kind, entity_id, sort_order) \
+         SELECT ?, ?, COALESCE(m, -1) + 1 \
+         FROM (SELECT MAX(sort_order) AS m FROM featured_game_items) AS t",
+    ))
+    .bind(entity_kind.as_wire_str())
+    .bind(id.to_string())
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    Ok(())
+}
+
+/// Removes `(entity_kind, id)` if present, then recompacts the remaining rows to
+/// a dense `0..n` — but only when a row was actually deleted, so a delete of a
+/// never-featured entity costs one no-op statement.
+async fn featured_game_items_remove(
+    tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+    kind: SqlBackend,
+    entity_kind: FeaturedGameItemKind,
+    id: Uuid,
+) -> Result<(), Error> {
+    let removed = sqlx::query(&q(
+        kind,
+        "DELETE FROM featured_game_items WHERE entity_kind = ? AND entity_id = ?",
+    ))
+    .bind(entity_kind.as_wire_str())
+    .bind(id.to_string())
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    if removed.rows_affected() > 0 {
+        featured_game_items_recompact(tx, kind).await?;
+    }
+    Ok(())
+}
+
+/// Renumbers `sort_order` to a dense `0..n` in one UPDATE, ranking by the current
+/// `sort_order`. The `ROW_NUMBER()` derived table is materialised on every
+/// backend (a window function blocks MySQL's derived-table merge, so error 1093
+/// doesn't fire against the table being updated), so the same statement is
+/// portable across SQLite / PostgreSQL / MySQL.
+async fn featured_game_items_recompact(
+    tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+    kind: SqlBackend,
+) -> Result<(), Error> {
+    sqlx::query(&q(
+        kind,
+        "UPDATE featured_game_items SET sort_order = ( \
+             SELECT rn FROM ( \
+                 SELECT entity_kind AS k, entity_id AS i, \
+                        ROW_NUMBER() OVER (ORDER BY sort_order) - 1 AS rn \
+                 FROM featured_game_items \
+             ) t \
+             WHERE t.k = featured_game_items.entity_kind \
+               AND t.i = featured_game_items.entity_id \
+         )",
+    ))
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    Ok(())
+}
+
+/// Reconciles the featured row for an entity whose visibility changed from `old`
+/// to `new`: append on a transition into `Curated`, remove + recompact on a
+/// transition out, nothing otherwise.
+async fn featured_game_items_reconcile_visibility(
+    tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+    kind: SqlBackend,
+    entity_kind: FeaturedGameItemKind,
+    id: Uuid,
+    old: Visibility,
+    new: Visibility,
+) -> Result<(), Error> {
+    match (old == Visibility::Curated, new == Visibility::Curated) {
+        (false, true) => featured_game_items_append(tx, kind, entity_kind, id).await,
+        (true, false) => featured_game_items_remove(tx, kind, entity_kind, id).await,
+        _ => Ok(()),
+    }
+}
+
 #[async_trait]
 impl GameStore for SqlStore {
     fn max_definitions_per_user(&self) -> Option<usize> {
@@ -5329,6 +5431,10 @@ impl GameStore for SqlStore {
         definition.created_at = now;
         definition.updated_at = now;
 
+        // Insert the definition and (when it starts life Curated) append its
+        // featured row in one transaction, so the `curated` flag and the
+        // featured projection commit together.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(&q(
             self.kind,
             "INSERT INTO game_definitions \
@@ -5346,9 +5452,13 @@ impl GameStore for SqlStore {
         .bind(&config_json)
         .bind(datetime_to_sql(definition.created_at))
         .bind(datetime_to_sql(definition.updated_at))
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
+        if definition.visibility == Visibility::Curated {
+            featured_game_items_append(&mut tx, self.kind, FeaturedGameItemKind::Definition, definition.id).await?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -5486,6 +5596,9 @@ impl GameStore for SqlStore {
         definition.created_at = existing.created_at;
         definition.updated_at = Utc::now().trunc_subsecs(3);
 
+        // Persist the update and reconcile the featured projection for any
+        // curated↔non-curated transition in the same transaction.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(&q(
             self.kind,
             "UPDATE game_definitions SET name = ?, description = ?, image_updated_at = ?, \
@@ -5500,9 +5613,19 @@ impl GameStore for SqlStore {
         .bind(&config_json)
         .bind(datetime_to_sql(definition.updated_at))
         .bind(definition.id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
+        featured_game_items_reconcile_visibility(
+            &mut tx,
+            self.kind,
+            FeaturedGameItemKind::Definition,
+            definition.id,
+            existing.visibility,
+            definition.visibility,
+        )
+        .await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -5556,19 +5679,25 @@ impl GameStore for SqlStore {
         }
         // Shares cascade via the FK, but delete explicitly for uniform
         // behaviour across backends (SQLite FK enforcement is pragma-gated).
+        // A curated definition's featured row is removed + the list recompacted
+        // in the same transaction; `featured_game_items_remove` is a no-op when
+        // the definition was never featured.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(&q(
             self.kind,
             "DELETE FROM game_definition_shares WHERE definition_id = ?",
         ))
         .bind(id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM game_definitions WHERE id = ?"))
             .bind(id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
+        featured_game_items_remove(&mut tx, self.kind, FeaturedGameItemKind::Definition, id).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -6460,6 +6589,10 @@ impl GameStore for SqlStore {
         collection.updated_at = now;
         normalize_item_order(&mut collection.items);
 
+        // Insert the collection and (when it starts life Curated) append its
+        // featured row atomically; item rows follow outside the transaction, as
+        // before (membership is presentation, not part of the curated flag).
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(&q(
             self.kind,
             "INSERT INTO game_collections \
@@ -6474,9 +6607,13 @@ impl GameStore for SqlStore {
         .bind(collection.visibility.as_wire_str())
         .bind(datetime_to_sql(collection.created_at))
         .bind(datetime_to_sql(collection.updated_at))
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
+        if collection.visibility == Visibility::Curated {
+            featured_game_items_append(&mut tx, self.kind, FeaturedGameItemKind::Collection, collection.id).await?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
         self.replace_collection_items(collection.id, &collection.items).await?;
         Ok(())
     }
@@ -6616,6 +6753,9 @@ impl GameStore for SqlStore {
         collection.items = existing.items;
         collection.updated_at = Utc::now().trunc_subsecs(3);
 
+        // Persist the metadata update and reconcile the featured projection for
+        // any curated↔non-curated transition in the same transaction.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(&q(
             self.kind,
             "UPDATE game_collections SET name = ?, description = ?, image_updated_at = ?, \
@@ -6627,9 +6767,19 @@ impl GameStore for SqlStore {
         .bind(collection.visibility.as_wire_str())
         .bind(datetime_to_sql(collection.updated_at))
         .bind(collection.id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
+        featured_game_items_reconcile_visibility(
+            &mut tx,
+            self.kind,
+            FeaturedGameItemKind::Collection,
+            collection.id,
+            existing.visibility,
+            collection.visibility,
+        )
+        .await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -6680,19 +6830,25 @@ impl GameStore for SqlStore {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         // Items + shares cascade via FK, but delete explicitly for uniform
-        // cross-backend behaviour.
+        // cross-backend behaviour. A curated collection's featured row is
+        // removed + the list recompacted in the same transaction;
+        // `featured_game_items_remove` is a no-op when the collection was never
+        // featured.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         for table in ["game_collection_shares", "game_collection_items"] {
             sqlx::query(&q(self.kind, &format!("DELETE FROM {table} WHERE collection_id = ?")))
                 .bind(id.to_string())
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await
                 .map_err(map_sqlx_err)?;
         }
         sqlx::query(&q(self.kind, "DELETE FROM game_collections WHERE id = ?"))
             .bind(id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
+        featured_game_items_remove(&mut tx, self.kind, FeaturedGameItemKind::Collection, id).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -7549,6 +7705,179 @@ impl GameStore for SqlStore {
         .await
         .map_err(map_sqlx_err)?;
         Ok(())
+    }
+
+    /// Rewrites the featured order to `ordered` (order-only). See
+    /// [`GameStore::reorder_featured_game_items`].
+    ///
+    /// # Examples
+    ///
+    /// Feature two definitions, then reorder them
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{FeaturedGameItemKind, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: true, username: "admin".into(),
+    ///     full_name: "Admin".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("admin@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut make = |name: &str| GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Curated,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// let (mut a, mut b) = (make("A"), make("B"));
+    /// store.create_game_definition(&owner, &mut a).await.unwrap();
+    /// store.create_game_definition(&owner, &mut b).await.unwrap();
+    ///
+    /// store.reorder_featured_game_items(&[
+    ///     (FeaturedGameItemKind::Definition, b.id),
+    ///     (FeaturedGameItemKind::Definition, a.id),
+    /// ]).await.unwrap();
+    /// let ids: Vec<Uuid> = store.list_featured_game_items().await.unwrap()
+    ///     .iter().map(|i| i.id()).collect();
+    /// assert_eq!(ids, vec![b.id, a.id]);
+    /// # });
+    /// ```
+    async fn reorder_featured_game_items(
+        &mut self,
+        ordered: &[(FeaturedGameItemKind, Uuid)],
+    ) -> Result<(), Error> {
+        let mut seen = std::collections::HashSet::new();
+        let deduped: Vec<(FeaturedGameItemKind, Uuid)> =
+            ordered.iter().copied().filter(|entry| seen.insert(*entry)).collect();
+        // Membership stays owned by the curated tier: reject any id that isn't
+        // currently curated so a reorder can't smuggle a non-featured entity in.
+        for (kind, id) in &deduped {
+            let visibility = match kind {
+                FeaturedGameItemKind::Definition => self.get_game_definition(*id).await?.visibility,
+                FeaturedGameItemKind::Collection => self.get_game_collection(*id).await?.visibility,
+            };
+            if visibility != Visibility::Curated {
+                return Err(Error::FeaturedGameItemNotCurated {
+                    kind: kind.as_wire_str(),
+                    id: id.to_string(),
+                });
+            }
+        }
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        sqlx::query("DELETE FROM featured_game_items")
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        for (index, (kind, id)) in deduped.iter().enumerate() {
+            sqlx::query(&q(
+                self.kind,
+                "INSERT INTO featured_game_items (entity_kind, entity_id, sort_order) \
+                 VALUES (?, ?, ?)",
+            ))
+            .bind(kind.as_wire_str())
+            .bind(id.to_string())
+            .bind(index as i32)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// The featured catalogue, hydrated in `sort_order`. See
+    /// [`GameStore::list_featured_game_items`].
+    ///
+    /// # Examples
+    ///
+    /// A curated definition appears in the featured list
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{FeaturedGameItem, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: true, username: "admin".into(),
+    ///     full_name: "Admin".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("admin@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Featured".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Curated,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    ///
+    /// let featured = store.list_featured_game_items().await.unwrap();
+    /// assert!(matches!(featured.as_slice(), [FeaturedGameItem::Definition(d)] if d.id == def.id));
+    /// # });
+    /// ```
+    async fn list_featured_game_items(&self) -> Result<Vec<FeaturedGameItem>, Error> {
+        let rows = sqlx::query(
+            "SELECT entity_kind, entity_id FROM featured_game_items ORDER BY sort_order ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut items = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let kind_str: String = row.try_get("entity_kind").map_err(map_sqlx_err)?;
+            let kind = FeaturedGameItemKind::from_wire_str(&kind_str).ok_or_else(|| {
+                integrity_violation(&format!(
+                    "unknown featured entity_kind '{kind_str}' in featured_game_items"
+                ))
+            })?;
+            let id = parse_uuid(
+                "featured entity_id",
+                &row.try_get::<String, _>("entity_id").map_err(map_sqlx_err)?,
+            )?;
+            // A row whose entity has vanished is skipped, not fatal (mirrors the
+            // dangling-collection-item behaviour).
+            match kind {
+                FeaturedGameItemKind::Definition => match self.get_game_definition(id).await {
+                    Ok(def) => items.push(FeaturedGameItem::Definition(def)),
+                    Err(Error::GameDefinitionIdNotFound(_)) => {}
+                    Err(err) => return Err(err),
+                },
+                FeaturedGameItemKind::Collection => match self.get_game_collection(id).await {
+                    Ok(collection) => items.push(FeaturedGameItem::Collection(collection)),
+                    Err(Error::GameCollectionIdNotFound(_)) => {}
+                    Err(err) => return Err(err),
+                },
+            }
+        }
+        Ok(items)
     }
 }
 

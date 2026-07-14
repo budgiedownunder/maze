@@ -13,9 +13,9 @@
 use chrono::{Duration, SubsecRound, Utc};
 use data_model::{
     AuditOutcome, CollectionItem, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS,
-    ERROR_MESSAGE_TRUNCATION_MARKER, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
-    Maze, MazeDefinition, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User, UserEmail,
-    UserLogin, Visibility,
+    ERROR_MESSAGE_TRUNCATION_MARKER, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
+    GameDefinition, GranteeSummary, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, Rotation,
+    TokenPurpose, User, UserEmail, UserLogin, Visibility,
 };
 use storage::{
     Error, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
@@ -3271,4 +3271,160 @@ fn item_ids(collection: &GameCollection) -> Vec<Uuid> {
 
 fn item_orders(collection: &GameCollection) -> Vec<u32> {
     collection.items.iter().map(|i| i.sort_order).collect()
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// GameStore — featured catalogue (the admin-ordered `Curated` projection)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The `(kind, id)` pairs of a featured list, in order — the shape the
+/// assertions compare against.
+fn featured_game_items_pairs(items: &[FeaturedGameItem]) -> Vec<(FeaturedGameItemKind, Uuid)> {
+    items.iter().map(|i| (i.kind(), i.id())).collect()
+}
+
+/// Creating a `Curated` definition then a `Curated` collection appends both to
+/// the featured list (in creation order); a `Private` entity is never featured.
+pub async fn featured_game_items_append_on_curate_and_ordered_read(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "feat_owner", "feat_owner@example.com").await;
+
+    let mut curated_def = make_game_definition("Featured Def", Visibility::Curated);
+    store.create_game_definition(&owner, &mut curated_def).await.expect("curated def");
+    let mut private_def = make_game_definition("Private Def", Visibility::Private);
+    store.create_game_definition(&owner, &mut private_def).await.expect("private def");
+    let mut curated_col = make_game_collection("Featured Col", Visibility::Curated);
+    store.create_game_collection(&owner, &mut curated_col).await.expect("curated col");
+
+    let featured = store.list_featured_game_items().await.expect("list featured");
+    assert_eq!(
+        featured_game_items_pairs(&featured),
+        vec![
+            (FeaturedGameItemKind::Definition, curated_def.id),
+            (FeaturedGameItemKind::Collection, curated_col.id),
+        ],
+        "only curated entities are featured, in append order",
+    );
+    // The hydrated read carries the whole entity, not just the id.
+    match &featured[0] {
+        FeaturedGameItem::Definition(d) => assert_eq!(d.name, "Featured Def"),
+        other => panic!("expected a definition first, got {other:?}"),
+    }
+}
+
+/// Un-curating a featured entity removes its row and recompacts the survivors to
+/// a dense `0..n`.
+pub async fn featured_game_items_remove_and_recompact_on_uncurate(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "feat_owner", "feat_owner@example.com").await;
+    let mut a = make_game_definition("A", Visibility::Curated);
+    let mut b = make_game_definition("B", Visibility::Curated);
+    let mut c = make_game_definition("C", Visibility::Curated);
+    store.create_game_definition(&owner, &mut a).await.expect("a");
+    store.create_game_definition(&owner, &mut b).await.expect("b");
+    store.create_game_definition(&owner, &mut c).await.expect("c");
+
+    // Un-curate the middle one.
+    b.visibility = Visibility::Public;
+    store.update_game_definition(&owner, &mut b).await.expect("uncurate b");
+
+    let featured = store.list_featured_game_items().await.expect("list");
+    assert_eq!(
+        featured_game_items_pairs(&featured),
+        vec![(FeaturedGameItemKind::Definition, a.id), (FeaturedGameItemKind::Definition, c.id)],
+        "the un-curated entity is dropped, the rest kept in order",
+    );
+    // Re-curating appends it to the end (max + 1), never back to its old slot.
+    b.visibility = Visibility::Curated;
+    store.update_game_definition(&owner, &mut b).await.expect("re-curate b");
+    let featured = store.list_featured_game_items().await.expect("list2");
+    assert_eq!(
+        featured_game_items_pairs(&featured),
+        vec![
+            (FeaturedGameItemKind::Definition, a.id),
+            (FeaturedGameItemKind::Definition, c.id),
+            (FeaturedGameItemKind::Definition, b.id),
+        ],
+        "re-curate appends at the end",
+    );
+}
+
+/// Deleting a featured entity removes its row and recompacts the survivors;
+/// works across both entity kinds.
+pub async fn featured_game_items_remove_and_recompact_on_delete(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "feat_owner", "feat_owner@example.com").await;
+    let mut def = make_game_definition("Def", Visibility::Curated);
+    let mut col = make_game_collection("Col", Visibility::Curated);
+    let mut def2 = make_game_definition("Def2", Visibility::Curated);
+    store.create_game_definition(&owner, &mut def).await.expect("def");
+    store.create_game_collection(&owner, &mut col).await.expect("col");
+    store.create_game_definition(&owner, &mut def2).await.expect("def2");
+
+    // Delete the first-featured (a definition).
+    store.delete_game_definition(&owner, def.id).await.expect("delete def");
+    let featured = store.list_featured_game_items().await.expect("list");
+    assert_eq!(
+        featured_game_items_pairs(&featured),
+        vec![(FeaturedGameItemKind::Collection, col.id), (FeaturedGameItemKind::Definition, def2.id)],
+        "deleting a featured entity drops its row and keeps the rest ordered",
+    );
+
+    // Deleting a never-featured (private) entity leaves the featured list alone.
+    let mut private = make_game_definition("Private", Visibility::Private);
+    store.create_game_definition(&owner, &mut private).await.expect("private");
+    store.delete_game_definition(&owner, private.id).await.expect("delete private");
+    let featured = store.list_featured_game_items().await.expect("list2");
+    assert_eq!(featured.len(), 2, "deleting a non-featured entity is a no-op for the list");
+}
+
+/// `reorder_featured_game_items` rewrites the order in one operation and rejects
+/// any entry whose entity is not `Curated`.
+pub async fn featured_game_items_reorder_in_one_and_rejects_non_curated(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "feat_owner", "feat_owner@example.com").await;
+    let mut a = make_game_definition("A", Visibility::Curated);
+    let mut b = make_game_collection("B", Visibility::Curated);
+    let mut c = make_game_definition("C", Visibility::Curated);
+    store.create_game_definition(&owner, &mut a).await.expect("a");
+    store.create_game_collection(&owner, &mut b).await.expect("b");
+    store.create_game_definition(&owner, &mut c).await.expect("c");
+
+    // Reverse the order in a single reconcile.
+    store
+        .reorder_featured_game_items(&[
+            (FeaturedGameItemKind::Definition, c.id),
+            (FeaturedGameItemKind::Collection, b.id),
+            (FeaturedGameItemKind::Definition, a.id),
+        ])
+        .await
+        .expect("reorder");
+    let featured = store.list_featured_game_items().await.expect("list");
+    assert_eq!(
+        featured_game_items_pairs(&featured),
+        vec![
+            (FeaturedGameItemKind::Definition, c.id),
+            (FeaturedGameItemKind::Collection, b.id),
+            (FeaturedGameItemKind::Definition, a.id),
+        ],
+        "reorder rewrites the order 0..N-1",
+    );
+
+    // A non-curated id is rejected and leaves the order untouched.
+    let mut plain = make_game_definition("Plain", Visibility::Public);
+    store.create_game_definition(&owner, &mut plain).await.expect("plain");
+    let err = store
+        .reorder_featured_game_items(&[
+            (FeaturedGameItemKind::Definition, a.id),
+            (FeaturedGameItemKind::Definition, plain.id),
+        ])
+        .await
+        .expect_err("a non-curated id must be rejected");
+    assert!(matches!(err, Error::FeaturedGameItemNotCurated { .. }), "got {err:?}");
+    let featured = store.list_featured_game_items().await.expect("list unchanged");
+    assert_eq!(
+        featured_game_items_pairs(&featured),
+        vec![
+            (FeaturedGameItemKind::Definition, c.id),
+            (FeaturedGameItemKind::Collection, b.id),
+            (FeaturedGameItemKind::Definition, a.id),
+        ],
+        "a rejected reorder is a no-op",
+    );
 }

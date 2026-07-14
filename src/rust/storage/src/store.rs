@@ -2,8 +2,8 @@ use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use data_model::{
-    AuditOutcome, CollectionItem, EmailAuditEntry, GameCollection, GameDefinition, GranteeSummary,
-    Maze, OneTimeToken, User, UserEmail,
+    AuditOutcome, CollectionItem, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
+    GameDefinition, GranteeSummary, Maze, OneTimeToken, User, UserEmail,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -717,6 +717,33 @@ pub trait GameStore {
     /// Removes a collection's image if present and clears its `image_updated_at`,
     /// for a collection owned by `owner`. Idempotent.
     async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+
+    // ── Featured catalogue (the admin-ordered `Curated` projection) ──────────
+    //
+    // `featured_game_items` is a faithful projection of the `Curated` tier: a
+    // single ordered list mixing definitions and collections. It is maintained
+    // automatically by `create`/`update`/`delete` on both entities — a
+    // transition into `Curated` appends a row (`sort_order` = max + 1), a
+    // transition out (or a delete) removes the row and recompacts `sort_order`
+    // to a dense `0..n`. Every mutation derives `sort_order` in-SQL inside a
+    // single transaction that also carries the entity's visibility change, so
+    // the `Curated` flag and its featured row can never disagree.
+
+    /// Rewrites the featured list's order to match `ordered` in one transaction,
+    /// assigning `sort_order` = index. Membership stays owned by the `Curated`
+    /// tier: this reorders the featured set, it does not add or remove members —
+    /// any `ordered` entry whose entity is not `Curated` is rejected with
+    /// [`Error::FeaturedGameItemNotCurated`]. Duplicate `(kind, id)` pairs collapse
+    /// to their first occurrence.
+    async fn reorder_featured_game_items(
+        &mut self,
+        ordered: &[(FeaturedGameItemKind, Uuid)],
+    ) -> Result<(), Error>;
+    /// The featured catalogue — every `Curated` definition and collection,
+    /// hydrated and returned in `sort_order`. A row whose entity has since
+    /// vanished is skipped (mirroring how collection items filter dangling refs
+    /// at display), so the read never fails on a stale projection.
+    async fn list_featured_game_items(&self) -> Result<Vec<FeaturedGameItem>, Error>;
 }
 
 /// Normalises a collection's item ordering: rewrites `sort_order = index` in the
