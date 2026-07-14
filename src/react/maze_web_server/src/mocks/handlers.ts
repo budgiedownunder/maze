@@ -299,10 +299,14 @@ export function resetMockFeaturedGameItems(): void {
 function hydrateFeaturedItems(): FeaturedGameItem[] {
   const curatedDefs = mockGameDefinitions.filter(d => d.visibility === 'curated')
   const curatedCols = mockGameCollections.filter(c => c.visibility === 'curated')
+  // Resolve an owner id to a username (server-side in production); the signed-in
+  // mock user, else the searchable directory, else "unknown".
+  const ownerName = (ownerId: string): string =>
+    ownerId === mockProfile.id ? mockProfile.username : (mockUserDirectory.find(u => u.id === ownerId)?.username ?? 'unknown')
   const out: FeaturedGameItem[] = []
   const seen = new Set<string>()
-  const pushDef = (definition: GameDefinition) => { if (!seen.has(`definition:${definition.id}`)) { seen.add(`definition:${definition.id}`); out.push({ kind: 'definition', definition }) } }
-  const pushCol = (collection: GameCollection) => { if (!seen.has(`collection:${collection.id}`)) { seen.add(`collection:${collection.id}`); out.push({ kind: 'collection', collection }) } }
+  const pushDef = (definition: GameDefinition) => { if (!seen.has(`definition:${definition.id}`)) { seen.add(`definition:${definition.id}`); out.push({ kind: 'definition', ownerUsername: ownerName(definition.ownerId), definition }) } }
+  const pushCol = (collection: GameCollection) => { if (!seen.has(`collection:${collection.id}`)) { seen.add(`collection:${collection.id}`); out.push({ kind: 'collection', ownerUsername: ownerName(collection.ownerId), collection }) } }
   // Known order first…
   for (const entry of mockFeaturedGameItems) {
     if (entry.kind === 'definition') {

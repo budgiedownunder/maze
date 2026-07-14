@@ -4,7 +4,7 @@ import { AppHeader } from '../components/AppHeader'
 import { WorkshopThumbnail } from '../components/WorkshopListPage'
 import { GameDefinitionEditor } from '../components/GameDefinitionEditor'
 import { GameCollectionFormModal } from '../components/GameCollectionFormModal'
-import { ManageSharesModal } from '../components/ManageSharesModal'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { GameLeaderboardModal } from '../components/GameLeaderboardModal'
 import { useToken, useAuth } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
@@ -46,24 +46,28 @@ function featuredKey(item: FeaturedGameItem): string {
   return `${item.kind}:${featuredEntity(item).id}`
 }
 
-// A one-line summary shown under the name: the kind, plus the game's level/rotation
-// or the collection's game count.
+// A one-line summary shown under the name: the kind, the game's level/rotation or
+// the collection's game count, and who owns it.
 function featuredSummary(item: FeaturedGameItem): string {
+  let base: string
   if (item.kind === 'definition' && item.definition) {
     const d = item.definition
     const count = Number((d.config.levels as { count?: number } | undefined)?.count) || 1
     const levels = count <= 1 ? 'Single level' : `${count} levels`
-    return `Game · ${levels} · ${d.rotation === 'daily' ? 'Daily' : 'Static'}`
+    base = `Game · ${levels} · ${d.rotation === 'daily' ? 'Daily' : 'Static'}`
+  } else {
+    const n = item.collection?.items.length ?? 0
+    base = `Collection · ${n === 1 ? '1 game' : `${n} games`}`
   }
-  const n = item.collection?.items.length ?? 0
-  return `Collection · ${n === 1 ? '1 game' : `${n} games`}`
+  return `${base} · by ${item.ownerUsername}`
 }
 
 // The admin-only Manage Features page: the featured catalogue (curated games +
 // collections) as one admin-ordered list, with reorder (↑/↓), per-row Edit
-// (admin-override — reuse the game editor / collection form), Access (re-tier,
-// which un-features by leaving the curated tier), and Play / Leaderboard for
-// games. The list is paged (Load more); a reorder submits the whole order.
+// (admin-override — reuse the game editor / collection form), Unfeature (reset
+// the item's access to its owner-only Private tier, dropping it off the list),
+// and Play / Leaderboard for games. The list is paged (Load more); a reorder
+// submits the whole order.
 export function WorkshopFeaturesPage() {
   const token = useToken()
   const { profile } = useAuth()
@@ -82,7 +86,7 @@ export function WorkshopFeaturesPage() {
 
   const [editingDef, setEditingDef] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
   const [editingCol, setEditingCol] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
-  const [sharing, setSharing] = useState<FeaturedGameItem | null>(null)
+  const [unfeaturing, setUnfeaturing] = useState<{ item: FeaturedGameItem; busy: boolean; error: string | null } | null>(null)
   const [viewingBoard, setViewingBoard] = useState<GameDefinition | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
@@ -195,11 +199,33 @@ export function WorkshopFeaturesPage() {
     }
   }
 
+  // Un-feature: reset the item to Private (owner-only), which drops it off the
+  // featured list. Reversible — the owner (or an admin) can re-feature it.
+  async function handleConfirmUnfeature() {
+    if (!unfeaturing) return
+    setUnfeaturing(u => (u ? { ...u, busy: true, error: null } : u))
+    try {
+      await setFeaturedVisibility(unfeaturing.item, 'private')
+      setUnfeaturing(null)
+      refresh()
+    } catch (ex: unknown) {
+      const message = (ex as { message?: string }).message ?? 'Failed to unfeature.'
+      setUnfeaturing(u => (u ? { ...u, busy: false, error: message } : u))
+    }
+  }
+
   // Hooks above run unconditionally; the admin gate is applied to the render so a
   // non-admin who navigates here directly is bounced back to the hub.
   if (!profile?.is_admin) return <Navigate to="/workshop" replace />
 
-  const sharingEntity = sharing ? featuredEntity(sharing) : null
+  // The confirm names where access lands: "Just me" when the admin owns it, else
+  // "the owner (username)".
+  let unfeatureMessage = ''
+  if (unfeaturing) {
+    const owner = featuredEntity(unfeaturing.item)
+    const target = owner.ownerId === profile.id ? 'Just me' : `the owner (${unfeaturing.item.ownerUsername})`
+    unfeatureMessage = `Unfeature “${owner.name}”? This removes it from the featured list and resets its access to ${target}.`
+  }
 
   return (
     <div className="games-page">
@@ -228,16 +254,15 @@ export function WorkshopFeaturesPage() {
           onCancel={() => setEditingCol(null)}
         />
       )}
-      {sharing && sharingEntity && (
-        <ManageSharesModal
-          subject={{ kind: sharing.kind, id: sharingEntity.id, name: sharingEntity.name, ownerId: sharingEntity.ownerId }}
-          visibility={sharingEntity.visibility}
-          isAdmin
-          onSetVisibility={v => setFeaturedVisibility(sharing, v)}
-          // A re-tier can un-feature the item (leave the curated tier), so reload
-          // the whole list rather than patching a single row.
-          onSaved={() => { setSharing(null); refresh() }}
-          onClose={() => setSharing(null)}
+      {unfeaturing && (
+        <ConfirmModal
+          title="Unfeature"
+          message={unfeatureMessage}
+          confirmLabel="Unfeature"
+          isLoading={unfeaturing.busy}
+          error={unfeaturing.error}
+          onConfirm={() => void handleConfirmUnfeature()}
+          onCancel={() => setUnfeaturing(null)}
         />
       )}
       {viewingBoard && (
@@ -303,9 +328,9 @@ export function WorkshopFeaturesPage() {
                           <span className="maze-item-action-label">Leaderboard</span>
                         </button>
                       )}
-                      <button type="button" className="maze-item-action btn-secondary" aria-label={`Access for ${e.name}`} onClick={() => setSharing(item)}>
-                        <img src="/images/icons/icon_share.svg" alt="" aria-hidden="true" />
-                        <span className="maze-item-action-label">Access</span>
+                      <button type="button" className="maze-item-action btn-secondary" aria-label={`Unfeature ${e.name}`} onClick={() => setUnfeaturing({ item, busy: false, error: null })}>
+                        <img src="/images/icons/icon_unfeature.svg" alt="" aria-hidden="true" />
+                        <span className="maze-item-action-label">Unfeature</span>
                       </button>
                     </div>
                   </li>

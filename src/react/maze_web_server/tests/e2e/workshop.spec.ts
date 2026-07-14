@@ -86,14 +86,23 @@ test('featuring a game via Access surfaces it on Manage Features', async ({ page
   await access.getByRole('button', { name: 'Save' }).click()
   await expect(access).toBeHidden()
 
-  // It now appears on Manage Features with its game actions + reorder controls.
+  // It now appears on Manage Features with its game actions + reorder controls,
+  // and the summary names the owner.
   await page.goto('/workshop/features')
   const row = page.locator('.game-list-item', { hasText: name })
   await expect(row).toBeVisible()
+  await expect(row.getByText(/· by /)).toBeVisible()
   await expect(row.getByRole('button', { name: `Play ${name}` })).toBeVisible()
   await expect(row.getByRole('button', { name: `Leaderboard for ${name}` })).toBeVisible()
-  await expect(row.getByRole('button', { name: `Access for ${name}` })).toBeVisible()
+  await expect(row.getByRole('button', { name: `Unfeature ${name}` })).toBeVisible()
   // As the only featured row it is both first and last, so both arrows disable.
   await expect(row.getByRole('button', { name: `Move ${name} up` })).toBeDisabled()
   await expect(row.getByRole('button', { name: `Move ${name} down` })).toBeDisabled()
+
+  // Unfeature it (the admin owns it → "Just me") and it drops off the list.
+  await row.getByRole('button', { name: `Unfeature ${name}` }).click()
+  const confirm = page.getByRole('dialog', { name: 'Unfeature' })
+  await expect(confirm.getByText(/resets its access to Just me/)).toBeVisible()
+  await confirm.getByRole('button', { name: 'Unfeature' }).click()
+  await expect(page.locator('.game-list-item', { hasText: name })).toHaveCount(0)
 })

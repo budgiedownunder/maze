@@ -6,7 +6,6 @@ import { http, HttpResponse } from 'msw'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { WorkshopFeaturesPage } from '../../src/pages/WorkshopFeaturesPage'
 import { server } from '../../src/mocks/server'
-import { resetMockShares } from '../../src/mocks/handlers'
 import type { FeaturedGameItem, GameCollection, GameDefinition } from '../../src/types/api'
 
 const OWNER = 'admin-me'
@@ -29,8 +28,8 @@ function col(overrides: Partial<GameCollection> & { id: string; name: string }):
   return { ownerId: OWNER, visibility: 'curated', items: [], createdAt: 'x', updatedAt: 'x', ...overrides }
 }
 
-function defItem(d: GameDefinition): FeaturedGameItem { return { kind: 'definition', definition: d } }
-function colItem(c: GameCollection): FeaturedGameItem { return { kind: 'collection', collection: c } }
+function defItem(d: GameDefinition, ownerUsername = 'admin'): FeaturedGameItem { return { kind: 'definition', ownerUsername, definition: d } }
+function colItem(c: GameCollection, ownerUsername = 'admin'): FeaturedGameItem { return { kind: 'collection', ownerUsername, collection: c } }
 
 // A stateful mock of the featured endpoints: GET pages the current list; PUT
 // /order reorders it (matching entries by kind+id) and returns the new order.
@@ -70,7 +69,6 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  resetMockShares()
   isAdmin = true
 })
 
@@ -101,9 +99,9 @@ describe('WorkshopFeaturesPage', () => {
     expect(within(items[0]).getByText('Alpha Game')).toBeInTheDocument()
     expect(within(items[1]).getByText('Beta Set')).toBeInTheDocument()
 
-    // Summaries reflect kind.
-    expect(within(items[0]).getByText('Game · 3 levels · Static')).toBeInTheDocument()
-    expect(within(items[1]).getByText('Collection · 1 game')).toBeInTheDocument()
+    // Summaries reflect kind and carry the owner's username.
+    expect(within(items[0]).getByText('Game · 3 levels · Static · by admin')).toBeInTheDocument()
+    expect(within(items[1]).getByText('Collection · 1 game · by admin')).toBeInTheDocument()
 
     // The relocated curated-marker assertion: a featured row shows the star.
     expect(items[0].querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-curated.svg')
@@ -112,9 +110,9 @@ describe('WorkshopFeaturesPage', () => {
     expect(within(items[0]).getByRole('button', { name: 'Play Alpha Game' })).toBeInTheDocument()
     expect(within(items[0]).getByRole('button', { name: 'Leaderboard for Alpha Game' })).toBeInTheDocument()
     expect(within(items[1]).queryByRole('button', { name: /^Play / })).toBeNull()
-    // Both have Edit + Access.
+    // Both have Edit + Unfeature.
     expect(within(items[1]).getByRole('button', { name: 'Edit Beta Set' })).toBeInTheDocument()
-    expect(within(items[1]).getByRole('button', { name: 'Access for Beta Set' })).toBeInTheDocument()
+    expect(within(items[1]).getByRole('button', { name: 'Unfeature Beta Set' })).toBeInTheDocument()
   })
 
   it('disables Up on the first row and Down on the last', async () => {
@@ -156,13 +154,38 @@ describe('WorkshopFeaturesPage', () => {
     })
   })
 
-  it('opens the Access modal for a featured item', async () => {
+  it('unfeatures an item — resets it to private (Just me when the admin owns it)', async () => {
     seedFeatured([defItem(def({ id: 'd1', name: 'Alpha Game' }))])
+    let putBody: { visibility?: string } | undefined
+    server.use(
+      http.put('/api/v1/game-definitions/d1', async ({ request }) => {
+        putBody = await request.json() as { visibility?: string }
+        return HttpResponse.json({ ...def({ id: 'd1', name: 'Alpha Game' }), visibility: putBody.visibility })
+      }),
+    )
     renderPage()
     await waitFor(() => expect(screen.getByText('Alpha Game')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Access for Alpha Game' }))
-    expect(await screen.findByRole('dialog', { name: 'Access: Alpha Game' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Unfeature Alpha Game' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Unfeature' })
+    // The admin owns this one, so the confirm names "Just me".
+    expect(within(dialog).getByText(/resets its access to Just me/)).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Unfeature' }))
+    await waitFor(() => expect(putBody).toMatchObject({ visibility: 'private' }))
+  })
+
+  it('names the owner in the unfeature confirm when the admin does not own the item', async () => {
+    // A featured game owned by someone else (admin-override view).
+    seedFeatured([defItem(def({ id: 'd9', name: 'Other Game', ownerId: 'someone-else' }), 'alice')])
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Other Game')).toBeInTheDocument())
+    // The summary shows the owner.
+    expect(screen.getByText(/· by alice$/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Unfeature Other Game' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Unfeature' })
+    expect(within(dialog).getByText(/resets its access to the owner \(alice\)/)).toBeInTheDocument()
   })
 
   it('opens the game editor for a featured game (admin-override edit)', async () => {

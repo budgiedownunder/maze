@@ -247,9 +247,11 @@ export type FeaturedGameItemKind = 'definition' | 'collection'
 
 // One hydrated entry of the admin-ordered featured catalogue. Exactly one of
 // `definition` / `collection` is present, matching `kind` (mirrors the server's
-// `FeaturedGameItemResponse`).
+// `FeaturedGameItemResponse`). `ownerUsername` is resolved server-side so the
+// admin view can show who owns each item without a per-row lookup.
 export interface FeaturedGameItem {
   kind: FeaturedGameItemKind
+  ownerUsername: string
   definition?: GameDefinition
   collection?: GameCollection
 }
