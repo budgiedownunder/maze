@@ -339,6 +339,10 @@ interface PageQuery {
   scope?: 'visible' | 'mine'
   // Case-insensitive name substring filter (honoured with scope=mine).
   q?: string
+  // When true, the game-definition list blanks each game's opaque `config` blob
+  // (returning only the light metadata) — for callers that only list games, e.g.
+  // the collection membership picker. Ignored by the collection list endpoint.
+  excludeDefinitions?: boolean
 }
 
 function pageQuery(query: PageQuery): string {
@@ -347,6 +351,7 @@ function pageQuery(query: PageQuery): string {
   if (query.offset != null) params.set('offset', String(query.offset))
   if (query.scope != null) params.set('scope', query.scope)
   if (query.q != null && query.q !== '') params.set('q', query.q)
+  if (query.excludeDefinitions) params.set('excludeDefinitions', 'true')
   const qs = params.toString()
   return qs ? `?${qs}` : ''
 }

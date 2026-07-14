@@ -41,17 +41,17 @@ function listOf(...cols: GameCollection[]) {
   })
 }
 
-// Mirrors the definition list endpoint (scope=mine → own only, q name filter) —
-// used to back the Edit-Collection Add-a-game picker's server-side search.
+// Mirrors the definition list endpoint (scope=mine → own only) — used to back the
+// Edit-Collection Add-a-game picker, which loads the owner's whole set once
+// (excludeDefinitions) and then filters in memory.
 function defsOf(...defs: GameDefinition[]) {
   return http.get('/api/v1/game-definitions', ({ request }) => {
     const url = new URL(request.url)
     const scope = url.searchParams.get('scope')
-    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
     let items = [...defs].sort((a, b) => a.name.localeCompare(b.name))
     if (scope === 'mine') items = items.filter(d => d.ownerId === OWNER)
-    if (q !== '') items = items.filter(d => d.name.toLowerCase().includes(q))
-    return HttpResponse.json({ definitions: items, limit: 20, offset: 0, hasMore: false })
+    if (url.searchParams.get('excludeDefinitions') === 'true') items = items.map(d => ({ ...d, config: {} }))
+    return HttpResponse.json({ definitions: items, limit: 100, offset: 0, hasMore: false })
   })
 }
 
@@ -213,8 +213,9 @@ describe('WorkshopCollectionsPage', () => {
     // Save is idle until something changes.
     expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
 
-    // The picker offers the owner's other game; add it.
-    await userEvent.type(within(dialog).getByLabelText('Add game'), 'Gam')
+    // The picker offers the owner's other game; add it (wait for the background
+    // load that enables the picker).
+    await userEvent.type(await within(dialog).findByLabelText('Add game'), 'Gam')
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Add Gamma' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
@@ -233,6 +234,8 @@ describe('WorkshopCollectionsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
     const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
     await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+    // The reorder/remove buttons enable once the owner's games finish loading.
+    await within(dialog).findByLabelText('Add game')
 
     // Alpha down (→ Beta, Alpha, Gamma), then remove Gamma (→ Beta, Alpha).
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move Alpha down' }))
@@ -256,7 +259,7 @@ describe('WorkshopCollectionsPage', () => {
 
     // Select the first row (Alpha), then add Gamma — it lands right after Alpha.
     await userEvent.click(within(dialog).getByText('Alpha'))
-    await userEvent.type(within(dialog).getByLabelText('Add game'), 'Gam')
+    await userEvent.type(await within(dialog).findByLabelText('Add game'), 'Gam')
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Add Gamma' }))
 
     // Gamma becomes the selected row.
@@ -279,14 +282,14 @@ describe('WorkshopCollectionsPage', () => {
 
     expect(within(dialog).getByText('Available Games')).toBeInTheDocument()
     // Beta is the only available game; click its row to highlight it (no add).
-    // The picker searches server-side (debounced), so wait for the row.
+    // Wait for the background load that populates the picker.
     await userEvent.click(await within(dialog).findByText('Beta'))
     expect(within(dialog).getByText('Beta').closest('.collection-picker-item')).toHaveClass('selected')
     // Clicking the row did not add it — Beta is still an available game, not a member.
     expect(within(dialog).getByRole('button', { name: 'Add Beta' })).toBeInTheDocument()
   })
 
-  it('the Add picker searches the owner’s games server-side', async () => {
+  it('the Add picker filters the owner’s games in memory', async () => {
     const alpha = def({ id: 'g1', name: 'Alpha' })
     const beta = def({ id: 'g2', name: 'Beta' })
     const gamma = def({ id: 'g3', name: 'Gamma' })
@@ -296,9 +299,9 @@ describe('WorkshopCollectionsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
     const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
 
-    // Empty query lists all the owner's games (first page).
+    // Once loaded, the empty query lists all the owner's games.
     expect(await within(dialog).findByRole('button', { name: 'Add Beta' })).toBeInTheDocument()
-    // Typing narrows to server-side name matches.
+    // Typing narrows by name — filtered client-side, no further server request.
     await userEvent.type(within(dialog).getByLabelText('Add game'), 'gam')
     expect(await within(dialog).findByRole('button', { name: 'Add Gamma' })).toBeInTheDocument()
     await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Add Beta' })).toBeNull())
@@ -313,6 +316,8 @@ describe('WorkshopCollectionsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
     const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
     await waitFor(() => expect(within(dialog).getByText('Alpha')).toBeInTheDocument())
+    // Reorder enables once the owner's games finish loading.
+    await within(dialog).findByLabelText('Add game')
 
     // Click Alpha's row to select it.
     await userEvent.click(within(dialog).getByText('Alpha'))

@@ -638,11 +638,14 @@ export const handlers = [
     const q = (url.searchParams.get('q') ?? '').trim().toLowerCase()
     const limit = Number(url.searchParams.get('limit') ?? '20')
     const offset = Number(url.searchParams.get('offset') ?? '0')
+    const excludeDefinitions = url.searchParams.get('excludeDefinitions') === 'true'
     let defs = [...mockGameDefinitions].sort((a, b) => a.name.localeCompare(b.name))
     if (scope === 'mine') defs = defs.filter(d => d.ownerId === mockProfile.id)
     if (q !== '') defs = defs.filter(d => d.name.toLowerCase().includes(q))
+    let page = defs.slice(offset, offset + limit)
+    if (excludeDefinitions) page = page.map(d => ({ ...d, config: {} }))
     return HttpResponse.json<GameDefinitionListResponse>({
-      definitions: defs.slice(offset, offset + limit),
+      definitions: page,
       limit,
       offset,
       hasMore: offset + limit < defs.length,

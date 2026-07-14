@@ -4,13 +4,13 @@ import { WorkshopThumbnail } from './WorkshopListPage'
 import { getGameCollection, listGameDefinitions } from '../api/client'
 import type { GameDefinition } from '../types/api'
 
-// The Add picker searches the owner's games server-side, debounced. It fetches
-// up to the server's max page so its (scrollable) list holds all the owner's
-// available games — as members are added they drop out and the next available
-// ones stay visible; the "keep typing to narrow" hint appears only when there
-// are more matches than that (i.e. a broad query worth narrowing).
-const PICK_LIMIT = 100
-const PICK_DEBOUNCE_MS = 250
+// The Add picker loads the owner's whole game set once (in the background, paged)
+// on open, then filters + excludes already-added members entirely in memory — so
+// searching never hits the server after init. It pages until the server signals
+// no more (rather than assuming the 500-per-user cap), so it stays correct if
+// that cap ever changes; games are fetched with excludeDefinitions so we don't
+// pull their heavy config blobs.
+const PICK_PAGE_SIZE = 100
 
 interface Props {
   title: string
@@ -48,12 +48,12 @@ export function GameCollectionFormModal({
   const [description, setDescription] = useState(initialDescription)
   const [validationError, setValidationError] = useState<string | null>(null)
 
-  // Membership (Edit mode only). `members` is null while loading; the picker
-  // searches the owner's games server-side into `pickerResults`.
+  // Membership (Edit mode only). `members` is null while loading; `ownerGames`
+  // holds the caller's whole game set (null until the background load finishes),
+  // which the Add picker filters in memory.
   const [members, setMembers] = useState<GameDefinition[] | null>(null)
   const [originalIds, setOriginalIds] = useState<string[]>([])
-  const [pickerResults, setPickerResults] = useState<GameDefinition[]>([])
-  const [pickerHasMore, setPickerHasMore] = useState(false)
+  const [ownerGames, setOwnerGames] = useState<GameDefinition[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   // The clicked member row; the highlight follows the game (by id) when moved.
@@ -85,17 +85,26 @@ export function GameCollectionFormModal({
     return () => { cancelled = true }
   }, [token, collectionId])
 
-  // Debounced server-side search of the owner's own games for the Add picker.
+  // Background load of the owner's whole game set (paged, light — no config), so
+  // the Add picker searches + excludes members in memory. Pages until the server
+  // signals no more; an empty page also stops it (a defensive guard so a
+  // misbehaving `hasMore` can't spin). On error the picker shows whatever loaded.
   useEffect(() => {
     if (!token || !collectionId) return
     let cancelled = false
-    const handle = setTimeout(() => {
-      listGameDefinitions(token, { scope: 'mine', q: query, limit: PICK_LIMIT })
-        .then(page => { if (!cancelled) { setPickerResults(page.definitions); setPickerHasMore(page.hasMore) } })
-        .catch(() => { if (!cancelled) { setPickerResults([]); setPickerHasMore(false) } })
-    }, PICK_DEBOUNCE_MS)
-    return () => { cancelled = true; clearTimeout(handle) }
-  }, [token, collectionId, query])
+    void (async () => {
+      const all: GameDefinition[] = []
+      try {
+        for (let offset = 0; ; offset += PICK_PAGE_SIZE) {
+          const res = await listGameDefinitions(token, { scope: 'mine', excludeDefinitions: true, limit: PICK_PAGE_SIZE, offset })
+          all.push(...res.definitions)
+          if (!res.hasMore || res.definitions.length === 0) break
+        }
+      } catch { /* leave `all` as whatever loaded; picker shows those */ }
+      if (!cancelled) setOwnerGames(all)
+    })()
+    return () => { cancelled = true }
+  }, [token, collectionId])
 
   const memberIds = members?.map(m => m.id) ?? []
   const membersDirty = members != null
@@ -132,9 +141,17 @@ export function GameCollectionFormModal({
     })
   }
 
+  // Membership editing is enabled only once the owner's game set has finished
+  // loading, so the picker (and the add/remove/reorder buttons) act on the
+  // complete list.
+  const gamesLoaded = ownerGames != null
   const stagedIds = new Set(memberIds)
-  // The server already applied the name filter (q); just drop already-staged games.
-  const pickable = pickerResults.filter(g => !stagedIds.has(g.id))
+  const trimmedQuery = query.trim().toLowerCase()
+  // Available = the owner's games not already staged, filtered by the search box
+  // — all in memory (no server request after the initial load).
+  const pickable = (ownerGames ?? [])
+    .filter(g => !stagedIds.has(g.id))
+    .filter(g => trimmedQuery === '' || g.name.toLowerCase().includes(trimmedQuery))
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -194,13 +211,13 @@ export function GameCollectionFormModal({
                       <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={m.visibility} showMarker={false} />
                       <span className="collection-member-name" title={m.name}>{m.name}</span>
                       <div className="collection-member-actions">
-                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} up`} disabled={i === 0} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, -1) }}>
+                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} up`} disabled={!gamesLoaded || i === 0} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, -1) }}>
                           <img src="/images/icons/icon_move_up.svg" alt="" aria-hidden="true" width={18} height={18} />
                         </button>
-                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} down`} disabled={i === members.length - 1} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, 1) }}>
+                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} down`} disabled={!gamesLoaded || i === members.length - 1} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, 1) }}>
                           <img src="/images/icons/icon_move_down.svg" alt="" aria-hidden="true" width={18} height={18} />
                         </button>
-                        <button type="button" className="btn-icon" aria-label={`Remove ${m.name}`} onClick={e => { e.stopPropagation(); stageRemove(m.id) }}>
+                        <button type="button" className="btn-icon" aria-label={`Remove ${m.name}`} disabled={!gamesLoaded} onClick={e => { e.stopPropagation(); stageRemove(m.id) }}>
                           <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" width={18} height={18} />
                         </button>
                       </div>
@@ -211,33 +228,35 @@ export function GameCollectionFormModal({
               {members != null && (
                 <>
                   <p className="field-group-title">Available Games</p>
-                  <input
-                    type="text"
-                    className="input"
-                    aria-label="Add game"
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
-                    placeholder="Add a game — type to filter…"
-                  />
-                  {pickable.length > 0 && (
-                    <ul className="collection-member-picker">
-                      {pickable.map(g => (
-                        <li
-                          key={g.id}
-                          className={`collection-picker-item${selectedSourceId === g.id ? ' selected' : ''}`}
-                          onClick={() => setSelectedSourceId(g.id)}
-                        >
-                          <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={g.visibility} showMarker={false} />
-                          <span className="collection-member-name" title={g.name}>{g.name}</span>
-                          <div className="collection-member-actions">
-                            <button type="button" className="btn-icon collection-add-btn" onClick={e => { e.stopPropagation(); stageAdd(g) }} aria-label={`Add ${g.name}`}>+</button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {pickerHasMore && (
-                    <p className="share-picker-hint">More matches — keep typing to narrow.</p>
+                  {!gamesLoaded && <p aria-label="Loading available games">Loading…</p>}
+                  {gamesLoaded && (
+                    <>
+                      <input
+                        type="text"
+                        className="input"
+                        aria-label="Add game"
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Add a game — type to filter…"
+                      />
+                      {pickable.length > 0 && (
+                        <ul className="collection-member-picker">
+                          {pickable.map(g => (
+                            <li
+                              key={g.id}
+                              className={`collection-picker-item${selectedSourceId === g.id ? ' selected' : ''}`}
+                              onClick={() => setSelectedSourceId(g.id)}
+                            >
+                              <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={g.visibility} showMarker={false} />
+                              <span className="collection-member-name" title={g.name}>{g.name}</span>
+                              <div className="collection-member-actions">
+                                <button type="button" className="btn-icon collection-add-btn" onClick={e => { e.stopPropagation(); stageAdd(g) }} aria-label={`Add ${g.name}`}>+</button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
                   )}
                 </>
               )}
