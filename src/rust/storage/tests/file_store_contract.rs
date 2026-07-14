@@ -1133,3 +1133,9 @@ async fn featured_game_items_reorder_in_one_and_rejects_non_curated() {
     let (mut s, _temp) = fresh_store().await;
     contract::featured_game_items_reorder_in_one_and_rejects_non_curated(&mut s).await;
 }
+
+#[tokio::test]
+async fn featured_game_items_reconcile_backfills_curated() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::featured_game_items_reconcile_backfills_curated(&mut s).await;
+}

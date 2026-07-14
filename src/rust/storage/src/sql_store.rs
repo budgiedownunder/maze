@@ -5219,6 +5219,18 @@ impl SqlStore {
         }
         Ok(collections)
     }
+
+    /// Runs a `SELECT id FROM …` and collects the id column as stored strings.
+    /// Used by the featured reconcile to enumerate curated ids.
+    async fn curated_ids(&self, sql: &str) -> Result<Vec<String>, Error> {
+        let rows = sqlx::query(&q(self.kind, sql))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| row.try_get::<String, _>("id").map_err(map_sqlx_err))
+            .collect()
+    }
 }
 
 // ── featured_game_items maintenance (runs inside the caller's transaction) ────
@@ -7878,6 +7890,110 @@ impl GameStore for SqlStore {
             }
         }
         Ok(items)
+    }
+
+    /// Appends any curated definition/collection missing from `featured_game_items`
+    /// (ordered by name, definitions first). See
+    /// [`GameStore::reconcile_featured_game_items`].
+    ///
+    /// # Examples
+    ///
+    /// Backfill a curated definition that isn't in the featured list yet
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: true, username: "admin".into(),
+    ///     full_name: "Admin".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("admin@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Featured".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Curated,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// store.reorder_featured_game_items(&[]).await.unwrap(); // simulate drift
+    /// assert!(store.list_featured_game_items().await.unwrap().is_empty());
+    ///
+    /// store.reconcile_featured_game_items().await.unwrap();
+    /// assert_eq!(store.list_featured_game_items().await.unwrap().len(), 1);
+    /// # });
+    /// ```
+    async fn reconcile_featured_game_items(&mut self) -> Result<(), Error> {
+        // Current featured set (kind, id) so we only append what's missing.
+        let existing_rows = sqlx::query("SELECT entity_kind, entity_id FROM featured_game_items")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        let mut have: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+        for row in &existing_rows {
+            let kind: String = row.try_get("entity_kind").map_err(map_sqlx_err)?;
+            let id: String = row.try_get("entity_id").map_err(map_sqlx_err)?;
+            have.insert((kind, id));
+        }
+
+        // Next sort_order, read once and advanced in app code as we append.
+        let max: Option<i32> = sqlx::query("SELECT MAX(sort_order) AS m FROM featured_game_items")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+            .try_get("m")
+            .map_err(map_sqlx_err)?;
+        let mut next_order = max.map(|m| m + 1).unwrap_or(0);
+
+        // Curated ids, name-ordered, definitions then collections. Reading the
+        // source tables (not featured_game_items) keeps the INSERT free of the
+        // self-referential MySQL error 1093, so the whole thing stays portable.
+        let def_ids = self
+            .curated_ids("SELECT id FROM game_definitions WHERE visibility = 'curated' ORDER BY LOWER(name), id")
+            .await?;
+        let col_ids = self
+            .curated_ids("SELECT id FROM game_collections WHERE visibility = 'curated' ORDER BY LOWER(name), id")
+            .await?;
+
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        for (kind, ids) in [
+            (FeaturedGameItemKind::Definition, def_ids),
+            (FeaturedGameItemKind::Collection, col_ids),
+        ] {
+            for id in ids {
+                if have.contains(&(kind.as_wire_str().to_string(), id.clone())) {
+                    continue;
+                }
+                sqlx::query(&q(
+                    self.kind,
+                    "INSERT INTO featured_game_items (entity_kind, entity_id, sort_order) VALUES (?, ?, ?)",
+                ))
+                .bind(kind.as_wire_str())
+                .bind(&id)
+                .bind(next_order)
+                .execute(&mut *tx)
+                .await
+                .map_err(map_sqlx_err)?;
+                next_order += 1;
+            }
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(())
     }
 }
 

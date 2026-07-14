@@ -250,6 +250,7 @@ pub async fn run_server() -> std::io::Result<()> {
 
     init_user_accounts(&config.security.password_hash, &mut store).await?;
     service::game_bootstrap::init_difficulty_collection(&mut store, DEFAULT_ADMIN_ACCOUNT_USERNAME).await?;
+    store.reconcile_featured_game_items().await?;
 
     let max_workers = std::thread::available_parallelism()?;
     let shared_store: SharedStore = Arc::new(AsyncRwLock::new(store));

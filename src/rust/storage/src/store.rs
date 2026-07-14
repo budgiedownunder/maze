@@ -744,6 +744,14 @@ pub trait GameStore {
     /// vanished is skipped (mirroring how collection items filter dangling refs
     /// at display), so the read never fails on a stale projection.
     async fn list_featured_game_items(&self) -> Result<Vec<FeaturedGameItem>, Error>;
+    /// Repairs the featured projection: **appends** any `Curated` definition or
+    /// collection that isn't already in `featured_game_items` (ordered by name,
+    /// definitions before collections), each after the current max `sort_order`.
+    /// Idempotent — a faithful projection is left untouched. The reconcile hook
+    /// keeps the table in sync going forward, but content that was already
+    /// `Curated` before the table existed (or that a bulk reorder dropped while
+    /// still curated) needs this catch-up, run once on startup.
+    async fn reconcile_featured_game_items(&mut self) -> Result<(), Error>;
 }
 
 /// Normalises a collection's item ordering: rewrites `sort_order = index` in the

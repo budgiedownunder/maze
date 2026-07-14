@@ -1332,6 +1332,30 @@ mod test_definitions {
             }
             Ok(items)
         }
+
+        async fn reconcile_featured_game_items(&mut self) -> Result<(), StoreError> {
+            let have: std::collections::HashSet<(FeaturedGameItemKind, Uuid)> =
+                self.featured_game_items.iter().copied().collect();
+            let mut defs: Vec<(String, Uuid)> = self.game_definitions.iter()
+                .filter(|d| d.visibility == Visibility::Curated)
+                .map(|d| (d.name.to_lowercase(), d.id)).collect();
+            defs.sort();
+            for (_, id) in defs {
+                if !have.contains(&(FeaturedGameItemKind::Definition, id)) {
+                    self.featured_game_items.push((FeaturedGameItemKind::Definition, id));
+                }
+            }
+            let mut cols: Vec<(String, Uuid)> = self.game_collections.iter()
+                .filter(|c| c.visibility == Visibility::Curated)
+                .map(|c| (c.name.to_lowercase(), c.id)).collect();
+            cols.sort();
+            for (_, id) in cols {
+                if !have.contains(&(FeaturedGameItemKind::Collection, id)) {
+                    self.featured_game_items.push((FeaturedGameItemKind::Collection, id));
+                }
+            }
+            Ok(())
+        }
     }
 
     impl Store for MockStore {}

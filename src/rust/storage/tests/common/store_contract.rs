@@ -3428,3 +3428,38 @@ pub async fn featured_game_items_reorder_in_one_and_rejects_non_curated(store: &
         "a rejected reorder is a no-op",
     );
 }
+
+/// `reconcile_featured_game_items` backfills any curated def/collection missing
+/// from the featured table (name-ordered, defs first), skips non-curated ones,
+/// and is idempotent — the catch-up for content curated before the table
+/// existed (or dropped by a bulk reorder while still curated).
+pub async fn featured_game_items_reconcile_backfills_curated(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "feat_owner", "feat_owner@example.com").await;
+    let mut alpha = make_game_definition("Alpha", Visibility::Curated);
+    let mut plain = make_game_definition("Plain", Visibility::Private);
+    let mut bundle = make_game_collection("Bundle", Visibility::Curated);
+    store.create_game_definition(&owner, &mut alpha).await.expect("alpha");
+    store.create_game_definition(&owner, &mut plain).await.expect("plain");
+    store.create_game_collection(&owner, &mut bundle).await.expect("bundle");
+
+    // Simulate the drift: a bulk reorder to empty clears the featured table while
+    // the entities stay curated (the "curated but unlisted" state).
+    store.reorder_featured_game_items(&[]).await.expect("clear");
+    assert!(store.list_featured_game_items().await.expect("empty").is_empty());
+
+    // Reconcile re-adds the curated def + collection (defs first, name-ordered);
+    // the private definition is not featured.
+    store.reconcile_featured_game_items().await.expect("reconcile");
+    assert_eq!(
+        featured_game_items_pairs(&store.list_featured_game_items().await.expect("list")),
+        vec![
+            (FeaturedGameItemKind::Definition, alpha.id),
+            (FeaturedGameItemKind::Collection, bundle.id),
+        ],
+        "curated def + collection backfilled; the private def is excluded",
+    );
+
+    // Idempotent — a faithful projection is left untouched (no duplicates).
+    store.reconcile_featured_game_items().await.expect("reconcile again");
+    assert_eq!(store.list_featured_game_items().await.expect("list2").len(), 2);
+}

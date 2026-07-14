@@ -6257,6 +6257,82 @@ impl GameStore for FileStore {
         }
         Ok(items)
     }
+
+    /// Appends any curated definition/collection missing from the featured file
+    /// (ordered by name, definitions first). See
+    /// [`GameStore::reconcile_featured_game_items`].
+    ///
+    /// # Examples
+    ///
+    /// Backfill a curated definition that isn't in the featured list yet
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{FeaturedGameItemKind, GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: true, username: "admin".to_string(),
+    ///     full_name: "Admin".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("admin@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut def = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Featured".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Curated,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut def).await.unwrap();
+    /// // Simulate drift: clear the featured order while the def stays curated.
+    /// store.reorder_featured_game_items(&[]).await.unwrap();
+    /// assert!(store.list_featured_game_items().await.unwrap().is_empty());
+    ///
+    /// store.reconcile_featured_game_items().await.unwrap();
+    /// assert_eq!(store.list_featured_game_items().await.unwrap().len(), 1);
+    /// # });
+    /// ```
+    async fn reconcile_featured_game_items(&mut self) -> Result<(), Error> {
+        let mut refs = self.read_featured_game_item_refs()?;
+        let mut have: std::collections::HashSet<(FeaturedGameItemKind, Uuid)> =
+            refs.iter().map(|r| (r.entity_kind, r.entity_id)).collect();
+
+        let mut defs = self.read_all_game_definitions()?;
+        Self::sort_definitions_by_name(&mut defs);
+        for def in defs {
+            if def.visibility == Visibility::Curated
+                && have.insert((FeaturedGameItemKind::Definition, def.id))
+            {
+                refs.push(FeaturedGameItemRef {
+                    entity_kind: FeaturedGameItemKind::Definition,
+                    entity_id: def.id,
+                });
+            }
+        }
+
+        let mut collections = self.read_all_game_collections()?;
+        Self::sort_collections_by_name(&mut collections);
+        for collection in collections {
+            if collection.visibility == Visibility::Curated
+                && have.insert((FeaturedGameItemKind::Collection, collection.id))
+            {
+                refs.push(FeaturedGameItemRef {
+                    entity_kind: FeaturedGameItemKind::Collection,
+                    entity_id: collection.id,
+                });
+            }
+        }
+
+        self.write_featured_game_item_refs(&refs)?;
+        Ok(())
+    }
 }
 
 impl Store for FileStore {}
