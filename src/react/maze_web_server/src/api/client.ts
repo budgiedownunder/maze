@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -446,6 +446,31 @@ export function setGameCollectionItems(token: string, collectionId: string, defi
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify({ definitionIds }),
+  })
+}
+
+// --- Featured catalogue ------------------------------------------------------
+
+// A page of the admin-ordered featured catalogue — curated definitions +
+// collections, hydrated and in sort order. Readable by any signed-in user.
+// Named to avoid `getFeatures()` (the app-flags endpoint).
+export function getFeaturedGameItems(token: string, query: { limit?: number; offset?: number } = {}): Promise<FeaturedGameItemsListResponse> {
+  const params = new URLSearchParams()
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  const qs = params.toString()
+  return request<FeaturedGameItemsListResponse>(`/featured-game-items${qs ? `?${qs}` : ''}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// Rewrites the featured catalogue's order to `entries` in one operation
+// (order-only; admin). Returns the full catalogue in its new order.
+export function setFeaturedGameItemsOrder(token: string, entries: FeaturedGameItemEntry[]): Promise<FeaturedGameItemsListResponse> {
+  return request<FeaturedGameItemsListResponse>('/featured-game-items/order', {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ entries }),
   })
 }
 

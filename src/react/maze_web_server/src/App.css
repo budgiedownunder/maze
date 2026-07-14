@@ -1455,6 +1455,23 @@ textarea.input {
   margin-top: 0.75rem;
 }
 
+/* Manage Features: the up/down reorder controls stacked at the row's left edge,
+   each a thick-arrow icon button. */
+.featured-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.featured-reorder .btn-icon {
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+}
+.featured-reorder .btn-icon img {
+  display: block;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .game-list-item {
   display: flex;
   flex-direction: row;

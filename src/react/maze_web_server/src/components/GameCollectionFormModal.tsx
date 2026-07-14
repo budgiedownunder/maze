@@ -194,8 +194,12 @@ export function GameCollectionFormModal({
                       <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={m.visibility} showMarker={false} />
                       <span className="collection-member-name" title={m.name}>{m.name}</span>
                       <div className="collection-member-actions">
-                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} up`} disabled={i === 0} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, -1) }}>↑</button>
-                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} down`} disabled={i === members.length - 1} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, 1) }}>↓</button>
+                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} up`} disabled={i === 0} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, -1) }}>
+                          <img src="/images/icons/icon_move_up.svg" alt="" aria-hidden="true" width={18} height={18} />
+                        </button>
+                        <button type="button" className="btn-icon" aria-label={`Move ${m.name} down`} disabled={i === members.length - 1} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, 1) }}>
+                          <img src="/images/icons/icon_move_down.svg" alt="" aria-hidden="true" width={18} height={18} />
+                        </button>
                         <button type="button" className="btn-icon" aria-label={`Remove ${m.name}`} onClick={e => { e.stopPropagation(); stageRemove(m.id) }}>
                           <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" width={18} height={18} />
                         </button>

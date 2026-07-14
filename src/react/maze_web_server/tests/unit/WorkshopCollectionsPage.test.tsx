@@ -124,10 +124,11 @@ describe('WorkshopCollectionsPage', () => {
     expect(screen.getByText('3 games · Everyone')).toBeInTheDocument()
   })
 
-  it('shows the base thumbnail and the visibility marker per row', async () => {
+  it('shows the base thumbnail and the visibility marker per row, and excludes curated collections', async () => {
     server.use(listOf(
       col({ id: 'c1', name: 'Private one' }),
       col({ id: 'c2', name: 'Public one', visibility: 'public' }),
+      // A curated collection is managed on Manage Features, not here (decision A).
       col({ id: 'c3', name: 'Featured one', visibility: 'curated' }),
     ))
     renderPage()
@@ -140,9 +141,8 @@ describe('WorkshopCollectionsPage', () => {
     const publicRow = screen.getByText('Public one').closest('.game-list-item')!
     expect(publicRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-public.svg')
 
-    // A Featured (curated) row shows the star marker.
-    const featuredRow = screen.getByText('Featured one').closest('.game-list-item')!
-    expect(featuredRow.querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-curated.svg')
+    // The curated collection is filtered out — it belongs to Manage Features.
+    expect(screen.queryByText('Featured one')).not.toBeInTheDocument()
   })
 
   it('creates a collection and shows it in the list', async () => {

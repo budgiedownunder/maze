@@ -240,6 +240,34 @@ export interface GameCollectionDetailResponse {
   definitions: GameDefinition[]
 }
 
+// --- Featured catalogue -----------------------------------------------------
+
+// Which kind of entity a featured-catalogue row points at.
+export type FeaturedGameItemKind = 'definition' | 'collection'
+
+// One hydrated entry of the admin-ordered featured catalogue. Exactly one of
+// `definition` / `collection` is present, matching `kind` (mirrors the server's
+// `FeaturedGameItemResponse`).
+export interface FeaturedGameItem {
+  kind: FeaturedGameItemKind
+  definition?: GameDefinition
+  collection?: GameCollection
+}
+
+// A page of the featured catalogue, in admin (sort) order.
+export interface FeaturedGameItemsListResponse {
+  items: FeaturedGameItem[]
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+// One `(kind, id)` reference in a reorder request body.
+export interface FeaturedGameItemEntry {
+  kind: FeaturedGameItemKind
+  id: string
+}
+
 // --- Sharing & user lookup --------------------------------------------------
 
 // A grantee in a share list — the granted user's id + username, resolved by the

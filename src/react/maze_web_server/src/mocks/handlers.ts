@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -13,6 +13,24 @@ export const mockProfile: UserProfile = {
   ],
   is_admin: false,
   has_password: true,
+}
+
+// Dev-mock admin toggle: signing in with this email makes the mock user an admin
+// (so the admin-only Manage Features surface is reachable in dev:mock / e2e). Any
+// other email signs in as the default non-admin `mockProfile`. Persisted in
+// sessionStorage so the flag survives the post-login navigation + `/users/me`
+// refetch. Unit tests mock `useAuth` directly and never touch this.
+const ADMIN_LOGIN_EMAIL = 'admin@example.com'
+const ADMIN_FLAG_KEY = 'mock-signed-in-is-admin'
+
+function setSignedInAdmin(isAdmin: boolean): void {
+  if (typeof sessionStorage === 'undefined') return
+  try { sessionStorage.setItem(ADMIN_FLAG_KEY, isAdmin ? '1' : '0') } catch { /* ignore */ }
+}
+
+function signedInIsAdmin(): boolean {
+  if (typeof sessionStorage === 'undefined') return false
+  try { return sessionStorage.getItem(ADMIN_FLAG_KEY) === '1' } catch { return false }
 }
 
 export let mockEmails: UserEmail[] = [
@@ -262,6 +280,45 @@ export function resetMockGameCollections(): void {
   if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(GAME_COLLECTION_STORAGE_KEY)
 }
 
+// The admin-ordered featured catalogue — a list of `(kind, id)` references, the
+// index carrying the order (mirrors the server's `featured_game_items`). GET
+// hydrates each entry from the mock defs/collections and filters to those still
+// curated (the server's projection of the curated tier); PUT /order rewrites it.
+export let mockFeaturedGameItems: FeaturedGameItemEntry[] = []
+
+export function resetMockFeaturedGameItems(): void {
+  mockFeaturedGameItems = []
+}
+
+// The featured catalogue is a projection of the curated tier: every curated
+// definition + collection, ordered by `mockFeaturedGameItems` (the admin order),
+// with any not-yet-ordered curated item appended. Deriving it from the persisted
+// def/collection stores (rather than a standalone list) means a newly-curated
+// item auto-appears, an un-curated one drops, and the set survives a reload —
+// mirroring the server's storage-side reconcile without tracking it by hand.
+function hydrateFeaturedItems(): FeaturedGameItem[] {
+  const curatedDefs = mockGameDefinitions.filter(d => d.visibility === 'curated')
+  const curatedCols = mockGameCollections.filter(c => c.visibility === 'curated')
+  const out: FeaturedGameItem[] = []
+  const seen = new Set<string>()
+  const pushDef = (definition: GameDefinition) => { if (!seen.has(`definition:${definition.id}`)) { seen.add(`definition:${definition.id}`); out.push({ kind: 'definition', definition }) } }
+  const pushCol = (collection: GameCollection) => { if (!seen.has(`collection:${collection.id}`)) { seen.add(`collection:${collection.id}`); out.push({ kind: 'collection', collection }) } }
+  // Known order first…
+  for (const entry of mockFeaturedGameItems) {
+    if (entry.kind === 'definition') {
+      const d = curatedDefs.find(x => x.id === entry.id)
+      if (d) pushDef(d)
+    } else {
+      const c = curatedCols.find(x => x.id === entry.id)
+      if (c) pushCol(c)
+    }
+  }
+  // …then any curated item not yet ordered (newly featured).
+  curatedDefs.forEach(pushDef)
+  curatedCols.forEach(pushCol)
+  return out
+}
+
 // The searchable user directory the share people-picker's username lookup matches
 // against, plus per-subject grantee state. The share endpoints store only ids;
 // the list handler resolves them back to `{ id, username }` via this directory,
@@ -381,7 +438,9 @@ export const handlers = [
     return HttpResponse.json<AppFeatures>(body)
   }),
 
-  http.post(`${BASE}/login`, () => {
+  http.post(`${BASE}/login`, async ({ request }) => {
+    const body = await request.json().catch(() => ({})) as { email?: string }
+    setSignedInAdmin((body.email ?? '').toLowerCase() === ADMIN_LOGIN_EMAIL)
     return HttpResponse.json(mockLoginResponse)
   }),
 
@@ -402,7 +461,7 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/users/me`, () => {
-    return HttpResponse.json({ ...mockProfile, avatar_updated_at: mockAvatarUpdatedAt })
+    return HttpResponse.json({ ...mockProfile, is_admin: signedInIsAdmin(), avatar_updated_at: mockAvatarUpdatedAt })
   }),
 
   // Avatar serve — returns the stored bytes for a seeded grantee avatar, or the
@@ -813,6 +872,43 @@ export const handlers = [
     const id = String(params.id)
     mockCollectionShares[id] = [...new Set(userIds)]
     return HttpResponse.json({ grantees: granteeSummaries(mockCollectionShares[id]) })
+  }),
+
+  // Featured catalogue — the admin-ordered curated defs + collections. GET
+  // hydrates + filters to still-curated entries (the server's projection); the
+  // /order PUT rewrites the order, rejecting a non-curated / unknown entry (400).
+  http.get(`${BASE}/featured-game-items`, ({ request }) => {
+    const url = new URL(request.url)
+    const limit = Number(url.searchParams.get('limit') ?? '20')
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    const hydrated = hydrateFeaturedItems()
+    return HttpResponse.json<FeaturedGameItemsListResponse>({
+      items: hydrated.slice(offset, offset + limit),
+      limit,
+      offset,
+      hasMore: offset + limit < hydrated.length,
+    })
+  }),
+
+  http.put(`${BASE}/featured-game-items/order`, async ({ request }) => {
+    const { entries } = await request.json() as { entries: FeaturedGameItemEntry[] }
+    const seen = new Set<string>()
+    const deduped: FeaturedGameItemEntry[] = []
+    for (const e of entries) {
+      const key = `${e.kind}:${e.id}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const entity = e.kind === 'definition'
+        ? mockGameDefinitions.find(d => d.id === e.id)
+        : mockGameCollections.find(c => c.id === e.id)
+      if (!entity || entity.visibility !== 'curated') {
+        return new HttpResponse(`Cannot feature a non-curated ${e.kind} '${e.id}'`, { status: 400 })
+      }
+      deduped.push({ kind: e.kind, id: e.id })
+    }
+    mockFeaturedGameItems = deduped
+    const hydrated = hydrateFeaturedItems()
+    return HttpResponse.json<FeaturedGameItemsListResponse>({ items: hydrated, limit: hydrated.length, offset: 0, hasMore: false })
   }),
 
   // Scores — curated preset (for the leaderboard seed), personal history, and

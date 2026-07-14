@@ -154,8 +154,11 @@ export function WorkshopCollectionsPage() {
       title="Manage Game Collections"
       newLabel="+ New Game Collection"
       onNew={() => setCreating({ busy: false, error: null })}
-      // Own collections only (server-scoped, paged).
+      // Own collections only (server-scoped, paged); a curated collection is
+      // managed from the admin Features area, so it is filtered out here (mirrors
+      // Manage Games excluding curated games).
       fetchPage={(t, limit, offset) => listGameCollections(t, { scope: 'mine', limit, offset }).then(p => ({ items: p.collections, hasMore: p.hasMore }))}
+      filter={c => c.visibility !== 'curated'}
       getId={c => c.id}
       emptyText="No collections yet."
       errorText="Failed to load collections"

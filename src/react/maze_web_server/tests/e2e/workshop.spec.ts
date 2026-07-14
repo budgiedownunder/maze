@@ -8,6 +8,16 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/$/)
 }
 
+// The dev:mock backend grants admin to this email (see src/mocks/handlers.ts), so
+// the admin-only Manage Features surface is reachable in e2e.
+async function loginAsAdmin(page: Page) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('admin@example.com')
+  await page.getByLabel('Password', { exact: true }).fill('Password1!')
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).toHaveURL(/\/$/)
+}
+
 test('Home 3D Game Workshop tile opens the hub', async ({ page }) => {
   await login(page)
   await page.getByRole('button', { name: /create, publish and share your own 3d games/i }).click()
@@ -48,4 +58,42 @@ test('the retired /games route redirects to the hub', async ({ page }) => {
   await login(page)
   await page.goto('/games')
   await expect(page).toHaveURL(/\/workshop$/)
+})
+
+test('an admin can open Manage Features and sees the empty state', async ({ page }) => {
+  await loginAsAdmin(page)
+  await page.goto('/workshop/features')
+  await expect(page.getByRole('banner').getByText('Manage Features')).toBeVisible()
+  await expect(page.getByText(/no featured items yet/i)).toBeVisible()
+})
+
+test('featuring a game via Access surfaces it on Manage Features', async ({ page }) => {
+  await loginAsAdmin(page)
+
+  // Create a game.
+  await page.goto('/workshop/games')
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  const name = `Feat ${Date.now()}`
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(wizard).toBeHidden()
+
+  // Feature it via the Access modal (admin-only Featured tier).
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // It now appears on Manage Features with its game actions + reorder controls.
+  await page.goto('/workshop/features')
+  const row = page.locator('.game-list-item', { hasText: name })
+  await expect(row).toBeVisible()
+  await expect(row.getByRole('button', { name: `Play ${name}` })).toBeVisible()
+  await expect(row.getByRole('button', { name: `Leaderboard for ${name}` })).toBeVisible()
+  await expect(row.getByRole('button', { name: `Access for ${name}` })).toBeVisible()
+  // As the only featured row it is both first and last, so both arrows disable.
+  await expect(row.getByRole('button', { name: `Move ${name} up` })).toBeDisabled()
+  await expect(row.getByRole('button', { name: `Move ${name} down` })).toBeDisabled()
 })
