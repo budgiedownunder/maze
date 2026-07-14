@@ -8755,6 +8755,28 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn list_game_definitions_exclude_definitions_blanks_config() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        seed_game_definition(&store, &me, "Alpha", Visibility::Private, Rotation::Static).await;
+
+        // Default: the full opaque config is included.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=mine", Some(me.api_key), None);
+        let list: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert!(list.definitions[0].config.get("rows").is_some(), "config included by default");
+
+        // excludeDefinitions=true blanks the config; the light metadata stays.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=mine&excludeDefinitions=true", Some(me.api_key), None);
+        let list: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(list.definitions[0].name, "Alpha");
+        assert_eq!(list.definitions[0].config, serde_json::json!({}), "config blanked when excludeDefinitions=true");
+    }
+
+    #[actix_web::test]
     async fn list_game_definitions_rejects_an_unknown_scope() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _store, mock_users, _k, _l) =

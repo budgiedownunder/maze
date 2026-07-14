@@ -89,7 +89,10 @@ pub struct GameDefinitionRequest {
 }
 
 /// Query parameters for the list endpoint — a page of the scoped result.
+/// `camelCase` on the wire (mirrors the maze list's `includeDefinitions`); the
+/// single-word params (`limit`/`offset`/`scope`/`q`) are unaffected.
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct ListGameDefinitionsQuery {
     /// Page size (server default when omitted, capped at the server maximum).
     pub limit: Option<u32>,
@@ -100,6 +103,11 @@ pub struct ListGameDefinitionsQuery {
     pub scope: Option<String>,
     /// Case-insensitive name substring filter (honoured with `scope=mine`).
     pub q: Option<String>,
+    /// When `true`, blanks each returned definition's opaque `config` blob (to an
+    /// empty object) so a caller that only needs the light metadata
+    /// (id/name/visibility/…) doesn't pull the heavy generation config — e.g. the
+    /// collection membership picker. Defaults to `false` (config included).
+    pub exclude_definitions: Option<bool>,
 }
 
 /// A page of the game definitions the caller may see — the merge of their own,
@@ -362,7 +370,8 @@ pub async fn create_game_definition(
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
         ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
         ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default) or 'mine' (the caller's own definitions)"),
-        ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine)")
+        ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine)"),
+        ("excludeDefinitions" = Option<bool>, Query, description = "When true, blanks each game's opaque config blob so only the light metadata is returned (default false)")
     ),
     responses(
         (status = 200, description = "A page of visible definitions", body = GameDefinitionListResponse),
@@ -382,9 +391,10 @@ pub async fn list_game_definitions(
     let scope = parse_scope(q.scope.as_deref())?;
     let limit = effective_limit(q.limit);
     let offset = q.offset.unwrap_or(0);
+    let exclude_definitions = q.exclude_definitions.unwrap_or(false);
     let store_lock = store.read().await;
 
-    let (definitions, has_more) = match scope {
+    let (mut definitions, has_more) = match scope {
         ListScope::Visible => {
             // Storage composes + pages the "visible to me" set. Over-fetch one row
             // so `has_more` needs no separate count.
@@ -412,6 +422,14 @@ pub async fn list_game_definitions(
             page_owned(all, q.q.as_deref(), |d| d.name.as_str(), limit, offset)
         }
     };
+
+    // Drop the heavy opaque config when the caller only wants the light metadata
+    // (e.g. the collection membership picker).
+    if exclude_definitions {
+        for definition in &mut definitions {
+            definition.config = serde_json::json!({});
+        }
+    }
 
     Ok(HttpResponse::Ok().json(GameDefinitionListResponse {
         definitions,
