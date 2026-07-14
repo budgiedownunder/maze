@@ -724,7 +724,7 @@ The **featured catalogue** is the admin-ordered list that drives the Play-3D *Fe
 
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|
-| `GET`  | `/api/v1/featured-game-items` | Either | A page of the ordered catalogue — the curated definitions + collections, hydrated and in sort order. Any signed-in user. Each item is `{ kind: "definition" \| "collection", definition? , collection? }` (the field matching `kind` is present). Paged via `limit` (default 20, capped at 100) / `offset`; echoes the effective `limit`/`offset` + a `hasMore` flag. |
+| `GET`  | `/api/v1/featured-game-items` | Either | A page of the ordered catalogue — the curated definitions + collections, hydrated and in sort order. Any signed-in user. Each item is `{ kind: "definition" \| "collection", ownerUsername, definition? , collection? }` (the field matching `kind` is present; `ownerUsername` is the item owner's username, resolved server-side for the admin view, or `"unknown"` if the owner can't be resolved). Paged via `limit` (default 20, capped at 100) / `offset`; echoes the effective `limit`/`offset` + a `hasMore` flag. |
 | `PUT`  | `/api/v1/featured-game-items/order` | Either | **Admin-only.** Rewrite the catalogue order in one operation to match the body `{ "entries": [ { "kind", "id" }, … ] }` (order-only — membership stays owned by the `curated` tier). An entry whose entity is not `curated`, or is unknown, is rejected with `400`. Returns the full catalogue in its new order. |
 
 ## Game

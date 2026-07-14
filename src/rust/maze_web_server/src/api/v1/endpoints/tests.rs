@@ -9489,6 +9489,8 @@ mod test_definitions {
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(featured_game_item_ids(&body), vec![a.id.to_string(), b.id.to_string()]);
         assert_eq!(body["items"][1]["kind"], serde_json::json!("collection"));
+        // Each item carries its owner's username, resolved server-side.
+        assert_eq!(body["items"][0]["ownerUsername"], serde_json::json!(admin.username));
         assert_eq!(body["limit"], serde_json::json!(2));
         assert_eq!(body["hasMore"], serde_json::json!(true));
 

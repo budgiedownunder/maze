@@ -40,6 +40,10 @@ pub struct FeaturedGameItemResponse {
     /// Which kind of entity this row is — `definition` or `collection`.
     #[schema(value_type = String)]
     pub kind: FeaturedGameItemKind,
+    /// The owner's username, resolved server-side so the admin view can show who
+    /// owns each featured item without a per-row lookup. `"unknown"` if the owner
+    /// can't be resolved (e.g. a since-deleted account).
+    pub owner_username: String,
     /// The featured game definition (present when `kind == definition`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub definition: Option<GameDefinition>,
@@ -48,21 +52,62 @@ pub struct FeaturedGameItemResponse {
     pub collection: Option<GameCollection>,
 }
 
-impl From<FeaturedGameItem> for FeaturedGameItemResponse {
-    fn from(item: FeaturedGameItem) -> Self {
+impl FeaturedGameItemResponse {
+    fn from_item(item: FeaturedGameItem, owner_username: String) -> Self {
         match item {
             FeaturedGameItem::Definition(definition) => Self {
                 kind: FeaturedGameItemKind::Definition,
+                owner_username,
                 definition: Some(definition),
                 collection: None,
             },
             FeaturedGameItem::Collection(collection) => Self {
                 kind: FeaturedGameItemKind::Collection,
+                owner_username,
                 definition: None,
                 collection: Some(collection),
             },
         }
     }
+}
+
+/// The owner id behind a featured item (definition or collection).
+fn featured_owner_id(item: &FeaturedGameItem) -> Uuid {
+    match item {
+        FeaturedGameItem::Definition(d) => d.owner_id,
+        FeaturedGameItem::Collection(c) => c.owner_id,
+    }
+}
+
+/// Builds the response list, resolving each item's owner username from the store
+/// (deduped by owner id, so a run of items by the same owner costs one lookup).
+/// A username that can't be resolved falls back to `"unknown"` rather than
+/// failing the whole list.
+async fn featured_responses(
+    store: &dyn storage::Store,
+    items: Vec<FeaturedGameItem>,
+) -> Vec<FeaturedGameItemResponse> {
+    let mut usernames: std::collections::HashMap<Uuid, String> = std::collections::HashMap::new();
+    for item in &items {
+        // Vacant-entry (rather than contains_key + insert) so the async lookup
+        // only runs for an owner not yet resolved.
+        if let std::collections::hash_map::Entry::Vacant(entry) = usernames.entry(featured_owner_id(item)) {
+            let owner_id = *entry.key();
+            let username = store
+                .get_user(owner_id)
+                .await
+                .map(|u| u.username)
+                .unwrap_or_else(|_| "unknown".to_string());
+            entry.insert(username);
+        }
+    }
+    items
+        .into_iter()
+        .map(|item| {
+            let owner_username = usernames.get(&featured_owner_id(&item)).cloned().unwrap_or_default();
+            FeaturedGameItemResponse::from_item(item, owner_username)
+        })
+        .collect()
 }
 
 /// A page of the featured catalogue, in admin order.
@@ -164,13 +209,10 @@ pub async fn get_featured_game_items(
         ErrorInternalServerError("Failed to list featured game items")
     })?;
     let total = all.len();
-    let items: Vec<FeaturedGameItemResponse> = all
-        .into_iter()
-        .skip(offset as usize)
-        .take(limit as usize)
-        .map(FeaturedGameItemResponse::from)
-        .collect();
-    let has_more = offset as usize + items.len() < total;
+    let page: Vec<FeaturedGameItem> =
+        all.into_iter().skip(offset as usize).take(limit as usize).collect();
+    let has_more = offset as usize + page.len() < total;
+    let items = featured_responses(&**store_lock, page).await;
 
     Ok(HttpResponse::Ok().json(FeaturedGameItemsListResponse {
         items,
@@ -233,8 +275,7 @@ pub async fn set_featured_game_items_order(
         log::warn!("list featured game items store error: {err}");
         ErrorInternalServerError("Failed to load featured game items")
     })?;
-    let items: Vec<FeaturedGameItemResponse> =
-        all.into_iter().map(FeaturedGameItemResponse::from).collect();
+    let items = featured_responses(&**store_lock, all).await;
     let limit = items.len() as u32;
     Ok(HttpResponse::Ok().json(FeaturedGameItemsListResponse {
         items,
