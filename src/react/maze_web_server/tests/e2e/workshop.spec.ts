@@ -91,7 +91,7 @@ test('featuring a game via Access surfaces it on Manage Features', async ({ page
   await page.goto('/workshop/features')
   const row = page.locator('.game-list-item', { hasText: name })
   await expect(row).toBeVisible()
-  await expect(row.getByText(/· by /)).toBeVisible()
+  await expect(row.getByText(/· testuser$/)).toBeVisible()
   await expect(row.getByRole('button', { name: `Play ${name}` })).toBeVisible()
   await expect(row.getByRole('button', { name: `Leaderboard for ${name}` })).toBeVisible()
   await expect(row.getByRole('button', { name: `Unfeature ${name}` })).toBeVisible()

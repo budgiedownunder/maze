@@ -100,8 +100,8 @@ describe('WorkshopFeaturesPage', () => {
     expect(within(items[1]).getByText('Beta Set')).toBeInTheDocument()
 
     // Summaries reflect kind and carry the owner's username.
-    expect(within(items[0]).getByText('Game · 3 levels · Static · by admin')).toBeInTheDocument()
-    expect(within(items[1]).getByText('Collection · 1 game · by admin')).toBeInTheDocument()
+    expect(within(items[0]).getByText('Game · 3 levels · Static · admin')).toBeInTheDocument()
+    expect(within(items[1]).getByText('Collection · 1 game · admin')).toBeInTheDocument()
 
     // The relocated curated-marker assertion: a featured row shows the star.
     expect(items[0].querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-curated.svg')
@@ -181,7 +181,7 @@ describe('WorkshopFeaturesPage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByText('Other Game')).toBeInTheDocument())
     // The summary shows the owner.
-    expect(screen.getByText(/· by alice$/)).toBeInTheDocument()
+    expect(screen.getByText(/· alice$/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Unfeature Other Game' }))
     const dialog = await screen.findByRole('dialog', { name: 'Unfeature' })
@@ -201,6 +201,22 @@ describe('WorkshopFeaturesPage', () => {
     await waitFor(() => expect(screen.getByText('Alpha Game')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit Alpha Game' }))
+    expect(await screen.findByRole('dialog', { name: 'Edit Game' })).toBeInTheDocument()
+  })
+
+  it('opens the editor when the row itself is clicked', async () => {
+    seedFeatured([defItem(def({ id: 'd1', name: 'Alpha Game' }))])
+    server.use(
+      http.get('/api/v1/game-definitions/d1', () => HttpResponse.json({
+        ...def({ id: 'd1', name: 'Alpha Game' }), config: {}, challengeKey: 'def:d1', leaderboardTracked: true,
+      })),
+      http.get('/api/v1/scores', () => HttpResponse.json({ scores: [], limit: 1, offset: 0, hasMore: false })),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Alpha Game')).toBeInTheDocument())
+
+    // Clicking the row (the name, not an action button) opens the editor.
+    await userEvent.click(screen.getByText('Alpha Game'))
     expect(await screen.findByRole('dialog', { name: 'Edit Game' })).toBeInTheDocument()
   })
 })

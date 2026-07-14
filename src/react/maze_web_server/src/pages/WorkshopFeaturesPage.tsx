@@ -59,7 +59,7 @@ function featuredSummary(item: FeaturedGameItem): string {
     const n = item.collection?.items.length ?? 0
     base = `Collection · ${n === 1 ? '1 game' : `${n} games`}`
   }
-  return `${base} · by ${item.ownerUsername}`
+  return `${base} · ${item.ownerUsername}`
 }
 
 // The admin-only Manage Features page: the featured catalogue (curated games +
@@ -296,13 +296,14 @@ export function WorkshopFeaturesPage() {
               {items.map((item, index) => {
                 const e = featuredEntity(item)
                 const isDef = item.kind === 'definition'
+                const openEdit = () => { if (isDef) void handleEditDefinition(e.id); else setEditingCol({ collection: item.collection!, busy: false, error: null }) }
                 return (
-                  <li key={featuredKey(item)} className="game-list-item" style={{ cursor: 'default' }}>
+                  <li key={featuredKey(item)} className="game-list-item" onClick={openEdit}>
                     <div className="featured-reorder">
-                      <button type="button" className="btn-icon" aria-label={`Move ${e.name} up`} disabled={index === 0 || actionBusy} onClick={() => void moveFeatured(item, -1)}>
+                      <button type="button" className="btn-icon" aria-label={`Move ${e.name} up`} disabled={index === 0 || actionBusy} onClick={ev => { ev.stopPropagation(); void moveFeatured(item, -1) }}>
                         <img src="/images/icons/icon_move_up.svg" alt="" aria-hidden="true" />
                       </button>
-                      <button type="button" className="btn-icon" aria-label={`Move ${e.name} down`} disabled={(index === items.length - 1 && !list.hasMore) || actionBusy} onClick={() => void moveFeatured(item, 1)}>
+                      <button type="button" className="btn-icon" aria-label={`Move ${e.name} down`} disabled={(index === items.length - 1 && !list.hasMore) || actionBusy} onClick={ev => { ev.stopPropagation(); void moveFeatured(item, 1) }}>
                         <img src="/images/icons/icon_move_down.svg" alt="" aria-hidden="true" />
                       </button>
                     </div>
@@ -312,23 +313,23 @@ export function WorkshopFeaturesPage() {
                       <span className="maze-item-subtitle">{featuredSummary(item)}</span>
                     </div>
                     <div className="game-item-actions">
-                      <button type="button" className="maze-item-action btn-secondary" aria-label={`Edit ${e.name}`} onClick={() => (isDef ? void handleEditDefinition(e.id) : setEditingCol({ collection: item.collection!, busy: false, error: null }))}>
+                      <button type="button" className="maze-item-action btn-secondary" aria-label={`Edit ${e.name}`} onClick={ev => { ev.stopPropagation(); openEdit() }}>
                         <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
                         <span className="maze-item-action-label">Edit</span>
                       </button>
                       {isDef && (
-                        <button type="button" className="maze-item-action btn-secondary" aria-label={`Play ${e.name}`} onClick={() => launchDefinition(e.id)}>
+                        <button type="button" className="maze-item-action btn-secondary" aria-label={`Play ${e.name}`} onClick={ev => { ev.stopPropagation(); launchDefinition(e.id) }}>
                           <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
                           <span className="maze-item-action-label">Play</span>
                         </button>
                       )}
                       {isDef && (
-                        <button type="button" className="maze-item-action btn-secondary" aria-label={`Leaderboard for ${e.name}`} onClick={() => setViewingBoard(item.definition!)}>
+                        <button type="button" className="maze-item-action btn-secondary" aria-label={`Leaderboard for ${e.name}`} onClick={ev => { ev.stopPropagation(); setViewingBoard(item.definition!) }}>
                           <img src="/images/icons/icon_leaderboard.svg" alt="" aria-hidden="true" />
                           <span className="maze-item-action-label">Leaderboard</span>
                         </button>
                       )}
-                      <button type="button" className="maze-item-action btn-secondary" aria-label={`Unfeature ${e.name}`} onClick={() => setUnfeaturing({ item, busy: false, error: null })}>
+                      <button type="button" className="maze-item-action btn-secondary" aria-label={`Unfeature ${e.name}`} onClick={ev => { ev.stopPropagation(); setUnfeaturing({ item, busy: false, error: null }) }}>
                         <img src="/images/icons/icon_unfeature.svg" alt="" aria-hidden="true" />
                         <span className="maze-item-action-label">Unfeature</span>
                       </button>
