@@ -514,8 +514,10 @@ pub async fn get_game_definition(
 
 #[utoipa::path(
     summary = "Update a game definition",
-    description = "Updates a definition owned by the caller — or, for an admin, any definition \
-                   (admin-override; ownership is preserved, not transferred). The seed and image are \
+    description = "Updates a definition owned by the caller — or, for an admin, a Featured (curated) \
+                   definition they don't own, or one they are featuring (setting curated); ownership \
+                   is preserved, not transferred. An admin cannot edit an unrelated non-featured \
+                   definition they don't own. The seed and image are \
                    server-owned and preserved; name, description, visibility, rotation, and config \
                    are replaced. Setting visibility to 'curated' requires an admin. If the edit \
                    changes a gameplay-affecting field (structure/scene/content/mechanics) or the \
@@ -554,9 +556,11 @@ pub async fn update_game_definition(
     let mut store_lock = store.write().await;
 
     // Load the existing record to preserve the server-owned fields and to detect
-    // a gameplay change. The owner may edit it; an admin may edit any definition
-    // (admin-override — lets an admin feature / un-feature / fix content they
-    // don't own). A non-owner non-admin is told it's absent.
+    // a gameplay change. The owner may edit it; an admin may edit a **Featured**
+    // (curated) definition they don't own — or one they are *featuring* (setting
+    // curated) — so an admin can bring content into the featured set, adjust it,
+    // and un-feature it, but not edit an unrelated non-featured definition they
+    // don't own. Any other non-owner is told it's absent.
     let existing = match store_lock.get_game_definition(id).await {
         Ok(def) => def,
         Err(StoreError::GameDefinitionIdNotFound(_)) => {
@@ -567,7 +571,9 @@ pub async fn update_game_definition(
             return Err(ErrorInternalServerError("Failed to load game definition"));
         }
     };
-    if existing.owner_id != user.id && !user.is_admin {
+    let admin_override = user.is_admin
+        && (existing.visibility == Visibility::Curated || body.visibility == Visibility::Curated);
+    if existing.owner_id != user.id && !admin_override {
         return Err(ErrorNotFound(format!("Game definition '{id}' not found")));
     }
     // The owner-scoped storage update keys on the definition's own owner, so an

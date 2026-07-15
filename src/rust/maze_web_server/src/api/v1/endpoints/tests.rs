@@ -9514,8 +9514,15 @@ mod test_definitions {
         let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(stranger_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
 
-        // An admin may edit + feature it; ownership stays with the original owner.
+        // An admin editing this non-featured definition they don't own, WITHOUT
+        // featuring it, is denied — ownership is ignored only for Featured
+        // definitions (or when featuring one).
         let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let body = definition_request("Owned", Visibility::Public, Rotation::Static);
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(admin_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+
+        // An admin may feature it (body sets curated); ownership stays with the owner.
         let body = definition_request("Owned", Visibility::Curated, Rotation::Static);
         let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(admin_key), None, &body);
         let resp = test::call_service(&app, req).await;
@@ -9530,6 +9537,16 @@ mod test_definitions {
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(body["items"][0]["kind"], serde_json::json!("definition"));
         assert_eq!(featured_game_item_ids(&body), vec![def.id.to_string()]);
+
+        // Now Featured, an admin may un-feature it (override applies because it is
+        // currently curated) — and it drops off the catalogue.
+        let body = definition_request("Owned", Visibility::Public, Rotation::Static);
+        let req = create_test_put_request(&format!("/api/v1/game-definitions/{}", def.id), Some(admin_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        let req = create_test_get_request("/api/v1/featured-game-items", Some(admin_key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert!(featured_game_item_ids(&body).is_empty(), "un-featured definition leaves the catalogue");
     }
 
     #[actix_web::test]
