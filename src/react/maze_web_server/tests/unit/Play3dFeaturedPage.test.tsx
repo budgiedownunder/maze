@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -79,21 +79,84 @@ describe('Play3dFeaturedPage', () => {
     expect(launchDefinition).toHaveBeenCalledWith('d1')
   })
 
-  it('Play on a single-game collection launches its sole member; a multi-game collection is disabled', async () => {
-    server.use(featuredOf(
-      colItem(col({ id: 'c1', name: 'Solo Set', items: [{ definitionId: 'only', sortOrder: 0 }] })),
-      colItem(col({ id: 'c2', name: 'Difficulty', items: [
-        { definitionId: 'e', sortOrder: 0 }, { definitionId: 't', sortOrder: 1 },
-      ] })),
-    ))
+  it('Play on a single-game collection launches its sole accessible member', async () => {
+    server.use(
+      featuredOf(colItem(col({ id: 'c1', name: 'Solo Set', items: [{ definitionId: 'only', sortOrder: 0 }] }))),
+      // The detail resolves the accessible members (here, the one game).
+      http.get('/api/v1/game-collections/c1', () =>
+        HttpResponse.json({ ...col({ id: 'c1', name: 'Solo Set' }), definitions: [def({ id: 'only', name: 'Only' })] })),
+    )
     renderPage()
-    // Single-game collection → launches its member.
     await userEvent.click(await screen.findByRole('button', { name: 'Play Solo Set' }))
-    expect(launchDefinition).toHaveBeenCalledWith('only')
-    // Multi-game collection → Play disabled with the coming-soon hint.
-    const multi = screen.getByRole('button', { name: 'Play Difficulty' })
-    expect(multi).toBeDisabled()
-    expect(multi).toHaveAttribute('title', expect.stringMatching(/coming soon/i))
+    await waitFor(() => expect(launchDefinition).toHaveBeenCalledWith('only'))
+  })
+
+  it('a single-game collection whose only member is inaccessible guards instead of launching', async () => {
+    server.use(
+      featuredOf(colItem(col({ id: 'c1', name: 'Gated Set', items: [{ definitionId: 'secret', sortOrder: 0 }] }))),
+      // The sole member is another user's non-public game → filtered out of the
+      // detail, so there is nothing the viewer can play.
+      http.get('/api/v1/game-collections/c1', () =>
+        HttpResponse.json({ ...col({ id: 'c1', name: 'Gated Set' }), definitions: [] })),
+    )
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Gated Set' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Play: Gated Set' })
+    expect(within(dialog).getByText(/no games you can play/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Play' })).toBeDisabled()
+    expect(launchDefinition).not.toHaveBeenCalled()
+  })
+
+  it('Play on a multi-game Arcade collection opens a picker (default first) and launches the chosen game', async () => {
+    const alpha = def({ id: 'a', name: 'Alpha', description: 'the first one' })
+    const beta = def({ id: 'b', name: 'Beta' })
+    server.use(
+      featuredOf(colItem(col({ id: 'c1', name: 'Arcade Set', playMode: 'arcade', items: [
+        { definitionId: 'a', sortOrder: 0 }, { definitionId: 'b', sortOrder: 1 },
+      ] }))),
+      http.get('/api/v1/game-collections/c1', () =>
+        HttpResponse.json({ ...col({ id: 'c1', name: 'Arcade Set' }), definitions: [alpha, beta] })),
+    )
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Arcade Set' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Play: Arcade Set' })
+    expect(within(dialog).getByText('Alpha')).toBeInTheDocument()
+    expect(within(dialog).getByText('the first one')).toBeInTheDocument()
+    expect(within(dialog).getByText('Beta')).toBeInTheDocument()
+    // The first game is the default selection.
+    expect(within(dialog).getByRole('radio', { name: /Alpha/ })).toBeChecked()
+
+    // Choosing Beta then Play launches it.
+    await userEvent.click(within(dialog).getByRole('radio', { name: /Beta/ }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Play' }))
+    expect(launchDefinition).toHaveBeenCalledWith('b')
+  })
+
+  it('the Arcade picker guards an empty (no accessible games) collection', async () => {
+    server.use(
+      featuredOf(colItem(col({ id: 'c1', name: 'Locked Set', playMode: 'arcade', items: [
+        { definitionId: 'x', sortOrder: 0 }, { definitionId: 'y', sortOrder: 1 },
+      ] }))),
+      // The viewer can access none of the members → detail returns no definitions.
+      http.get('/api/v1/game-collections/c1', () =>
+        HttpResponse.json({ ...col({ id: 'c1', name: 'Locked Set' }), definitions: [] })),
+    )
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Locked Set' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Play: Locked Set' })
+    expect(await within(dialog).findByText(/no games you can play/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Play' })).toBeDisabled()
+  })
+
+  it('a multi-game Campaign collection Play is disabled (coming soon)', async () => {
+    server.use(featuredOf(colItem(col({ id: 'c1', name: 'Campaign', playMode: 'campaign', items: [
+      { definitionId: 'a', sortOrder: 0 }, { definitionId: 'b', sortOrder: 1 },
+    ] }))))
+    renderPage()
+    const play = await screen.findByRole('button', { name: 'Play Campaign' })
+    expect(play).toBeDisabled()
+    expect(play).toHaveAttribute('title', expect.stringMatching(/campaign play is coming soon/i))
   })
 
   it('Leaderboard opens the game leaderboard modal', async () => {

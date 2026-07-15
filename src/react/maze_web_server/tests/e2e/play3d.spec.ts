@@ -68,3 +68,56 @@ test('a featured game appears as a card on Featured with Play and a Leaderboard 
   await card.getByRole('button', { name: `Leaderboard for ${name}` }).click()
   await expect(page.getByRole('dialog', { name: `Leaderboard: ${name}` })).toBeVisible()
 })
+
+test('a featured multi-game Arcade collection opens the picker on Featured', async ({ page }) => {
+  await loginAsAdmin(page)
+  const stamp = Date.now()
+  const g1 = `GA ${stamp}`
+  const g2 = `GB ${stamp}`
+  const colName = `Set ${stamp}`
+
+  // Two games.
+  for (const gameName of [g1, g2]) {
+    await page.goto('/workshop/games')
+    await page.getByRole('button', { name: 'New Game' }).click()
+    const wiz = page.getByRole('dialog', { name: 'New Game' })
+    await wiz.getByLabel('Name').fill(gameName)
+    await wiz.getByRole('button', { name: 'Finish' }).click()
+    await expect(wiz).toBeHidden()
+  }
+
+  // A collection containing both (Arcade is the default play mode).
+  await page.goto('/workshop/game-collections')
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  await page.getByRole('button', { name: `Edit ${colName}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  await edit.getByLabel('Add game').fill(g1)
+  await edit.getByRole('button', { name: `Add ${g1}` }).click()
+  await edit.getByLabel('Add game').fill(g2)
+  await edit.getByRole('button', { name: `Add ${g2}` }).click()
+  await edit.getByRole('button', { name: 'Save' }).click()
+  await expect(edit).toBeHidden()
+
+  // Feature it (admin-only Featured tier).
+  await page.getByRole('button', { name: `Access for ${colName}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // On Featured, the collection card's Play opens the Arcade picker of its games.
+  await page.goto('/play-3d/featured')
+  const card = page.locator('.play3d-card', { hasText: colName })
+  await card.getByRole('button', { name: `Play ${colName}` }).click()
+  const picker = page.getByRole('dialog', { name: `Play: ${colName}` })
+  await expect(picker).toBeVisible()
+  await expect(picker.getByText(g1)).toBeVisible()
+  await expect(picker.getByText(g2)).toBeVisible()
+  await picker.getByRole('button', { name: 'Cancel' }).click()
+  await expect(picker).toBeHidden()
+})
