@@ -34,7 +34,7 @@ function def(over: Partial<GameDefinition> = {}): GameDefinition {
 
 function coll(over: Partial<GameCollection> = {}): GameCollection {
   return {
-    id: 'c1', ownerId: 'o1', name: 'Campaign', visibility: 'private', items: [],
+    id: 'c1', ownerId: 'o1', name: 'Campaign', visibility: 'private', playMode: 'arcade', items: [],
     createdAt: '2025-04-01T12:00:00Z', updatedAt: '2025-04-01T12:00:00Z', ...over,
   }
 }

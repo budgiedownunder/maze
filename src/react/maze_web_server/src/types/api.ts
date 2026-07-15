@@ -1,11 +1,11 @@
 import type { CanonicalMazeDefinition } from './cellEntities'
 import type { MazeGameSettings } from '../utils/mazeGameSettings'
-import type { Visibility, Rotation } from '../utils/gameDefinitions'
+import type { Visibility, Rotation, PlayMode } from '../utils/gameDefinitions'
 // Re-export score metrics so consumers can pull the DTO types and
 // the query vocabulary from one place.
 export type { ScoreMetric, SortDirection } from '../utils/scores'
-// Likewise the game-definition access/rotation vocabulary.
-export type { Visibility, Rotation } from '../utils/gameDefinitions'
+// Likewise the game-definition access/rotation/play-mode vocabulary.
+export type { Visibility, Rotation, PlayMode } from '../utils/gameDefinitions'
 
 export interface UserEmail {
   email: string
@@ -201,6 +201,7 @@ export interface GameCollection {
   ownerId: string
   name: string
   visibility: Visibility
+  playMode: PlayMode
   description?: string
   imageUpdatedAt?: string
   items: CollectionItem[]
@@ -209,11 +210,13 @@ export interface GameCollection {
 }
 
 // Create / update body for a collection's own metadata; membership is managed
-// via the item endpoints, so it is not part of this body.
+// via the item endpoints, so it is not part of this body. `visibility` /
+// `playMode` default server-side (private / arcade) when omitted.
 export interface GameCollectionRequest {
   name: string
   description?: string | null
   visibility?: Visibility
+  playMode?: PlayMode
 }
 
 // A page of the collections the caller may see.
@@ -234,6 +237,7 @@ export interface GameCollectionDetailResponse {
   name: string
   description?: string
   visibility: Visibility
+  playMode: PlayMode
   imageUpdatedAt?: string
   createdAt: string
   updatedAt: string

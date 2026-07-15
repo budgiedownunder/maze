@@ -22,7 +22,7 @@ import {
 import { parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import { launchDefinitionPreview } from '../utils/definitionPreview'
 import { launchDefinition } from '../utils/play3dLaunch'
-import { type Visibility } from '../utils/gameDefinitions'
+import { type PlayMode, type Visibility } from '../utils/gameDefinitions'
 import type { FeaturedGameItem, FeaturedGameItemEntry, GameCollection, GameDefinition, GameDefinitionRequest, GamePlayResponse } from '../types/api'
 
 // Server hard cap on a page — used to walk the whole catalogue when a reorder
@@ -168,14 +168,16 @@ export function WorkshopFeaturesPage() {
     }
   }
 
-  async function handleSaveCollection(name: string, description: string | null, memberIds?: string[]) {
+  async function handleSaveCollection(name: string, description: string | null, playMode: PlayMode, memberIds?: string[]) {
     if (!editingCol) return
     const c = editingCol.collection
     setEditingCol({ ...editingCol, busy: true, error: null })
     try {
-      const metaDirty = name !== c.name || (description ?? null) !== (c.description ?? null)
+      const metaDirty = name !== c.name
+        || (description ?? null) !== (c.description ?? null)
+        || playMode !== c.playMode
       if (metaDirty) {
-        await updateGameCollection(token!, c.id, { name, description, visibility: c.visibility })
+        await updateGameCollection(token!, c.id, { name, description, visibility: c.visibility, playMode })
       }
       if (memberIds) {
         await setGameCollectionItems(token!, c.id, memberIds)
@@ -195,7 +197,9 @@ export function WorkshopFeaturesPage() {
       await updateGameDefinition(token!, d.id, { name: d.name, description: d.description ?? null, visibility, rotation: d.rotation, config: d.config })
     } else if (item.collection) {
       const c = item.collection
-      await updateGameCollection(token!, c.id, { name: c.name, description: c.description ?? null, visibility })
+      // playMode preserved — the update overwrites it, so omitting it would reset
+      // the collection to the server default (arcade).
+      await updateGameCollection(token!, c.id, { name: c.name, description: c.description ?? null, visibility, playMode: c.playMode })
     }
   }
 
@@ -247,10 +251,11 @@ export function WorkshopFeaturesPage() {
           confirmLabel="Save"
           initialName={editingCol.collection.name}
           initialDescription={editingCol.collection.description ?? ''}
+          initialPlayMode={editingCol.collection.playMode}
           collectionId={editingCol.collection.id}
           isLoading={editingCol.busy}
           error={editingCol.error}
-          onSubmit={(name, description, memberIds) => void handleSaveCollection(name, description, memberIds)}
+          onSubmit={(name, description, playMode, memberIds) => void handleSaveCollection(name, description, playMode, memberIds)}
           onCancel={() => setEditingCol(null)}
         />
       )}

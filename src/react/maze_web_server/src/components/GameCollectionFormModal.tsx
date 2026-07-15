@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useToken } from '../context/AuthContext'
 import { WorkshopThumbnail } from './WorkshopListPage'
 import { getGameCollection, listGameDefinitions } from '../api/client'
-import type { GameDefinition } from '../types/api'
+import type { GameDefinition, PlayMode } from '../types/api'
+import { PLAY_MODES, playModeDescription, playModeLabel } from '../utils/gameDefinitions'
 
 // The Add picker loads the owner's whole game set once (in the background, paged)
 // on open, then filters + excludes already-added members entirely in memory — so
@@ -17,6 +18,7 @@ interface Props {
   confirmLabel: string
   initialName?: string
   initialDescription?: string
+  initialPlayMode?: PlayMode
   // Edit mode: the collection whose membership this modal also manages. Omitted
   // for Create (a new collection has no id to attach members to yet).
   collectionId?: string
@@ -24,7 +26,7 @@ interface Props {
   error?: string | null
   // `memberIds` is supplied (Edit only) when the membership changed — the parent
   // then reconciles it in one call alongside the metadata update.
-  onSubmit: (name: string, description: string | null, memberIds?: string[]) => void
+  onSubmit: (name: string, description: string | null, playMode: PlayMode, memberIds?: string[]) => void
   onCancel: () => void
 }
 
@@ -37,6 +39,7 @@ export function GameCollectionFormModal({
   confirmLabel,
   initialName = '',
   initialDescription = '',
+  initialPlayMode = 'arcade',
   collectionId,
   isLoading = false,
   error,
@@ -46,6 +49,7 @@ export function GameCollectionFormModal({
   const token = useToken()
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription)
+  const [playMode, setPlayMode] = useState<PlayMode>(initialPlayMode)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   // Membership (Edit mode only). `members` is null while loading; `ownerGames`
@@ -109,7 +113,7 @@ export function GameCollectionFormModal({
   const memberIds = members?.map(m => m.id) ?? []
   const membersDirty = members != null
     && (memberIds.length !== originalIds.length || memberIds.some((id, i) => id !== originalIds[i]))
-  const metaDirty = name !== initialName || description !== initialDescription
+  const metaDirty = name !== initialName || description !== initialDescription || playMode !== initialPlayMode
   // Create Save stays always-enabled (validates on submit); Edit gates on dirty.
   const saveDisabled = isLoading || (collectionId != null && !metaDirty && !membersDirty)
 
@@ -162,7 +166,7 @@ export function GameCollectionFormModal({
     }
     setValidationError(null)
     const trimmedDescription = description.trim()
-    onSubmit(trimmedName, trimmedDescription === '' ? null : trimmedDescription, membersDirty ? memberIds : undefined)
+    onSubmit(trimmedName, trimmedDescription === '' ? null : trimmedDescription, playMode, membersDirty ? memberIds : undefined)
   }
 
   const displayError = validationError ?? error
@@ -192,6 +196,19 @@ export function GameCollectionFormModal({
               onChange={e => setDescription(e.target.value)}
             />
           </label>
+          <label>
+            Play mode
+            <select
+              className="input"
+              value={playMode}
+              onChange={e => setPlayMode(e.target.value as PlayMode)}
+            >
+              {PLAY_MODES.map(mode => (
+                <option key={mode} value={mode}>{playModeLabel(mode)}</option>
+              ))}
+            </select>
+          </label>
+          <p className="access-tier-desc">{playModeDescription(playMode)}</p>
 
           {collectionId != null && (
             <div className="field-group">

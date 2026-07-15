@@ -25,7 +25,7 @@ function def(overrides: Partial<GameDefinition> & { id: string; name: string }):
 }
 
 function col(overrides: Partial<GameCollection> & { id: string; name: string }): GameCollection {
-  return { ownerId: OWNER, visibility: 'curated', items: [], createdAt: 'x', updatedAt: 'x', ...overrides }
+  return { ownerId: OWNER, visibility: 'curated', playMode: 'arcade', items: [], createdAt: 'x', updatedAt: 'x', ...overrides }
 }
 
 function defItem(d: GameDefinition, ownerUsername = 'admin'): FeaturedGameItem { return { kind: 'definition', ownerUsername, definition: d } }

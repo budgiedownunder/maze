@@ -72,6 +72,32 @@ export function reshuffleConfirmMessage(hasScores: boolean): string {
 export const ROTATIONS = ['static', 'daily'] as const
 export type Rotation = (typeof ROTATIONS)[number]
 
+// How a collection is played once opened: "arcade" = free choice (pick any
+// member game), "campaign" = an ordered progression through the members. The
+// lowercase wire values mirror the server's `data_model::PlayMode`.
+export const PLAY_MODES = ['arcade', 'campaign'] as const
+export type PlayMode = (typeof PLAY_MODES)[number]
+
+// User-facing label + one-line description for each play mode, shown by the
+// collection editor's Play mode control.
+const PLAY_MODE_LABELS: Record<PlayMode, string> = {
+  arcade: 'Arcade',
+  campaign: 'Campaign',
+}
+
+const PLAY_MODE_DESCRIPTIONS: Record<PlayMode, string> = {
+  arcade: 'Players pick any game in the collection to play.',
+  campaign: 'Players work through the games in order, unlocking the next as they go.',
+}
+
+export function playModeLabel(mode: PlayMode): string {
+  return PLAY_MODE_LABELS[mode]
+}
+
+export function playModeDescription(mode: PlayMode): string {
+  return PLAY_MODE_DESCRIPTIONS[mode]
+}
+
 // ── Multi-level run vocabulary ──────────────────────────────────────────────
 // The three enum-valued fields of a definition's `levels` config. Lowercase wire
 // values mirror the server's `FinishTypeConfig` / `DifficultyChangeConfig` /

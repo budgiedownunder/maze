@@ -798,6 +798,7 @@ export const handlers = [
       name: body.name,
       description: body.description ?? undefined,
       visibility: body.visibility ?? 'private',
+      playMode: body.playMode ?? 'arcade',
       items: [],
       createdAt: now,
       updatedAt: now,
@@ -822,6 +823,7 @@ export const handlers = [
       name: collection.name,
       description: collection.description,
       visibility: collection.visibility,
+      playMode: collection.playMode,
       imageUpdatedAt: collection.imageUpdatedAt,
       createdAt: collection.createdAt,
       updatedAt: collection.updatedAt,
@@ -839,6 +841,9 @@ export const handlers = [
       name: body.name,
       description: body.description ?? undefined,
       visibility: body.visibility ?? mockGameCollections[index].visibility,
+      // Mirror the server: the update overwrites playMode, defaulting to arcade
+      // when the body omits it.
+      playMode: body.playMode ?? 'arcade',
       updatedAt: new Date().toISOString(),
     }
     mockGameCollections = mockGameCollections.map((c, i) => (i === index ? updated : c))

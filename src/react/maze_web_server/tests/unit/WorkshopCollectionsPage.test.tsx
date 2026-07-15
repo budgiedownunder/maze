@@ -7,7 +7,7 @@ import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { WorkshopCollectionsPage } from '../../src/pages/WorkshopCollectionsPage'
 import { mockProfile, resetMockGameCollections, resetMockShares } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
-import type { GameCollection, GameDefinition } from '../../src/types/api'
+import type { GameCollection, GameCollectionRequest, GameDefinition } from '../../src/types/api'
 
 // The page filters to the caller's own collections (ownerId === profile.id).
 const OWNER = mockProfile.id
@@ -22,7 +22,7 @@ vi.mock('../../src/context/AuthContext', async () => {
 })
 
 function col(overrides: Partial<GameCollection> & { id: string; name: string }): GameCollection {
-  return { ownerId: OWNER, visibility: 'private', items: [], createdAt: 'x', updatedAt: 'x', ...overrides }
+  return { ownerId: OWNER, visibility: 'private', playMode: 'arcade', items: [], createdAt: 'x', updatedAt: 'x', ...overrides }
 }
 
 // Mirrors the server list endpoint: name-ordered, scope=mine → own only, q name
@@ -160,6 +160,55 @@ describe('WorkshopCollectionsPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New Game Collection' })).toBeNull())
     expect(screen.getByText('Campaign')).toBeInTheDocument()
     expect(dialog).not.toBeInTheDocument()
+  })
+
+  it('creates a collection with the chosen play mode', async () => {
+    const captured: { body?: GameCollectionRequest } = {}
+    server.use(
+      listOf(),
+      http.post('/api/v1/game-collections', async ({ request }) => {
+        captured.body = await request.json() as GameCollectionRequest
+        return HttpResponse.json(col({ id: 'c1', name: captured.body.name, playMode: captured.body.playMode }), { status: 201 })
+      }),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('No collections yet.')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New Game Collection' })
+    // Defaults to Arcade.
+    expect(within(dialog).getByLabelText('Play mode')).toHaveValue('arcade')
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Campaign')
+    await userEvent.selectOptions(within(dialog).getByLabelText('Play mode'), 'campaign')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(captured.body?.playMode).toBe('campaign'))
+  })
+
+  it('Edit initialises the play mode from the collection and sends a change on Save', async () => {
+    const captured: { body?: GameCollectionRequest } = {}
+    server.use(
+      listOf(col({ id: 'c1', name: 'Campaign', playMode: 'campaign' })),
+      http.get('/api/v1/game-collections/c1', () =>
+        HttpResponse.json({ ...col({ id: 'c1', name: 'Campaign', playMode: 'campaign' }), definitions: [] })),
+      http.put('/api/v1/game-collections/c1', async ({ request }) => {
+        captured.body = await request.json() as GameCollectionRequest
+        return HttpResponse.json({ ...col({ id: 'c1', name: 'Campaign' }), ...captured.body })
+      }),
+    )
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Campaign')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Collection' })
+    // The control is seeded from the collection's stored play mode.
+    expect(within(dialog).getByLabelText('Play mode')).toHaveValue('campaign')
+
+    // Changing it makes the edit dirty; Save sends the new mode.
+    await userEvent.selectOptions(within(dialog).getByLabelText('Play mode'), 'arcade')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(captured.body?.playMode).toBe('arcade'))
   })
 
   it('Edit renames a collection and refreshes the list', async () => {

@@ -6,7 +6,7 @@ import { ManageSharesModal } from '../components/ManageSharesModal'
 import { useToken, useAuth } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { createGameCollection, deleteGameCollection, getGameCollection, listGameCollections, setGameCollectionItems, updateGameCollection } from '../api/client'
-import { accessLabel, type Visibility } from '../utils/gameDefinitions'
+import { accessLabel, type PlayMode, type Visibility } from '../utils/gameDefinitions'
 import type { GameCollection } from '../types/api'
 
 // A one-line collection summary — game count and access tier — shown under the
@@ -35,10 +35,10 @@ export function WorkshopCollectionsPage() {
 
   useBusyCursor(!!creating?.busy || !!editing?.busy || !!deleting?.busy)
 
-  async function handleCreate(name: string, description: string | null) {
+  async function handleCreate(name: string, description: string | null, playMode: PlayMode) {
     setCreating({ busy: true, error: null })
     try {
-      await createGameCollection(token!, { name, description })
+      await createGameCollection(token!, { name, description, playMode })
       setCreating(null)
       refresh()
     } catch (ex) {
@@ -46,14 +46,17 @@ export function WorkshopCollectionsPage() {
     }
   }
 
-  async function handleEdit(collection: GameCollection, name: string, description: string | null, memberIds?: string[]) {
+  async function handleEdit(collection: GameCollection, name: string, description: string | null, playMode: PlayMode, memberIds?: string[]) {
     setEditing({ collection, busy: true, error: null })
     try {
-      // Commit only what changed: metadata (visibility preserved) and, when the
+      // Commit only what changed: metadata (visibility preserved; playMode sent
+      // so the update doesn't reset it to the server default) and, when the
       // membership was edited, reconcile it in one call.
-      const metaDirty = name !== collection.name || (description ?? null) !== (collection.description ?? null)
+      const metaDirty = name !== collection.name
+        || (description ?? null) !== (collection.description ?? null)
+        || playMode !== collection.playMode
       if (metaDirty) {
-        await updateGameCollection(token!, collection.id, { name, description, visibility: collection.visibility })
+        await updateGameCollection(token!, collection.id, { name, description, visibility: collection.visibility, playMode })
       }
       if (memberIds) {
         await setGameCollectionItems(token!, collection.id, memberIds)
@@ -84,6 +87,9 @@ export function WorkshopCollectionsPage() {
       name: collection.name,
       description: collection.description ?? null,
       visibility,
+      // Preserve playMode — the update overwrites it, so omitting it would reset
+      // the collection to the server default (arcade).
+      playMode: collection.playMode,
     })
   }
 
@@ -107,7 +113,7 @@ export function WorkshopCollectionsPage() {
           confirmLabel="Create"
           isLoading={creating.busy}
           error={creating.error}
-          onSubmit={(name, description) => void handleCreate(name, description)}
+          onSubmit={(name, description, playMode) => void handleCreate(name, description, playMode)}
           onCancel={() => setCreating(null)}
         />
       )}
@@ -117,10 +123,11 @@ export function WorkshopCollectionsPage() {
           confirmLabel="Save"
           initialName={editing.collection.name}
           initialDescription={editing.collection.description ?? ''}
+          initialPlayMode={editing.collection.playMode}
           collectionId={editing.collection.id}
           isLoading={editing.busy}
           error={editing.error}
-          onSubmit={(name, description, memberIds) => void handleEdit(editing.collection, name, description, memberIds)}
+          onSubmit={(name, description, playMode, memberIds) => void handleEdit(editing.collection, name, description, playMode, memberIds)}
           onCancel={() => setEditing(null)}
         />
       )}
