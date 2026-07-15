@@ -116,57 +116,18 @@ describe('HamburgerMenu', () => {
     expect(screen.queryByRole('menuitem', { name: /^manage features$/i })).not.toBeInTheDocument()
   })
 
-  it('Play 3D opens the difficulty modal (no navigation yet)', async () => {
-    const locationStub = { href: '' }
-    vi.stubGlobal('location', locationStub)
-
+  it('3D Games navigates to the Play-3D hub', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
-
-    expect(screen.getByRole('dialog', { name: /choose difficulty/i })).toBeInTheDocument()
-    expect(locationStub.href).toBe('')
-    expect(mockNavigate).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('menuitem', { name: /^3d games$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/play-3d')
   })
 
-  it('difficulty modal defaults to Easy and Play navigates to /game/?difficulty=easy', async () => {
-    const locationStub = { href: '' }
-    vi.stubGlobal('location', locationStub)
-
+  it('the Featured sub-item navigates to the Featured page', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
-    expect(screen.getByRole('radio', { name: /easy/i })).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
-
-    expect(locationStub.href).toBe('/game/?difficulty=easy')
-  })
-
-  it('choosing Hard then Play navigates to /game/?difficulty=hard', async () => {
-    const locationStub = { href: '' }
-    vi.stubGlobal('location', locationStub)
-
-    renderMenu()
-    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
-    await userEvent.click(screen.getByRole('radio', { name: /hard/i }))
-    await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
-
-    expect(locationStub.href).toBe('/game/?difficulty=hard')
-  })
-
-  it('cancelling the difficulty modal closes it without navigating', async () => {
-    const locationStub = { href: '' }
-    vi.stubGlobal('location', locationStub)
-
-    renderMenu()
-    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
-    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
-    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
-
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(locationStub.href).toBe('')
-    expect(mockNavigate).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('menuitem', { name: /^featured$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/play-3d/featured')
   })
 
   it('renders three separators dividing home / nav / account / about groups', async () => {

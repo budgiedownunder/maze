@@ -31,6 +31,9 @@ test('Home menu item navigates back to home from /account', async ({ page }) => 
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
   await expect(page).toHaveURL(/\/account/)
+  // Wait for the (lazily-loaded) Account page to finish rendering before
+  // re-opening the menu, so the interaction doesn't race the Suspense fallback.
+  await expect(page.getByRole('heading', { name: /^my account$/i })).toBeVisible()
 
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /^home$/i }).click()
@@ -43,15 +46,17 @@ test('Mazes menu item navigates to /mazes', async ({ page }) => {
   await expect(page).toHaveURL(/\/mazes$/)
 })
 
-test('hamburger menu Play 3D item opens the difficulty modal', async ({ page }) => {
+test('hamburger menu 3D Games item navigates to the Play-3D hub', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
-  await expect(page.getByRole('menuitem', { name: /play 3d/i })).toBeVisible()
-  await page.getByRole('menuitem', { name: /play 3d/i }).click()
-  await expect(page.getByRole('dialog', { name: /choose difficulty/i })).toBeVisible()
-  await expect(page.getByRole('radio', { name: /easy/i })).toBeChecked()
-  await page.getByRole('button', { name: /cancel/i }).click()
-  await expect(page.getByRole('dialog')).not.toBeVisible()
-  await expect(page).toHaveURL(/\/$/)
+  await page.getByRole('menuitem', { name: /^3d games$/i }).click()
+  await expect(page).toHaveURL(/\/play-3d$/)
+  await expect(page.getByRole('heading', { name: /^featured$/i })).toBeVisible()
+})
+
+test('hamburger menu Featured sub-item navigates to the Featured page', async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /^featured$/i }).click()
+  await expect(page).toHaveURL(/\/play-3d\/featured$/)
 })
 
 test('My Account page opens and shows profile fields', async ({ page }) => {
