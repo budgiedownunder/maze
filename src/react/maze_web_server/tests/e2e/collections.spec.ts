@@ -30,7 +30,7 @@ test('New collection creates a collection that appears in the list', async ({ pa
   const row = page.locator('.game-list-item', { hasText: name })
   await expect(row).toBeVisible()
   // A fresh collection is empty and private.
-  await expect(row.getByText('0 games · Just me')).toBeVisible()
+  await expect(row.getByText('0 games · Arcade · Just me')).toBeVisible()
 
   // It survives a reload (the mock store is sessionStorage-backed).
   await page.reload()
@@ -100,7 +100,7 @@ test('Edit adds a game to a collection and updates its count', async ({ page }) 
   await create.getByLabel('Name').fill(colName)
   await create.getByRole('button', { name: 'Create' }).click()
   const row = page.locator('.game-list-item', { hasText: colName })
-  await expect(row.getByText('0 games · Just me')).toBeVisible()
+  await expect(row.getByText('0 games · Arcade · Just me')).toBeVisible()
 
   // Edit → add the game via the picker → Save.
   await page.getByRole('button', { name: `Edit ${colName}` }).click()
@@ -111,7 +111,7 @@ test('Edit adds a game to a collection and updates its count', async ({ page }) 
   await expect(edit).toBeHidden()
 
   // The row's game count reflects the added member.
-  await expect(row.getByText('1 game · Just me')).toBeVisible()
+  await expect(row.getByText('1 game · Arcade · Just me')).toBeVisible()
 })
 
 test('the Edit modal keeps Cancel/Save on-screen on a short window', async ({ page }) => {

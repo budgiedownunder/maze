@@ -110,18 +110,25 @@ describe('WorkshopCollectionsPage', () => {
     expect(screen.queryByText('Someone Else')).toBeNull()
   })
 
-  it('summarises each collection with its game count and access tier', async () => {
+  it('summarises each collection with its game count, play mode and access tier', async () => {
     server.use(listOf(
       col({ id: 'c1', name: 'Solo', items: [{ definitionId: 'd1', sortOrder: 0 }] }),
-      col({ id: 'c2', name: 'Trio', visibility: 'public', items: [
+      col({ id: 'c2', name: 'Trio', visibility: 'public', playMode: 'campaign', items: [
         { definitionId: 'd1', sortOrder: 0 },
         { definitionId: 'd2', sortOrder: 1 },
         { definitionId: 'd3', sortOrder: 2 },
       ] }),
     ))
     renderPage()
-    await waitFor(() => expect(screen.getByText('1 game · Just me')).toBeInTheDocument())
-    expect(screen.getByText('3 games · Everyone')).toBeInTheDocument()
+    // Play mode sits between the game count and the access tier — both modes shown.
+    await waitFor(() => expect(screen.getByText('1 game · Arcade · Just me')).toBeInTheDocument())
+    expect(screen.getByText('3 games · Campaign · Everyone')).toBeInTheDocument()
+
+    // The play-mode badge overlays the thumbnail's bottom-left corner.
+    const soloRow = screen.getByText('Solo').closest('.game-list-item')!
+    expect(soloRow.querySelector('.game-thumb-mode')).toHaveAttribute('src', '/images/workshop/mode-arcade.svg')
+    const trioRow = screen.getByText('Trio').closest('.game-list-item')!
+    expect(trioRow.querySelector('.game-thumb-mode')).toHaveAttribute('src', '/images/workshop/mode-campaign.svg')
   })
 
   it('shows the base thumbnail and the visibility marker per row, and excludes curated collections', async () => {
@@ -398,15 +405,15 @@ describe('WorkshopCollectionsPage', () => {
     await userEvent.click(screen.getByRole('button', { name: '+ New Game Collection' }))
     await userEvent.type(screen.getByLabelText('Name'), 'Campaign')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
-    await waitFor(() => expect(screen.getByText('0 games · Just me')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('0 games · Arcade · Just me')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Access for Campaign' }))
     const dialog = await screen.findByRole('dialog', { name: 'Access: Campaign' })
     await userEvent.click(within(dialog).getByRole('radio', { name: /Everyone/ }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(screen.getByText('0 games · Everyone')).toBeInTheDocument())
-    expect(screen.queryByText('0 games · Just me')).toBeNull()
+    await waitFor(() => expect(screen.getByText('0 games · Arcade · Everyone')).toBeInTheDocument())
+    expect(screen.queryByText('0 games · Arcade · Just me')).toBeNull()
   })
 
   it('blocks an empty name and surfaces a create failure', async () => {

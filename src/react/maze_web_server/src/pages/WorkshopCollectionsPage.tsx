@@ -6,15 +6,15 @@ import { ManageSharesModal } from '../components/ManageSharesModal'
 import { useToken, useAuth } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { createGameCollection, deleteGameCollection, getGameCollection, listGameCollections, setGameCollectionItems, updateGameCollection } from '../api/client'
-import { accessLabel, type PlayMode, type Visibility } from '../utils/gameDefinitions'
+import { accessLabel, playModeLabel, type PlayMode, type Visibility } from '../utils/gameDefinitions'
 import type { GameCollection } from '../types/api'
 
-// A one-line collection summary — game count and access tier — shown under the
-// name.
+// A one-line collection summary — game count, play mode and access tier — shown
+// under the name.
 function collectionSummary(c: GameCollection): string {
   const count = c.items.length
   const games = count === 1 ? '1 game' : `${count} games`
-  return `${games} · ${accessLabel(c.visibility)}`
+  return `${games} · ${playModeLabel(c.playMode)} · ${accessLabel(c.visibility)}`
 }
 
 // The workshop's Collections area: the caller's own game collections, each with
@@ -177,7 +177,7 @@ export function WorkshopCollectionsPage() {
       row={c => ({
         name: c.name,
         subtitle: collectionSummary(c),
-        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game-collection.svg" visibility={c.visibility} />,
+        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game-collection.svg" visibility={c.visibility} playMode={c.playMode} />,
         onOpen: () => setEditing({ collection: c, busy: false, error: null }),
         actions: [
           { key: 'edit', label: 'Edit', ariaLabel: `Edit ${c.name}`, icon: '/images/icons/icon_rename.png', onClick: () => setEditing({ collection: c, busy: false, error: null }) },

@@ -2,18 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AppHeader } from './AppHeader'
 import { useToken } from '../context/AuthContext'
 import { usePagedList } from '../hooks/usePagedList'
-import { accessDescription, type Visibility } from '../utils/gameDefinitions'
+import { accessDescription, playModeLabel, type PlayMode, type Visibility } from '../utils/gameDefinitions'
 
 // A workshop row thumbnail: the base art with the visibility marker overhanging
-// its corner, titled with the access description. Shared by the Games and
-// Collections rows (each supplies its own base art). `showMarker` is dropped in
-// contexts where a game's own visibility is irrelevant (the collection
-// membership editor, where the collection carries the visibility).
-export function WorkshopThumbnail({ baseSrc, visibility, showMarker = true }: { baseSrc: string; visibility: Visibility; showMarker?: boolean }) {
+// its bottom-right corner, titled with the access description. Shared by the
+// Games and Collections rows (each supplies its own base art). `showMarker` is
+// dropped in contexts where a game's own visibility is irrelevant (the collection
+// membership editor, where the collection carries the visibility). `playMode`,
+// when given (collection rows), adds the matching badge on the bottom-left corner.
+export function WorkshopThumbnail({ baseSrc, visibility, showMarker = true, playMode }: { baseSrc: string; visibility: Visibility; showMarker?: boolean; playMode?: PlayMode }) {
   return (
     <div className="game-thumb" title={showMarker ? accessDescription(visibility) : undefined}>
       <img className="game-thumb-base" src={baseSrc} alt="" aria-hidden="true" />
       {showMarker && <img className="game-thumb-marker" src={`/images/workshop/marker-${visibility}.svg`} alt="" aria-hidden="true" />}
+      {playMode && <img className="game-thumb-mode" src={`/images/workshop/mode-${playMode}.svg`} alt="" aria-hidden="true" title={playModeLabel(playMode)} />}
     </div>
   )
 }

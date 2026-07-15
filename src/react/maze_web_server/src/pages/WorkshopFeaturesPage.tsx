@@ -22,7 +22,7 @@ import {
 import { parseDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import { launchDefinitionPreview } from '../utils/definitionPreview'
 import { launchDefinition } from '../utils/play3dLaunch'
-import { type PlayMode, type Visibility } from '../utils/gameDefinitions'
+import { playModeLabel, type PlayMode, type Visibility } from '../utils/gameDefinitions'
 import type { FeaturedGameItem, FeaturedGameItemEntry, GameCollection, GameDefinition, GameDefinitionRequest, GamePlayResponse } from '../types/api'
 
 // Server hard cap on a page — used to walk the whole catalogue when a reorder
@@ -56,8 +56,10 @@ function featuredSummary(item: FeaturedGameItem): string {
     const levels = count <= 1 ? 'Single level' : `${count} levels`
     base = `Game · ${levels} · ${d.rotation === 'daily' ? 'Daily' : 'Static'}`
   } else {
-    const n = item.collection?.items.length ?? 0
-    base = `Collection · ${n === 1 ? '1 game' : `${n} games`}`
+    const c = item.collection
+    const n = c?.items.length ?? 0
+    const games = n === 1 ? '1 game' : `${n} games`
+    base = c ? `Collection · ${games} · ${playModeLabel(c.playMode)}` : `Collection · ${games}`
   }
   return `${base} · ${item.ownerUsername}`
 }
@@ -312,7 +314,7 @@ export function WorkshopFeaturesPage() {
                         <img src="/images/icons/icon_move_down.svg" alt="" aria-hidden="true" />
                       </button>
                     </div>
-                    <WorkshopThumbnail baseSrc={isDef ? '/images/workshop/workshop-game.svg' : '/images/workshop/workshop-game-collection.svg'} visibility={e.visibility} />
+                    <WorkshopThumbnail baseSrc={isDef ? '/images/workshop/workshop-game.svg' : '/images/workshop/workshop-game-collection.svg'} visibility={e.visibility} playMode={item.collection?.playMode} />
                     <div className="maze-item-text">
                       <span className="maze-item-name" title={e.name}>{e.name}</span>
                       <span className="maze-item-subtitle">{featuredSummary(item)}</span>

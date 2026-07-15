@@ -1551,6 +1551,17 @@ textarea.input {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+/* Play-mode badge — the bottom-left counterpart to the bottom-right visibility
+   marker; both are 24px circular badges that fit side by side on the thumbnail. */
+.game-thumb-mode {
+  position: absolute;
+  left: -6px;
+  bottom: -6px;
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
 @media (max-width: 540px) {
   .maze-item-action-label {
     display: none;

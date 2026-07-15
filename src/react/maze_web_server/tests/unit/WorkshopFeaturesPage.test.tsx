@@ -101,10 +101,13 @@ describe('WorkshopFeaturesPage', () => {
 
     // Summaries reflect kind and carry the owner's username.
     expect(within(items[0]).getByText('Game · 3 levels · Static · admin')).toBeInTheDocument()
-    expect(within(items[1]).getByText('Collection · 1 game · admin')).toBeInTheDocument()
+    expect(within(items[1]).getByText('Collection · 1 game · Arcade · admin')).toBeInTheDocument()
 
     // The relocated curated-marker assertion: a featured row shows the star.
     expect(items[0].querySelector('.game-thumb-marker')).toHaveAttribute('src', '/images/workshop/marker-curated.svg')
+    // The collection row carries a play-mode badge; the game row does not.
+    expect(items[1].querySelector('.game-thumb-mode')).toHaveAttribute('src', '/images/workshop/mode-arcade.svg')
+    expect(items[0].querySelector('.game-thumb-mode')).toBeNull()
 
     // A game row has Play + Leaderboard; a collection row does not.
     expect(within(items[0]).getByRole('button', { name: 'Play Alpha Game' })).toBeInTheDocument()
