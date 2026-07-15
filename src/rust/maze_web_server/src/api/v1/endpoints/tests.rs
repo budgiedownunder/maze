@@ -9547,8 +9547,15 @@ mod test_definitions {
         let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(stranger_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
 
-        // Admin features it; ownership preserved.
+        // An admin editing this non-featured collection they don't own, WITHOUT
+        // featuring it (visibility stays non-curated), is denied — ownership is
+        // ignored only for Featured collections (or when featuring one).
         let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let body = collection_request("Owned Set", Visibility::Public);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+
+        // Admin features it (body sets curated); ownership preserved.
         let body = collection_request("Owned Set", Visibility::Curated);
         let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
         let resp = test::call_service(&app, req).await;
@@ -9562,6 +9569,50 @@ mod test_definitions {
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(body["items"][0]["kind"], serde_json::json!("collection"));
         assert_eq!(featured_game_item_ids(&body), vec![col.id.to_string()]);
+
+        // Now that it is Featured, an admin may also un-feature it (the override
+        // applies because the collection is currently curated, even though the new
+        // visibility is not) — and it drops off the featured catalogue.
+        let body = collection_request("Owned Set", Visibility::Public);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        let req = create_test_get_request("/api/v1/featured-game-items", Some(admin_key), None);
+        let body: serde_json::Value =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert!(featured_game_item_ids(&body).is_empty(), "un-featured collection leaves the catalogue");
+    }
+
+    #[actix_web::test]
+    async fn admin_can_edit_a_featured_collections_games_but_not_a_private_one() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
+        let stranger_key = api_key_for(&mock_users, VALID_USERNAME_2);
+
+        let game = seed_game_definition(&store, &owner, "G", Visibility::Public, Rotation::Static).await;
+        let body = SetGameCollectionItemsRequest { definition_ids: vec![game.id] };
+
+        // A Featured (curated) collection owned by user1: an admin (non-owner) may
+        // set its games — curating the featured set — and ownership is preserved.
+        let featured = seed_game_collection(&store, &owner, "Featured Set", Visibility::Curated).await;
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", featured.id), Some(admin_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let updated: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(updated.owner_id, owner.id, "ownership preserved (no transfer)");
+        assert_eq!(collection_item_ids(&updated), vec![game.id]);
+
+        // A stranger (non-owner non-admin) still cannot.
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", featured.id), Some(stranger_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
+
+        // A PRIVATE collection owned by user1: ownership is ignored only for
+        // Featured collections, so even an admin cannot edit its games.
+        let private = seed_game_collection(&store, &owner, "Private Set", Visibility::Private).await;
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", private.id), Some(admin_key), None, &body);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 
     #[actix_web::test]

@@ -455,9 +455,11 @@ pub async fn get_game_collection(
 #[utoipa::path(
     summary = "Update a collection's metadata",
     description = "Updates the name, description, and visibility of a collection owned by the \
-                   caller — or, for an admin, any collection (admin-override; ownership is \
-                   preserved, not transferred). Membership and the collection image are left \
-                   unchanged. Setting visibility to 'curated' requires an admin.",
+                   caller — or, for an admin, a Featured (curated) collection they don't own, or one \
+                   they are featuring (setting curated); ownership is preserved, not transferred. An \
+                   admin cannot edit an unrelated non-featured collection they don't own. Membership \
+                   and the collection image are left unchanged. Setting visibility to 'curated' \
+                   requires an admin.",
     put,
     path = "/api/v1/game-collections/{id}",
     params(("id" = String, Path, description = "Collection id")),
@@ -490,9 +492,11 @@ pub async fn update_game_collection(
 
     let mut store_lock = store.write().await;
 
-    // The owner may edit it; an admin may edit any collection (admin-override —
-    // feature / un-feature / fix content they don't own). A non-owner non-admin
-    // is told it's absent.
+    // The owner may edit it; an admin may edit a **Featured** (curated) collection
+    // they don't own — or one they are *featuring* (setting curated) — so an admin
+    // can bring content into the featured set, adjust it, and un-feature it, but
+    // not edit an unrelated non-featured collection they don't own. Any other
+    // non-owner is told it's absent.
     let existing = match store_lock.get_game_collection(id).await {
         Ok(collection) => collection,
         Err(StoreError::GameCollectionIdNotFound(_)) => {
@@ -503,7 +507,9 @@ pub async fn update_game_collection(
             return Err(ErrorInternalServerError("Failed to load game collection"));
         }
     };
-    if existing.owner_id != user.id && !user.is_admin {
+    let admin_override = user.is_admin
+        && (existing.visibility == Visibility::Curated || body.visibility == Visibility::Curated);
+    if existing.owner_id != user.id && !admin_override {
         return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
     }
     // Owner-scoped update keys on the collection's own owner, so an admin editing
@@ -583,9 +589,10 @@ pub async fn delete_game_collection(
     summary = "Set a collection's games",
     description = "Replaces a collection's whole membership with the supplied ordered list in one \
                    operation — duplicates collapse, anyone absent is dropped, any new id added, and \
-                   the sequence reordered to match — and returns the updated collection. Owner-only \
-                   (a collection owned by someone else returns 404). Only references are stored; a \
-                   ref to an inaccessible or since-deleted definition is filtered at detail time.",
+                   the sequence reordered to match — and returns the updated collection. The owner may \
+                   edit it, or an admin may edit a Featured (curated) collection they don't own \
+                   (admin-override, ownership preserved); any other non-owner gets 404. Only references \
+                   are stored; a ref to an inaccessible or since-deleted definition is filtered at detail time.",
     put,
     path = "/api/v1/game-collections/{id}/items",
     params(("id" = String, Path, description = "Collection id")),
@@ -610,7 +617,30 @@ pub async fn set_game_collection_items(
     let definition_ids = body.into_inner().definition_ids;
     let mut store_lock = store.write().await;
 
-    match store_lock.set_game_collection_items(&user, id, &definition_ids).await {
+    // The owner may edit membership; an admin may edit a **Featured** (curated)
+    // collection they don't own — curating the featured set includes adjusting a
+    // featured collection's games. Ownership is ignored only when the caller is an
+    // admin and the collection is currently curated; any other non-owner (incl. an
+    // admin on a non-featured collection) is told it's absent.
+    let existing = match store_lock.get_game_collection(id).await {
+        Ok(collection) => collection,
+        Err(StoreError::GameCollectionIdNotFound(_)) => {
+            return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
+        }
+        Err(err) => {
+            log::warn!("get game collection store error: {err}");
+            return Err(ErrorInternalServerError("Failed to load game collection"));
+        }
+    };
+    let admin_override = user.is_admin && existing.visibility == Visibility::Curated;
+    if existing.owner_id != user.id && !admin_override {
+        return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
+    }
+    // Owner-scoped storage call keys on the collection's own owner, so an admin
+    // editing someone else's featured collection preserves its ownership.
+    let owner = resolve_owner(&**store_lock, &user, existing.owner_id).await?;
+
+    match store_lock.set_game_collection_items(&owner, id, &definition_ids).await {
         Ok(()) => {}
         Err(StoreError::GameCollectionIdNotFound(_)) => {
             return Err(ErrorNotFound(format!("Game collection '{id}' not found")))
@@ -621,7 +651,7 @@ pub async fn set_game_collection_items(
         }
     }
 
-    let updated = owned_collection(&**store_lock, &user, id).await?;
+    let updated = owned_collection(&**store_lock, &owner, id).await?;
     Ok(HttpResponse::Ok().json(updated))
 }
 
