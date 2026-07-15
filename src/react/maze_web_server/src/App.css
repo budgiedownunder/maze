@@ -1468,6 +1468,68 @@ textarea.input {
   margin-top: 0.75rem;
 }
 
+/* Play-3D browse pages: a responsive grid of vertical gallery cards (image on
+   top, name + description, Play/Leaderboard footer). The consumer-side analogue
+   of the workshop's `.game-list` rows. */
+.play3d-search {
+  display: block;
+  max-width: 320px;
+  margin-bottom: 1rem;
+}
+.play3d-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.play3d-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+.play3d-card-thumb {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.75rem 0 0.25rem;
+}
+.play3d-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.play3d-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play3d-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.play3d-card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.play3d-card-actions > button {
+  flex: 1 1 auto;
+}
+
 /* Manage Features: the up/down reorder controls stacked at the row's left edge,
    each a thick-arrow icon button. */
 .featured-reorder {
