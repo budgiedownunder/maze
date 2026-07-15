@@ -4386,6 +4386,66 @@ impl ScoreStore for FileStore {
             .collect())
     }
 
+    /// The subset of `challenges` this user has completed (has ≥1 score against).
+    /// See [`ScoreStore::completed_challenges`].
+    ///
+    /// # Examples
+    ///
+    /// Record a score on one of two challenges, then query completion
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, ScoreEntry, ScoreStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".to_string(),
+    ///     full_name: "Alice".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".to_string(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: None, challenge: Some("def:a".to_string()),
+    ///     score: 5, elapsed_ms: 1000, recorded_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// let done = store.completed_challenges(user.id, &["def:a".to_string(), "def:b".to_string()]).await.unwrap();
+    /// assert_eq!(done, vec!["def:a".to_string()]);
+    /// # });
+    /// ```
+    async fn completed_challenges(
+        &self,
+        user_id: Uuid,
+        challenges: &[String],
+    ) -> Result<Vec<String>, Error> {
+        if challenges.is_empty() {
+            return Ok(Vec::new());
+        }
+        let wanted: std::collections::HashSet<&str> = challenges.iter().map(String::as_str).collect();
+        let mut done: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in self.read_all_score_entries()? {
+            if entry.user_id != user_id {
+                continue;
+            }
+            if let Some(challenge) = entry.challenge.as_deref()
+                && wanted.contains(challenge)
+            {
+                done.insert(challenge.to_string());
+            }
+        }
+        Ok(done.into_iter().collect())
+    }
+
     /// Deletes every score for a stored maze, returning the number removed. See
     /// [`ScoreStore::clear_maze_scores`].
     ///

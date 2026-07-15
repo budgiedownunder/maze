@@ -861,6 +861,12 @@ async fn score_user_history_is_recent_first_and_pages() {
 }
 
 #[tokio::test]
+async fn score_completed_challenges_returns_scored_subset() {
+    let mut s = fresh_store().await;
+    contract::score_completed_challenges_returns_scored_subset(&mut s).await;
+}
+
+#[tokio::test]
 async fn score_boards_are_empty_for_unknown_subject() {
     let mut s = fresh_store().await;
     contract::score_boards_are_empty_for_unknown_subject(&mut s).await;

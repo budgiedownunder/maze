@@ -417,6 +417,77 @@ pub async fn get_my_history(
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/v1/scores/me/completed  (which of these challenges has the caller scored on)
+// ---------------------------------------------------------------------------
+
+/// The most challenge keys one `/scores/me/completed` request may ask about. A
+/// campaign is a handful of games; this bounds the `IN (…)` list well above any
+/// real collection while rejecting abusive payloads.
+const MAX_COMPLETED_CHALLENGES: usize = 200;
+
+/// Request body for `POST /api/v1/scores/me/completed`: the challenge board keys
+/// to check (e.g. `def:<id>` for a stored game, or a daily `def:<id>:<date>`).
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedChallengesRequest {
+    /// The challenge keys to check, at most `MAX_COMPLETED_CHALLENGES`.
+    pub challenges: Vec<String>,
+}
+
+/// The subset of the requested challenges the caller has completed (has ≥1 score
+/// on). Order is unspecified; treat it as a set.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedChallengesResponse {
+    /// The requested challenges the caller has scored on.
+    pub completed: Vec<String>,
+}
+
+#[utoipa::path(
+    summary = "Which of these challenges the caller has completed",
+    description = "Given a set of challenge board keys (e.g. a campaign's games as `def:<id>`), \
+                   returns the subset the authenticated caller has recorded at least one score \
+                   against — used to derive campaign progress in one request instead of paging the \
+                   caller's whole history. Scoped to the caller's own scores.",
+    post,
+    path = "/api/v1/scores/me/completed",
+    request_body = CompletedChallengesRequest,
+    responses(
+        (status = 200, description = "The completed subset", body = CompletedChallengesResponse),
+        (status = 400, description = "Too many challenges requested"),
+        (status = 401, description = "Unauthorized request")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[post("/scores/me/completed")]
+pub async fn get_my_completed_challenges(
+    body: web::Json<CompletedChallengesRequest>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req)?;
+    let challenges = body.into_inner().challenges;
+    if challenges.len() > MAX_COMPLETED_CHALLENGES {
+        return Err(ErrorBadRequest(format!(
+            "At most {MAX_COMPLETED_CHALLENGES} challenges may be queried at once"
+        )));
+    }
+
+    let store_lock = store.read().await;
+    match store_lock.completed_challenges(user.id, &challenges).await {
+        Ok(completed) => Ok(HttpResponse::Ok().json(CompletedChallengesResponse { completed })),
+        Err(err) => {
+            log::warn!("completed_challenges store error: {err}");
+            Err(ErrorInternalServerError("Failed to read completed challenges"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // DELETE /api/v1/scores  (reset a leaderboard)
 // ---------------------------------------------------------------------------
 

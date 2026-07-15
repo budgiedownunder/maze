@@ -2193,6 +2193,29 @@ pub async fn score_user_history_is_recent_first_and_pages(store: &mut Box<dyn St
     assert_eq!(second[0].recorded_at, ts[1]);
 }
 
+pub async fn score_completed_challenges_returns_scored_subset(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let bob = fixture_user(store, "bob", "bob@example.com").await;
+
+    // Alice scored on def:a (twice) and def:c; bob scored on def:b.
+    for challenge in ["def:a", "def:a", "def:c"] {
+        store.record_score(&score_entry(alice.id, None, Some(challenge), 1, 1_000)).await.expect("record");
+    }
+    store.record_score(&score_entry(bob.id, None, Some("def:b"), 1, 1_000)).await.expect("record");
+
+    // Alice's completed subset of {a,b,c} = {a, c} (deduped; bob's def:b excluded).
+    let mut done = store
+        .completed_challenges(alice.id, &["def:a".to_string(), "def:b".to_string(), "def:c".to_string()])
+        .await
+        .expect("completed_challenges");
+    done.sort();
+    assert_eq!(done, vec!["def:a".to_string(), "def:c".to_string()]);
+
+    // Empty input → empty result. A challenge she hasn't scored → excluded.
+    assert!(store.completed_challenges(alice.id, &[]).await.expect("empty").is_empty());
+    assert!(store.completed_challenges(alice.id, &["def:x".to_string()]).await.expect("none").is_empty());
+}
+
 pub async fn score_boards_are_empty_for_unknown_subject(store: &mut Box<dyn Store>) {
     assert!(store
         .maze_leaderboard("does-not-exist", FASTEST, 10, 0, false)

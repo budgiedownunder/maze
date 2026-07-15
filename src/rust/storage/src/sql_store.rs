@@ -4948,6 +4948,75 @@ impl ScoreStore for SqlStore {
         rows.iter().map(score_entry_from_row).collect()
     }
 
+    /// The subset of `challenges` this user has completed (has ≥1 score against).
+    /// See [`ScoreStore::completed_challenges`].
+    ///
+    /// # Examples
+    ///
+    /// Record a score on one of two challenges, then query completion
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{ScoreEntry, ScoreStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
+    ///     avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let entry = ScoreEntry {
+    ///     id: Uuid::new_v4(), user_id: user.id,
+    ///     maze_id: None, challenge: Some("def:a".to_string()),
+    ///     score: 5, elapsed_ms: 1000, recorded_at: chrono::Utc::now(),
+    /// };
+    /// store.record_score(&entry).await.expect("record_score");
+    ///
+    /// let done = store.completed_challenges(user.id, &["def:a".to_string(), "def:b".to_string()]).await.unwrap();
+    /// assert_eq!(done, vec!["def:a".to_string()]);
+    /// # });
+    /// ```
+    async fn completed_challenges(
+        &self,
+        user_id: Uuid,
+        challenges: &[String],
+    ) -> Result<Vec<String>, Error> {
+        if challenges.is_empty() {
+            return Ok(Vec::new());
+        }
+        // One placeholder per challenge → "challenge IN (?, ?, …)"; `q` rewrites
+        // every `?` (user_id first, then the list) to `$N` for PostgreSQL.
+        let placeholders = vec!["?"; challenges.len()].join(", ");
+        let sql = q(
+            self.kind,
+            &format!(
+                "SELECT DISTINCT challenge FROM score_history WHERE user_id = ? AND challenge IN ({placeholders})"
+            ),
+        );
+        let mut query = sqlx::query(&sql).bind(user_id.to_string());
+        for challenge in challenges {
+            query = query.bind(challenge);
+        }
+        let rows = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| row.try_get::<String, _>("challenge").map_err(map_sqlx_err))
+            .collect()
+    }
+
     /// Deletes every score for a stored maze, returning the number removed. See
     /// [`ScoreStore::clear_maze_scores`].
     ///

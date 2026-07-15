@@ -434,6 +434,18 @@ pub trait ScoreStore {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ScoreEntry>, Error>;
+    /// The subset of `challenges` the given user has recorded at least one score
+    /// against — i.e. the game boards (`def:<id>`) they have completed. Lets a
+    /// caller derive campaign progress in one query instead of paging the user's
+    /// whole history. The result is treated as a set (order/duplication
+    /// unspecified); an empty `challenges` returns an empty vec without touching
+    /// the store. Authorization is the caller's responsibility (the scores are the
+    /// user's own).
+    async fn completed_challenges(
+        &self,
+        user_id: Uuid,
+        challenges: &[String],
+    ) -> Result<Vec<String>, Error>;
     /// Deletes every score recorded against a user maze, resetting its
     /// leaderboard to empty. Returns the number of rows removed (0 if the board
     /// was already empty). Authorization (maze ownership) is the caller's

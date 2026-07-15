@@ -9,7 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse, UsersListResponse};
-    use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
+    use crate::api::v1::endpoints::scores::{CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -918,6 +918,22 @@ mod test_definitions {
             // Recent first: recorded_at DESC, id DESC (mirrors FileStore/SqlStore).
             matched.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at).then(b.id.cmp(&a.id)));
             Ok(matched.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+        async fn completed_challenges(
+            &self,
+            user_id: Uuid,
+            challenges: &[String],
+        ) -> Result<Vec<String>, StoreError> {
+            let wanted: std::collections::HashSet<&str> = challenges.iter().map(String::as_str).collect();
+            let mut done: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for entry in self.scores.iter().filter(|e| e.user_id == user_id) {
+                if let Some(challenge) = entry.challenge.as_deref() {
+                    if wanted.contains(challenge) {
+                        done.insert(challenge.to_string());
+                    }
+                }
+            }
+            Ok(done.into_iter().collect())
         }
         async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, StoreError> {
             let before = self.scores.len();
@@ -7645,6 +7661,54 @@ mod test_definitions {
             elapsed_ms: 1,
         };
         let req = create_test_post_request("/api/v1/scores", None, None, Some(&body));
+        test::call_service(&app, req).await;
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /api/v1/scores/me/completed  (campaign progress)
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn completed_challenges_returns_the_scored_subset() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+
+        // The caller scored on def:a and def:c (not def:b).
+        for challenge in ["def:a", "def:c"] {
+            let body = RecordScoreRequest { maze_id: None, challenge: Some(challenge.to_string()), score: 1, elapsed_ms: 1000 };
+            let req = create_test_post_request("/api/v1/scores", api_key, login_id, Some(&body));
+            assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+        }
+
+        let body = CompletedChallengesRequest { challenges: vec!["def:a".to_string(), "def:b".to_string(), "def:c".to_string()] };
+        let req = create_test_post_request("/api/v1/scores/me/completed", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let out: CompletedChallengesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        let mut completed = out.completed;
+        completed.sort();
+        assert_eq!(completed, vec!["def:a".to_string(), "def:c".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn completed_challenges_rejects_an_oversized_request() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let challenges: Vec<String> = (0..201).map(|i| format!("def:{i}")).collect();
+        let body = CompletedChallengesRequest { challenges };
+        let req = create_test_post_request("/api/v1/scores/me/completed", api_key, login_id, Some(&body));
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn completed_challenges_unauthenticated_is_rejected() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let body = CompletedChallengesRequest { challenges: vec!["def:a".to_string()] };
+        let req = create_test_post_request("/api/v1/scores/me/completed", None, None, Some(&body));
         test::call_service(&app, req).await;
     }
 
