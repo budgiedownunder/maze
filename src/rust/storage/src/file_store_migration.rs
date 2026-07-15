@@ -244,6 +244,13 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// `0013_featured_game_items.sql` migration. The FileStore keeps the featured
 /// list in a single root file `featured_game_items.json`, created lazily on the
 /// first feature — there is no directory to pre-create.
+///
+/// **Version 14 is a no-op.** The matching SQL migration adds a nullable
+/// `play_mode` column to `game_collections`. The FileStore data shape is updated
+/// by the `#[serde(default)]` on the new `GameCollection.play_mode` field —
+/// existing `collection.json` files round-trip without rewriting (an absent value
+/// loads as the default `Arcade`). The framework entry exists to advance the
+/// version counter in step with the SQL backend.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -257,6 +264,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (11, migrate_0011_create_game_definitions_dir),
     (12, migrate_0012_create_game_collections_dir),
     (13, no_op_migration),
+    (14, no_op_migration),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {

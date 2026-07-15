@@ -79,11 +79,12 @@ impl FeaturedGameItem {
     /// # Examples
     ///
     /// ```
-    /// use data_model::{FeaturedGameItem, FeaturedGameItemKind, GameCollection, Visibility};
+    /// use data_model::{FeaturedGameItem, FeaturedGameItemKind, GameCollection, PlayMode, Visibility};
     /// use uuid::Uuid;
     /// let collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Difficulty".into(),
-    ///     visibility: Visibility::Curated, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Curated, play_mode: PlayMode::Arcade,
+    ///     description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// let item = FeaturedGameItem::Collection(collection);
@@ -101,12 +102,13 @@ impl FeaturedGameItem {
     /// # Examples
     ///
     /// ```
-    /// use data_model::{FeaturedGameItem, GameCollection, Visibility};
+    /// use data_model::{FeaturedGameItem, GameCollection, PlayMode, Visibility};
     /// use uuid::Uuid;
     /// let id = Uuid::new_v4();
     /// let collection = GameCollection {
     ///     id, owner_id: Uuid::nil(), name: "Difficulty".into(),
-    ///     visibility: Visibility::Curated, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Curated, play_mode: PlayMode::Arcade,
+    ///     description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// assert_eq!(FeaturedGameItem::Collection(collection).id(), id);

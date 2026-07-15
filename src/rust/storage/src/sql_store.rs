@@ -24,8 +24,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, SubsecRound, Utc};
 use data_model::{
     AuditOutcome, CollectionItem, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
-    GameDefinition, GranteeSummary, Maze, OAuthIdentity, OneTimeToken, Rotation, TokenPurpose, User,
-    UserEmail, UserLogin, Visibility, truncate_email_audit_error_message,
+    GameDefinition, GranteeSummary, Maze, OAuthIdentity, OneTimeToken, PlayMode, Rotation, TokenPurpose,
+    User, UserEmail, UserLogin, Visibility, truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
@@ -984,6 +984,14 @@ fn game_collection_from_row(row: &AnyRow) -> Result<GameCollection, Error> {
     };
     let visibility =
         Visibility::from_wire_str(&row.try_get::<String, _>("visibility").map_err(map_sqlx_err)?);
+    // Nullable column (migration 0014): a row written before it existed reads back
+    // as `None`, which `from_wire_str` maps to the default `Arcade`.
+    let play_mode = PlayMode::from_wire_str(
+        row.try_get::<Option<String>, _>("play_mode")
+            .map_err(map_sqlx_err)?
+            .as_deref()
+            .unwrap_or_default(),
+    );
     let created_at =
         datetime_from_sql(&row.try_get::<String, _>("created_at").map_err(map_sqlx_err)?)?;
     let updated_at =
@@ -993,6 +1001,7 @@ fn game_collection_from_row(row: &AnyRow) -> Result<GameCollection, Error> {
         owner_id,
         name,
         visibility,
+        play_mode,
         description,
         image_updated_at,
         items: Vec::new(),
@@ -6517,7 +6526,7 @@ impl GameStore for SqlStore {
     /// Create a collection and read it back by id
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6542,7 +6551,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6608,8 +6617,8 @@ impl GameStore for SqlStore {
         sqlx::query(&q(
             self.kind,
             "INSERT INTO game_collections \
-             (id, owner_id, name, description, image_updated_at, visibility, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+             (id, owner_id, name, description, image_updated_at, visibility, play_mode, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ))
         .bind(collection.id.to_string())
         .bind(collection.owner_id.to_string())
@@ -6617,6 +6626,7 @@ impl GameStore for SqlStore {
         .bind(collection.description.clone())
         .bind(collection.image_updated_at.map(datetime_to_sql))
         .bind(collection.visibility.as_wire_str())
+        .bind(collection.play_mode.as_wire_str())
         .bind(datetime_to_sql(collection.created_at))
         .bind(datetime_to_sql(collection.updated_at))
         .execute(&mut *tx)
@@ -6638,7 +6648,7 @@ impl GameStore for SqlStore {
     /// Create a collection then read it back by id
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6663,7 +6673,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6697,7 +6707,7 @@ impl GameStore for SqlStore {
     /// Rename a collection and confirm the change persists
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6722,7 +6732,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6771,12 +6781,13 @@ impl GameStore for SqlStore {
         sqlx::query(&q(
             self.kind,
             "UPDATE game_collections SET name = ?, description = ?, image_updated_at = ?, \
-             visibility = ?, updated_at = ? WHERE id = ?",
+             visibility = ?, play_mode = ?, updated_at = ? WHERE id = ?",
         ))
         .bind(&collection.name)
         .bind(collection.description.clone())
         .bind(collection.image_updated_at.map(datetime_to_sql))
         .bind(collection.visibility.as_wire_str())
+        .bind(collection.play_mode.as_wire_str())
         .bind(datetime_to_sql(collection.updated_at))
         .bind(collection.id.to_string())
         .execute(&mut *tx)
@@ -6803,7 +6814,7 @@ impl GameStore for SqlStore {
     /// Delete a collection and confirm it no longer loads
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6828,7 +6839,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6872,7 +6883,7 @@ impl GameStore for SqlStore {
     /// Set two members, then reconcile to a new set (drop one, add one, reorder)
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6897,7 +6908,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6966,7 +6977,7 @@ impl GameStore for SqlStore {
     /// Grant access and confirm the grantee is listed
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7001,7 +7012,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut friend).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7050,7 +7061,7 @@ impl GameStore for SqlStore {
     /// Revoke a previously granted access
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7085,7 +7096,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut friend).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7124,7 +7135,7 @@ impl GameStore for SqlStore {
     /// Replace the grant list, then clear it
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7150,6 +7161,7 @@ impl GameStore for SqlStore {
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Set".to_string(),
     ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     play_mode: PlayMode::Arcade,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7211,7 +7223,7 @@ impl GameStore for SqlStore {
     /// List an owner's collections in name order
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7237,7 +7249,7 @@ impl GameStore for SqlStore {
     /// for name in ["Beta", "Alpha"] {
     ///     let mut collection = GameCollection {
     ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
-    ///         visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///         items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     ///     };
     ///     store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7270,7 +7282,7 @@ impl GameStore for SqlStore {
     /// A public collection is visible to another user
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7305,7 +7317,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut viewer).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
-    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7353,7 +7365,7 @@ impl GameStore for SqlStore {
     /// Read back the grantee list after a grant
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7388,7 +7400,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut friend).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7422,7 +7434,7 @@ impl GameStore for SqlStore {
     /// Read back the resolved grantee list after a grant
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, GranteeSummary, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, GranteeSummary, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7457,7 +7469,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut friend).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7505,7 +7517,7 @@ impl GameStore for SqlStore {
     /// Set, read back, then clear a collection's image
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7540,6 +7552,7 @@ impl GameStore for SqlStore {
     ///     owner_id: Uuid::nil(),
     ///     name: "Framed".to_string(),
     ///     visibility: Visibility::Public,
+    ///     play_mode: PlayMode::Arcade,
     ///     description: None,
     ///     image_updated_at: None,
     ///     items: vec![],
@@ -7602,7 +7615,7 @@ impl GameStore for SqlStore {
     /// Read back an image after storing one
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7627,7 +7640,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -7660,7 +7673,7 @@ impl GameStore for SqlStore {
     /// Clear a stored image
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
@@ -7685,7 +7698,7 @@ impl GameStore for SqlStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();

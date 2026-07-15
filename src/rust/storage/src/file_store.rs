@@ -5318,7 +5318,7 @@ impl GameStore for FileStore {
     /// Create a collection and read it back by id
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5337,7 +5337,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5390,7 +5390,7 @@ impl GameStore for FileStore {
     /// Create a collection and read it back by id
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5409,7 +5409,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5431,7 +5431,7 @@ impl GameStore for FileStore {
     /// Rename a collection and read the new name back
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5450,7 +5450,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5501,7 +5501,7 @@ impl GameStore for FileStore {
     /// Create then delete a collection; the id is gone afterwards
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5520,7 +5520,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5548,7 +5548,7 @@ impl GameStore for FileStore {
     /// Set two members, then reconcile to a new set (drop one, add one, reorder)
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5567,7 +5567,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5614,7 +5614,7 @@ impl GameStore for FileStore {
     /// Grant access, then confirm the grantee appears in the grantee list
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5634,7 +5634,7 @@ impl GameStore for FileStore {
     /// let grantee = Uuid::new_v4();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5669,7 +5669,7 @@ impl GameStore for FileStore {
     /// Grant then revoke; the grantee list is empty afterwards
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5689,7 +5689,7 @@ impl GameStore for FileStore {
     /// let grantee = Uuid::new_v4();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5726,7 +5726,7 @@ impl GameStore for FileStore {
     /// Replace the grant list, then clear it
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5746,6 +5746,7 @@ impl GameStore for FileStore {
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Set".to_string(),
     ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     play_mode: PlayMode::Arcade,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5779,7 +5780,7 @@ impl GameStore for FileStore {
     /// Two collections come back sorted by name
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5799,7 +5800,7 @@ impl GameStore for FileStore {
     /// for name in ["Zeta", "Alpha"] {
     ///     let mut collection = GameCollection {
     ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
-    ///         visibility: Visibility::Private, description: None, image_updated_at: None,
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///         items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     ///     };
     ///     store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5830,7 +5831,7 @@ impl GameStore for FileStore {
     /// A public collection is visible to another user
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5858,7 +5859,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut viewer).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
-    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5897,7 +5898,7 @@ impl GameStore for FileStore {
     /// A freshly-created collection has no grantees
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5916,7 +5917,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5936,7 +5937,7 @@ impl GameStore for FileStore {
     /// Read back the resolved grantee list after a grant
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, GranteeSummary, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, GranteeSummary, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5964,7 +5965,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut friend).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -5990,7 +5991,7 @@ impl GameStore for FileStore {
     /// Set, read back, then clear a collection's image
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6009,7 +6010,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
-    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6045,7 +6046,7 @@ impl GameStore for FileStore {
     /// Set a collection image, then read the bytes back
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6064,7 +6065,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
-    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
@@ -6085,7 +6086,7 @@ impl GameStore for FileStore {
     /// Set then clear a collection's image; the bytes are gone afterwards
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, User, UserEmail, Visibility};
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6104,7 +6105,7 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
     ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
-    ///     visibility: Visibility::Public, description: None, image_updated_at: None,
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
     ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();

@@ -17,7 +17,7 @@ mod test_definitions {
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
-    use data_model::{CollectionItem, FeaturedGameItem, FeaturedGameItemKind, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, Rotation, User, UserLogin, Visibility};
+    use data_model::{CollectionItem, FeaturedGameItem, FeaturedGameItemKind, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, PlayMode, Rotation, User, UserLogin, Visibility};
     use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest};
     use crate::api::v1::endpoints::game_shared::SetGameSharesRequest;
     use crate::api::v1::endpoints::game_collections::{GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest};
@@ -8875,6 +8875,7 @@ mod test_definitions {
             name: name.to_string(),
             description: None,
             visibility,
+            play_mode: PlayMode::Arcade,
         }
     }
 
@@ -8892,6 +8893,7 @@ mod test_definitions {
             owner_id: Uuid::nil(),
             name: name.to_string(),
             visibility,
+            play_mode: PlayMode::Arcade,
             description: None,
             image_updated_at: None,
             items: Vec::new(),
@@ -8934,6 +8936,7 @@ mod test_definitions {
         assert!(!created.id.is_nil());
         assert_eq!(created.owner_id, owner.id);
         assert!(created.items.is_empty());
+        assert_eq!(created.play_mode, PlayMode::Arcade);
 
         // Duplicate name for the same owner → 409.
         let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&body));
@@ -8946,6 +8949,51 @@ mod test_definitions {
         let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
         let req = create_test_post_request("/api/v1/game-collections", Some(admin_key), None, Some(&curated));
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::CREATED);
+    }
+
+    #[actix_web::test]
+    async fn game_collection_play_mode_defaults_and_round_trips() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let key = owner.api_key;
+
+        // A create body that omits playMode entirely → defaults to Arcade.
+        let omitted = serde_json::json!({ "name": "No Mode", "visibility": "private" });
+        let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&omitted));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let created: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(created.play_mode, PlayMode::Arcade);
+
+        // Create with campaign → round-trips on the create body and the detail GET.
+        let campaign = serde_json::json!({ "name": "Campaign", "visibility": "private", "playMode": "campaign" });
+        let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&campaign));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let created: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(created.play_mode, PlayMode::Campaign);
+        let detail: serde_json::Value = serde_json::from_slice(
+            &test::read_body(
+                test::call_service(
+                    &app,
+                    create_test_get_request(&format!("/api/v1/game-collections/{}", created.id), Some(key), None),
+                )
+                .await,
+            )
+            .await,
+        )
+        .expect("json");
+        assert_eq!(detail["playMode"], "campaign");
+
+        // Update back to arcade → persists.
+        let edit = serde_json::json!({ "name": "Campaign", "visibility": "private", "playMode": "arcade" });
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", created.id), Some(key), None, &edit);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let updated: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(updated.play_mode, PlayMode::Arcade);
     }
 
     #[actix_web::test]

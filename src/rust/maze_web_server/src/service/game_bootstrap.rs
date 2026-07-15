@@ -14,7 +14,7 @@
 //! identical shape a difficulty preset does today.
 
 use chrono::Utc;
-use data_model::{GameCollection, GameDefinition, Rotation, User, Visibility};
+use data_model::{GameCollection, GameDefinition, PlayMode, Rotation, User, Visibility};
 use storage::{Error as StoreError, Store};
 use uuid::Uuid;
 
@@ -234,6 +234,7 @@ pub async fn init_difficulty_collection(
         owner_id: Uuid::nil(),
         name: DIFFICULTY_COLLECTION_NAME.to_string(),
         visibility: Visibility::Curated,
+        play_mode: PlayMode::Arcade,
         description: Some("Warm up on Easy, then climb through Tricky and Hard.".to_string()),
         image_updated_at: None,
         items: Vec::new(),

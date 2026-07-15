@@ -14,7 +14,7 @@ use chrono::{Duration, SubsecRound, Utc};
 use data_model::{
     AuditOutcome, CollectionItem, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS,
     ERROR_MESSAGE_TRUNCATION_MARKER, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
-    GameDefinition, GranteeSummary, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, Rotation,
+    GameDefinition, GranteeSummary, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, PlayMode, Rotation,
     TokenPurpose, User, UserEmail, UserLogin, Visibility,
 };
 use storage::{
@@ -2756,6 +2756,7 @@ pub fn make_game_collection(name: &str, visibility: Visibility) -> GameCollectio
         owner_id: Uuid::nil(),
         name: name.to_string(),
         visibility,
+        play_mode: PlayMode::Arcade,
         description: None,
         image_updated_at: None,
         items: vec![],
@@ -2853,6 +2854,32 @@ pub async fn update_game_collection_is_metadata_only_and_scoped_to_owner(
         .await
         .expect_err("non-owner update must be rejected");
     assert!(matches!(err, Error::GameCollectionIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn game_collection_persists_play_mode(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "col_owner", "col_owner@example.com").await;
+
+    // Omitting play_mode (the helper leaves it at the struct default) persists
+    // and reads back as Arcade.
+    let mut arcade = make_game_collection("Arcade Set", Visibility::Private);
+    assert_eq!(arcade.play_mode, PlayMode::Arcade, "helper default is Arcade");
+    store.create_game_collection(&owner, &mut arcade).await.expect("create arcade");
+    let loaded = store.get_game_collection(arcade.id).await.expect("get arcade");
+    assert_eq!(loaded.play_mode, PlayMode::Arcade, "default play_mode round-trips as Arcade");
+
+    // Creating with Campaign round-trips.
+    let mut campaign = make_game_collection("Campaign Set", Visibility::Private);
+    campaign.play_mode = PlayMode::Campaign;
+    store.create_game_collection(&owner, &mut campaign).await.expect("create campaign");
+    let loaded = store.get_game_collection(campaign.id).await.expect("get campaign");
+    assert_eq!(loaded.play_mode, PlayMode::Campaign, "campaign play_mode round-trips");
+
+    // Update flips it back to Arcade and persists.
+    let mut edit = loaded;
+    edit.play_mode = PlayMode::Arcade;
+    store.update_game_collection(&owner, &mut edit).await.expect("update");
+    let loaded = store.get_game_collection(campaign.id).await.expect("get after update");
+    assert_eq!(loaded.play_mode, PlayMode::Arcade, "update changes play_mode");
 }
 
 pub async fn delete_game_collection_is_owner_scoped(store: &mut Box<dyn Store>) {

@@ -987,6 +987,12 @@ async fn game_collection_update_is_metadata_only_and_scoped_to_owner() {
 }
 
 #[tokio::test]
+async fn game_collection_persists_play_mode() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::game_collection_persists_play_mode(&mut s).await;
+}
+
+#[tokio::test]
 async fn game_collection_delete_is_owner_scoped() {
     let (mut s, _temp) = fresh_store().await;
     contract::delete_game_collection_is_owner_scoped(&mut s).await;

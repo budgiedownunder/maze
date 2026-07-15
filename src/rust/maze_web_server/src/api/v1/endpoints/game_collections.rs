@@ -33,7 +33,7 @@ use actix_web::{
     http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
 use chrono::{DateTime, Utc};
-use data_model::{GameCollection, GameDefinition, GranteeSummary, User, Visibility};
+use data_model::{GameCollection, GameDefinition, GranteeSummary, PlayMode, User, Visibility};
 use serde::{Deserialize, Serialize};
 use storage::{Error as StoreError, SharedStore};
 use utoipa::ToSchema;
@@ -61,6 +61,11 @@ pub struct GameCollectionRequest {
     #[serde(default)]
     #[schema(value_type = String)]
     pub visibility: Visibility,
+    /// How the collection is played (`arcade` free-choice or `campaign` ordered).
+    /// Defaults to `arcade` when omitted.
+    #[serde(default)]
+    #[schema(value_type = String)]
+    pub play_mode: PlayMode,
 }
 
 /// Query parameters for the list endpoint — a page of the scoped result.
@@ -112,6 +117,9 @@ pub struct GameCollectionDetailResponse {
     #[schema(value_type = String)]
     /// Access tier gating the grouping.
     pub visibility: Visibility,
+    #[schema(value_type = String)]
+    /// How the collection is played (`arcade` free-choice or `campaign` ordered).
+    pub play_mode: PlayMode,
     /// Cache-key for the optional collection-level image; `None` when unset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_updated_at: Option<DateTime<Utc>>,
@@ -134,6 +142,7 @@ impl GameCollectionDetailResponse {
             name: collection.name,
             description: collection.description,
             visibility: collection.visibility,
+            play_mode: collection.play_mode,
             image_updated_at: collection.image_updated_at,
             created_at: collection.created_at,
             updated_at: collection.updated_at,
@@ -268,6 +277,7 @@ pub async fn create_game_collection(
         owner_id: Uuid::nil(),
         name: body.name,
         visibility: body.visibility,
+        play_mode: body.play_mode,
         description: body.description,
         image_updated_at: None,
         items: Vec::new(),
@@ -505,6 +515,7 @@ pub async fn update_game_collection(
         owner_id: owner.id,
         name: body.name,
         visibility: body.visibility,
+        play_mode: body.play_mode,
         description: body.description,
         image_updated_at: existing.image_updated_at, // image bytes managed separately
         items: existing.items,                        // membership is managed by the item endpoints
