@@ -194,7 +194,9 @@
 :root[data-theme="dark"] .maze-item-action img,
 :root:not([data-theme="light"]) .maze-item-action img,
 :root[data-theme="dark"] .leaderboard-reset img,
-:root:not([data-theme="light"]) .leaderboard-reset img {
+:root:not([data-theme="light"]) .leaderboard-reset img,
+:root[data-theme="dark"] .play3d-card-actions .btn-secondary .play3d-card-action-icon,
+:root:not([data-theme="light"]) .play3d-card-actions .btn-secondary .play3d-card-action-icon {
   filter: invert(1);
 }
 
@@ -1528,6 +1530,21 @@ textarea.input {
 }
 .play3d-card-actions > button {
   flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.play3d-card-action-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+}
+/* The Play (primary/accent) button has white text, so force its icon white too.
+   The monochrome icons are black by default (they invert in dark mode on
+   transparent buttons — see the invert rule below). */
+.play3d-card-actions .btn-primary .play3d-card-action-icon {
+  filter: invert(1);
 }
 
 /* Manage Features: the up/down reorder controls stacked at the row's left edge,

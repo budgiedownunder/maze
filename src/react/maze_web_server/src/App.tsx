@@ -18,6 +18,9 @@ import { WorkshopGamesPage } from './pages/WorkshopGamesPage'
 import { WorkshopHubPage } from './pages/WorkshopHubPage'
 import { WorkshopCollectionsPage } from './pages/WorkshopCollectionsPage'
 import { WorkshopFeaturesPage } from './pages/WorkshopFeaturesPage'
+import { Play3dHubPage } from './pages/Play3dHubPage'
+import { Play3dFeaturedPage } from './pages/Play3dFeaturedPage'
+import { Play3dPlaceholderPage } from './pages/Play3dPlaceholderPage'
 import { AccountPage } from './pages/AccountPage'
 import { LeaderboardsPage } from './pages/LeaderboardsPage'
 
@@ -43,6 +46,12 @@ const router = createBrowserRouter([
   { path: '/workshop/games', element: <ProtectedRoute><WorkshopGamesPage /></ProtectedRoute> },
   { path: '/workshop/game-collections', element: <ProtectedRoute><WorkshopCollectionsPage /></ProtectedRoute> },
   { path: '/workshop/features', element: <ProtectedRoute><WorkshopFeaturesPage /></ProtectedRoute> },
+  { path: '/play-3d', element: <ProtectedRoute><Play3dHubPage /></ProtectedRoute> },
+  { path: '/play-3d/featured', element: <ProtectedRoute><Play3dFeaturedPage /></ProtectedRoute> },
+  // Built out in D4.6 (My Games / Shared) and D4.8 (Community); placeholders for now.
+  { path: '/play-3d/my-games', element: <ProtectedRoute><Play3dPlaceholderPage title="My Games" /></ProtectedRoute> },
+  { path: '/play-3d/shared', element: <ProtectedRoute><Play3dPlaceholderPage title="Shared with me" /></ProtectedRoute> },
+  { path: '/play-3d/community', element: <ProtectedRoute><Play3dPlaceholderPage title="Community" /></ProtectedRoute> },
   // The bare stub route is retired; its surface now lives under the workshop hub.
   { path: '/games', element: <Navigate to="/workshop" replace /> },
   { path: '/leaderboards', element: <ProtectedRoute><LeaderboardsPage /></ProtectedRoute> },

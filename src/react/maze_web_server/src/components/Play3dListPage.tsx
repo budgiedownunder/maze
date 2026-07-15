@@ -15,6 +15,7 @@ export interface Play3dCardAction {
   variant?: 'primary' | 'secondary'
   disabled?: boolean
   title?: string
+  icon?: string
 }
 
 // A declarative description of one browse card: the base renders the shared
@@ -47,6 +48,7 @@ function Play3dCardView({ name, description, thumbnail, actions }: Play3dCard) {
             disabled={a.disabled}
             title={a.title}
           >
+            {a.icon && <img className="play3d-card-action-icon" src={a.icon} alt="" aria-hidden="true" />}
             {a.label}
           </button>
         ))}

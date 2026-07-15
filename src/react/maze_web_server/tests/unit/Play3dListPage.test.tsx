@@ -69,6 +69,15 @@ describe('Play3dListPage', () => {
     expect(screen.getByRole('button', { name: 'Play Quick Picks' })).toBeInTheDocument()
   })
 
+  it('renders a leading icon on a card action when provided', async () => {
+    renderList({
+      fetchPage: () => Promise.resolve({ items: [{ id: 'g1', name: 'Night Climb' }], hasMore: false }),
+      card: cardOf([{ key: 'play', label: 'Play', ariaLabel: 'Play', variant: 'primary', icon: '/images/icons/icon_play_3d.png', onClick: () => {} }]),
+    })
+    const play = await screen.findByRole('button', { name: 'Play Night Climb' })
+    expect(play.querySelector('img')).toHaveAttribute('src', '/images/icons/icon_play_3d.png')
+  })
+
   it('fires a card action’s onClick', async () => {
     const onPlay = vi.fn()
     renderList({
