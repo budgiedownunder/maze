@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, CompletedChallengesResponse, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -939,6 +939,11 @@ export const handlers = [
     ]
     return HttpResponse.json<ScoreboardResponse>({ scores, limit: 100, offset: 0, has_more: false })
   }),
+
+  // Campaign progress: which of the requested challenges the caller has scored on.
+  // Default: none. Tests override with server.use to mark specific games complete.
+  http.post(`${BASE}/scores/me/completed`, () =>
+    HttpResponse.json<CompletedChallengesResponse>({ completed: [] })),
 
   http.get(`${BASE}/scores`, ({ request }) => {
     const url = new URL(request.url)

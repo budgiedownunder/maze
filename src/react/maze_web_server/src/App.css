@@ -450,6 +450,79 @@
   overflow: hidden;
 }
 
+/* Campaign collection modal: an ordered progression of levels, each a clickable
+   row (play/replay) except locked ones, with a complete/current/locked status. */
+.campaign-done {
+  margin: 0;
+  font-weight: 600;
+  color: #2f9e44;
+}
+.campaign-levels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.campaign-level-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.campaign-level-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.campaign-level.current .campaign-level-btn {
+  border-color: var(--accent);
+}
+.campaign-level-num {
+  flex: 0 0 auto;
+  width: 1.4rem;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.campaign-level-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.campaign-level-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.campaign-level-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.campaign-level-status {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.campaign-level-status.complete { color: #2f9e44; }
+.campaign-level-status.current { color: var(--accent); }
+.campaign-level-status.locked { color: var(--text-muted); }
+
 /* Access-tier radio group (Just me / Specific people / Everyone / Featured). */
 .access-tiers {
   display: flex;

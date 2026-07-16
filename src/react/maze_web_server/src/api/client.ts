@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -320,6 +320,17 @@ export function getScoreHistory(token: string, query: HistoryQuery = {}): Promis
   const qs = params.toString()
   return request<ScoreboardResponse>(`/scores/me${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(token),
+  })
+}
+
+// Given challenge board keys (e.g. a campaign's games as `def:<id>`), returns the
+// subset the caller has scored on — one request for campaign progress instead of
+// paging the whole history.
+export function getCompletedChallenges(token: string, challenges: string[]): Promise<CompletedChallengesResponse> {
+  return request<CompletedChallengesResponse>('/scores/me/completed', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ challenges } satisfies CompletedChallengesRequest),
   })
 }
 

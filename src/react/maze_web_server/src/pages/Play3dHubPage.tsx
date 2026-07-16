@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { AppHeader } from '../components/AppHeader'
 
 // The four browse scopes, in order. Featured is live; the other three link to a
-// "coming soon" placeholder until D4.6 (My Games / Shared) and D4.8 (Community).
+// "coming soon" placeholder until their scope pages are implemented.
 const TILES = [
   { to: '/play-3d/featured', img: '/images/workshop/workshop-features.svg', title: 'Featured', desc: 'Games and collections featured for everyone' },
   { to: '/play-3d/my-games', img: '/images/workshop/workshop-my-games.svg', title: 'My Games', desc: 'Your own 3D games and collections' },

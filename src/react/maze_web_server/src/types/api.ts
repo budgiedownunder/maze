@@ -133,6 +133,15 @@ export interface ResetScoresResponse {
   deleted: number
 }
 
+// Request/response for POST /scores/me/completed: given a set of challenge board
+// keys, the subset the caller has scored on (used to derive campaign progress).
+export interface CompletedChallengesRequest {
+  challenges: string[]
+}
+export interface CompletedChallengesResponse {
+  completed: string[]
+}
+
 // The subset of the server's Play3dConfigResponse the client consumes: the
 // curated difficulty's fixed maze seed, used to key its leaderboard
 // (`challenge = "<difficulty>:<seed>"`).

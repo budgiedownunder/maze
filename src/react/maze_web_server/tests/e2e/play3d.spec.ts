@@ -121,3 +121,57 @@ test('a featured multi-game Arcade collection opens the picker on Featured', asy
   await picker.getByRole('button', { name: 'Cancel' }).click()
   await expect(picker).toBeHidden()
 })
+
+test('a featured Campaign collection opens the ordered progression on Featured', async ({ page }) => {
+  await loginAsAdmin(page)
+  const stamp = Date.now()
+  const g1 = `CA ${stamp}`
+  const g2 = `CB ${stamp}`
+  const colName = `Camp ${stamp}`
+
+  for (const gameName of [g1, g2]) {
+    await page.goto('/workshop/games')
+    await page.getByRole('button', { name: 'New Game' }).click()
+    const wiz = page.getByRole('dialog', { name: 'New Game' })
+    await wiz.getByLabel('Name').fill(gameName)
+    await wiz.getByRole('button', { name: 'Finish' }).click()
+    await expect(wiz).toBeHidden()
+  }
+
+  // A Campaign collection (set the play mode at create) containing both games.
+  await page.goto('/workshop/game-collections')
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByLabel('Play mode').selectOption('campaign')
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  await page.getByRole('button', { name: `Edit ${colName}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  await edit.getByLabel('Add game').fill(g1)
+  await edit.getByRole('button', { name: `Add ${g1}` }).click()
+  await edit.getByLabel('Add game').fill(g2)
+  await edit.getByRole('button', { name: `Add ${g2}` }).click()
+  await edit.getByRole('button', { name: 'Save' }).click()
+  await expect(edit).toBeHidden()
+
+  await page.getByRole('button', { name: `Access for ${colName}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // On Featured, Play opens the ordered campaign modal: nothing played yet, so the
+  // first level is current (Play) and the second is locked.
+  await page.goto('/play-3d/featured')
+  const card = page.locator('.play3d-card', { hasText: colName })
+  await card.getByRole('button', { name: `Play ${colName}` }).click()
+  const modal = page.getByRole('dialog', { name: `Play: ${colName}` })
+  await expect(modal).toBeVisible()
+  await expect(modal.getByRole('button', { name: `Play ${g1}` })).toBeVisible()
+  await expect(modal.getByRole('button', { name: `Locked: ${g2}` })).toBeVisible()
+  await expect(modal.getByRole('button', { name: 'Continue' })).toBeVisible()
+  await modal.getByRole('button', { name: 'Cancel' }).click()
+  await expect(modal).toBeHidden()
+})

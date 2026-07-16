@@ -54,7 +54,7 @@ const router = createBrowserRouter([
   { path: '/workshop/features', element: <ProtectedRoute><WorkshopFeaturesPage /></ProtectedRoute> },
   { path: '/play-3d', element: <ProtectedRoute><Play3dHubPage /></ProtectedRoute> },
   { path: '/play-3d/featured', element: <ProtectedRoute><Play3dFeaturedPage /></ProtectedRoute> },
-  // Built out in D4.6 (My Games / Shared) and D4.8 (Community); placeholders for now.
+  // Placeholders until the My Games / Shared with me / Community scope pages are built.
   { path: '/play-3d/my-games', element: <ProtectedRoute><Play3dPlaceholderPage title="My Games" /></ProtectedRoute> },
   { path: '/play-3d/shared', element: <ProtectedRoute><Play3dPlaceholderPage title="Shared with me" /></ProtectedRoute> },
   { path: '/play-3d/community', element: <ProtectedRoute><Play3dPlaceholderPage title="Community" /></ProtectedRoute> },

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
+import { getCompletedChallenges, getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
+import { gameChallengeKey } from '../../src/utils/gameDefinitions'
 import type { ScoreboardResponse } from '../../src/types/api'
 
 const TOKEN = 'test-token'
@@ -184,5 +185,29 @@ describe('getScoreHistory', () => {
     const url = cap.url()
     expect(url.searchParams.get('limit')).toBe('5')
     expect(url.searchParams.get('offset')).toBe('10')
+  })
+})
+
+describe('getCompletedChallenges', () => {
+  it('POSTs the challenges and returns the completed subset', async () => {
+    let body: unknown = null
+    let auth: string | null = null
+    server.use(
+      http.post('/api/v1/scores/me/completed', async ({ request }) => {
+        body = await request.json()
+        auth = request.headers.get('Authorization')
+        return HttpResponse.json({ completed: ['def:a'] })
+      }),
+    )
+    const res = await getCompletedChallenges(TOKEN, ['def:a', 'def:b'])
+    expect(res.completed).toEqual(['def:a'])
+    expect(body).toEqual({ challenges: ['def:a', 'def:b'] })
+    expect(auth).toContain(TOKEN)
+  })
+})
+
+describe('gameChallengeKey', () => {
+  it('is def:<id> for a game', () => {
+    expect(gameChallengeKey('abc')).toBe('def:abc')
   })
 })

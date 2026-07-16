@@ -149,14 +149,52 @@ describe('Play3dFeaturedPage', () => {
     expect(within(dialog).getByRole('button', { name: 'Play' })).toBeDisabled()
   })
 
-  it('a multi-game Campaign collection Play is disabled (coming soon)', async () => {
-    server.use(featuredOf(colItem(col({ id: 'c1', name: 'Campaign', playMode: 'campaign', items: [
-      { definitionId: 'a', sortOrder: 0 }, { definitionId: 'b', sortOrder: 1 },
-    ] }))))
+  function campaignSetup(completed: string[]) {
+    const g1 = def({ id: 'g1', name: 'Alpha' })
+    const g2 = def({ id: 'g2', name: 'Beta' })
+    const g3 = def({ id: 'g3', name: 'Gamma' })
+    server.use(
+      featuredOf(colItem(col({ id: 'c1', name: 'Campaign', playMode: 'campaign', items: [
+        { definitionId: 'g1', sortOrder: 0 }, { definitionId: 'g2', sortOrder: 1 }, { definitionId: 'g3', sortOrder: 2 },
+      ] }))),
+      http.get('/api/v1/game-collections/c1', () =>
+        HttpResponse.json({ ...col({ id: 'c1', name: 'Campaign' }), definitions: [g1, g2, g3] })),
+      http.post('/api/v1/scores/me/completed', () => HttpResponse.json({ completed })),
+    )
+  }
+
+  it('a multi-game Campaign collection opens an ordered modal with complete/current/locked progress', async () => {
+    // Alpha (def:g1) is completed → Beta is current → Gamma is locked.
+    campaignSetup(['def:g1'])
     renderPage()
-    const play = await screen.findByRole('button', { name: 'Play Campaign' })
-    expect(play).toBeDisabled()
-    expect(play).toHaveAttribute('title', expect.stringMatching(/campaign play is coming soon/i))
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Play: Campaign' })
+
+    expect(within(dialog).getByText('✓ Completed')).toBeInTheDocument()
+    const alpha = within(dialog).getByRole('button', { name: 'Replay Alpha' })
+    const beta = within(dialog).getByRole('button', { name: 'Play Beta' })
+    const gamma = within(dialog).getByRole('button', { name: 'Locked: Gamma' })
+    expect(alpha).toBeEnabled()
+    expect(beta).toBeEnabled()
+    expect(gamma).toBeDisabled()
+
+    // A completed level replays; Continue plays the current (first-incomplete) level.
+    await userEvent.click(alpha)
+    expect(launchDefinition).toHaveBeenCalledWith('g1')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
+    expect(launchDefinition).toHaveBeenCalledWith('g2')
+  })
+
+  it('an all-complete campaign shows the done state with Continue disabled', async () => {
+    campaignSetup(['def:g1', 'def:g2', 'def:g3'])
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Campaign' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Play: Campaign' })
+    expect(within(dialog).getByText(/completed this campaign/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Completed' })).toBeDisabled()
+    // Every level is replayable (none locked).
+    expect(within(dialog).getByRole('button', { name: 'Replay Alpha' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'Replay Gamma' })).toBeEnabled()
   })
 
   it('Leaderboard opens the game leaderboard modal', async () => {

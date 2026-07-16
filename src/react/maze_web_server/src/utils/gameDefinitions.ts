@@ -72,6 +72,15 @@ export function reshuffleConfirmMessage(hasScores: boolean): string {
 export const ROTATIONS = ['static', 'daily'] as const
 export type Rotation = (typeof ROTATIONS)[number]
 
+// The leaderboard challenge key for a game, matching the server's play-fetch
+// subject (game_definitions.rs `compute_play_subject`) for a Static game: `def:<id>`.
+// Used to check per-game completion (a score on this key) for campaign progress.
+// Only Static games can be created today; Daily rotation (whose board key folds in
+// the UTC date, `def:<id>:<yyyy-mm-dd>`) is not yet supported here.
+export function gameChallengeKey(id: string): string {
+  return `def:${id}`
+}
+
 // How a collection is played once opened: "arcade" = free choice (pick any
 // member game), "campaign" = an ordered progression through the members. The
 // lowercase wire values mirror the server's `data_model::PlayMode`.
