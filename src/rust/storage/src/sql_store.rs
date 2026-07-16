@@ -5806,6 +5806,61 @@ impl GameStore for SqlStore {
         .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
+        // Drop the game from every collection that lists it. `game_collection_items`
+        // has no FK on `definition_id` (membership is a loose reference, so reads
+        // tolerate + filter dangling ones), which means nothing removes these for
+        // us — and a left-behind row would make a collection's item count read
+        // higher than the members it can actually show. Capture the affected
+        // collections first, so only they are renumbered afterwards.
+        let affected = sqlx::query(&q(
+            self.kind,
+            "SELECT collection_id FROM game_collection_items WHERE definition_id = ?",
+        ))
+        .bind(id.to_string())
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        let affected: Vec<String> = affected
+            .iter()
+            .map(|row| row.try_get("collection_id").map_err(map_sqlx_err))
+            .collect::<Result<_, _>>()?;
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM game_collection_items WHERE definition_id = ?",
+        ))
+        .bind(id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        if !affected.is_empty() {
+            // Close the gap the removed member left, so `sort_order` stays the
+            // dense 0..n the model guarantees after any membership change (what
+            // `set_game_collection_items` would write, and what FileStore's
+            // `normalize_item_order` produces). Same portable shape as
+            // `featured_game_items_recompact` — the `ROW_NUMBER()` derived table is
+            // materialised on every backend, so MySQL's error 1093 doesn't fire
+            // against the table being updated — but partitioned per collection, and
+            // bounded to the collections that actually changed.
+            let placeholders = vec!["?"; affected.len()].join(", ");
+            let sql = format!(
+                "UPDATE game_collection_items SET sort_order = ( \
+                     SELECT rn FROM ( \
+                         SELECT collection_id AS c, definition_id AS d, \
+                                ROW_NUMBER() OVER (PARTITION BY collection_id ORDER BY sort_order) - 1 AS rn \
+                         FROM game_collection_items WHERE collection_id IN ({placeholders}) \
+                     ) t \
+                     WHERE t.c = game_collection_items.collection_id \
+                       AND t.d = game_collection_items.definition_id \
+                 ) WHERE collection_id IN ({placeholders})"
+            );
+            let renumber_sql = q(self.kind, &sql);
+            let mut renumber = sqlx::query(&renumber_sql);
+            // Bound twice: once for the derived table, once for the outer filter.
+            for collection_id in affected.iter().chain(affected.iter()) {
+                renumber = renumber.bind(collection_id);
+            }
+            renumber.execute(&mut *tx).await.map_err(map_sqlx_err)?;
+        }
         sqlx::query(&q(self.kind, "DELETE FROM game_definitions WHERE id = ?"))
             .bind(id.to_string())
             .execute(&mut *tx)

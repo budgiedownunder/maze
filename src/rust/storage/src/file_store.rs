@@ -756,6 +756,24 @@ impl FileStore {
     }
 
     // Loads every collection, skipping any unreadable file.
+    /// Removes `definition_id` from every collection that lists it, re-compacting
+    /// the survivors' `sort_order`. Membership is a loose reference (the SQL
+    /// schema deliberately puts no FK on `definition_id`, so reads tolerate and
+    /// filter dangling ones), which means nothing drops these for us — and a
+    /// left-behind item would make a collection's count read higher than the
+    /// members it can actually show.
+    fn prune_definition_from_collections(&self, definition_id: Uuid) -> Result<(), Error> {
+        for mut collection in self.read_all_game_collections()? {
+            if !collection.items.iter().any(|i| i.definition_id == definition_id) {
+                continue;
+            }
+            collection.items.retain(|i| i.definition_id != definition_id);
+            normalize_item_order(&mut collection.items);
+            self.write_game_collection_file(&collection, true)?;
+        }
+        Ok(())
+    }
+
     fn read_all_game_collections(&self) -> Result<Vec<GameCollection>, Error> {
         let mut collections = Vec::new();
         for id in self.get_game_collection_ids()? {
@@ -4836,6 +4854,7 @@ impl GameStore for FileStore {
             return Err(Error::GameDefinitionIdNotFound(id.to_string()));
         }
         delete_dir(&self.game_definition_dir_path(id));
+        self.prune_definition_from_collections(id)?;
         // Drop the featured row (no-op when the definition was never featured).
         self.featured_game_items_remove(FeaturedGameItemKind::Definition, id)?;
         Ok(())

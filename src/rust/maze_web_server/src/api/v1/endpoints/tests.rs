@@ -1077,6 +1077,16 @@ mod test_definitions {
             self.owned_def_or_not_found(owner, id)?;
             self.game_definitions.retain(|d| d.id != id);
             self.def_grantees.remove(&id);
+            // Drop the game from every collection listing it (membership carries no
+            // FK, so nothing else removes these), re-compacting the survivors.
+            for collection in &mut self.game_collections {
+                if collection.items.iter().any(|i| i.definition_id == id) {
+                    collection.items.retain(|i| i.definition_id != id);
+                    for (index, item) in collection.items.iter_mut().enumerate() {
+                        item.sort_order = index as u32;
+                    }
+                }
+            }
             self.featured_game_items_remove(FeaturedGameItemKind::Definition, id);
             Ok(())
         }

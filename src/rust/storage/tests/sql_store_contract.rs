@@ -1145,6 +1145,12 @@ async fn game_public_lists_sort_by_newest() {
 }
 
 #[tokio::test]
+async fn game_definition_delete_removes_it_from_collections() {
+    let mut s = fresh_store().await;
+    contract::delete_game_definition_removes_it_from_collections(&mut s).await;
+}
+
+#[tokio::test]
 async fn user_prefix_search_filters_and_pages() {
     let mut s = fresh_store().await;
     contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;

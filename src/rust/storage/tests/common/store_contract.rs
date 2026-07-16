@@ -3377,6 +3377,39 @@ pub async fn get_public_game_definitions_lists_cross_owner_and_filters(store: &m
     assert_eq!(page.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
 }
 
+pub async fn delete_game_definition_removes_it_from_collections(store: &mut Box<dyn Store>) {
+    let owner = fixture_user(store, "prune_a", "prune_a@example.com").await;
+    let mut keep = make_game_definition("Keep", Visibility::Private);
+    store.create_game_definition(&owner, &mut keep).await.expect("keep");
+    let mut doomed = make_game_definition("Doomed", Visibility::Private);
+    store.create_game_definition(&owner, &mut doomed).await.expect("doomed");
+    let mut third = make_game_definition("Third", Visibility::Private);
+    store.create_game_definition(&owner, &mut third).await.expect("third");
+
+    let mut collection = make_game_collection("Set", Visibility::Private);
+    store.create_game_collection(&owner, &mut collection).await.expect("collection");
+    store
+        .set_game_collection_items(&owner, collection.id, &[keep.id, doomed.id, third.id])
+        .await
+        .expect("items");
+
+    store.delete_game_definition(&owner, doomed.id).await.expect("delete");
+
+    // Membership carries no FK, so the delete must drop the item itself —
+    // otherwise the collection's item count outruns the members it can show.
+    let loaded = store.get_game_collection(collection.id).await.expect("load");
+    assert_eq!(
+        loaded.items.iter().map(|i| i.definition_id).collect::<Vec<_>>(),
+        vec![keep.id, third.id],
+        "the deleted game is gone; the survivors keep their relative order"
+    );
+    assert_eq!(
+        loaded.items.iter().map(|i| i.sort_order).collect::<Vec<_>>(),
+        vec![0, 1],
+        "sort_order re-compacted to a dense 0..n"
+    );
+}
+
 pub async fn get_public_game_lists_sort_by_newest(store: &mut Box<dyn Store>) {
     let author = fixture_user(store, "new_a", "new_a@example.com").await;
     let viewer = fixture_user(store, "new_b", "new_b@example.com").await;
