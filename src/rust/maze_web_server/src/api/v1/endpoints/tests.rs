@@ -1123,6 +1123,16 @@ mod test_definitions {
             Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
+        async fn get_shared_game_definitions(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
+                .filter(|d| d.owner_id != viewer.id
+                    && d.visibility == Visibility::Shared
+                    && self.def_grantees.get(&d.id).is_some_and(|g| g.contains(&viewer.id)))
+                .cloned().collect();
+            defs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+
         async fn get_game_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
         }
@@ -1275,6 +1285,16 @@ mod test_definitions {
                     || matches!(c.visibility, Visibility::Public | Visibility::Curated)
                     || (c.visibility == Visibility::Shared
                         && self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&viewer.id))))
+                .cloned().collect();
+            cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+
+        async fn get_shared_game_collections(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
+            let mut cols: Vec<GameCollection> = self.game_collections.iter()
+                .filter(|c| c.owner_id != viewer.id
+                    && c.visibility == Visibility::Shared
+                    && self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&viewer.id)))
                 .cloned().collect();
             cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
@@ -8843,6 +8863,35 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn list_game_definitions_scope_shared_returns_only_grants() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        // My own shared one (excluded), and others' public/curated/ungranted-shared
+        // (all excluded) — only the one granted to me should appear.
+        let my_own = seed_game_definition(&store, &me, "My Own", Visibility::Shared, Rotation::Static).await;
+        let others_public = seed_game_definition(&store, &other, "Public", Visibility::Public, Rotation::Static).await;
+        let others_curated = seed_game_definition(&store, &other, "Curated", Visibility::Curated, Rotation::Static).await;
+        let shared = seed_game_definition(&store, &other, "Shared to me", Visibility::Shared, Rotation::Static).await;
+        store.write().await.grant_game_definition_access(&other, shared.id, me.id).await.expect("grant");
+        let ungranted = seed_game_definition(&store, &other, "Shared to others", Visibility::Shared, Rotation::Static).await;
+
+        let req = create_test_get_request("/api/v1/game-definitions?scope=shared", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameDefinitionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(list.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Shared to me"]);
+        let ids: Vec<Uuid> = list.definitions.iter().map(|d| d.id).collect();
+        assert!(!ids.contains(&my_own.id));
+        assert!(!ids.contains(&others_public.id));
+        assert!(!ids.contains(&others_curated.id));
+        assert!(!ids.contains(&ungranted.id));
+    }
+
+    #[actix_web::test]
     async fn list_game_definitions_exclude_definitions_blanks_config() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
@@ -9218,6 +9267,31 @@ mod test_definitions {
         // Invalid scope → 400.
         let req = create_test_get_request("/api/v1/game-collections?scope=bogus", Some(me.api_key), None);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn list_game_collections_scope_shared_returns_only_grants() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let my_own = seed_game_collection(&store, &me, "My Own", Visibility::Shared).await;
+        let others_public = seed_game_collection(&store, &other, "Public", Visibility::Public).await;
+        let shared = seed_game_collection(&store, &other, "Shared to me", Visibility::Shared).await;
+        store.write().await.grant_game_collection_access(&other, shared.id, me.id).await.expect("grant");
+        let ungranted = seed_game_collection(&store, &other, "Shared to others", Visibility::Shared).await;
+
+        let req = create_test_get_request("/api/v1/game-collections?scope=shared", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(list.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Shared to me"]);
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
+        assert!(!ids.contains(&my_own.id));
+        assert!(!ids.contains(&others_public.id));
+        assert!(!ids.contains(&ungranted.id));
     }
 
     #[actix_web::test]

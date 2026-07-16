@@ -3288,6 +3288,60 @@ pub async fn get_visible_game_collections_composes_and_pages(store: &mut Box<dyn
     assert_eq!(page.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["C Shared"]);
 }
 
+pub async fn get_shared_game_definitions_lists_only_grants(store: &mut Box<dyn Store>) {
+    let a = fixture_user(store, "shd_a", "shd_a@example.com").await;
+    let b = fixture_user(store, "shd_b", "shd_b@example.com").await;
+    // A owns one of each visibility plus two Shared — only the first granted to B.
+    let mut a_private = make_game_definition("A Private", Visibility::Private);
+    store.create_game_definition(&a, &mut a_private).await.expect("a private");
+    let mut a_public = make_game_definition("B Public", Visibility::Public);
+    store.create_game_definition(&a, &mut a_public).await.expect("a public");
+    let mut a_curated = make_game_definition("C Curated", Visibility::Curated);
+    store.create_game_definition(&a, &mut a_curated).await.expect("a curated");
+    let mut a_shared = make_game_definition("D Shared", Visibility::Shared);
+    store.create_game_definition(&a, &mut a_shared).await.expect("a shared");
+    store.grant_game_definition_access(&a, a_shared.id, b.id).await.expect("grant b");
+    let mut a_shared_other = make_game_definition("E Shared Other", Visibility::Shared);
+    store.create_game_definition(&a, &mut a_shared_other).await.expect("a shared other");
+    // B owns a Shared one — their OWN shared is excluded from "shared with me".
+    let mut b_shared = make_game_definition("F BShared", Visibility::Shared);
+    store.create_game_definition(&b, &mut b_shared).await.expect("b shared");
+
+    // "Shared with me" = only A's shared-and-granted-to-B: not public/curated, not
+    // the ungranted shared, not B's own.
+    let shared = store.get_shared_game_definitions(&b, 100, 0).await.expect("b shared");
+    assert_eq!(shared.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["D Shared"]);
+
+    // Grant the second one too and confirm ordering + paging.
+    store.grant_game_definition_access(&a, a_shared_other.id, b.id).await.expect("grant b 2");
+    let both = store.get_shared_game_definitions(&b, 100, 0).await.expect("both");
+    assert_eq!(both.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["D Shared", "E Shared Other"]);
+    let page2 = store.get_shared_game_definitions(&b, 1, 1).await.expect("page2");
+    assert_eq!(page2.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["E Shared Other"]);
+}
+
+pub async fn get_shared_game_collections_lists_only_grants(store: &mut Box<dyn Store>) {
+    let a = fixture_user(store, "cshd_a", "cshd_a@example.com").await;
+    let b = fixture_user(store, "cshd_b", "cshd_b@example.com").await;
+    let mut a_public = make_game_collection("A Public", Visibility::Public);
+    store.create_game_collection(&a, &mut a_public).await.expect("a public");
+    let mut a_shared = make_game_collection("B Shared", Visibility::Shared);
+    store.create_game_collection(&a, &mut a_shared).await.expect("a shared");
+    store.grant_game_collection_access(&a, a_shared.id, b.id).await.expect("grant b");
+    // An ungranted shared collection + B's own shared: both excluded.
+    let mut a_shared_other = make_game_collection("C Shared Other", Visibility::Shared);
+    store.create_game_collection(&a, &mut a_shared_other).await.expect("a shared other");
+    let mut b_shared = make_game_collection("D BShared", Visibility::Shared);
+    store.create_game_collection(&b, &mut b_shared).await.expect("b shared");
+
+    let shared = store.get_shared_game_collections(&b, 100, 0).await.expect("b shared");
+    assert_eq!(
+        shared.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        vec!["B Shared"],
+        "only A's shared-and-granted-to-B: not public, not ungranted-shared, not B's own"
+    );
+}
+
 pub async fn search_users_by_username_prefix_filters_and_pages(store: &mut Box<dyn Store>) {
     fixture_user(store, "alpha_one", "au1@example.com").await;
     fixture_user(store, "alpha_two", "au2@example.com").await;

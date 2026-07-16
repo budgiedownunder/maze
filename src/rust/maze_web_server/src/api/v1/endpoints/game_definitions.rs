@@ -362,14 +362,16 @@ pub async fn create_game_definition(
                    default) it is the caller's visible set — their own (all visibilities, drafts \
                    included), those shared with them, and all public and curated definitions, \
                    de-duplicated. With scope=mine it is only the caller's own definitions (any \
-                   visibility), optionally filtered by a case-insensitive name substring q. Paged \
-                   via limit (server-capped) and offset.",
+                   visibility), optionally filtered by a case-insensitive name substring q. With \
+                   scope=shared it is only the definitions shared with the caller (a share grant \
+                   they don't own; public/curated excluded). Paged via limit (server-capped) and \
+                   offset.",
     get,
     path = "/api/v1/game-definitions",
     params(
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
         ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
-        ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default) or 'mine' (the caller's own definitions)"),
+        ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default), 'mine' (the caller's own definitions), or 'shared' (definitions shared with the caller)"),
         ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine)"),
         ("excludeDefinitions" = Option<bool>, Query, description = "When true, blanks each game's opaque config blob so only the light metadata is returned (default false)")
     ),
@@ -420,6 +422,20 @@ pub async fn list_game_definitions(
                     ErrorInternalServerError("Failed to list game definitions")
                 })?;
             page_owned(all, q.q.as_deref(), |d| d.name.as_str(), limit, offset)
+        }
+        ListScope::Shared => {
+            // Storage composes + pages the "shared with me" set (unbounded, so
+            // DB-paged). Over-fetch one row so `has_more` needs no separate count.
+            let mut defs = store_lock
+                .get_shared_game_definitions(&user, limit + 1, offset)
+                .await
+                .map_err(|err| {
+                    log::warn!("list game definitions store error: {err}");
+                    ErrorInternalServerError("Failed to list game definitions")
+                })?;
+            let has_more = defs.len() as u32 > limit;
+            defs.truncate(limit as usize);
+            (defs, has_more)
         }
     };
 

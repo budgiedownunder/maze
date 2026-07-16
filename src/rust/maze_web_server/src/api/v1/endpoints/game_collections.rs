@@ -304,14 +304,15 @@ pub async fn create_game_collection(
                    default) it is the caller's visible set — their own (all visibilities), those \
                    shared with them, and all public and curated collections, de-duplicated. With \
                    scope=mine it is only the caller's own collections (any visibility), optionally \
-                   filtered by a case-insensitive name substring q. Paged via limit (server-capped) \
-                   and offset.",
+                   filtered by a case-insensitive name substring q. With scope=shared it is only \
+                   the collections shared with the caller (a share grant they don't own; \
+                   public/curated excluded). Paged via limit (server-capped) and offset.",
     get,
     path = "/api/v1/game-collections",
     params(
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
         ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
-        ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default) or 'mine' (the caller's own collections)"),
+        ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default), 'mine' (the caller's own collections), or 'shared' (collections shared with the caller)"),
         ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine)")
     ),
     responses(
@@ -360,6 +361,20 @@ pub async fn list_game_collections(
                     ErrorInternalServerError("Failed to list game collections")
                 })?;
             page_owned(all, q.q.as_deref(), |c| c.name.as_str(), limit, offset)
+        }
+        ListScope::Shared => {
+            // Storage composes + pages the "shared with me" set; over-fetch one
+            // row for `has_more`.
+            let mut cols = store_lock
+                .get_shared_game_collections(&user, limit + 1, offset)
+                .await
+                .map_err(|err| {
+                    log::warn!("list game collections store error: {err}");
+                    ErrorInternalServerError("Failed to list game collections")
+                })?;
+            let has_more = cols.len() as u32 > limit;
+            cols.truncate(limit as usize);
+            (cols, has_more)
         }
     };
 

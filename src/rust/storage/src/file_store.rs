@@ -5117,6 +5117,84 @@ impl GameStore for FileStore {
         Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
+    /// A page of the definitions **shared with** `viewer` (a `Shared` grant they
+    /// don't own; `Public`/`Curated` excluded), ordered by name then id. See
+    /// [`GameStore::get_shared_game_definitions`].
+    ///
+    /// # Examples
+    ///
+    /// A shared definition granted to the viewer is listed; a public one is not
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut shared = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Shared".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut shared).await.unwrap();
+    /// store.grant_game_definition_access(&owner, shared.id, viewer.id).await.unwrap();
+    /// let mut public = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Public".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 2, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut public).await.unwrap();
+    ///
+    /// let shared_list = store.get_shared_game_definitions(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(shared_list.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Shared"]);
+    /// # });
+    /// ```
+    async fn get_shared_game_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        // Narrower than the visible predicate: only a `Shared` grant the viewer
+        // doesn't own. The SqlStore does this as one paged predicate query.
+        let mut defs: Vec<GameDefinition> = Vec::new();
+        for def in self.read_all_game_definitions()? {
+            let shared = def.owner_id != viewer.id
+                && def.visibility == Visibility::Shared
+                && self.read_game_definition_grantees(def.id)?.contains(&viewer.id);
+            if shared {
+                defs.push(def);
+            }
+        }
+        defs.sort_by(|a, b| {
+            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+        });
+        Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
     /// The user ids currently granted access to a definition. See
     /// [`GameStore::get_game_definition_grantees`].
     ///
@@ -5941,6 +6019,74 @@ impl GameStore for FileStore {
                 || (collection.visibility == Visibility::Shared
                     && self.read_game_collection_grantees(collection.id)?.contains(&viewer.id));
             if visible {
+                collections.push(collection);
+            }
+        }
+        collections.sort_by(|a, b| {
+            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+        });
+        Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
+    /// A page of the collections **shared with** `viewer` (a `Shared` grant they
+    /// don't own; `Public`/`Curated` excluded), ordered by name then id. See
+    /// [`GameStore::get_shared_game_collections`].
+    ///
+    /// # Examples
+    ///
+    /// A shared collection granted to the viewer is listed
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut shared = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Shared".to_string(),
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut shared).await.unwrap();
+    /// store.grant_game_collection_access(&owner, shared.id, viewer.id).await.unwrap();
+    ///
+    /// let shared_list = store.get_shared_game_collections(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(shared_list.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Shared"]);
+    /// # });
+    /// ```
+    async fn get_shared_game_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let mut collections: Vec<GameCollection> = Vec::new();
+        for collection in self.read_all_game_collections()? {
+            let shared = collection.owner_id != viewer.id
+                && collection.visibility == Visibility::Shared
+                && self.read_game_collection_grantees(collection.id)?.contains(&viewer.id);
+            if shared {
                 collections.push(collection);
             }
         }

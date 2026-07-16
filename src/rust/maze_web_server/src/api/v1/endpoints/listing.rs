@@ -26,6 +26,9 @@ pub(crate) enum ListScope {
     Visible,
     /// Only the caller's own items (any visibility).
     Mine,
+    /// Only items shared with the caller — a `Shared` grant they don't own
+    /// (public/curated excluded). Backs the play-side "Shared with me" list.
+    Shared,
 }
 
 /// Parses the `scope` query value, defaulting to [`ListScope::Visible`] when
@@ -34,8 +37,9 @@ pub(crate) fn parse_scope(raw: Option<&str>) -> Result<ListScope, Error> {
     match raw {
         None | Some("visible") => Ok(ListScope::Visible),
         Some("mine") => Ok(ListScope::Mine),
+        Some("shared") => Ok(ListScope::Shared),
         Some(other) => Err(ErrorBadRequest(format!(
-            "invalid scope '{other}' (expected 'mine' or 'visible')"
+            "invalid scope '{other}' (expected 'visible', 'mine' or 'shared')"
         ))),
     }
 }

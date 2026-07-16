@@ -6191,6 +6191,93 @@ impl GameStore for SqlStore {
         rows.iter().map(game_definition_from_row).collect()
     }
 
+    /// A page of the definitions **shared with** `viewer` (a `Shared` grant they
+    /// don't own; `Public`/`Curated` excluded), ordered by name then id. See
+    /// [`GameStore::get_shared_game_definitions`].
+    ///
+    /// # Examples
+    ///
+    /// A shared definition granted to the viewer is listed; a public one is not
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut shared = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Shared".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut shared).await.unwrap();
+    /// store.grant_game_definition_access(&owner, shared.id, viewer.id).await.unwrap();
+    /// let mut public = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Public".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 2, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&owner, &mut public).await.unwrap();
+    ///
+    /// let shared_list = store.get_shared_game_definitions(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(shared_list.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Shared"]);
+    /// # });
+    /// ```
+    async fn get_shared_game_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        // Narrower than the visible predicate: only a `Shared` grant the viewer
+        // doesn't own — the play-side "Shared with me" list.
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM game_definitions \
+             WHERE owner_id != ? \
+                AND visibility = 'shared' \
+                AND EXISTS ( \
+                     SELECT 1 FROM game_definition_shares s \
+                     WHERE s.definition_id = game_definitions.id AND s.grantee_user_id = ?) \
+             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+        ))
+        .bind(viewer.id.to_string())
+        .bind(viewer.id.to_string())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter().map(game_definition_from_row).collect()
+    }
+
     /// The user ids currently granted access to a definition. See
     /// [`GameStore::get_game_definition_grantees`].
     ///
@@ -7409,6 +7496,88 @@ impl GameStore for SqlStore {
                 OR (visibility = 'shared' AND EXISTS ( \
                      SELECT 1 FROM game_collection_shares s \
                      WHERE s.collection_id = game_collections.id AND s.grantee_user_id = ?)) \
+             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+        ))
+        .bind(viewer.id.to_string())
+        .bind(viewer.id.to_string())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut collections: Vec<GameCollection> =
+            rows.iter().map(game_collection_from_row).collect::<Result<_, _>>()?;
+        for collection in &mut collections {
+            collection.items = self.load_collection_items(collection.id).await?;
+        }
+        Ok(collections)
+    }
+
+    /// A page of the collections **shared with** `viewer` (a `Shared` grant they
+    /// don't own; `Public`/`Curated` excluded), ordered by name then id. See
+    /// [`GameStore::get_shared_game_collections`].
+    ///
+    /// # Examples
+    ///
+    /// A shared collection granted to the viewer is listed
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    /// let mut owner = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "owner".to_string(),
+    ///     full_name: "Owner".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut owner).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut shared = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Shared".to_string(),
+    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&owner, &mut shared).await.unwrap();
+    /// store.grant_game_collection_access(&owner, shared.id, viewer.id).await.unwrap();
+    ///
+    /// let shared_list = store.get_shared_game_collections(&viewer, 10, 0).await.unwrap();
+    /// assert_eq!(shared_list.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Shared"]);
+    /// # });
+    /// ```
+    async fn get_shared_game_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM game_collections \
+             WHERE owner_id != ? \
+                AND visibility = 'shared' \
+                AND EXISTS ( \
+                     SELECT 1 FROM game_collection_shares s \
+                     WHERE s.collection_id = game_collections.id AND s.grantee_user_id = ?) \
              ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
         ))
         .bind(viewer.id.to_string())

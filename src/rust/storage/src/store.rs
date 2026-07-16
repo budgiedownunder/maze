@@ -595,6 +595,20 @@ pub trait GameStore {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameDefinition>, Error>;
+    /// A page of the definitions **shared with** `viewer` — every `Shared`
+    /// definition they've been granted that they do **not** own. A `Public` or
+    /// `Curated` definition is excluded: it is open to everyone, not a targeted
+    /// share. Ordered by name (case-insensitive) then id, sliced to
+    /// `limit`/`offset`. The narrowed counterpart of
+    /// [`GameStore::get_visible_game_definitions`] that backs the play-side
+    /// "Shared with me" list; same predicate-is-a-filter, server-owns-access
+    /// rationale (the server still access-checks single fetches).
+    async fn get_shared_game_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error>;
     /// The user ids granted access to a definition — an unconditional primitive
     /// the server uses for composing the access decision (owner ∨ granted).
     /// Returns an empty list for an unknown/ungranted id.
@@ -697,6 +711,16 @@ pub trait GameStore {
     /// The collection-side counterpart of [`GameStore::get_visible_game_definitions`];
     /// same predicate-is-a-filter, server-owns-access rationale.
     async fn get_visible_game_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error>;
+    /// A page of the collections **shared with** `viewer` — every `Shared`
+    /// collection they've been granted that they do **not** own (`Public` /
+    /// `Curated` excluded, exactly as for definitions). The collection
+    /// counterpart of [`GameStore::get_shared_game_definitions`].
+    async fn get_shared_game_collections(
         &self,
         viewer: &User,
         limit: u32,

@@ -1093,6 +1093,18 @@ async fn game_visible_collections_compose_and_page() {
 }
 
 #[tokio::test]
+async fn game_shared_definitions_list_only_grants() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_shared_game_definitions_lists_only_grants(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_shared_collections_list_only_grants() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_shared_game_collections_lists_only_grants(&mut s).await;
+}
+
+#[tokio::test]
 async fn user_prefix_search_filters_and_pages() {
     let (mut s, _temp) = fresh_store().await;
     contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;
