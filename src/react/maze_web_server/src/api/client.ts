@@ -352,6 +352,9 @@ interface PageQuery {
   // Case-insensitive name substring filter (honoured with scope=mine or
   // scope=public).
   q?: string
+  // Result ordering: 'name' (default, A–Z) or 'newest' (most recently created
+  // first). Honoured with scope=public; every other scope is name-ordered.
+  sort?: 'name' | 'newest'
   // When true, the game-definition list blanks each game's opaque `config` blob
   // (returning only the light metadata) — for callers that only list games, e.g.
   // the collection membership picker. Ignored by the collection list endpoint.
@@ -364,6 +367,7 @@ function pageQuery(query: PageQuery): string {
   if (query.offset != null) params.set('offset', String(query.offset))
   if (query.scope != null) params.set('scope', query.scope)
   if (query.q != null && query.q !== '') params.set('q', query.q)
+  if (query.sort != null) params.set('sort', query.sort)
   if (query.excludeDefinitions) params.set('excludeDefinitions', 'true')
   const qs = params.toString()
   return qs ? `?${qs}` : ''

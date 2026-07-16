@@ -400,11 +400,13 @@ seedSharedWithMe()
 // under `mine` (not owned by the signed-in user) or `shared` (no grant).
 // Idempotent by id.
 const COMMUNITY_GAME_ID = 'def-community'
+const COMMUNITY_GAME_2_ID = 'def-community-2'
 const COMMUNITY_COLLECTION_ID = 'col-community'
 
 function seedCommunity(): void {
   const owner = mockUserDirectory.find(u => u.username === 'cleo')!.id
   const now = '2026-01-01T00:00:00.000Z'
+  const later = '2026-02-01T00:00:00.000Z'
   if (!mockGameDefinitions.some(d => d.id === COMMUNITY_GAME_ID)) {
     mockGameDefinitions = [...mockGameDefinitions, {
       id: COMMUNITY_GAME_ID,
@@ -417,6 +419,20 @@ function seedCommunity(): void {
       config: { rows: 8, cols: 8, seed: 707070 },
       createdAt: now,
       updatedAt: now,
+    }]
+  }
+  if (!mockGameDefinitions.some(d => d.id === COMMUNITY_GAME_2_ID)) {
+    mockGameDefinitions = [...mockGameDefinitions, {
+      id: COMMUNITY_GAME_2_ID,
+      ownerId: owner,
+      name: 'Zephyr Heights',
+      description: 'A newer game published for everyone.',
+      visibility: 'public',
+      seed: 606060,
+      rotation: 'static',
+      config: { rows: 10, cols: 10, seed: 606060 },
+      createdAt: later,
+      updatedAt: later,
     }]
   }
   if (!mockGameCollections.some(c => c.id === COMMUNITY_COLLECTION_ID)) {
@@ -732,6 +748,11 @@ export const handlers = [
     }
     if (scope === 'public') {
       defs = defs.filter(d => d.visibility === 'public' && d.ownerId !== mockProfile.id)
+      // The server honours `sort` for the public scope only; every other scope
+      // stays name-ordered.
+      if (url.searchParams.get('sort') === 'newest') {
+        defs = [...defs].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+      }
     }
     if (q !== '') defs = defs.filter(d => d.name.toLowerCase().includes(q))
     let page = defs.slice(offset, offset + limit)
@@ -878,6 +899,9 @@ export const handlers = [
     }
     if (scope === 'public') {
       cols = cols.filter(c => c.visibility === 'public' && c.ownerId !== mockProfile.id)
+      if (url.searchParams.get('sort') === 'newest') {
+        cols = [...cols].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
+      }
     }
     if (q !== '') cols = cols.filter(c => c.name.toLowerCase().includes(q))
     return HttpResponse.json<GameCollectionListResponse>({

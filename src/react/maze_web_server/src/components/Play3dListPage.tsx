@@ -1,7 +1,9 @@
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { AppHeader } from './AppHeader'
 import { useToken } from '../context/AuthContext'
 import { usePagedList } from '../hooks/usePagedList'
+
+const DEBOUNCE_MS = 300
 
 // One action button on a browse card (e.g. Play, Leaderboard). `primary` renders
 // the accented button; anything else is a secondary button. `disabled` + `title`
@@ -57,24 +59,34 @@ function Play3dCardView({ name, description, thumbnail, actions }: Play3dCard) {
   )
 }
 
+// How a list's search box narrows results.
+//   * `client` — filter the pages already loaded by `text`. Fine for a bounded
+//     scope whose endpoint takes no `q`.
+//   * `server` — send the (debounced) query to `fetchPage` and reload from the
+//     first page. Required for an unbounded scope like Community, where a match
+//     may simply not be in the pages loaded so far.
+export type Play3dListSearch<T> =
+  | { mode: 'client'; text: (item: T) => string }
+  | { mode: 'server' }
+
 interface BodyProps<T> {
   // Fetches one page of the scope's items. Paged by `usePagedList`; `hasMore`
-  // drives the Load more button.
-  fetchPage: (token: string, limit: number, offset: number) => Promise<{ items: T[]; hasMore: boolean }>
+  // drives the Load more button. `query` is the debounced search text, and is
+  // empty unless the search is in `server` mode.
+  fetchPage: (token: string, limit: number, offset: number, query: string) => Promise<{ items: T[]; hasMore: boolean }>
   getId: (item: T) => string
   // Maps an item to its card descriptor (name/description/thumbnail/actions).
   card: (item: T) => Play3dCard
-  // When provided, renders a filter box that narrows the accumulated pages
-  // client-side by this text; omit it for scopes with no filter. (Server-side
-  // search — the Community scope — is layered on when that page is built.)
-  searchText?: (item: T) => string
+  // Omit for a list with no search box.
+  search?: Play3dListSearch<T>
   searchPlaceholder?: string
   emptyText: string
   errorText: string
-  // Bumping this resets + reloads the list — driven by the page's Refresh
-  // button. A page hosting several bodies (one per tab) passes the same token to
-  // each so one Refresh refreshes whichever is showing.
-  refreshToken: number
+  // Identifies the current query: the parent folds in whatever it owns (its
+  // Refresh counter, the chosen sort, …), and any change resets + reloads the
+  // list. A page hosting several bodies (one per tab) passes the same token to
+  // each, so one Refresh refreshes whichever is showing.
+  queryToken: string | number
 }
 
 // The list body of a Play-3D browse surface: an optional filter box, the
@@ -82,28 +94,39 @@ interface BodyProps<T> {
 // driven by `usePagedList`. Rendered by `Play3dListPage` (single list) and by
 // the tabbed scope pages (one body per tab).
 export function Play3dListBody<T>({
-  fetchPage, getId, card, searchText, searchPlaceholder = 'Filter…', emptyText, errorText, refreshToken,
+  fetchPage, getId, card, search, searchPlaceholder = 'Filter…', emptyText, errorText, queryToken,
 }: BodyProps<T>) {
   const token = useToken()
   const [query, setQuery] = useState('')
+  const [debounced, setDebounced] = useState('')
 
-  const key = token ? `${token}:${refreshToken}` : null
+  // Debounce only matters for a server-searched list (it refetches per query);
+  // a client filter reads `query` directly, so it stays instant.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebounced(query), DEBOUNCE_MS)
+    return () => clearTimeout(handle)
+  }, [query])
+
+  // A server-searched list refetches on the query, so it belongs in the key.
+  const serverQuery = search?.mode === 'server' ? debounced.trim() : ''
+  const key = token ? `${token}:${queryToken}:${serverQuery}` : null
   const doFetch = useCallback(
-    (limit: number, offset: number) => fetchPage(token!, limit, offset),
-    [token, fetchPage],
+    (limit: number, offset: number) => fetchPage(token!, limit, offset, serverQuery),
+    [token, fetchPage, serverQuery],
   )
   const list = usePagedList<T>(key, doFetch, getId, errorText)
 
-  // The filter narrows the accumulated pages for display; Load more / `hasMore`
-  // stay driven by the unfiltered server page.
-  const trimmed = query.trim().toLowerCase()
-  const items = searchText && trimmed !== ''
-    ? list.items.filter(i => searchText(i).toLowerCase().includes(trimmed))
+  // A client filter narrows the accumulated pages for display; Load more /
+  // `hasMore` stay driven by the unfiltered server page. A server-searched list
+  // already came back filtered.
+  const trimmed = query.trim()
+  const items = search?.mode === 'client' && trimmed !== ''
+    ? list.items.filter(i => search.text(i).toLowerCase().includes(trimmed.toLowerCase()))
     : list.items
 
   return (
     <main className="maze-list-page">
-      {searchText && (
+      {search && (
         <input
           type="text"
           className="input play3d-search"
@@ -139,7 +162,7 @@ export function Play3dListBody<T>({
   )
 }
 
-interface Props<T> extends Omit<BodyProps<T>, 'refreshToken'> {
+interface Props<T> extends Omit<BodyProps<T>, 'queryToken'> {
   title: string
   // The parent's modals/dialogs (e.g. a leaderboard), rendered in the page shell.
   overlays?: ReactNode
@@ -160,7 +183,7 @@ export function Play3dListPage<T>({ title, overlays, ...body }: Props<T>) {
           <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
         </button>
       </AppHeader>
-      <Play3dListBody<T> {...body} refreshToken={refreshCount} />
+      <Play3dListBody<T> {...body} queryToken={refreshCount} />
     </div>
   )
 }

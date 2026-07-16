@@ -30,11 +30,26 @@ test('the 3D Games hub shows the four browse tiles and Featured opens empty', as
   await expect(page.getByText(/no featured games or collections yet/i)).toBeVisible()
 })
 
-test('the Community scope still shows a coming-soon placeholder', async ({ page }) => {
+test('Community lists other users’ published games, searchable and sortable', async ({ page }) => {
   await login(page)
+  // The dev:mock backend seeds two public games owned by another user, named so
+  // that A-Z and Newest disagree.
   await page.goto('/play-3d/community')
   await expect(page.getByRole('banner').getByText('Community')).toBeVisible()
-  await expect(page.getByText('Coming soon.')).toBeVisible()
+  const names = page.locator('.play3d-card-name')
+  await expect(names).toHaveText(['Community Classic', 'Zephyr Heights'])
+
+  // Sort reorders the catalogue (server-side).
+  await page.getByLabel('Sort').selectOption('newest')
+  await expect(names).toHaveText(['Zephyr Heights', 'Community Classic'])
+
+  // Search narrows it (server-side `q`, debounced).
+  await page.getByLabel('Search games…').fill('Zephyr')
+  await expect(names).toHaveText(['Zephyr Heights'])
+
+  // The Collections tab shows the published collection.
+  await page.getByRole('tab', { name: 'Collections' }).click()
+  await expect(page.locator('.play3d-card', { hasText: 'Community Picks' })).toBeVisible()
 })
 
 test('My Games lists the caller’s own games + collections across the two tabs', async ({ page }) => {

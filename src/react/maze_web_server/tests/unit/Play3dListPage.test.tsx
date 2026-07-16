@@ -3,11 +3,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
-import { Play3dListPage, type Play3dCard } from '../../src/components/Play3dListPage'
+import { Play3dListPage, type Play3dCard, type Play3dListSearch } from '../../src/components/Play3dListPage'
 
 // Isolation tests for the reusable Play-3D browse shell: paging, the client-side
-// filter, empty/error states, and card action wiring — driven by a stub loader,
-// no routing or real endpoints.
+// filter, the server-side search mode, empty/error states, and card action
+// wiring — driven by a stub loader, no routing or real endpoints.
 
 vi.mock('../../src/context/AuthContext', async () => {
   const actual = await vi.importActual('../../src/context/AuthContext')
@@ -26,10 +26,10 @@ function cardOf(actions: Play3dCard['actions'] = [{ key: 'play', label: 'Play', 
 
 interface ListOverrides {
   title?: string
-  fetchPage?: (token: string, limit: number, offset: number) => Promise<{ items: Item[]; hasMore: boolean }>
+  fetchPage?: (token: string, limit: number, offset: number, query: string) => Promise<{ items: Item[]; hasMore: boolean }>
   getId?: (i: Item) => string
   card?: (i: Item) => Play3dCard
-  searchText?: (i: Item) => string
+  search?: Play3dListSearch<Item>
   emptyText?: string
   errorText?: string
 }
@@ -101,13 +101,13 @@ describe('Play3dListPage', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
-  it('filters the loaded items client-side when searchText is given', async () => {
+  it('filters the loaded items client-side in client search mode', async () => {
     renderList({
       fetchPage: () => Promise.resolve({ items: [
         { id: 'g1', name: 'Alpha' },
         { id: 'g2', name: 'Beta' },
       ], hasMore: false }),
-      searchText: (i: Item) => i.name,
+      search: { mode: 'client', text: (i: Item) => i.name },
     })
     await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
     await userEvent.type(screen.getByLabelText('Filter…'), 'bet')
@@ -117,6 +117,31 @@ describe('Play3dListPage', () => {
     await userEvent.clear(screen.getByLabelText('Filter…'))
     await userEvent.type(screen.getByLabelText('Filter…'), 'zzz')
     expect(screen.getByText('No matches.')).toBeInTheDocument()
+  })
+
+  it('sends the query to the loader (and reloads) in server search mode', async () => {
+    const queries: string[] = []
+    // The loader answers as a server would — only matches come back — so the list
+    // can't be passing a client filter off as a server search.
+    const all: Item[] = [{ id: 'g1', name: 'Alpha' }, { id: 'g2', name: 'Beta' }]
+    renderList({
+      fetchPage: (_t, _limit, _offset, query) => {
+        queries.push(query)
+        const items = query === '' ? all : all.filter(i => i.name.toLowerCase().includes(query.toLowerCase()))
+        return Promise.resolve({ items, hasMore: false })
+      },
+      search: { mode: 'server' },
+    })
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    expect(queries).toEqual([''])
+
+    await userEvent.type(screen.getByLabelText('Filter…'), 'bet')
+    // Debounced, so settle on the refetched page rather than the loading flash.
+    await waitFor(() => {
+      expect(screen.queryByText('Alpha')).toBeNull()
+      expect(screen.getByText('Beta')).toBeInTheDocument()
+    })
+    expect(queries).toContain('bet')
   })
 
   it('shows the empty state when there are no items', async () => {

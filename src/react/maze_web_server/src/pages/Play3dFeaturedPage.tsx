@@ -34,7 +34,7 @@ export function Play3dFeaturedPage() {
       fetchPage={(t, limit, offset) => getFeaturedGameItems(t, { limit, offset }).then(p => ({ items: p.items, hasMore: p.hasMore }))}
       getId={featuredKey}
       card={card}
-      searchText={featuredName}
+      search={{ mode: 'client', text: featuredName }}
       searchPlaceholder="Filter featured…"
       emptyText="No featured games or collections yet."
       errorText="Failed to load featured items"
