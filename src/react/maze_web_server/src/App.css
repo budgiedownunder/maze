@@ -1623,6 +1623,17 @@ textarea.input {
   gap: 0.5rem;
   min-width: 0;
 }
+/* In the Leaderboards selector row the picker's parts join the row directly, so
+   the summary sits inline with the Game Type select + Play button while the
+   expanded panel takes a full-width line of its own. `order` keeps the panel
+   after the Play button, so the panel (not Play) is what wraps. */
+.subject-selector .lb-picker {
+  display: contents;
+}
+.subject-selector .lb-picker-panel {
+  order: 1;
+  flex: 1 1 100%;
+}
 .lb-picker-summary {
   display: flex;
   align-items: center;

@@ -81,6 +81,17 @@ export function gameChallengeKey(id: string): string {
   return `def:${id}`
 }
 
+// The game id behind a `def:<id>` (or Daily `def:<id>:<yyyy-mm-dd>`) leaderboard
+// challenge, or null for any other challenge namespace (e.g. a legacy
+// `<difficulty>:<seed>` board). The inverse of [gameChallengeKey], mirroring the
+// server's `parse_definition_challenge`; lets a score row's challenge be resolved
+// back to the game it was set on.
+export function gameIdFromChallenge(challenge: string): string | null {
+  if (!challenge.startsWith('def:')) return null
+  const id = challenge.slice('def:'.length).split(':')[0]
+  return id === '' ? null : id
+}
+
 // How a collection is played once opened: "arcade" = free choice (pick any
 // member game), "campaign" = an ordered progression through the members. The
 // lowercase wire values mirror the server's `data_model::PlayMode`.

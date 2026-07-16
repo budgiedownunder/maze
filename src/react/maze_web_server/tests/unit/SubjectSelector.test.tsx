@@ -3,6 +3,22 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SubjectSelector, type SubjectSelection } from '../../src/components/SubjectSelector'
 
+// The game picker has its own test file; stub it here so this stays focused on
+// the Game Type cascade (and needn't fetch).
+vi.mock('../../src/components/LeaderboardGamePicker', () => ({
+  LeaderboardGamePicker: ({ value, onSelect }: {
+    value: { name: string } | null
+    onSelect: (game: { id: string; name: string; ownerId: string }) => void
+  }) => (
+    <div>
+      <span>{value ? value.name : 'no game'}</span>
+      <button type="button" onClick={() => onSelect({ id: 'g1', name: 'Picked', ownerId: 'owner-1' })}>
+        Pick game
+      </button>
+    </div>
+  ),
+}))
+
 const MAZES = [
   { mazeId: 'a.json', name: 'Alpha' },
   { mazeId: 'b.json', name: 'Beta' },
@@ -18,26 +34,25 @@ describe('SubjectSelector', () => {
       />,
     )
     const gameType = screen.getByLabelText('Game Type') as HTMLSelectElement
-    expect([...gameType.options].map(o => o.textContent)).toEqual(['Mazes', 'Play 3D'])
+    expect([...gameType.options].map(o => o.textContent)).toEqual(['Mazes', '3D Games'])
     const game = screen.getByLabelText('Game') as HTMLSelectElement
-    const labels = [...game.options].map(o => o.textContent)
-    expect(labels).toEqual(['Alpha', 'Beta'])
+    expect([...game.options].map(o => o.textContent)).toEqual(['Alpha', 'Beta'])
     expect(game.value).toBe('a.json')
   })
 
-  it('lists Easy/Tricky/Hard for Play 3D', () => {
+  it('renders the game picker (not a maze dropdown) for 3D Games', () => {
     render(
       <SubjectSelector
         mazes={MAZES}
-        value={{ gameType: 'play3d', difficulty: 'easy' }}
+        value={{ gameType: 'play3d', game: { id: 'g9', name: 'Tricky', ownerId: 'o9' } }}
         onChange={vi.fn()}
       />,
     )
-    const game = screen.getByLabelText('Game') as HTMLSelectElement
-    expect([...game.options].map(o => o.textContent)).toEqual(['Easy', 'Tricky', 'Hard'])
+    expect(screen.getByText('Tricky')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Game')).not.toBeInTheDocument()
   })
 
-  it('switching Game Type to Play 3D emits the first difficulty', async () => {
+  it('switching Game Type to 3D Games emits an empty game selection', async () => {
     const onChange = vi.fn()
     render(
       <SubjectSelector
@@ -47,7 +62,23 @@ describe('SubjectSelector', () => {
       />,
     )
     await userEvent.selectOptions(screen.getByLabelText('Game Type'), 'play3d')
-    expect(onChange).toHaveBeenCalledWith({ gameType: 'play3d', difficulty: 'easy' } satisfies SubjectSelection)
+    expect(onChange).toHaveBeenCalledWith({ gameType: 'play3d', game: null } satisfies SubjectSelection)
+  })
+
+  it('picking a game emits the play3d subject', async () => {
+    const onChange = vi.fn()
+    render(
+      <SubjectSelector
+        mazes={MAZES}
+        value={{ gameType: 'play3d', game: null }}
+        onChange={onChange}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Pick game' }))
+    expect(onChange).toHaveBeenCalledWith({
+      gameType: 'play3d',
+      game: { id: 'g1', name: 'Picked', ownerId: 'owner-1' },
+    } satisfies SubjectSelection)
   })
 
   it('selecting a maze emits the my-mazes subject', async () => {
