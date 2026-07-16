@@ -1151,6 +1151,18 @@ async fn game_definition_delete_removes_it_from_collections() {
 }
 
 #[tokio::test]
+async fn user_delete_removes_their_games_from_other_collections() {
+    let mut s = fresh_store().await;
+    contract::delete_user_removes_their_games_from_other_collections(&mut s).await;
+}
+
+#[tokio::test]
+async fn user_purge_removes_their_game_content_and_collection_refs() {
+    let mut s = fresh_store().await;
+    contract::purge_user_removes_their_game_content_and_collection_refs(&mut s).await;
+}
+
+#[tokio::test]
 async fn user_prefix_search_filters_and_pages() {
     let mut s = fresh_store().await;
     contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;

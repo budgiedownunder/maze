@@ -3410,6 +3410,76 @@ pub async fn delete_game_definition_removes_it_from_collections(store: &mut Box<
     );
 }
 
+pub async fn delete_user_removes_their_games_from_other_collections(store: &mut Box<dyn Store>) {
+    let author = fixture_user(store, "du_a", "du_a@example.com").await;
+    let other = fixture_user(store, "du_b", "du_b@example.com").await;
+
+    // The departing user's game and one of the other user's, both listed in the
+    // other user's collection.
+    let mut theirs = make_game_definition("Theirs", Visibility::Public);
+    store.create_game_definition(&author, &mut theirs).await.expect("theirs");
+    let mut mine = make_game_definition("Mine", Visibility::Private);
+    store.create_game_definition(&other, &mut mine).await.expect("mine");
+    let mut collection = make_game_collection("Set", Visibility::Private);
+    store.create_game_collection(&other, &mut collection).await.expect("collection");
+    store
+        .set_game_collection_items(&other, collection.id, &[theirs.id, mine.id])
+        .await
+        .expect("items");
+
+    store.delete_user(author.id).await.expect("delete user");
+
+    // Deleting the account takes its games with it, so a surviving collection
+    // must stop pointing at them — membership has no FK to do it for us.
+    let loaded = store.get_game_collection(collection.id).await.expect("load");
+    assert_eq!(
+        loaded.items.iter().map(|i| i.definition_id).collect::<Vec<_>>(),
+        vec![mine.id],
+        "the departed user's game is gone from the other user's collection"
+    );
+    assert_eq!(loaded.items[0].sort_order, 0, "sort_order re-compacted");
+}
+
+pub async fn purge_user_removes_their_game_content_and_collection_refs(store: &mut Box<dyn Store>) {
+    let author = fixture_user(store, "pu_a", "pu_a@example.com").await;
+    let other = fixture_user(store, "pu_b", "pu_b@example.com").await;
+
+    let mut theirs = make_game_definition("Theirs", Visibility::Public);
+    store.create_game_definition(&author, &mut theirs).await.expect("theirs");
+    let mut their_collection = make_game_collection("Their Set", Visibility::Public);
+    store.create_game_collection(&author, &mut their_collection).await.expect("their collection");
+    let mut mine = make_game_definition("Mine", Visibility::Private);
+    store.create_game_definition(&other, &mut mine).await.expect("mine");
+    let mut collection = make_game_collection("Set", Visibility::Private);
+    store.create_game_collection(&other, &mut collection).await.expect("collection");
+    store
+        .set_game_collection_items(&other, collection.id, &[theirs.id, mine.id])
+        .await
+        .expect("items");
+
+    // Purge with no prior soft-delete — the trait permits it (right-to-erasure
+    // straight onto an active user).
+    store.purge_user(author.id).await.expect("purge");
+
+    // Their game content goes with them...
+    assert!(
+        matches!(store.get_game_definition(theirs.id).await, Err(Error::GameDefinitionIdNotFound(_))),
+        "the purged user's game is gone"
+    );
+    assert!(
+        matches!(store.get_game_collection(their_collection.id).await, Err(Error::GameCollectionIdNotFound(_))),
+        "the purged user's collection is gone"
+    );
+    // ...and no surviving collection still points at their game.
+    let loaded = store.get_game_collection(collection.id).await.expect("load");
+    assert_eq!(
+        loaded.items.iter().map(|i| i.definition_id).collect::<Vec<_>>(),
+        vec![mine.id],
+        "the purged user's game is gone from the other user's collection"
+    );
+    assert_eq!(loaded.items[0].sort_order, 0, "sort_order re-compacted");
+}
+
 pub async fn get_public_game_lists_sort_by_newest(store: &mut Box<dyn Store>) {
     let author = fixture_user(store, "new_a", "new_a@example.com").await;
     let viewer = fixture_user(store, "new_b", "new_b@example.com").await;

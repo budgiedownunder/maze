@@ -1458,6 +1458,19 @@ impl UserStore for SqlStore {
             let def_id: String = row.try_get("id").map_err(map_sqlx_err)?;
             self.clear_challenge_scores_prefix(&format!("def:{def_id}")).await?;
         }
+        // Drop the user's games from every *other* user's collection that lists
+        // them, before those definitions go — nothing else removes these rows
+        // (see `prune_collection_items`). The user's own collections are deleted
+        // wholesale further down, items and all.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        prune_collection_items(
+            &mut tx,
+            self.kind,
+            "IN (SELECT id FROM game_definitions WHERE owner_id = ?)",
+            &id.to_string(),
+        )
+        .await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         // Strip the user from every remaining definition's grantee list, then
         // delete the user's own definitions + their shares. FK cascades are a
         // backstop; we delete explicitly for uniform cross-backend behaviour.
@@ -1578,14 +1591,30 @@ impl UserStore for SqlStore {
         // is purging it; (2) right-to-erasure called directly on an active
         // user. The trait does not require a prior soft-delete, so the
         // `deleted_at IS NULL` filter is intentionally omitted here.
+        //
+        // Transactional because that cascade needs a companion sweep: the user's
+        // game definitions cascade away, but `game_collection_items` has no FK on
+        // `definition_id`, so *other* users' collections would keep dangling items
+        // (see `prune_collection_items`). Prune first — while the definitions are
+        // still there to match — and commit both together.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        prune_collection_items(
+            &mut tx,
+            self.kind,
+            "IN (SELECT id FROM game_definitions WHERE owner_id = ?)",
+            &id.to_string(),
+        )
+        .await?;
         let result = sqlx::query(&q(self.kind, "DELETE FROM users WHERE id = ?"))
             .bind(id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
         if result.rows_affected() == 0 {
+            // Dropping `tx` rolls the prune back — nothing was purged.
             return Err(Error::UserIdNotFound(id.to_string()));
         }
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -5371,6 +5400,75 @@ async fn featured_game_items_append(
 /// Removes `(entity_kind, id)` if present, then recompacts the remaining rows to
 /// a dense `0..n` — but only when a row was actually deleted, so a delete of a
 /// never-featured entity costs one no-op statement.
+/// Drops every `game_collection_items` row whose `definition_id` matches
+/// `definition_filter` — a fragment completing `WHERE definition_id …`, e.g.
+/// `= ?` or `IN (SELECT id FROM game_definitions WHERE owner_id = ?)`, bound to
+/// `bind` — then re-compacts the `sort_order` of the collections it touched.
+///
+/// `game_collection_items` has **no FK** on `definition_id` (membership is a
+/// loose reference that reads tolerate + filter), so nothing removes these rows
+/// for us; left behind, they make a collection's item count out-read the members
+/// it can actually show. Every path that removes definitions must call this
+/// **before** the definitions go, while `definition_filter` can still match them.
+///
+/// The recompact keeps `sort_order` the dense `0..n` the model guarantees after
+/// any membership change. Its `ROW_NUMBER()` derived table is materialised on
+/// every backend (a window function blocks MySQL's derived-table merge, so error
+/// 1093 doesn't fire against the table being updated) — the same portable shape
+/// as [`featured_game_items_recompact`] — partitioned per collection and bounded
+/// to the collections that actually changed.
+async fn prune_collection_items(
+    tx: &mut sqlx::Transaction<'_, sqlx::Any>,
+    kind: SqlBackend,
+    definition_filter: &str,
+    bind: &str,
+) -> Result<(), Error> {
+    let affected = sqlx::query(&q(
+        kind,
+        &format!("SELECT DISTINCT collection_id FROM game_collection_items WHERE definition_id {definition_filter}"),
+    ))
+    .bind(bind)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    let affected: Vec<String> = affected
+        .iter()
+        .map(|row| row.try_get("collection_id").map_err(map_sqlx_err))
+        .collect::<Result<_, _>>()?;
+    if affected.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(&q(
+        kind,
+        &format!("DELETE FROM game_collection_items WHERE definition_id {definition_filter}"),
+    ))
+    .bind(bind)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+
+    let placeholders = vec!["?"; affected.len()].join(", ");
+    let sql = format!(
+        "UPDATE game_collection_items SET sort_order = ( \
+             SELECT rn FROM ( \
+                 SELECT collection_id AS c, definition_id AS d, \
+                        ROW_NUMBER() OVER (PARTITION BY collection_id ORDER BY sort_order) - 1 AS rn \
+                 FROM game_collection_items WHERE collection_id IN ({placeholders}) \
+             ) t \
+             WHERE t.c = game_collection_items.collection_id \
+               AND t.d = game_collection_items.definition_id \
+         ) WHERE collection_id IN ({placeholders})"
+    );
+    let renumber_sql = q(kind, &sql);
+    let mut renumber = sqlx::query(&renumber_sql);
+    // Bound twice: once for the derived table, once for the outer filter.
+    for collection_id in affected.iter().chain(affected.iter()) {
+        renumber = renumber.bind(collection_id);
+    }
+    renumber.execute(&mut **tx).await.map_err(map_sqlx_err)?;
+    Ok(())
+}
+
 async fn featured_game_items_remove(
     tx: &mut sqlx::Transaction<'_, sqlx::Any>,
     kind: SqlBackend,
@@ -5806,61 +5904,9 @@ impl GameStore for SqlStore {
         .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
-        // Drop the game from every collection that lists it. `game_collection_items`
-        // has no FK on `definition_id` (membership is a loose reference, so reads
-        // tolerate + filter dangling ones), which means nothing removes these for
-        // us — and a left-behind row would make a collection's item count read
-        // higher than the members it can actually show. Capture the affected
-        // collections first, so only they are renumbered afterwards.
-        let affected = sqlx::query(&q(
-            self.kind,
-            "SELECT collection_id FROM game_collection_items WHERE definition_id = ?",
-        ))
-        .bind(id.to_string())
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(map_sqlx_err)?;
-        let affected: Vec<String> = affected
-            .iter()
-            .map(|row| row.try_get("collection_id").map_err(map_sqlx_err))
-            .collect::<Result<_, _>>()?;
-        sqlx::query(&q(
-            self.kind,
-            "DELETE FROM game_collection_items WHERE definition_id = ?",
-        ))
-        .bind(id.to_string())
-        .execute(&mut *tx)
-        .await
-        .map_err(map_sqlx_err)?;
-        if !affected.is_empty() {
-            // Close the gap the removed member left, so `sort_order` stays the
-            // dense 0..n the model guarantees after any membership change (what
-            // `set_game_collection_items` would write, and what FileStore's
-            // `normalize_item_order` produces). Same portable shape as
-            // `featured_game_items_recompact` — the `ROW_NUMBER()` derived table is
-            // materialised on every backend, so MySQL's error 1093 doesn't fire
-            // against the table being updated — but partitioned per collection, and
-            // bounded to the collections that actually changed.
-            let placeholders = vec!["?"; affected.len()].join(", ");
-            let sql = format!(
-                "UPDATE game_collection_items SET sort_order = ( \
-                     SELECT rn FROM ( \
-                         SELECT collection_id AS c, definition_id AS d, \
-                                ROW_NUMBER() OVER (PARTITION BY collection_id ORDER BY sort_order) - 1 AS rn \
-                         FROM game_collection_items WHERE collection_id IN ({placeholders}) \
-                     ) t \
-                     WHERE t.c = game_collection_items.collection_id \
-                       AND t.d = game_collection_items.definition_id \
-                 ) WHERE collection_id IN ({placeholders})"
-            );
-            let renumber_sql = q(self.kind, &sql);
-            let mut renumber = sqlx::query(&renumber_sql);
-            // Bound twice: once for the derived table, once for the outer filter.
-            for collection_id in affected.iter().chain(affected.iter()) {
-                renumber = renumber.bind(collection_id);
-            }
-            renumber.execute(&mut *tx).await.map_err(map_sqlx_err)?;
-        }
+        // Drop the game from every collection that lists it (see
+        // `prune_collection_items` for why nothing else does).
+        prune_collection_items(&mut tx, self.kind, "= ?", &id.to_string()).await?;
         sqlx::query(&q(self.kind, "DELETE FROM game_definitions WHERE id = ?"))
             .bind(id.to_string())
             .execute(&mut *tx)

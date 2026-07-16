@@ -756,18 +756,86 @@ impl FileStore {
     }
 
     // Loads every collection, skipping any unreadable file.
-    /// Removes `definition_id` from every collection that lists it, re-compacting
-    /// the survivors' `sort_order`. Membership is a loose reference (the SQL
-    /// schema deliberately puts no FK on `definition_id`, so reads tolerate and
-    /// filter dangling ones), which means nothing drops these for us — and a
-    /// left-behind item would make a collection's count read higher than the
-    /// members it can actually show.
-    fn prune_definition_from_collections(&self, definition_id: Uuid) -> Result<(), Error> {
+    /// Removes `definition_ids` from every collection that lists any of them,
+    /// re-compacting the survivors' `sort_order`. Membership is a loose reference
+    /// (the SQL schema deliberately puts no FK on `definition_id`, so reads
+    /// tolerate and filter dangling ones), which means nothing drops these for us
+    /// — and a left-behind item would make a collection's count read higher than
+    /// the members it can actually show. Every path that removes definitions must
+    /// call this.
+    /// Removes everything game-related belonging to `id`: their game definitions
+    /// (with those definitions' boards and share grants), their collections, their
+    /// grantee entries on everyone else's definitions/collections, and — since
+    /// membership carries no FK — their definitions' references in everyone else's
+    /// collections.
+    ///
+    /// Mirrors the SqlStore FK cascades on `game_definitions.owner_id`,
+    /// `game_collections.owner_id` and `*_shares.grantee_user_id`, which FileStore
+    /// has no equivalent of. Shared by `delete_user` (the account deletion takes
+    /// the user's content with it) and `purge_user` — game content lives at the
+    /// data-dir root rather than under `users/<id>/`, so removing the user
+    /// directory doesn't touch it, and a purge may be called on a still-active
+    /// user without a prior soft-delete.
+    fn remove_user_game_content(&mut self, id: Uuid) -> Result<(), Error> {
+        let mut owned_definition_ids: Vec<Uuid> = Vec::new();
+        for def_id in self.get_game_definition_ids()? {
+            match self.read_game_definition_raw(def_id) {
+                Ok(def) if def.owner_id == id => {
+                    owned_definition_ids.push(def_id);
+                    delete_dir(&self.game_definition_dir_path(def_id));
+                }
+                Ok(_) => {
+                    let mut grantees = self.read_game_definition_grantees(def_id)?;
+                    if grantees.contains(&id) {
+                        grantees.retain(|g| *g != id);
+                        self.write_game_definition_grantees(def_id, &grantees)?;
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        // Clear the boards of the removed definitions (other players' runs on
+        // them), keyed by the `def:<id>` challenge subject (Static + Daily).
+        if !owned_definition_ids.is_empty() {
+            self.delete_scores_matching(|e| {
+                e.challenge.as_deref().is_some_and(|c| {
+                    owned_definition_ids
+                        .iter()
+                        .any(|d| c == format!("def:{d}") || c.starts_with(&format!("def:{d}:")))
+                })
+            })?;
+        }
+        // Hard-delete the user's game collections + their share grants, and strip
+        // the user from every remaining collection's grantee list.
+        for collection_id in self.get_game_collection_ids()? {
+            match self.read_game_collection_raw(collection_id) {
+                Ok(collection) if collection.owner_id == id => {
+                    delete_dir(&self.game_collection_dir_path(collection_id));
+                }
+                Ok(_) => {
+                    let mut grantees = self.read_game_collection_grantees(collection_id)?;
+                    if grantees.contains(&id) {
+                        grantees.retain(|g| *g != id);
+                        self.write_game_collection_grantees(collection_id, &grantees)?;
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        // Drop the removed definitions from the collections that survive. Runs
+        // after the user's own collections are gone, so it only rewrites others'.
+        self.prune_definitions_from_collections(&owned_definition_ids)
+    }
+
+    fn prune_definitions_from_collections(&self, definition_ids: &[Uuid]) -> Result<(), Error> {
+        if definition_ids.is_empty() {
+            return Ok(());
+        }
         for mut collection in self.read_all_game_collections()? {
-            if !collection.items.iter().any(|i| i.definition_id == definition_id) {
+            if !collection.items.iter().any(|i| definition_ids.contains(&i.definition_id)) {
                 continue;
             }
-            collection.items.retain(|i| i.definition_id != definition_id);
+            collection.items.retain(|i| !definition_ids.contains(&i.definition_id));
             normalize_item_order(&mut collection.items);
             self.write_game_collection_file(&collection, true)?;
         }
@@ -1652,57 +1720,7 @@ impl UserStore for FileStore {
                 }
             }
         }
-        // Hard-delete the user's game definitions + their share grants, and
-        // strip the user from every remaining definition's grantee list. Mirrors
-        // the SqlStore FK cascade on `game_definitions.owner_id` and
-        // `game_definition_shares.grantee_user_id`.
-        let mut owned_definition_ids: Vec<Uuid> = Vec::new();
-        for def_id in self.get_game_definition_ids()? {
-            match self.read_game_definition_raw(def_id) {
-                Ok(def) if def.owner_id == id => {
-                    owned_definition_ids.push(def_id);
-                    delete_dir(&self.game_definition_dir_path(def_id));
-                }
-                Ok(_) => {
-                    let mut grantees = self.read_game_definition_grantees(def_id)?;
-                    if grantees.contains(&id) {
-                        grantees.retain(|g| *g != id);
-                        self.write_game_definition_grantees(def_id, &grantees)?;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-        // Clear the boards of the removed definitions (other players' runs on
-        // them), keyed by the `def:<id>` challenge subject (Static + Daily).
-        if !owned_definition_ids.is_empty() {
-            self.delete_scores_matching(|e| {
-                e.challenge.as_deref().is_some_and(|c| {
-                    owned_definition_ids
-                        .iter()
-                        .any(|d| c == format!("def:{d}") || c.starts_with(&format!("def:{d}:")))
-                })
-            })?;
-        }
-        // Hard-delete the user's game collections + their share grants, and strip
-        // the user from every remaining collection's grantee list. Mirrors the
-        // SqlStore FK cascade on `game_collections.owner_id` and
-        // `game_collection_shares.grantee_user_id`.
-        for collection_id in self.get_game_collection_ids()? {
-            match self.read_game_collection_raw(collection_id) {
-                Ok(collection) if collection.owner_id == id => {
-                    delete_dir(&self.game_collection_dir_path(collection_id));
-                }
-                Ok(_) => {
-                    let mut grantees = self.read_game_collection_grantees(collection_id)?;
-                    if grantees.contains(&id) {
-                        grantees.retain(|g| *g != id);
-                        self.write_game_collection_grantees(collection_id, &grantees)?;
-                    }
-                }
-                Err(_) => {}
-            }
-        }
+        self.remove_user_game_content(id)?;
         Ok(())
     }
     /// True hard-delete: removes the user directory outright. Mirrors the
@@ -1769,6 +1787,13 @@ impl UserStore for FileStore {
         // user's own runs and the boards of their mazes.
         let owned_mazes = self.user_maze_ids(id);
         self.delete_score_rows(Some(id), &owned_mazes)?;
+        // Game content lives at the data-dir root, not under `users/<id>/`, so
+        // removing the user directory below doesn't touch it — remove it
+        // explicitly, mirroring the SqlStore FK cascades a purge fires there. A
+        // purge may be called on a still-active user (no prior soft-delete), so
+        // this can't assume `delete_user` already did it; it is idempotent when it
+        // did.
+        self.remove_user_game_content(id)?;
         delete_dir(&self.user_dir_path(id));
         if self.user_dir_exists(id) {
             return Err(Error::Other(format!(
@@ -4854,7 +4879,7 @@ impl GameStore for FileStore {
             return Err(Error::GameDefinitionIdNotFound(id.to_string()));
         }
         delete_dir(&self.game_definition_dir_path(id));
-        self.prune_definition_from_collections(id)?;
+        self.prune_definitions_from_collections(&[id])?;
         // Drop the featured row (no-op when the definition was never featured).
         self.featured_game_items_remove(FeaturedGameItemKind::Definition, id)?;
         Ok(())
