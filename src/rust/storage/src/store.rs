@@ -371,6 +371,18 @@ pub struct ScoreOrdering {
     pub direction: SortDirection,
 }
 
+/// The ordering of a **game list** page (the Community catalogue's sort). Each
+/// variant ends in `id` so the order is total and paging stays deterministic.
+/// Built from fixed column names — never user input.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GameListSort {
+    /// Alphabetical, case-insensitive (`LOWER(name)`, then `id`) — the default.
+    #[default]
+    Name,
+    /// Most recently created first (`created_at DESC`, then `id`).
+    Newest,
+}
+
 /// Per-completed-run score history: records a won run and serves the
 /// leaderboards (per-maze, per-curated-challenge) and personal history over
 /// them. One row per completed run — "best" is a query, not a stored flag.
@@ -612,15 +624,15 @@ pub trait GameStore {
     /// A page of the **public** definitions (`visibility = Public`) owned by
     /// someone **other than** `viewer` — the cross-owner Community pool. Filtered
     /// by an optional case-insensitive name substring `name_query` (applied
-    /// server-side, since this pool is unbounded), ordered by name
-    /// (case-insensitive) then id, sliced to `limit`/`offset`. The viewer's own
-    /// public games are excluded — they surface under the owner read. Same
-    /// predicate-is-a-filter, server-owns-access rationale as the other scoped
-    /// reads.
+    /// server-side, since this pool is unbounded), ordered by `sort`, sliced to
+    /// `limit`/`offset`. The viewer's own public games are excluded — they
+    /// surface under the owner read. Same predicate-is-a-filter,
+    /// server-owns-access rationale as the other scoped reads.
     async fn get_public_game_definitions(
         &self,
         viewer: &User,
         name_query: Option<&str>,
+        sort: GameListSort,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameDefinition>, Error>;
@@ -743,12 +755,14 @@ pub trait GameStore {
     ) -> Result<Vec<GameCollection>, Error>;
     /// A page of the **public** collections (`visibility = Public`) owned by
     /// someone **other than** `viewer` — the cross-owner Community pool, filtered
-    /// by an optional case-insensitive name substring `name_query`. The collection
-    /// counterpart of [`GameStore::get_public_game_definitions`].
+    /// by an optional case-insensitive name substring `name_query` and ordered by
+    /// `sort`. The collection counterpart of
+    /// [`GameStore::get_public_game_definitions`].
     async fn get_public_game_collections(
         &self,
         viewer: &User,
         name_query: Option<&str>,
+        sort: GameListSort,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameCollection>, Error>;

@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use unicase::UniCase;
 use uuid::Uuid;
 
@@ -16,9 +17,9 @@ use data_model::{
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{
-    EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
-    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_grantees,
-    normalize_item_order,
+    EmailAuditLog, GameListSort, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric,
+    ScoreOrdering, ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore,
+    normalize_grantees, normalize_item_order,
 };
 use crate::{
     file_store_migration,
@@ -4047,6 +4048,21 @@ impl EmailAuditLog for FileStore {
 /// Comparator mirroring the SqlStore `ORDER BY`: the primary metric in the
 /// requested direction, then the other metric in its fixed best direction
 /// (score DESC / elapsed_ms ASC), then `recorded_at` ASC and `id` ASC.
+/// Orders a game-list page in memory, mirroring the SqlStore's `ORDER BY` for
+/// each [`GameListSort`]. Takes the sort keys — `(name, created_at, id)` — so it
+/// serves both definitions and collections. `id` last keeps the order total, so
+/// paging is deterministic.
+fn game_list_cmp(
+    sort: GameListSort,
+    a: (&str, DateTime<Utc>, Uuid),
+    b: (&str, DateTime<Utc>, Uuid),
+) -> std::cmp::Ordering {
+    match sort {
+        GameListSort::Name => UniCase::new(a.0).cmp(&UniCase::new(b.0)).then(a.2.cmp(&b.2)),
+        GameListSort::Newest => b.1.cmp(&a.1).then(a.2.cmp(&b.2)),
+    }
+}
+
 fn score_cmp(ordering: ScoreOrdering, a: &ScoreEntry, b: &ScoreEntry) -> std::cmp::Ordering {
     let primary = match ordering.metric {
         ScoreMetric::Time => a.elapsed_ms.cmp(&b.elapsed_ms),
@@ -5205,7 +5221,7 @@ impl GameStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
-    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use storage::{FileStore, FileStoreConfig, GameListSort, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// let temp = tempfile::tempdir().unwrap();
@@ -5245,7 +5261,10 @@ impl GameStore for FileStore {
     /// };
     /// store.create_game_definition(&viewer, &mut mine).await.unwrap();
     ///
-    /// let public = store.get_public_game_definitions(&viewer, Some("sky"), 10, 0).await.unwrap();
+    /// let public = store
+    ///     .get_public_game_definitions(&viewer, Some("sky"), GameListSort::Name, 10, 0)
+    ///     .await
+    ///     .unwrap();
     /// assert_eq!(public.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
     /// # });
     /// ```
@@ -5253,6 +5272,7 @@ impl GameStore for FileStore {
         &self,
         viewer: &User,
         name_query: Option<&str>,
+        sort: GameListSort,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameDefinition>, Error> {
@@ -5266,9 +5286,7 @@ impl GameStore for FileStore {
                 defs.push(def);
             }
         }
-        defs.sort_by(|a, b| {
-            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
-        });
+        defs.sort_by(|a, b| game_list_cmp(sort, (&a.name, a.created_at, a.id), (&b.name, b.created_at, b.id)));
         Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
@@ -6182,7 +6200,7 @@ impl GameStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
-    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use storage::{FileStore, FileStoreConfig, GameListSort, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// let temp = tempfile::tempdir().unwrap();
@@ -6214,7 +6232,10 @@ impl GameStore for FileStore {
     /// };
     /// store.create_game_collection(&author, &mut theirs).await.unwrap();
     ///
-    /// let public = store.get_public_game_collections(&viewer, None, 10, 0).await.unwrap();
+    /// let public = store
+    ///     .get_public_game_collections(&viewer, None, GameListSort::Name, 10, 0)
+    ///     .await
+    ///     .unwrap();
     /// assert_eq!(public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
     /// # });
     /// ```
@@ -6222,6 +6243,7 @@ impl GameStore for FileStore {
         &self,
         viewer: &User,
         name_query: Option<&str>,
+        sort: GameListSort,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameCollection>, Error> {
@@ -6235,9 +6257,7 @@ impl GameStore for FileStore {
                 collections.push(collection);
             }
         }
-        collections.sort_by(|a, b| {
-            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
-        });
+        collections.sort_by(|a, b| game_list_cmp(sort, (&a.name, a.created_at, a.id), (&b.name, b.created_at, b.id)));
         Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 

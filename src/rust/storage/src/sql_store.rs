@@ -12,9 +12,9 @@
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
 use crate::store::{
-    EmailAuditLog, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric, ScoreOrdering,
-    ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore, normalize_grantees,
-    normalize_item_order,
+    EmailAuditLog, GameListSort, GameStore, Manage, MazeStore, ScoreEntry, ScoreMetric,
+    ScoreOrdering, ScoreStore, ScoreboardEntry, SortDirection, TokenStore, UserStore,
+    normalize_grantees, normalize_item_order,
 };
 use crate::{
     validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
@@ -879,6 +879,21 @@ fn like_substring(name_query: Option<&str>) -> String {
     match name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
         Some(query) => format!("%{}%", escape_like(&query)),
         None => "%".to_string(),
+    }
+}
+
+/// The `ORDER BY` clause for a game-list page. Each ends in `id` so the order is
+/// total and paging is deterministic. Fixed column names (never user input), so
+/// it is safe to interpolate into the query.
+///
+/// `created_at` is stored as a string ([`datetime_to_sql`] — RFC 3339, always
+/// UTC with fixed millisecond digits), so it is fixed-width and zero-padded and
+/// sorts lexicographically in chronological order. Keep that format if this
+/// ordering is to stay correct.
+fn game_list_order_by_clause(sort: GameListSort) -> &'static str {
+    match sort {
+        GameListSort::Name => "LOWER(name), id",
+        GameListSort::Newest => "created_at DESC, id",
     }
 }
 
@@ -6298,7 +6313,7 @@ impl GameStore for SqlStore {
     /// ```
     /// # tokio_test::block_on(async {
     /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
-    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use storage::{GameListSort, GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
     /// let mut store = SqlStore::new(SqlStoreConfig {
@@ -6342,7 +6357,10 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_definition(&viewer, &mut mine).await.unwrap();
     ///
-    /// let public = store.get_public_game_definitions(&viewer, Some("sky"), 10, 0).await.unwrap();
+    /// let public = store
+    ///     .get_public_game_definitions(&viewer, Some("sky"), GameListSort::Name, 10, 0)
+    ///     .await
+    ///     .unwrap();
     /// assert_eq!(public.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
     /// # });
     /// ```
@@ -6350,15 +6368,20 @@ impl GameStore for SqlStore {
         &self,
         viewer: &User,
         name_query: Option<&str>,
+        sort: GameListSort,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameDefinition>, Error> {
-        // The unbounded Community pool, so the name filter is applied in the query.
+        // The unbounded Community pool, so the name filter + ordering are applied
+        // in the query.
+        let order = game_list_order_by_clause(sort);
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM game_definitions \
-             WHERE visibility = 'public' AND owner_id != ? AND LOWER(name) LIKE ? ESCAPE '!' \
-             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+            &format!(
+                "SELECT * FROM game_definitions \
+                 WHERE visibility = 'public' AND owner_id != ? AND LOWER(name) LIKE ? ESCAPE '!' \
+                 ORDER BY {order} LIMIT ? OFFSET ?"
+            ),
         ))
         .bind(viewer.id.to_string())
         .bind(like_substring(name_query))
@@ -7696,7 +7719,7 @@ impl GameStore for SqlStore {
     /// ```
     /// # tokio_test::block_on(async {
     /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
-    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use storage::{GameListSort, GameStore, SqlStore, SqlStoreConfig, UserStore};
     /// use uuid::Uuid;
     ///
     /// let mut store = SqlStore::new(SqlStoreConfig {
@@ -7732,7 +7755,10 @@ impl GameStore for SqlStore {
     /// };
     /// store.create_game_collection(&author, &mut theirs).await.unwrap();
     ///
-    /// let public = store.get_public_game_collections(&viewer, None, 10, 0).await.unwrap();
+    /// let public = store
+    ///     .get_public_game_collections(&viewer, None, GameListSort::Name, 10, 0)
+    ///     .await
+    ///     .unwrap();
     /// assert_eq!(public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
     /// # });
     /// ```
@@ -7740,14 +7766,18 @@ impl GameStore for SqlStore {
         &self,
         viewer: &User,
         name_query: Option<&str>,
+        sort: GameListSort,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameCollection>, Error> {
+        let order = game_list_order_by_clause(sort);
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM game_collections \
-             WHERE visibility = 'public' AND owner_id != ? AND LOWER(name) LIKE ? ESCAPE '!' \
-             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+            &format!(
+                "SELECT * FROM game_collections \
+                 WHERE visibility = 'public' AND owner_id != ? AND LOWER(name) LIKE ? ESCAPE '!' \
+                 ORDER BY {order} LIMIT ? OFFSET ?"
+            ),
         ))
         .bind(viewer.id.to_string())
         .bind(like_substring(name_query))

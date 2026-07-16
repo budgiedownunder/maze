@@ -41,7 +41,7 @@ use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
 use super::game_shared::{ImageUpdatedResponse, ImageUploadForm, resolve_owner, SetGameSharesRequest};
-use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
+use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, parse_sort, ListScope};
 
 // ---------------------------------------------------------------------------
 // Request / response shapes
@@ -78,8 +78,13 @@ pub struct ListGameCollectionsQuery {
     /// Result scope: `visible` (default — everything the caller may see) or
     /// `mine` (only the caller's own collections, any visibility).
     pub scope: Option<String>,
-    /// Case-insensitive name substring filter (honoured with `scope=mine`).
+    /// Case-insensitive name substring filter (honoured with `scope=mine` or
+    /// `scope=public`).
     pub q: Option<String>,
+    /// Result ordering: `name` (default) or `newest`. Honoured with
+    /// `scope=public` — the Community catalogue is the only surface offering a
+    /// sort; every other scope is name-ordered.
+    pub sort: Option<String>,
 }
 
 /// A page of the collections the caller may see — the merge of their own, those
@@ -307,15 +312,16 @@ pub async fn create_game_collection(
                    filtered by a case-insensitive name substring q. With scope=shared it is only \
                    the collections shared with the caller (a share grant they don't own; \
                    public/curated excluded). With scope=public it is the cross-owner Community \
-                   pool (public collections the caller doesn't own), optionally filtered by q. \
-                   Paged via limit (server-capped) and offset.",
+                   pool (public collections the caller doesn't own), optionally filtered by q and \
+                   ordered by sort. Paged via limit (server-capped) and offset.",
     get,
     path = "/api/v1/game-collections",
     params(
         ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
         ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
         ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default), 'mine' (the caller's own collections), 'shared' (collections shared with the caller), or 'public' (the cross-owner Community pool)"),
-        ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine or scope=public)")
+        ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine or scope=public)"),
+        ("sort" = Option<String>, Query, description = "Result ordering: 'name' (default, case-insensitive A-Z) or 'newest' (most recently created first). Honoured with scope=public; every other scope is name-ordered")
     ),
     responses(
         (status = 200, description = "A page of visible collections", body = GameCollectionListResponse),
@@ -333,6 +339,7 @@ pub async fn list_game_collections(
     let user = get_authorized_user(&req, false)?;
     let q = query.into_inner();
     let scope = parse_scope(q.scope.as_deref())?;
+    let sort = parse_sort(q.sort.as_deref())?;
     let limit = effective_limit(q.limit);
     let offset = q.offset.unwrap_or(0);
     let store_lock = store.read().await;
@@ -379,10 +386,10 @@ pub async fn list_game_collections(
             (cols, has_more)
         }
         ListScope::Public => {
-            // The unbounded Community pool: storage applies the name filter + pages
-            // it. Over-fetch one row for `has_more`.
+            // The unbounded Community pool: storage applies the name filter, the
+            // ordering, and pages it. Over-fetch one row for `has_more`.
             let mut cols = store_lock
-                .get_public_game_collections(&user, q.q.as_deref(), limit + 1, offset)
+                .get_public_game_collections(&user, q.q.as_deref(), sort, limit + 1, offset)
                 .await
                 .map_err(|err| {
                     log::warn!("list game collections store error: {err}");

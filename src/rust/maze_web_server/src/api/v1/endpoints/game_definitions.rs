@@ -56,7 +56,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::api::v1::endpoints::avatar::canonicalise_to_png;
-use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, ListScope};
+use crate::api::v1::endpoints::listing::{effective_limit, page_owned, parse_scope, parse_sort, ListScope};
 use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, ImageUploadForm, resolve_owner, SetGameSharesRequest};
 
 // ---------------------------------------------------------------------------
@@ -101,8 +101,13 @@ pub struct ListGameDefinitionsQuery {
     /// Result scope: `visible` (default — everything the caller may see) or
     /// `mine` (only the caller's own definitions, any visibility).
     pub scope: Option<String>,
-    /// Case-insensitive name substring filter (honoured with `scope=mine`).
+    /// Case-insensitive name substring filter (honoured with `scope=mine` or
+    /// `scope=public`).
     pub q: Option<String>,
+    /// Result ordering: `name` (default) or `newest`. Honoured with
+    /// `scope=public` — the Community catalogue is the only surface offering a
+    /// sort; every other scope is name-ordered.
+    pub sort: Option<String>,
     /// When `true`, blanks each returned definition's opaque `config` blob (to an
     /// empty object) so a caller that only needs the light metadata
     /// (id/name/visibility/…) doesn't pull the heavy generation config — e.g. the
@@ -366,7 +371,8 @@ pub async fn create_game_definition(
                    scope=shared it is only the definitions shared with the caller (a share grant \
                    they don't own; public/curated excluded). With scope=public it is the \
                    cross-owner Community pool (public definitions the caller doesn't own), \
-                   optionally filtered by q. Paged via limit (server-capped) and offset.",
+                   optionally filtered by q and ordered by sort. Paged via limit (server-capped) \
+                   and offset.",
     get,
     path = "/api/v1/game-definitions",
     params(
@@ -374,6 +380,7 @@ pub async fn create_game_definition(
         ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)"),
         ("scope" = Option<String>, Query, description = "Result scope: 'visible' (default), 'mine' (the caller's own definitions), 'shared' (definitions shared with the caller), or 'public' (the cross-owner Community pool)"),
         ("q" = Option<String>, Query, description = "Case-insensitive name substring filter (honoured with scope=mine or scope=public)"),
+        ("sort" = Option<String>, Query, description = "Result ordering: 'name' (default, case-insensitive A-Z) or 'newest' (most recently created first). Honoured with scope=public; every other scope is name-ordered"),
         ("excludeDefinitions" = Option<bool>, Query, description = "When true, blanks each game's opaque config blob so only the light metadata is returned (default false)")
     ),
     responses(
@@ -392,6 +399,7 @@ pub async fn list_game_definitions(
     let user = get_authorized_user(&req, false)?;
     let q = query.into_inner();
     let scope = parse_scope(q.scope.as_deref())?;
+    let sort = parse_sort(q.sort.as_deref())?;
     let limit = effective_limit(q.limit);
     let offset = q.offset.unwrap_or(0);
     let exclude_definitions = q.exclude_definitions.unwrap_or(false);
@@ -439,10 +447,10 @@ pub async fn list_game_definitions(
             (defs, has_more)
         }
         ListScope::Public => {
-            // The unbounded Community pool: storage applies the name filter + pages
-            // it. Over-fetch one row for `has_more`.
+            // The unbounded Community pool: storage applies the name filter, the
+            // ordering, and pages it. Over-fetch one row for `has_more`.
             let mut defs = store_lock
-                .get_public_game_definitions(&user, q.q.as_deref(), limit + 1, offset)
+                .get_public_game_definitions(&user, q.q.as_deref(), sort, limit + 1, offset)
                 .await
                 .map_err(|err| {
                     log::warn!("list game definitions store error: {err}");

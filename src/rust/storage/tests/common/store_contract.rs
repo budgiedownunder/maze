@@ -18,7 +18,7 @@ use data_model::{
     TokenPurpose, User, UserEmail, UserLogin, Visibility,
 };
 use storage::{
-    Error, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
+    Error, GameListSort, MAX_GAME_DEFINITION_CONFIG_BYTES, ScoreEntry, ScoreMetric, ScoreOrdering,
     ScoreboardEntry, SortDirection, Store,
 };
 use uuid::Uuid;
@@ -3356,16 +3356,82 @@ pub async fn get_public_game_definitions_lists_cross_owner_and_filters(store: &m
     store.create_game_definition(&viewer, &mut b_own).await.expect("b own");
 
     // Cross-owner public, name-ordered: not the private one, not the viewer's own.
-    let public = store.get_public_game_definitions(&viewer, None, 100, 0).await.expect("public");
+    let public = store
+        .get_public_game_definitions(&viewer, None, GameListSort::Name, 100, 0)
+        .await
+        .expect("public");
     assert_eq!(public.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Cavern", "Skyline"]);
 
     // Case-insensitive name substring filter.
-    let filtered = store.get_public_game_definitions(&viewer, Some("SKY"), 100, 0).await.expect("filtered");
+    let filtered = store
+        .get_public_game_definitions(&viewer, Some("SKY"), GameListSort::Name, 100, 0)
+        .await
+        .expect("filtered");
     assert_eq!(filtered.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
 
     // Paging over the ordered set.
-    let page = store.get_public_game_definitions(&viewer, None, 1, 1).await.expect("page");
+    let page = store
+        .get_public_game_definitions(&viewer, None, GameListSort::Name, 1, 1)
+        .await
+        .expect("page");
     assert_eq!(page.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
+}
+
+pub async fn get_public_game_lists_sort_by_newest(store: &mut Box<dyn Store>) {
+    let author = fixture_user(store, "new_a", "new_a@example.com").await;
+    let viewer = fixture_user(store, "new_b", "new_b@example.com").await;
+
+    // Names deliberately run opposite to creation order, so Newest and Name can't
+    // both be satisfied by the same sequence — the assertions below would pass on
+    // a no-op sort otherwise. `created_at` is server-stamped to millisecond
+    // precision, so pause between creates to guarantee distinct stamps (equal
+    // stamps fall back to the random-uuid tiebreak, which would flake).
+    let mut alpha = make_game_definition("Alpha", Visibility::Public);
+    store.create_game_definition(&author, &mut alpha).await.expect("alpha");
+    let mut alpha_col = make_game_collection("Alpha Set", Visibility::Public);
+    store.create_game_collection(&author, &mut alpha_col).await.expect("alpha set");
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let mut zulu = make_game_definition("Zulu", Visibility::Public);
+    store.create_game_definition(&author, &mut zulu).await.expect("zulu");
+    let mut zulu_col = make_game_collection("Zulu Set", Visibility::Public);
+    store.create_game_collection(&author, &mut zulu_col).await.expect("zulu set");
+
+    let by_name = store
+        .get_public_game_definitions(&viewer, None, GameListSort::Name, 100, 0)
+        .await
+        .expect("by name");
+    assert_eq!(by_name.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Alpha", "Zulu"]);
+
+    // Newest = most recently created first — the reverse of the name order here.
+    let by_newest = store
+        .get_public_game_definitions(&viewer, None, GameListSort::Newest, 100, 0)
+        .await
+        .expect("by newest");
+    assert_eq!(by_newest.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Zulu", "Alpha"]);
+
+    // The sort composes with the name filter and with paging.
+    let filtered = store
+        .get_public_game_definitions(&viewer, Some("zul"), GameListSort::Newest, 100, 0)
+        .await
+        .expect("newest filtered");
+    assert_eq!(filtered.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Zulu"]);
+    let page = store
+        .get_public_game_definitions(&viewer, None, GameListSort::Newest, 1, 1)
+        .await
+        .expect("newest page");
+    assert_eq!(page.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Alpha"]);
+
+    // Collections sort the same way.
+    let cols_by_name = store
+        .get_public_game_collections(&viewer, None, GameListSort::Name, 100, 0)
+        .await
+        .expect("cols by name");
+    assert_eq!(cols_by_name.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Alpha Set", "Zulu Set"]);
+    let cols_by_newest = store
+        .get_public_game_collections(&viewer, None, GameListSort::Newest, 100, 0)
+        .await
+        .expect("cols by newest");
+    assert_eq!(cols_by_newest.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Zulu Set", "Alpha Set"]);
 }
 
 pub async fn get_public_game_collections_lists_cross_owner_and_filters(store: &mut Box<dyn Store>) {
@@ -3378,13 +3444,19 @@ pub async fn get_public_game_collections_lists_cross_owner_and_filters(store: &m
     let mut b_own = make_game_collection("Owned Public", Visibility::Public);
     store.create_game_collection(&viewer, &mut b_own).await.expect("b own");
 
-    let public = store.get_public_game_collections(&viewer, None, 100, 0).await.expect("public");
+    let public = store
+        .get_public_game_collections(&viewer, None, GameListSort::Name, 100, 0)
+        .await
+        .expect("public");
     assert_eq!(
         public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
         vec!["Open Set"],
         "cross-owner public only: not the private one, not the viewer's own"
     );
-    let filtered = store.get_public_game_collections(&viewer, Some("open"), 100, 0).await.expect("filtered");
+    let filtered = store
+        .get_public_game_collections(&viewer, Some("open"), GameListSort::Name, 100, 0)
+        .await
+        .expect("filtered");
     assert_eq!(filtered.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
 }
 

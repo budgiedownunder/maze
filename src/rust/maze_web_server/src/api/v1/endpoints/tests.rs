@@ -27,7 +27,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::GameStore, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreboardEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::GameListSort, store::GameStore, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, store::ScoreStore, store::ScoreEntry, store::ScoreboardEntry, store::ScoreOrdering, store::ScoreMetric, store::SortDirection, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -1133,14 +1133,17 @@ mod test_definitions {
             Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
-        async fn get_public_game_definitions(&self, viewer: &User, name_query: Option<&str>, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
+        async fn get_public_game_definitions(&self, viewer: &User, name_query: Option<&str>, sort: GameListSort, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
             let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
             let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
                 .filter(|d| d.visibility == Visibility::Public
                     && d.owner_id != viewer.id
                     && needle.as_ref().is_none_or(|n| d.name.to_lowercase().contains(n)))
                 .cloned().collect();
-            defs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            defs.sort_by(|a, b| match sort {
+                GameListSort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)),
+                GameListSort::Newest => b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)),
+            });
             Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
@@ -1311,14 +1314,17 @@ mod test_definitions {
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
-        async fn get_public_game_collections(&self, viewer: &User, name_query: Option<&str>, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
+        async fn get_public_game_collections(&self, viewer: &User, name_query: Option<&str>, sort: GameListSort, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
             let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
             let mut cols: Vec<GameCollection> = self.game_collections.iter()
                 .filter(|c| c.visibility == Visibility::Public
                     && c.owner_id != viewer.id
                     && needle.as_ref().is_none_or(|n| c.name.to_lowercase().contains(n)))
                 .cloned().collect();
-            cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            cols.sort_by(|a, b| match sort {
+                GameListSort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)),
+                GameListSort::Newest => b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)),
+            });
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
@@ -8942,6 +8948,38 @@ mod test_definitions {
         let page: GameDefinitionListResponse =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Public Sky"]);
+
+        // An unknown sort is rejected rather than silently ignored.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=public&sort=bogus", Some(me.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn list_game_definitions_sort_newest_orders_by_creation() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        // Names run opposite to creation order, so the two sorts can't agree. The
+        // store stamps `created_at` itself, so pause between seeds to guarantee
+        // distinct stamps (equal ones fall back to the random-uuid tiebreak).
+        seed_game_definition(&store, &other, "Alpha", Visibility::Public, Rotation::Static).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        seed_game_definition(&store, &other, "Zulu", Visibility::Public, Rotation::Static).await;
+
+        // Default (name) ordering.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=public", Some(me.api_key), None);
+        let list: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(list.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Alpha", "Zulu"]);
+
+        // sort=newest reverses it (Zulu was created last).
+        let req = create_test_get_request("/api/v1/game-definitions?scope=public&sort=newest", Some(me.api_key), None);
+        let list: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(list.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Zulu", "Alpha"]);
     }
 
     #[actix_web::test]

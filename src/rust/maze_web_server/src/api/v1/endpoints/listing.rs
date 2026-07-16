@@ -4,6 +4,7 @@
 //! endpoints share one copy rather than duplicating it per module.
 
 use actix_web::{error::ErrorBadRequest, Error};
+use storage::GameListSort;
 
 /// Page size used when the caller omits `limit`.
 pub(crate) const DEFAULT_PAGE_SIZE: u32 = 20;
@@ -44,6 +45,20 @@ pub(crate) fn parse_scope(raw: Option<&str>) -> Result<ListScope, Error> {
         Some("public") => Ok(ListScope::Public),
         Some(other) => Err(ErrorBadRequest(format!(
             "invalid scope '{other}' (expected 'visible', 'mine', 'shared' or 'public')"
+        ))),
+    }
+}
+
+/// Parses the `sort` query value into a [`GameListSort`], defaulting to
+/// [`GameListSort::Name`] when omitted. Honoured by the game list endpoints with
+/// `scope=public` (the Community catalogue is the only surface that offers a
+/// sort); every other scope is name-ordered.
+pub(crate) fn parse_sort(raw: Option<&str>) -> Result<GameListSort, Error> {
+    match raw {
+        None | Some("name") => Ok(GameListSort::Name),
+        Some("newest") => Ok(GameListSort::Newest),
+        Some(other) => Err(ErrorBadRequest(format!(
+            "invalid sort '{other}' (expected 'name' or 'newest')"
         ))),
     }
 }

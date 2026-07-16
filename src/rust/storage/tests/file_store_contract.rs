@@ -1117,6 +1117,12 @@ async fn game_public_collections_list_cross_owner_and_filter() {
 }
 
 #[tokio::test]
+async fn game_public_lists_sort_by_newest() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_public_game_lists_sort_by_newest(&mut s).await;
+}
+
+#[tokio::test]
 async fn user_prefix_search_filters_and_pages() {
     let (mut s, _temp) = fresh_store().await;
     contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;
