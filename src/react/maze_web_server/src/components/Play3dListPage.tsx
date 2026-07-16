@@ -57,8 +57,7 @@ function Play3dCardView({ name, description, thumbnail, actions }: Play3dCard) {
   )
 }
 
-interface Props<T> {
-  title: string
+interface BodyProps<T> {
   // Fetches one page of the scope's items. Paged by `usePagedList`; `hasMore`
   // drives the Load more button.
   fetchPage: (token: string, limit: number, offset: number) => Promise<{ items: T[]; hasMore: boolean }>
@@ -72,25 +71,23 @@ interface Props<T> {
   searchPlaceholder?: string
   emptyText: string
   errorText: string
-  // The parent's modals/dialogs (e.g. a leaderboard), rendered in the page shell.
-  overlays?: ReactNode
+  // Bumping this resets + reloads the list — driven by the page's Refresh
+  // button. A page hosting several bodies (one per tab) passes the same token to
+  // each so one Refresh refreshes whichever is showing.
+  refreshToken: number
 }
 
-// The shared shell for the Play-3D browse pages (Featured, and later My Games /
-// Shared with me / Community): it owns the keyed paged-load state machine (via
-// `usePagedList`) and the page chrome (header + Refresh, then the loading /
-// error / empty / card-grid / Load more scaffold + an optional client-side
-// filter). Each page supplies its own `fetchPage` + `card` mapping and any
-// `overlays`. The play-side analogue of `WorkshopListPage`, rendering cards
-// rather than rows.
-export function Play3dListPage<T>({
-  title, fetchPage, getId, card, searchText, searchPlaceholder = 'Filter…', emptyText, errorText, overlays,
-}: Props<T>) {
+// The list body of a Play-3D browse surface: an optional filter box, the
+// responsive card grid, a Load more button, and loading/empty/error states,
+// driven by `usePagedList`. Rendered by `Play3dListPage` (single list) and by
+// the tabbed scope pages (one body per tab).
+export function Play3dListBody<T>({
+  fetchPage, getId, card, searchText, searchPlaceholder = 'Filter…', emptyText, errorText, refreshToken,
+}: BodyProps<T>) {
   const token = useToken()
-  const [refreshCount, setRefreshCount] = useState(0)
   const [query, setQuery] = useState('')
 
-  const key = token ? `${token}:${refreshCount}` : null
+  const key = token ? `${token}:${refreshToken}` : null
   const doFetch = useCallback(
     (limit: number, offset: number) => fetchPage(token!, limit, offset),
     [token, fetchPage],
@@ -104,50 +101,66 @@ export function Play3dListPage<T>({
     ? list.items.filter(i => searchText(i).toLowerCase().includes(trimmed))
     : list.items
 
-  const refresh = () => setRefreshCount(c => c + 1)
+  return (
+    <main className="maze-list-page">
+      {searchText && (
+        <input
+          type="text"
+          className="input play3d-search"
+          aria-label={searchPlaceholder}
+          placeholder={searchPlaceholder}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+        />
+      )}
+      {list.isLoading && <p aria-label="Loading">Loading&hellip;</p>}
+      {!list.isLoading && list.error && <p className="error-msg" role="alert">{list.error}</p>}
+      {!list.isLoading && !list.error && items.length === 0 && (
+        <p>{trimmed !== '' ? 'No matches.' : emptyText}</p>
+      )}
+      {!list.isLoading && !list.error && items.length > 0 && (
+        <>
+          <ul className="play3d-grid">
+            {items.map(item => <Play3dCardView key={getId(item)} {...card(item)} />)}
+          </ul>
+          {list.hasMore && (
+            <button
+              type="button"
+              className="btn-secondary workshop-load-more"
+              onClick={list.loadMore}
+              disabled={list.isLoadingMore}
+            >
+              {list.isLoadingMore ? 'Loading…' : 'Load more'}
+            </button>
+          )}
+        </>
+      )}
+    </main>
+  )
+}
 
+interface Props<T> extends Omit<BodyProps<T>, 'refreshToken'> {
+  title: string
+  // The parent's modals/dialogs (e.g. a leaderboard), rendered in the page shell.
+  overlays?: ReactNode
+}
+
+// The shared shell for a single-list Play-3D browse page (Featured): the page
+// chrome (header + Refresh) around one `Play3dListBody`. The tabbed scope pages
+// (My Games / Shared with me) build their own shell with a tab strip and one
+// body per tab. The play-side analogue of `WorkshopListPage`, rendering cards
+// rather than rows.
+export function Play3dListPage<T>({ title, overlays, ...body }: Props<T>) {
+  const [refreshCount, setRefreshCount] = useState(0)
   return (
     <div className="games-page">
       {overlays}
       <AppHeader title={title}>
-        <button className="btn-icon" onClick={refresh} aria-label="Refresh" title="Refresh">
+        <button className="btn-icon" onClick={() => setRefreshCount(c => c + 1)} aria-label="Refresh" title="Refresh">
           <img src="/images/maze/refresh.png" alt="Refresh" style={{ width: '1.1rem', height: '1.1rem' }} />
         </button>
       </AppHeader>
-      <main className="maze-list-page">
-        {searchText && (
-          <input
-            type="text"
-            className="input play3d-search"
-            aria-label={searchPlaceholder}
-            placeholder={searchPlaceholder}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-        )}
-        {list.isLoading && <p aria-label="Loading">Loading&hellip;</p>}
-        {!list.isLoading && list.error && <p className="error-msg" role="alert">{list.error}</p>}
-        {!list.isLoading && !list.error && items.length === 0 && (
-          <p>{trimmed !== '' ? 'No matches.' : emptyText}</p>
-        )}
-        {!list.isLoading && !list.error && items.length > 0 && (
-          <>
-            <ul className="play3d-grid">
-              {items.map(item => <Play3dCardView key={getId(item)} {...card(item)} />)}
-            </ul>
-            {list.hasMore && (
-              <button
-                type="button"
-                className="btn-secondary workshop-load-more"
-                onClick={list.loadMore}
-                disabled={list.isLoadingMore}
-              >
-                {list.isLoadingMore ? 'Loading…' : 'Load more'}
-              </button>
-            )}
-          </>
-        )}
-      </main>
+      <Play3dListBody<T> {...body} refreshToken={refreshCount} />
     </div>
   )
 }

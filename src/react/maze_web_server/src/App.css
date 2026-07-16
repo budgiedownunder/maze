@@ -1592,6 +1592,28 @@ textarea.input {
   max-width: 320px;
   margin-bottom: 1rem;
 }
+/* Games / Collections tab strip on the My Games + Shared-with-me scope pages —
+   a pill row mirroring the leaderboard metric tabs, sitting below the header. */
+.play3d-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 1rem;
+  margin-bottom: 1rem;
+}
+.play3d-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--border-input);
+  border-radius: 999px;
+  background: var(--button-bg);
+  color: var(--text, inherit);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.play3d-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 .play3d-grid {
   list-style: none;
   margin: 0;

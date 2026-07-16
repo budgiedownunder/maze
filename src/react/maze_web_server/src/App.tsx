@@ -26,6 +26,8 @@ const WorkshopCollectionsPage = lazy(() => import('./pages/WorkshopCollectionsPa
 const WorkshopFeaturesPage = lazy(() => import('./pages/WorkshopFeaturesPage').then(m => ({ default: m.WorkshopFeaturesPage })))
 const Play3dHubPage = lazy(() => import('./pages/Play3dHubPage').then(m => ({ default: m.Play3dHubPage })))
 const Play3dFeaturedPage = lazy(() => import('./pages/Play3dFeaturedPage').then(m => ({ default: m.Play3dFeaturedPage })))
+const Play3dMyGamesPage = lazy(() => import('./pages/Play3dMyGamesPage').then(m => ({ default: m.Play3dMyGamesPage })))
+const Play3dSharedPage = lazy(() => import('./pages/Play3dSharedPage').then(m => ({ default: m.Play3dSharedPage })))
 const Play3dPlaceholderPage = lazy(() => import('./pages/Play3dPlaceholderPage').then(m => ({ default: m.Play3dPlaceholderPage })))
 const AccountPage = lazy(() => import('./pages/AccountPage').then(m => ({ default: m.AccountPage })))
 const LeaderboardsPage = lazy(() => import('./pages/LeaderboardsPage').then(m => ({ default: m.LeaderboardsPage })))
@@ -54,9 +56,9 @@ const router = createBrowserRouter([
   { path: '/workshop/features', element: <ProtectedRoute><WorkshopFeaturesPage /></ProtectedRoute> },
   { path: '/play-3d', element: <ProtectedRoute><Play3dHubPage /></ProtectedRoute> },
   { path: '/play-3d/featured', element: <ProtectedRoute><Play3dFeaturedPage /></ProtectedRoute> },
-  // Placeholders until the My Games / Shared with me / Community scope pages are built.
-  { path: '/play-3d/my-games', element: <ProtectedRoute><Play3dPlaceholderPage title="My Games" /></ProtectedRoute> },
-  { path: '/play-3d/shared', element: <ProtectedRoute><Play3dPlaceholderPage title="Shared with me" /></ProtectedRoute> },
+  { path: '/play-3d/my-games', element: <ProtectedRoute><Play3dMyGamesPage /></ProtectedRoute> },
+  { path: '/play-3d/shared', element: <ProtectedRoute><Play3dSharedPage /></ProtectedRoute> },
+  // Placeholder until the Community scope page is built.
   { path: '/play-3d/community', element: <ProtectedRoute><Play3dPlaceholderPage title="Community" /></ProtectedRoute> },
   // The bare stub route is retired; its surface now lives under the workshop hub.
   { path: '/games', element: <Navigate to="/workshop" replace /> },

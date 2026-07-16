@@ -350,6 +350,50 @@ export function resetMockShares(): void {
   mockCollectionShares = {}
 }
 
+// Seed one game + one collection **owned by another user and shared with** the
+// signed-in mock user, so the "Shared with me" Play-3D page has content in
+// dev:mock (and the e2e can drive it). Owned by a directory user with visibility
+// `shared`, so they're excluded from `scope=mine` and only surface under
+// `scope=shared`/`visible`. Idempotent by id; the grant lives in the in-memory
+// share maps (re-applied on each module load, so a page reload keeps it).
+const SHARED_WITH_ME_GAME_ID = 'def-shared-with-me'
+const SHARED_WITH_ME_COLLECTION_ID = 'col-shared-with-me'
+
+function seedSharedWithMe(): void {
+  const owner = mockUserDirectory.find(u => u.username === 'bob')!.id
+  const now = '2026-01-01T00:00:00.000Z'
+  if (!mockGameDefinitions.some(d => d.id === SHARED_WITH_ME_GAME_ID)) {
+    mockGameDefinitions = [...mockGameDefinitions, {
+      id: SHARED_WITH_ME_GAME_ID,
+      ownerId: owner,
+      name: 'Shared Adventure',
+      description: 'A game a friend shared with you.',
+      visibility: 'shared',
+      seed: 909090,
+      rotation: 'static',
+      config: { rows: 6, cols: 6, seed: 909090 },
+      createdAt: now,
+      updatedAt: now,
+    }]
+  }
+  if (!mockGameCollections.some(c => c.id === SHARED_WITH_ME_COLLECTION_ID)) {
+    mockGameCollections = [...mockGameCollections, {
+      id: SHARED_WITH_ME_COLLECTION_ID,
+      ownerId: owner,
+      name: 'Shared Journey',
+      description: 'A collection a friend shared with you.',
+      visibility: 'shared',
+      playMode: 'arcade',
+      items: [{ definitionId: SHARED_WITH_ME_GAME_ID, sortOrder: 0 }],
+      createdAt: now,
+      updatedAt: now,
+    }]
+  }
+  mockDefinitionShares[SHARED_WITH_ME_GAME_ID] = [mockProfile.id]
+  mockCollectionShares[SHARED_WITH_ME_COLLECTION_ID] = [mockProfile.id]
+}
+seedSharedWithMe()
+
 // A few directory users have an avatar (id → marker) so the grantee list's
 // `<Avatar>` fetch path is exercisable in the dev:mock run; the rest fall back
 // to the placeholder. The marker doubles as the has-avatar gate + cache-buster,
@@ -641,6 +685,10 @@ export const handlers = [
     const excludeDefinitions = url.searchParams.get('excludeDefinitions') === 'true'
     let defs = [...mockGameDefinitions].sort((a, b) => a.name.localeCompare(b.name))
     if (scope === 'mine') defs = defs.filter(d => d.ownerId === mockProfile.id)
+    if (scope === 'shared') {
+      defs = defs.filter(d =>
+        d.ownerId !== mockProfile.id && d.visibility === 'shared' && (mockDefinitionShares[d.id] ?? []).includes(mockProfile.id))
+    }
     if (q !== '') defs = defs.filter(d => d.name.toLowerCase().includes(q))
     let page = defs.slice(offset, offset + limit)
     if (excludeDefinitions) page = page.map(d => ({ ...d, config: {} }))
@@ -780,6 +828,10 @@ export const handlers = [
     const offset = Number(url.searchParams.get('offset') ?? '0')
     let cols = [...mockGameCollections].sort((a, b) => a.name.localeCompare(b.name))
     if (scope === 'mine') cols = cols.filter(c => c.ownerId === mockProfile.id)
+    if (scope === 'shared') {
+      cols = cols.filter(c =>
+        c.ownerId !== mockProfile.id && c.visibility === 'shared' && (mockCollectionShares[c.id] ?? []).includes(mockProfile.id))
+    }
     if (q !== '') cols = cols.filter(c => c.name.toLowerCase().includes(q))
     return HttpResponse.json<GameCollectionListResponse>({
       collections: cols.slice(offset, offset + limit),

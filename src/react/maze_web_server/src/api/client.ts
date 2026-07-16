@@ -345,9 +345,10 @@ export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
 interface PageQuery {
   limit?: number
   offset?: number
-  // 'visible' (default) or 'mine' (the caller's own items); honoured by the
-  // game definition / collection list endpoints.
-  scope?: 'visible' | 'mine'
+  // 'visible' (default), 'mine' (the caller's own items), or 'shared' (items
+  // shared with the caller); honoured by the game definition / collection list
+  // endpoints.
+  scope?: 'visible' | 'mine' | 'shared'
   // Case-insensitive name substring filter (honoured with scope=mine).
   q?: string
   // When true, the game-definition list blanks each game's opaque `config` blob

@@ -30,14 +30,59 @@ test('the 3D Games hub shows the four browse tiles and Featured opens empty', as
   await expect(page.getByText(/no featured games or collections yet/i)).toBeVisible()
 })
 
-test('the not-yet-built scopes show a coming-soon placeholder', async ({ page }) => {
+test('the Community scope still shows a coming-soon placeholder', async ({ page }) => {
   await login(page)
-  await page.goto('/play-3d/my-games')
-  await expect(page.getByRole('banner').getByText('My Games')).toBeVisible()
-  await expect(page.getByText('Coming soon.')).toBeVisible()
-
   await page.goto('/play-3d/community')
+  await expect(page.getByRole('banner').getByText('Community')).toBeVisible()
   await expect(page.getByText('Coming soon.')).toBeVisible()
+})
+
+test('My Games lists the caller’s own games + collections across the two tabs', async ({ page }) => {
+  await login(page)
+  const stamp = Date.now()
+  const gameName = `Mine ${stamp}`
+  const colName = `MySet ${stamp}`
+
+  await page.goto('/workshop/games')
+  await page.getByRole('button', { name: 'New Game' }).click()
+  const wiz = page.getByRole('dialog', { name: 'New Game' })
+  await wiz.getByLabel('Name').fill(gameName)
+  await wiz.getByRole('button', { name: 'Finish' }).click()
+  await expect(wiz).toBeHidden()
+
+  await page.goto('/workshop/game-collections')
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  // The Games tab (default) shows the game with Play + Leaderboard.
+  await page.goto('/play-3d/my-games')
+  const gameCard = page.locator('.play3d-card', { hasText: gameName })
+  await expect(gameCard).toBeVisible()
+  await expect(gameCard.getByRole('button', { name: `Play ${gameName}` })).toBeVisible()
+  await gameCard.getByRole('button', { name: `Leaderboard for ${gameName}` }).click()
+  await expect(page.getByRole('dialog', { name: `Leaderboard: ${gameName}` })).toBeVisible()
+  await page.getByRole('dialog', { name: `Leaderboard: ${gameName}` }).getByRole('button', { name: 'Close' }).click()
+
+  // The Collections tab shows the collection (and not the game).
+  await page.getByRole('tab', { name: 'Collections' }).click()
+  await expect(page.locator('.play3d-card', { hasText: colName })).toBeVisible()
+  await expect(page.locator('.play3d-card', { hasText: gameName })).toHaveCount(0)
+})
+
+test('Shared with me lists games + collections another user shared with the caller', async ({ page }) => {
+  await login(page)
+  // The dev:mock backend seeds a game + collection owned by another user and
+  // shared with the signed-in user.
+  await page.goto('/play-3d/shared')
+  const gameCard = page.locator('.play3d-card', { hasText: 'Shared Adventure' })
+  await expect(gameCard).toBeVisible()
+  await expect(gameCard.getByRole('button', { name: 'Play Shared Adventure' })).toBeVisible()
+
+  await page.getByRole('tab', { name: 'Collections' }).click()
+  await expect(page.locator('.play3d-card', { hasText: 'Shared Journey' })).toBeVisible()
 })
 
 test('a featured game appears as a card on Featured with Play and a Leaderboard modal', async ({ page }) => {
