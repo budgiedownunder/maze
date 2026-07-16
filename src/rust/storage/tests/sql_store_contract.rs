@@ -1127,6 +1127,18 @@ async fn game_shared_collections_list_only_grants() {
 }
 
 #[tokio::test]
+async fn game_public_definitions_list_cross_owner_and_filter() {
+    let mut s = fresh_store().await;
+    contract::get_public_game_definitions_lists_cross_owner_and_filters(&mut s).await;
+}
+
+#[tokio::test]
+async fn game_public_collections_list_cross_owner_and_filter() {
+    let mut s = fresh_store().await;
+    contract::get_public_game_collections_lists_cross_owner_and_filters(&mut s).await;
+}
+
+#[tokio::test]
 async fn user_prefix_search_filters_and_pages() {
     let mut s = fresh_store().await;
     contract::search_users_by_username_prefix_filters_and_pages(&mut s).await;

@@ -3342,6 +3342,52 @@ pub async fn get_shared_game_collections_lists_only_grants(store: &mut Box<dyn S
     );
 }
 
+pub async fn get_public_game_definitions_lists_cross_owner_and_filters(store: &mut Box<dyn Store>) {
+    let author = fixture_user(store, "pub_a", "pub_a@example.com").await;
+    let viewer = fixture_user(store, "pub_b", "pub_b@example.com").await;
+    // Author owns two public games + a private one; viewer owns a public one.
+    let mut a_sky = make_game_definition("Skyline", Visibility::Public);
+    store.create_game_definition(&author, &mut a_sky).await.expect("a sky");
+    let mut a_cave = make_game_definition("Cavern", Visibility::Public);
+    store.create_game_definition(&author, &mut a_cave).await.expect("a cave");
+    let mut a_hidden = make_game_definition("Skyward Secret", Visibility::Private);
+    store.create_game_definition(&author, &mut a_hidden).await.expect("a hidden");
+    let mut b_own = make_game_definition("Skyfall", Visibility::Public);
+    store.create_game_definition(&viewer, &mut b_own).await.expect("b own");
+
+    // Cross-owner public, name-ordered: not the private one, not the viewer's own.
+    let public = store.get_public_game_definitions(&viewer, None, 100, 0).await.expect("public");
+    assert_eq!(public.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Cavern", "Skyline"]);
+
+    // Case-insensitive name substring filter.
+    let filtered = store.get_public_game_definitions(&viewer, Some("SKY"), 100, 0).await.expect("filtered");
+    assert_eq!(filtered.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
+
+    // Paging over the ordered set.
+    let page = store.get_public_game_definitions(&viewer, None, 1, 1).await.expect("page");
+    assert_eq!(page.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
+}
+
+pub async fn get_public_game_collections_lists_cross_owner_and_filters(store: &mut Box<dyn Store>) {
+    let author = fixture_user(store, "cpub_a", "cpub_a@example.com").await;
+    let viewer = fixture_user(store, "cpub_b", "cpub_b@example.com").await;
+    let mut a_open = make_game_collection("Open Set", Visibility::Public);
+    store.create_game_collection(&author, &mut a_open).await.expect("a open");
+    let mut a_private = make_game_collection("Private Set", Visibility::Private);
+    store.create_game_collection(&author, &mut a_private).await.expect("a private");
+    let mut b_own = make_game_collection("Owned Public", Visibility::Public);
+    store.create_game_collection(&viewer, &mut b_own).await.expect("b own");
+
+    let public = store.get_public_game_collections(&viewer, None, 100, 0).await.expect("public");
+    assert_eq!(
+        public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        vec!["Open Set"],
+        "cross-owner public only: not the private one, not the viewer's own"
+    );
+    let filtered = store.get_public_game_collections(&viewer, Some("open"), 100, 0).await.expect("filtered");
+    assert_eq!(filtered.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
+}
+
 pub async fn search_users_by_username_prefix_filters_and_pages(store: &mut Box<dyn Store>) {
     fixture_user(store, "alpha_one", "au1@example.com").await;
     fixture_user(store, "alpha_two", "au2@example.com").await;

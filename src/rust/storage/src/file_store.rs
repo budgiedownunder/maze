@@ -5195,6 +5195,83 @@ impl GameStore for FileStore {
         Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
+    /// A page of the cross-owner **public** definitions matching `name_query`,
+    /// ordered by name then id. See [`GameStore::get_public_game_definitions`].
+    ///
+    /// # Examples
+    ///
+    /// Another user's public definition is listed (and name-filtered); the
+    /// viewer's own public one is not
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut author = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "author".to_string(),
+    ///     full_name: "Author".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("author@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut author).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut theirs = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Skyline".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&author, &mut theirs).await.unwrap();
+    /// let mut mine = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Skyfall".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 2, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&viewer, &mut mine).await.unwrap();
+    ///
+    /// let public = store.get_public_game_definitions(&viewer, Some("sky"), 10, 0).await.unwrap();
+    /// assert_eq!(public.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
+    /// # });
+    /// ```
+    async fn get_public_game_definitions(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+        let mut defs: Vec<GameDefinition> = Vec::new();
+        for def in self.read_all_game_definitions()? {
+            let matches = def.visibility == Visibility::Public
+                && def.owner_id != viewer.id
+                && needle.as_ref().is_none_or(|n| def.name.to_lowercase().contains(n));
+            if matches {
+                defs.push(def);
+            }
+        }
+        defs.sort_by(|a, b| {
+            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+        });
+        Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
     /// The user ids currently granted access to a definition. See
     /// [`GameStore::get_game_definition_grantees`].
     ///
@@ -6087,6 +6164,74 @@ impl GameStore for FileStore {
                 && collection.visibility == Visibility::Shared
                 && self.read_game_collection_grantees(collection.id)?.contains(&viewer.id);
             if shared {
+                collections.push(collection);
+            }
+        }
+        collections.sort_by(|a, b| {
+            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+        });
+        Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
+    }
+
+    /// A page of the cross-owner **public** collections matching `name_query`,
+    /// ordered by name then id. See [`GameStore::get_public_game_collections`].
+    ///
+    /// # Examples
+    ///
+    /// Another user's public collection is listed
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut author = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "author".to_string(),
+    ///     full_name: "Author".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("author@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut author).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut theirs = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open Set".to_string(),
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&author, &mut theirs).await.unwrap();
+    ///
+    /// let public = store.get_public_game_collections(&viewer, None, 10, 0).await.unwrap();
+    /// assert_eq!(public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
+    /// # });
+    /// ```
+    async fn get_public_game_collections(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+        let mut collections: Vec<GameCollection> = Vec::new();
+        for collection in self.read_all_game_collections()? {
+            let matches = collection.visibility == Visibility::Public
+                && collection.owner_id != viewer.id
+                && needle.as_ref().is_none_or(|n| collection.name.to_lowercase().contains(n));
+            if matches {
                 collections.push(collection);
             }
         }

@@ -609,6 +609,21 @@ pub trait GameStore {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameDefinition>, Error>;
+    /// A page of the **public** definitions (`visibility = Public`) owned by
+    /// someone **other than** `viewer` — the cross-owner Community pool. Filtered
+    /// by an optional case-insensitive name substring `name_query` (applied
+    /// server-side, since this pool is unbounded), ordered by name
+    /// (case-insensitive) then id, sliced to `limit`/`offset`. The viewer's own
+    /// public games are excluded — they surface under the owner read. Same
+    /// predicate-is-a-filter, server-owns-access rationale as the other scoped
+    /// reads.
+    async fn get_public_game_definitions(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error>;
     /// The user ids granted access to a definition — an unconditional primitive
     /// the server uses for composing the access decision (owner ∨ granted).
     /// Returns an empty list for an unknown/ungranted id.
@@ -723,6 +738,17 @@ pub trait GameStore {
     async fn get_shared_game_collections(
         &self,
         viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error>;
+    /// A page of the **public** collections (`visibility = Public`) owned by
+    /// someone **other than** `viewer` — the cross-owner Community pool, filtered
+    /// by an optional case-insensitive name substring `name_query`. The collection
+    /// counterpart of [`GameStore::get_public_game_definitions`].
+    async fn get_public_game_collections(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<GameCollection>, Error>;

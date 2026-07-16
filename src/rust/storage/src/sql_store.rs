@@ -872,6 +872,16 @@ fn escape_like(input: &str) -> String {
     out
 }
 
+/// Builds a case-insensitive substring `LIKE` pattern for an optional name query
+/// (paired with `ESCAPE '!'`). An absent/blank query yields `%` (match all);
+/// otherwise `%<escaped>%`, keeping any `_`/`%` in the query literal.
+fn like_substring(name_query: Option<&str>) -> String {
+    match name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+        Some(query) => format!("%{}%", escape_like(&query)),
+        None => "%".to_string(),
+    }
+}
+
 async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result<User, Error> {
     let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
     let id = parse_uuid("user id", &id_str)?;
@@ -6278,6 +6288,88 @@ impl GameStore for SqlStore {
         rows.iter().map(game_definition_from_row).collect()
     }
 
+    /// A page of the cross-owner **public** definitions matching `name_query`,
+    /// ordered by name then id. See [`GameStore::get_public_game_definitions`].
+    ///
+    /// # Examples
+    ///
+    /// Another user's public definition is listed (and name-filtered); the
+    /// viewer's own public one is not
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameDefinition, Rotation, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    /// let mut author = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "author".to_string(),
+    ///     full_name: "Author".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("author@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut author).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut theirs = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Skyline".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 1, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&author, &mut theirs).await.unwrap();
+    /// let mut mine = GameDefinition {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Skyfall".to_string(),
+    ///     description: None, image_updated_at: None, visibility: Visibility::Public,
+    ///     seed: 2, rotation: Rotation::Static, config: serde_json::json!({}),
+    ///     created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_definition(&viewer, &mut mine).await.unwrap();
+    ///
+    /// let public = store.get_public_game_definitions(&viewer, Some("sky"), 10, 0).await.unwrap();
+    /// assert_eq!(public.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["Skyline"]);
+    /// # });
+    /// ```
+    async fn get_public_game_definitions(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error> {
+        // The unbounded Community pool, so the name filter is applied in the query.
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM game_definitions \
+             WHERE visibility = 'public' AND owner_id != ? AND LOWER(name) LIKE ? ESCAPE '!' \
+             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+        ))
+        .bind(viewer.id.to_string())
+        .bind(like_substring(name_query))
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter().map(game_definition_from_row).collect()
+    }
+
     /// The user ids currently granted access to a definition. See
     /// [`GameStore::get_game_definition_grantees`].
     ///
@@ -7582,6 +7674,83 @@ impl GameStore for SqlStore {
         ))
         .bind(viewer.id.to_string())
         .bind(viewer.id.to_string())
+        .bind(i64::from(limit))
+        .bind(i64::from(offset))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut collections: Vec<GameCollection> =
+            rows.iter().map(game_collection_from_row).collect::<Result<_, _>>()?;
+        for collection in &mut collections {
+            collection.items = self.load_collection_items(collection.id).await?;
+        }
+        Ok(collections)
+    }
+
+    /// A page of the cross-owner **public** collections matching `name_query`,
+    /// ordered by name then id. See [`GameStore::get_public_game_collections`].
+    ///
+    /// # Examples
+    ///
+    /// Another user's public collection is listed
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use storage::{GameStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    /// let mut author = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "author".to_string(),
+    ///     full_name: "Author".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("author@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut author).await.unwrap();
+    /// let mut viewer = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "viewer".to_string(),
+    ///     full_name: "Viewer".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("viewer@example.com")],
+    ///     password_hash: "h".to_string(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut viewer).await.unwrap();
+    /// let mut theirs = GameCollection {
+    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open Set".to_string(),
+    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    /// };
+    /// store.create_game_collection(&author, &mut theirs).await.unwrap();
+    ///
+    /// let public = store.get_public_game_collections(&viewer, None, 10, 0).await.unwrap();
+    /// assert_eq!(public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
+    /// # });
+    /// ```
+    async fn get_public_game_collections(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM game_collections \
+             WHERE visibility = 'public' AND owner_id != ? AND LOWER(name) LIKE ? ESCAPE '!' \
+             ORDER BY LOWER(name), id LIMIT ? OFFSET ?",
+        ))
+        .bind(viewer.id.to_string())
+        .bind(like_substring(name_query))
         .bind(i64::from(limit))
         .bind(i64::from(offset))
         .fetch_all(&self.pool)

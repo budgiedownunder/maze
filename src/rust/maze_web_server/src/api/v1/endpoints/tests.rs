@@ -1133,6 +1133,17 @@ mod test_definitions {
             Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
+        async fn get_public_game_definitions(&self, viewer: &User, name_query: Option<&str>, limit: u32, offset: u32) -> Result<Vec<GameDefinition>, StoreError> {
+            let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+            let mut defs: Vec<GameDefinition> = self.game_definitions.iter()
+                .filter(|d| d.visibility == Visibility::Public
+                    && d.owner_id != viewer.id
+                    && needle.as_ref().is_none_or(|n| d.name.to_lowercase().contains(n)))
+                .cloned().collect();
+            defs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(defs.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+
         async fn get_game_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, StoreError> {
             Ok(self.def_grantees.get(&id).cloned().unwrap_or_default())
         }
@@ -1295,6 +1306,17 @@ mod test_definitions {
                 .filter(|c| c.owner_id != viewer.id
                     && c.visibility == Visibility::Shared
                     && self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&viewer.id)))
+                .cloned().collect();
+            cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
+        }
+
+        async fn get_public_game_collections(&self, viewer: &User, name_query: Option<&str>, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
+            let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
+            let mut cols: Vec<GameCollection> = self.game_collections.iter()
+                .filter(|c| c.visibility == Visibility::Public
+                    && c.owner_id != viewer.id
+                    && needle.as_ref().is_none_or(|n| c.name.to_lowercase().contains(n)))
                 .cloned().collect();
             cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
@@ -8892,6 +8914,37 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn list_game_definitions_scope_public_returns_cross_owner_and_filters() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        // My own public one (excluded — cross-owner), others' public (included) +
+        // curated/private (excluded).
+        let my_own = seed_game_definition(&store, &me, "My Public", Visibility::Public, Rotation::Static).await;
+        seed_game_definition(&store, &other, "Public Sky", Visibility::Public, Rotation::Static).await;
+        seed_game_definition(&store, &other, "Public Cave", Visibility::Public, Rotation::Static).await;
+        let curated = seed_game_definition(&store, &other, "Curated", Visibility::Curated, Rotation::Static).await;
+
+        let req = create_test_get_request("/api/v1/game-definitions?scope=public", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameDefinitionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(list.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Public Cave", "Public Sky"]);
+        let ids: Vec<Uuid> = list.definitions.iter().map(|d| d.id).collect();
+        assert!(!ids.contains(&my_own.id));
+        assert!(!ids.contains(&curated.id));
+
+        // q narrows the public pool case-insensitively.
+        let req = create_test_get_request("/api/v1/game-definitions?scope=public&q=SKY", Some(me.api_key), None);
+        let page: GameDefinitionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.definitions.iter().map(|d| d.name.clone()).collect::<Vec<_>>(), vec!["Public Sky"]);
+    }
+
+    #[actix_web::test]
     async fn list_game_definitions_exclude_definitions_blanks_config() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
         let (app, store, mock_users, _k, _l) =
@@ -9292,6 +9345,33 @@ mod test_definitions {
         assert!(!ids.contains(&my_own.id));
         assert!(!ids.contains(&others_public.id));
         assert!(!ids.contains(&ungranted.id));
+    }
+
+    #[actix_web::test]
+    async fn list_game_collections_scope_public_returns_cross_owner_and_filters() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let my_own = seed_game_collection(&store, &me, "My Public", Visibility::Public).await;
+        seed_game_collection(&store, &other, "Open Sky", Visibility::Public).await;
+        let private = seed_game_collection(&store, &other, "Private Set", Visibility::Private).await;
+
+        let req = create_test_get_request("/api/v1/game-collections?scope=public", Some(me.api_key), None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(list.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Open Sky"]);
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
+        assert!(!ids.contains(&my_own.id));
+        assert!(!ids.contains(&private.id));
+
+        let req = create_test_get_request("/api/v1/game-collections?scope=public&q=sky", Some(me.api_key), None);
+        let page: GameCollectionListResponse =
+            serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
+        assert_eq!(page.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Open Sky"]);
     }
 
     #[actix_web::test]
