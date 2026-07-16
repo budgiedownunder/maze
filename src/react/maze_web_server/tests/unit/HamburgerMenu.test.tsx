@@ -130,6 +130,17 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/play-3d/featured')
   })
 
+  it.each([
+    [/^my games$/i, '/play-3d/my-games'],
+    [/^shared with me$/i, '/play-3d/shared'],
+    [/^community$/i, '/play-3d/community'],
+  ])('the %s sub-item navigates to its scope page', async (name, path) => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name }))
+    expect(mockNavigate).toHaveBeenCalledWith(path)
+  })
+
   it('renders three separators dividing home / nav / account / about groups', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))

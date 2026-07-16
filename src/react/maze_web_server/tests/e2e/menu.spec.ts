@@ -59,6 +59,22 @@ test('hamburger menu Featured sub-item navigates to the Featured page', async ({
   await expect(page).toHaveURL(/\/play-3d\/featured$/)
 })
 
+test('hamburger menu 3D Games sub-items navigate to each scope page', async ({ page }) => {
+  for (const [name, url, heading] of [
+    [/^my games$/i, /\/play-3d\/my-games$/, 'My Games'],
+    [/^shared with me$/i, /\/play-3d\/shared$/, 'Shared with me'],
+    [/^community$/i, /\/play-3d\/community$/, 'Community'],
+  ] as const) {
+    await page.getByRole('button', { name: /open menu/i }).click()
+    await page.getByRole('menuitem', { name }).click()
+    await expect(page).toHaveURL(url)
+    // Wait for the lazily-loaded destination to render before the next iteration
+    // re-opens the menu, so it doesn't race the Suspense fallback (which briefly
+    // drops the header/menu).
+    await expect(page.getByRole('banner').getByText(heading)).toBeVisible()
+  }
+})
+
 test('My Account page opens and shows profile fields', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
