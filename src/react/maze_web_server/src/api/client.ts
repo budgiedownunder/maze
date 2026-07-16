@@ -345,11 +345,12 @@ export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
 interface PageQuery {
   limit?: number
   offset?: number
-  // 'visible' (default), 'mine' (the caller's own items), or 'shared' (items
-  // shared with the caller); honoured by the game definition / collection list
-  // endpoints.
-  scope?: 'visible' | 'mine' | 'shared'
-  // Case-insensitive name substring filter (honoured with scope=mine).
+  // 'visible' (default), 'mine' (the caller's own items), 'shared' (items shared
+  // with the caller), or 'public' (the cross-owner Community pool); honoured by
+  // the game definition / collection list endpoints.
+  scope?: 'visible' | 'mine' | 'shared' | 'public'
+  // Case-insensitive name substring filter (honoured with scope=mine or
+  // scope=public).
   q?: string
   // When true, the game-definition list blanks each game's opaque `config` blob
   // (returning only the light metadata) — for callers that only list games, e.g.

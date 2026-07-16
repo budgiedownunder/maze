@@ -394,6 +394,47 @@ function seedSharedWithMe(): void {
 }
 seedSharedWithMe()
 
+// Seed a **public** game + collection owned by another user, so the Community
+// scope has content in dev:mock. Owned by a directory user with visibility
+// `public`, so they surface only under `scope=public` (and `visible`) — never
+// under `mine` (not owned by the signed-in user) or `shared` (no grant).
+// Idempotent by id.
+const COMMUNITY_GAME_ID = 'def-community'
+const COMMUNITY_COLLECTION_ID = 'col-community'
+
+function seedCommunity(): void {
+  const owner = mockUserDirectory.find(u => u.username === 'cleo')!.id
+  const now = '2026-01-01T00:00:00.000Z'
+  if (!mockGameDefinitions.some(d => d.id === COMMUNITY_GAME_ID)) {
+    mockGameDefinitions = [...mockGameDefinitions, {
+      id: COMMUNITY_GAME_ID,
+      ownerId: owner,
+      name: 'Community Classic',
+      description: 'A game published for everyone.',
+      visibility: 'public',
+      seed: 707070,
+      rotation: 'static',
+      config: { rows: 8, cols: 8, seed: 707070 },
+      createdAt: now,
+      updatedAt: now,
+    }]
+  }
+  if (!mockGameCollections.some(c => c.id === COMMUNITY_COLLECTION_ID)) {
+    mockGameCollections = [...mockGameCollections, {
+      id: COMMUNITY_COLLECTION_ID,
+      ownerId: owner,
+      name: 'Community Picks',
+      description: 'A collection published for everyone.',
+      visibility: 'public',
+      playMode: 'arcade',
+      items: [{ definitionId: COMMUNITY_GAME_ID, sortOrder: 0 }],
+      createdAt: now,
+      updatedAt: now,
+    }]
+  }
+}
+seedCommunity()
+
 // A few directory users have an avatar (id → marker) so the grantee list's
 // `<Avatar>` fetch path is exercisable in the dev:mock run; the rest fall back
 // to the placeholder. The marker doubles as the has-avatar gate + cache-buster,
@@ -689,6 +730,9 @@ export const handlers = [
       defs = defs.filter(d =>
         d.ownerId !== mockProfile.id && d.visibility === 'shared' && (mockDefinitionShares[d.id] ?? []).includes(mockProfile.id))
     }
+    if (scope === 'public') {
+      defs = defs.filter(d => d.visibility === 'public' && d.ownerId !== mockProfile.id)
+    }
     if (q !== '') defs = defs.filter(d => d.name.toLowerCase().includes(q))
     let page = defs.slice(offset, offset + limit)
     if (excludeDefinitions) page = page.map(d => ({ ...d, config: {} }))
@@ -831,6 +875,9 @@ export const handlers = [
     if (scope === 'shared') {
       cols = cols.filter(c =>
         c.ownerId !== mockProfile.id && c.visibility === 'shared' && (mockCollectionShares[c.id] ?? []).includes(mockProfile.id))
+    }
+    if (scope === 'public') {
+      cols = cols.filter(c => c.visibility === 'public' && c.ownerId !== mockProfile.id)
     }
     if (q !== '') cols = cols.filter(c => c.name.toLowerCase().includes(q))
     return HttpResponse.json<GameCollectionListResponse>({
