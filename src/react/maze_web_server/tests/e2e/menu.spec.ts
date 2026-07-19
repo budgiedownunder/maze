@@ -46,6 +46,14 @@ test('Mazes menu item navigates to /mazes', async ({ page }) => {
   await expect(page).toHaveURL(/\/mazes$/)
 })
 
+test("hamburger menu Today's Challenge launches the seeded daily game", async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /today's challenge/i }).click()
+  // Resolves the curated "Daily Challenges" collection (dev:mock seeds `def-daily`)
+  // and launches its daily member via the host page.
+  await expect(page).toHaveURL(/\/game\/\?def=def-daily/)
+})
+
 test('hamburger menu 3D Games item navigates to the Play-3D hub', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /^3d games$/i }).click()

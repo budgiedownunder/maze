@@ -2,9 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { http, HttpResponse } from 'msw'
 import { AuthProvider } from '../../src/context/AuthProvider'
 import { HamburgerMenu } from '../../src/components/HamburgerMenu'
 import { mockLoginResponse } from '../../src/mocks/handlers'
+import { server } from '../../src/mocks/server'
+import { launchDefinition } from '../../src/utils/play3dLaunch'
+
+vi.mock('../../src/utils/play3dLaunch', () => ({ launchDefinition: vi.fn() }))
 
 beforeEach(() => {
   sessionStorage.setItem('auth', JSON.stringify({
@@ -13,6 +18,7 @@ beforeEach(() => {
     expiry: mockLoginResponse.login_token_expires_at,
   }))
   mockNavigate.mockReset()
+  vi.clearAllMocks()
 })
 afterEach(() => {
   sessionStorage.clear()
@@ -139,6 +145,27 @@ describe('HamburgerMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
     await userEvent.click(screen.getByRole('menuitem', { name }))
     expect(mockNavigate).toHaveBeenCalledWith(path)
+  })
+
+  it("Today's Challenge launches the seeded daily game", async () => {
+    // The dev:mock backend seeds the curated "Daily Challenges" collection whose
+    // daily member is `def-daily`.
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /today's challenge/i }))
+    await waitFor(() => expect(launchDefinition).toHaveBeenCalledWith('def-daily'))
+    // Launching closes the menu, and it doesn't navigate anywhere.
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it("Today's Challenge alerts gracefully when none is available", async () => {
+    server.use(http.get('/api/v1/featured-game-items', () =>
+      HttpResponse.json({ items: [], limit: 20, offset: 0, hasMore: false })))
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /today's challenge/i }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Daily Challenge' })).toBeInTheDocument())
+    expect(launchDefinition).not.toHaveBeenCalled()
   })
 
   it('renders three separators dividing home / nav / account / about groups', async () => {

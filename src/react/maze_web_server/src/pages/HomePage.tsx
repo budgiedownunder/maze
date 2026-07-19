@@ -4,16 +4,12 @@ import { AppHeader } from '../components/AppHeader'
 import { AlertModal } from '../components/AlertModal'
 import { useToken } from '../context/AuthContext'
 import { useBusyCursor } from '../hooks/useBusyCursor'
-import { getFeaturedGameItems, getGameCollection } from '../api/client'
-import { launchDefinition } from '../utils/play3dLaunch'
+import { launchTodaysChallenge } from '../utils/dailyChallenge'
 import appIcon from '../assets/app.png'
 import play3dIcon from '../assets/play3d.png'
 import workshopIcon from '../assets/workshop.svg'
 import leaderboardsIcon from '../assets/leaderboards.svg'
-
-// The curated collection the daily games live in (seeded at server startup); the
-// Today's Challenge tile finds it in the featured catalogue by this name.
-const DAILY_CHALLENGES_COLLECTION = 'Daily Challenges'
+import dailyChallengeIcon from '../assets/daily-challenge.svg'
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -22,27 +18,17 @@ export function HomePage() {
   const [dailyError, setDailyError] = useState<string | null>(null)
   useBusyCursor(resolvingDaily)
 
-  // Launch today's daily challenge by client-resolving the curated "Daily
-  // Challenges" collection — find it in the featured catalogue, then launch its
-  // daily member (the host page date-mixes the seed for the current UTC day). No
-  // dedicated endpoint. Guarded end to end: a missing collection or member (or a
-  // load failure) surfaces a friendly alert rather than a dead tile.
+  // Launch today's daily challenge (see launchTodaysChallenge). Guarded end to
+  // end: nothing to play, or a load failure, surfaces a friendly alert rather
+  // than a dead tile.
   async function handleTodaysChallenge() {
     if (!token || resolvingDaily) return
     setResolvingDaily(true)
     setDailyError(null)
     try {
-      const featured = await getFeaturedGameItems(token, { limit: 100 })
-      const collection = featured.items.find(
-        i => i.kind === 'collection' && i.collection?.name === DAILY_CHALLENGES_COLLECTION,
-      )?.collection
-      const detail = collection ? await getGameCollection(token, collection.id) : null
-      const daily = detail?.definitions.find(d => d.rotation === 'daily') ?? detail?.definitions[0]
-      if (!daily) {
+      if (!(await launchTodaysChallenge(token))) {
         setDailyError('There is no daily challenge available right now.')
-        return
       }
-      launchDefinition(daily.id)
     } catch {
       setDailyError('Could not load today’s challenge. Please try again.')
     } finally {
@@ -72,7 +58,7 @@ export function HomePage() {
       <main className="home-main">
         <section className="home-tiles">
           <button type="button" className="home-tile" onClick={handleTodaysChallenge} disabled={resolvingDaily}>
-            <img src={leaderboardsIcon} className="home-tile-img" alt="" aria-hidden="true" />
+            <img src={dailyChallengeIcon} className="home-tile-img" alt="" aria-hidden="true" />
             <div className="home-tile-text">
               <h2 className="home-tile-title">Today's Challenge</h2>
               <p className="home-tile-desc">Play today's daily 3D game and climb the board</p>
