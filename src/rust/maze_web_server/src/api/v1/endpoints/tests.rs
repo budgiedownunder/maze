@@ -9,7 +9,7 @@ mod test_definitions {
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse, UsersListResponse};
-    use crate::api::v1::endpoints::scores::{CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
+    use crate::api::v1::endpoints::scores::{BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -934,6 +934,17 @@ mod test_definitions {
                 }
             }
             Ok(done.into_iter().collect())
+        }
+        async fn challenges_with_prefix(&self, prefix: &str) -> Result<Vec<String>, StoreError> {
+            let mut distinct: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            for entry in &self.scores {
+                if let Some(challenge) = entry.challenge.as_deref() {
+                    if challenge.starts_with(prefix) {
+                        distinct.insert(challenge.to_string());
+                    }
+                }
+            }
+            Ok(distinct.into_iter().collect())
         }
         async fn clear_maze_scores(&mut self, maze_id: &str) -> Result<u64, StoreError> {
             let before = self.scores.len();
@@ -7768,6 +7779,49 @@ mod test_definitions {
         let body = CompletedChallengesRequest { challenges: vec!["def:a".to_string()] };
         let req = create_test_post_request("/api/v1/scores/me/completed", None, None, Some(&body));
         test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    async fn board_dates_lists_a_daily_games_dated_boards_newest_first() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let me = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+
+        let daily = seed_game_definition(&store, &me, "Daily", Visibility::Public, Rotation::Daily).await;
+        // Two dated boards (across two users on the 14th → one distinct board) plus
+        // the static board, which must NOT surface as a date.
+        let dated = [
+            (me.id, format!("def:{}:2026-07-14", daily.id)),
+            (other.id, format!("def:{}:2026-07-14", daily.id)),
+            (me.id, format!("def:{}:2026-07-15", daily.id)),
+            (me.id, format!("def:{}", daily.id)),
+        ];
+        for (user_id, challenge) in dated {
+            store.write().await.record_score(&ScoreEntry {
+                id: Uuid::new_v4(), user_id, maze_id: None,
+                challenge: Some(challenge), score: 1, elapsed_ms: 1, recorded_at: Utc::now(),
+            }).await.expect("record");
+        }
+
+        let url = format!("/api/v1/scores/board-dates?definition_id={}", daily.id);
+        let resp = test::call_service(&app, create_test_get_request(&url, Some(me.api_key), None)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: BoardDatesResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
+        assert_eq!(body.dates, vec!["2026-07-15".to_string(), "2026-07-14".to_string()]);
+
+        // A private game owned by someone else → 403 (its board isn't readable).
+        let hidden = seed_game_definition(&store, &other, "Hidden", Visibility::Private, Rotation::Daily).await;
+        let url = format!("/api/v1/scores/board-dates?definition_id={}", hidden.id);
+        assert_eq!(
+            test::call_service(&app, create_test_get_request(&url, Some(me.api_key), None)).await.status(),
+            StatusCode::FORBIDDEN
+        );
+
+        // A malformed id → 400.
+        let req = create_test_get_request("/api/v1/scores/board-dates?definition_id=not-a-uuid", Some(me.api_key), None);
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::BAD_REQUEST);
     }
 
     // -----------------------------------------------------------------------

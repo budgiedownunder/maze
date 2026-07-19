@@ -64,6 +64,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(scores::record_score)
                 .service(scores::get_my_history)
                 .service(scores::get_my_completed_challenges)
+                .service(scores::get_board_dates)
                 .service(scores::get_leaderboard)
                 .service(scores::reset_leaderboard)
                 // Users (self-service) - must come BEFORE /users/{id}

@@ -5071,6 +5071,64 @@ impl ScoreStore for SqlStore {
             .collect()
     }
 
+    /// The distinct `challenge` values starting with `prefix`, sorted ascending.
+    /// See [`ScoreStore::challenges_with_prefix`].
+    ///
+    /// # Examples
+    ///
+    /// Enumerate a daily game's dated boards from scores under its prefix
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{ScoreEntry, ScoreStore, SqlStore, SqlStoreConfig, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "p".into(), full_name: "P".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("p@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    /// for challenge in ["def:a:2026-07-14", "def:a:2026-07-15", "def:b:2026-07-14"] {
+    ///     store.record_score(&ScoreEntry {
+    ///         id: Uuid::new_v4(), user_id: user.id, maze_id: None,
+    ///         challenge: Some(challenge.to_string()), score: 1, elapsed_ms: 1,
+    ///         recorded_at: chrono::Utc::now(),
+    ///     }).await.unwrap();
+    /// }
+    ///
+    /// let dated = store.challenges_with_prefix("def:a:").await.unwrap();
+    /// assert_eq!(dated, vec!["def:a:2026-07-14".to_string(), "def:a:2026-07-15".to_string()]);
+    /// # });
+    /// ```
+    async fn challenges_with_prefix(&self, prefix: &str) -> Result<Vec<String>, Error> {
+        // `escape_like` keeps any `_`/`%` in the prefix literal (paired with
+        // `ESCAPE '!'`); the trailing `%` makes it a starts-with match.
+        let pattern = format!("{}%", escape_like(prefix));
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT DISTINCT challenge FROM score_history WHERE challenge LIKE ? ESCAPE '!' \
+             ORDER BY challenge",
+        ))
+        .bind(pattern)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        rows.iter()
+            .map(|row| row.try_get::<String, _>("challenge").map_err(map_sqlx_err))
+            .collect()
+    }
+
     /// Deletes every score for a stored maze, returning the number removed. See
     /// [`ScoreStore::clear_maze_scores`].
     ///

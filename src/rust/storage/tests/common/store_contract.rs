@@ -2465,6 +2465,38 @@ pub async fn score_clear_prefix_removes_a_game_definitions_boards(store: &mut Bo
     );
 }
 
+/// `challenges_with_prefix("def:<id>:")` lists the **distinct** dated boards of a
+/// daily game across all users — sorted ascending, the static `"def:<id>"` board
+/// and other definitions excluded.
+pub async fn challenges_with_prefix_lists_distinct_dated_boards(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "cwp_a", "cwp_a@example.com").await;
+    let bob = fixture_user(store, "cwp_b", "cwp_b@example.com").await;
+    let def_id = "11111111-1111-1111-1111-111111111111";
+    let d14 = format!("def:{def_id}:2026-07-14");
+    let d15 = format!("def:{def_id}:2026-07-15");
+    // The static board shares the id but not the `def:<id>:` (dated) prefix.
+    let static_ch = format!("def:{def_id}");
+    let other = "def:22222222-2222-2222-2222-222222222222:2026-07-14".to_string();
+    // Two users both scored on the 14th (→ one distinct board); alice also the 15th.
+    for (user, ch) in [(alice.id, &d14), (bob.id, &d14), (alice.id, &d15), (alice.id, &static_ch), (alice.id, &other)] {
+        store.record_score(&score_entry(user, None, Some(ch), 1, 100)).await.expect("record");
+    }
+
+    let dated = store.challenges_with_prefix(&format!("def:{def_id}:")).await.expect("prefix");
+    assert_eq!(
+        dated,
+        vec![d14.clone(), d15.clone()],
+        "distinct dated boards ascending; the two-user 14th collapses to one, the static board + other def excluded"
+    );
+
+    // A prefix no one has scored under yields nothing.
+    let none = store
+        .challenges_with_prefix("def:33333333-3333-3333-3333-333333333333:")
+        .await
+        .expect("empty");
+    assert!(none.is_empty());
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // GameStore — game definitions
 //

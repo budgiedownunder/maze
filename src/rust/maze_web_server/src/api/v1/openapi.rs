@@ -29,7 +29,7 @@ use crate::api::v1::endpoints::featured_game_items::{
     ReorderFeaturedGameItemsRequest,
 };
 use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, SetGameSharesRequest};
-use crate::api::v1::endpoints::scores::{CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
+use crate::api::v1::endpoints::scores::{BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
 
@@ -154,6 +154,7 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::scores::get_leaderboard,
         crate::api::v1::endpoints::scores::get_my_history,
         crate::api::v1::endpoints::scores::get_my_completed_challenges,
+        crate::api::v1::endpoints::scores::get_board_dates,
         crate::api::v1::endpoints::scores::reset_leaderboard,
         // User lookup (share people-picker)
         crate::api::v1::endpoints::handlers::lookup_users,
@@ -177,7 +178,7 @@ impl utoipa::Modify for LoginTokenAuth {
             UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm,
-            CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
+            BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
             GameDefinition, GameDefinitionRequest, GameDefinitionListResponse, GamePlayResponse,
             SetGameSharesRequest, GameDefinitionSharesResponse, GranteeSummary,
             GameCollection, CollectionItem, GameCollectionRequest, GameCollectionListResponse,

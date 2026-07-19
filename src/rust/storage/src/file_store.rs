@@ -4505,6 +4505,55 @@ impl ScoreStore for FileStore {
         Ok(done.into_iter().collect())
     }
 
+    /// The distinct `challenge` values starting with `prefix`, sorted ascending.
+    /// See [`ScoreStore::challenges_with_prefix`].
+    ///
+    /// # Examples
+    ///
+    /// Enumerate a daily game's dated boards from scores under its prefix
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, ScoreEntry, ScoreStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "p".into(), full_name: "P".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("p@example.com")],
+    ///     password_hash: "h".into(), api_key: Uuid::nil(), logins: vec![],
+    ///     oauth_identities: vec![], deleted_at: None, created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None, avatar_updated_at: None,
+    /// };
+    /// store.create_user(&mut user).await.unwrap();
+    /// for challenge in ["def:a:2026-07-14", "def:a:2026-07-15", "def:b:2026-07-14"] {
+    ///     store.record_score(&ScoreEntry {
+    ///         id: Uuid::new_v4(), user_id: user.id, maze_id: None,
+    ///         challenge: Some(challenge.to_string()), score: 1, elapsed_ms: 1,
+    ///         recorded_at: chrono::Utc::now(),
+    ///     }).await.unwrap();
+    /// }
+    ///
+    /// let dated = store.challenges_with_prefix("def:a:").await.unwrap();
+    /// assert_eq!(dated, vec!["def:a:2026-07-14".to_string(), "def:a:2026-07-15".to_string()]);
+    /// # });
+    /// ```
+    async fn challenges_with_prefix(&self, prefix: &str) -> Result<Vec<String>, Error> {
+        let mut distinct: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for entry in self.read_all_score_entries()? {
+            if let Some(challenge) = entry.challenge.as_deref()
+                && challenge.starts_with(prefix)
+            {
+                distinct.insert(challenge.to_string());
+            }
+        }
+        // `BTreeSet` yields the distinct values already sorted ascending.
+        Ok(distinct.into_iter().collect())
+    }
+
     /// Deletes every score for a stored maze, returning the number removed. See
     /// [`ScoreStore::clear_maze_scores`].
     ///

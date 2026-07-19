@@ -458,6 +458,14 @@ pub trait ScoreStore {
         user_id: Uuid,
         challenges: &[String],
     ) -> Result<Vec<String>, Error>;
+    /// The **distinct** `challenge` values (across all users) that start with
+    /// `prefix` — the boards that exist under it. For a daily game the server
+    /// passes `"def:<id>:"` to enumerate its per-day `"def:<id>:<date>"` boards
+    /// (a board exists once anyone has scored on that day). Sorted ascending for
+    /// a deterministic order; an empty result means no such board has any score.
+    /// Storage stays subject-agnostic — the caller owns the prefix convention and
+    /// any date parsing. Authorization is the caller's responsibility.
+    async fn challenges_with_prefix(&self, prefix: &str) -> Result<Vec<String>, Error>;
     /// Deletes every score recorded against a user maze, resetting its
     /// leaderboard to empty. Returns the number of rows removed (0 if the board
     /// was already empty). Authorization (maze ownership) is the caller's

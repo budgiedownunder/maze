@@ -488,6 +488,86 @@ pub async fn get_my_completed_challenges(
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/v1/scores/board-dates  (a daily game's dated boards)
+// ---------------------------------------------------------------------------
+
+/// Query parameters for `GET /api/v1/scores/board-dates`.
+#[derive(Deserialize, Debug)]
+pub struct BoardDatesQuery {
+    /// The daily game definition whose dated boards to enumerate.
+    pub definition_id: String,
+}
+
+/// The UTC dates a daily game has a leaderboard for — the days someone has
+/// recorded a score, most recent first.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+pub struct BoardDatesResponse {
+    /// `yyyy-mm-dd` dates with at least one score, most recent first.
+    pub dates: Vec<String>,
+}
+
+#[utoipa::path(
+    summary = "List the dates a daily game has a leaderboard for",
+    description = "Returns the UTC dates on which anyone has recorded a score for a daily \
+                   game — i.e. the days whose `def:<id>:<date>` board is non-empty, most recent \
+                   first — so a client can offer them as quick-picks when browsing past boards. \
+                   Access-checked like the leaderboard read (owner, curated, public, or granted); \
+                   an inaccessible or unknown definition returns 403. A Static game (or a Daily \
+                   one no one has played) returns an empty list.",
+    get,
+    path = "/api/v1/scores/board-dates",
+    params(
+        ("definition_id" = String, Query, description = "The daily game definition id")
+    ),
+    responses(
+        (status = 200, description = "The dates with a board, most recent first", body = BoardDatesResponse),
+        (status = 400, description = "Missing or malformed definition_id"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 403, description = "Not authorized to read this leaderboard")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[get("/scores/board-dates")]
+pub async fn get_board_dates(
+    query: web::Query<BoardDatesQuery>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req)?;
+    let id = Uuid::parse_str(query.into_inner().definition_id.trim())
+        .map_err(|_| ErrorBadRequest("definition_id must be a valid UUID"))?;
+
+    let store_lock = store.read().await;
+    // A daily board is readable exactly when its game is (owner ∨ curated ∨
+    // public ∨ granted) — the same rule as reading a `def:<id>` board.
+    if !can_read_challenge_board(&**store_lock, &user, &format!("def:{id}")).await {
+        return Err(ErrorForbidden("Not authorized to read this leaderboard"));
+    }
+
+    let prefix = format!("def:{id}:");
+    match store_lock.challenges_with_prefix(&prefix).await {
+        Ok(challenges) => {
+            // Each `def:<id>:<date>` → its `<date>` suffix, most recent first.
+            let mut dates: Vec<String> = challenges
+                .into_iter()
+                .filter_map(|c| c.strip_prefix(&prefix).map(|d| d.to_string()))
+                .collect();
+            dates.sort();
+            dates.reverse();
+            Ok(HttpResponse::Ok().json(BoardDatesResponse { dates }))
+        }
+        Err(err) => {
+            log::warn!("challenges_with_prefix store error: {err}");
+            Err(ErrorInternalServerError("Failed to read board dates"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // DELETE /api/v1/scores  (reset a leaderboard)
 // ---------------------------------------------------------------------------
 

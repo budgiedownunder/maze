@@ -908,6 +908,12 @@ async fn score_clear_prefix_removes_a_game_definitions_boards() {
     contract::score_clear_prefix_removes_a_game_definitions_boards(&mut s).await;
 }
 
+#[tokio::test]
+async fn challenges_with_prefix_lists_distinct_dated_boards() {
+    let mut s = fresh_store().await;
+    contract::challenges_with_prefix_lists_distinct_dated_boards(&mut s).await;
+}
+
 // ─── GameStore — game definitions ─────────────────────────────────────────
 
 #[tokio::test]
