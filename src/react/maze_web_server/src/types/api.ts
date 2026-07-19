@@ -142,6 +142,14 @@ export interface CompletedChallengesResponse {
   completed: string[]
 }
 
+// Response for GET /scores/board-dates: the UTC dates a daily game has a
+// non-empty leaderboard for (`def:<id>:<date>` boards someone has scored on),
+// most recent first. A static game (or an unplayed daily one) returns an empty
+// list. Powers the daily leaderboard's "days with runs" quick-picks.
+export interface BoardDatesResponse {
+  dates: string[]
+}
+
 // The subset of the server's Play3dConfigResponse the client consumes: the
 // curated difficulty's fixed maze seed, used to key its leaderboard
 // (`challenge = "<difficulty>:<seed>"`).

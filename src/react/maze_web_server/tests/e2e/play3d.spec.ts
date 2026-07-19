@@ -17,7 +17,7 @@ async function loginAsAdmin(page: Page) {
   await expect(page).toHaveURL(/\/$/)
 }
 
-test('the 3D Games hub shows the four browse tiles and Featured opens empty', async ({ page }) => {
+test('the 3D Games hub shows the four browse tiles and Featured lists the seeded daily content', async ({ page }) => {
   await login(page)
   await page.goto('/play-3d')
   await expect(page.getByRole('heading', { name: /^featured$/i })).toBeVisible()
@@ -27,7 +27,9 @@ test('the 3D Games hub shows the four browse tiles and Featured opens empty', as
 
   await page.getByRole('button', { name: /featured/i }).click()
   await expect(page).toHaveURL(/\/play-3d\/featured$/)
-  await expect(page.getByText(/no featured games or collections yet/i)).toBeVisible()
+  // The dev:mock backend seeds the curated "Daily Challenges" collection + its
+  // daily game, so Featured is populated out of the box.
+  await expect(page.locator('.play3d-card-name', { hasText: 'Daily Challenges' })).toBeVisible()
 })
 
 test('Community lists other users’ published games, searchable and sortable', async ({ page }) => {

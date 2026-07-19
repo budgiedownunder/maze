@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
+import { DailyBoardDatePicker } from '../components/DailyBoardDatePicker'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { AlertModal } from '../components/AlertModal'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { useToken, useAuth } from '../context/AuthContext'
 import { getScoreHistory, getMazes, getGameDefinition, resetLeaderboard } from '../api/client'
-import { gameChallengeKey, gameIdFromChallenge } from '../utils/gameDefinitions'
+import { gameChallengeKey, gameIdFromChallenge, todayUtc } from '../utils/gameDefinitions'
 import { launchPlay3dWithSettings, launchDefinition } from '../utils/play3dLaunch'
 import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
 import type { Maze, ScoreEntry } from '../types/api'
@@ -63,6 +64,9 @@ export function LeaderboardsPage() {
   // personal maze in 3D with its saved settings.
   const [allMazes, setAllMazes] = useState<Maze[]>([])
   const [selection, setSelection] = useState<SubjectSelection | null>(null)
+  // Which day's board to show for a Daily game (`yyyy-mm-dd`, UTC) — ignored for
+  // Static games. Reset to today whenever the picked game changes.
+  const [selectedDate, setSelectedDate] = useState<string>(todayUtc())
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(true)
   const [subjectsError, setSubjectsError] = useState<string | null>(null)
 
@@ -115,9 +119,20 @@ export function LeaderboardsPage() {
     return () => { cancelled = true }
   }, [token])
 
+  // The picked 3D game (null for a maze subject or before a game is chosen).
+  const pickedGame = selection?.gameType === 'play3d' ? selection.game : null
+  const isDailyGame = pickedGame?.rotation === 'daily'
+
+  // A newly-picked game starts on today's board; the date control then browses
+  // past days (Daily only).
+  useEffect(() => {
+    setSelectedDate(todayUtc())
+  }, [pickedGame?.id])
+
   // The board subject follows the selection directly — a maze board keys on the
-  // maze id, a 3D game board on the game's `def:<id>` challenge (the picker
-  // already resolved the game, so nothing needs fetching). Memoised so the board
+  // maze id, a 3D game board on the game's challenge (the picker already resolved
+  // the game, so nothing needs fetching): `def:<id>` for a Static game,
+  // `def:<id>:<date>` for the selected day of a Daily one. Memoised so the board
   // isn't handed a fresh subject object every render.
   const boardSubject = useMemo<BoardSubject | null>(() => {
     if (selection == null) return null
@@ -125,9 +140,9 @@ export function LeaderboardsPage() {
       return selection.mazeId ? { mazeId: selection.mazeId } : null
     }
     return selection.game
-      ? { challenge: gameChallengeKey(selection.game.id, selection.game.rotation) }
+      ? { challenge: gameChallengeKey(selection.game.id, selection.game.rotation, selectedDate) }
       : null
-  }, [selection])
+  }, [selection, selectedDate])
 
   // Launch the selected subject in 3D: a personal maze with its saved settings,
   // or the stored game (the host page fetches its config by id). No prompt.
@@ -218,6 +233,14 @@ export function LeaderboardsPage() {
                 {hasPlayed ? '↻ Play Again' : '▶ Play'}
               </button>
             </SubjectSelector>
+            {isDailyGame && pickedGame && token && (
+              <DailyBoardDatePicker
+                token={token}
+                gameId={pickedGame.id}
+                value={selectedDate}
+                onChange={setSelectedDate}
+              />
+            )}
             {boardSubject && token && (
               <Leaderboard
                 token={token}

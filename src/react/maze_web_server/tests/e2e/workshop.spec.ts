@@ -60,11 +60,13 @@ test('the retired /games route redirects to the hub', async ({ page }) => {
   await expect(page).toHaveURL(/\/workshop$/)
 })
 
-test('an admin can open Manage Features and sees the empty state', async ({ page }) => {
+test('an admin can open Manage Features and sees the seeded featured items', async ({ page }) => {
   await loginAsAdmin(page)
   await page.goto('/workshop/features')
   await expect(page.getByRole('banner').getByText('Manage Features')).toBeVisible()
-  await expect(page.getByText(/no featured items yet/i)).toBeVisible()
+  // The dev:mock backend seeds the curated "Daily Challenges" collection + its
+  // daily game, so the featured catalogue is populated out of the box.
+  await expect(page.locator('.game-list-item', { hasText: 'Daily Challenges' })).toBeVisible()
 })
 
 test('featuring a game via Access surfaces it on Manage Features', async ({ page }) => {
@@ -95,9 +97,10 @@ test('featuring a game via Access surfaces it on Manage Features', async ({ page
   await expect(row.getByRole('button', { name: `Play ${name}` })).toBeVisible()
   await expect(row.getByRole('button', { name: `Leaderboard for ${name}` })).toBeVisible()
   await expect(row.getByRole('button', { name: `Unfeature ${name}` })).toBeVisible()
-  // As the only featured row it is both first and last, so both arrows disable.
-  await expect(row.getByRole('button', { name: `Move ${name} up` })).toBeDisabled()
-  await expect(row.getByRole('button', { name: `Move ${name} down` })).toBeDisabled()
+  // Its reorder controls are present (their enabled/disabled state depends on
+  // where the row sits among the pre-seeded featured items).
+  await expect(row.getByRole('button', { name: `Move ${name} up` })).toBeVisible()
+  await expect(row.getByRole('button', { name: `Move ${name} down` })).toBeVisible()
 
   // Unfeature it (the admin owns it → "Just me") and it drops off the list.
   await row.getByRole('button', { name: `Unfeature ${name}` }).click()

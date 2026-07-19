@@ -46,3 +46,24 @@ test('picking a game in the picker shows its board with usernames', async ({ pag
   await expect(page.getByRole('cell', { name: 'alice' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'testuser' })).toBeVisible()
 })
+
+test('a daily game shows a date picker and browses past days', async ({ page }) => {
+  await login(page)
+  await page.goto('/leaderboards')
+  await page.getByLabel('Game Type').selectOption('play3d')
+
+  // The seeded daily game is curated → it shows on the picker's Featured tab.
+  await page.getByRole('button', { name: 'Choose a game' }).click()
+  await page.getByRole('button', { name: 'Show leaderboard for Daily Maze' }).click()
+
+  // The date control appears, defaulting to today (UTC). Exact match — the
+  // quick-pick group's "Days with scores" label otherwise also matches "Day".
+  const dateInput = page.getByLabel('Day', { exact: true })
+  await expect(dateInput).toBeVisible()
+  await expect(dateInput).toHaveValue(new Date().toISOString().slice(0, 10))
+
+  // A past day with runs is offered as a quick-pick; picking it re-keys the board.
+  await page.getByRole('button', { name: '2026-07-05' }).click()
+  await expect(dateInput).toHaveValue('2026-07-05')
+  await expect(page.getByRole('table')).toBeVisible()
+})

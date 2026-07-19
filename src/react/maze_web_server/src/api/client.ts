@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -331,6 +331,16 @@ export function getCompletedChallenges(token: string, challenges: string[]): Pro
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify({ challenges } satisfies CompletedChallengesRequest),
+  })
+}
+
+// The UTC dates a daily game has a non-empty leaderboard for (someone scored on
+// that day's `def:<id>:<date>` board), most recent first — access-checked like
+// the board read. A static game (or an unplayed daily one) returns an empty
+// list. Feeds the daily leaderboard's "days with runs" quick-picks.
+export function getBoardDates(token: string, definitionId: string): Promise<BoardDatesResponse> {
+  return request<BoardDatesResponse>(`/scores/board-dates?definition_id=${encodeURIComponent(definitionId)}`, {
+    headers: authHeaders(token),
   })
 }
 

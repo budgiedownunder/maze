@@ -8,6 +8,7 @@ import { LeaderboardsPage } from '../../src/pages/LeaderboardsPage'
 import { server } from '../../src/mocks/server'
 import { launchPlay3dWithSettings, launchDefinition } from '../../src/utils/play3dLaunch'
 import { solveMaze } from '../../src/wasm/mazeWasm'
+import { todayUtc } from '../../src/utils/gameDefinitions'
 import type { ScoreEntry } from '../../src/types/api'
 
 vi.mock('../../src/utils/play3dLaunch', () => ({
@@ -83,6 +84,35 @@ function defDefaultHandlers(ownerId = 'owner-x', boardRows: ScoreEntry[] = []) {
       })
     }),
   ]
+}
+
+// History whose most-recent run is on a *daily* stored game, its play-fetch
+// (rotation 'daily'), its dated boards, and a board handler that records every
+// challenge key the page requests — the fixture behind the daily date-picker
+// tests.
+function dailyDefaultHandlers(boardDates: string[] = ['2026-07-10', '2026-07-05']) {
+  const requested: string[] = []
+  return {
+    requested,
+    handlers: [
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', challenge: 'def:daily-1', user_id: 'me' })], limit: 100, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () => HttpResponse.json([])),
+      http.get('/api/v1/game-definitions/:id', ({ params }) =>
+        HttpResponse.json({ ...gameDef(String(params.id), 'Daily Maze', 'owner-x'), rotation: 'daily', challengeKey: `def:${String(params.id)}:${todayUtc()}`, leaderboardTracked: true }),
+      ),
+      http.get('/api/v1/scores/board-dates', () => HttpResponse.json({ dates: boardDates })),
+      http.get('/api/v1/scores', ({ request }) => {
+        const challenge = new URL(request.url).searchParams.get('challenge')
+        if (challenge) requested.push(challenge)
+        return HttpResponse.json({
+          scores: [row({ id: 's1', challenge, user_id: 'me', username: 'bob', elapsed_ms: 42137 })],
+          limit: 20, offset: 0, has_more: false,
+        })
+      }),
+    ],
+  }
 }
 
 function renderPage() {
@@ -277,6 +307,41 @@ describe('LeaderboardsPage', () => {
 
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
     expect(launchPlay3dWithSettings).not.toHaveBeenCalled()
+  })
+
+  it('shows a date picker defaulting to today for a daily game', async () => {
+    const { handlers, requested } = dailyDefaultHandlers()
+    server.use(...handlers)
+    renderPage()
+
+    // Defaults to the daily game behind the most-recent run.
+    await waitFor(() => expect(screen.getByText('Daily Maze')).toBeInTheDocument())
+    const input = (await screen.findByLabelText('Day')) as HTMLInputElement
+    expect(input.value).toBe(todayUtc())
+    // Its board is keyed to today's dated challenge.
+    await waitFor(() => expect(requested).toContain(`def:daily-1:${todayUtc()}`))
+    // A past day with runs is offered as a quick-pick.
+    expect(await screen.findByRole('button', { name: '2026-07-05' })).toBeInTheDocument()
+  })
+
+  it('re-keys the board to a past day when a quick-pick chip is clicked', async () => {
+    const { handlers, requested } = dailyDefaultHandlers()
+    server.use(...handlers)
+    renderPage()
+
+    const chip = await screen.findByRole('button', { name: '2026-07-05' })
+    await userEvent.click(chip)
+
+    // The board now asks for that day's dated challenge, and the input reflects it.
+    await waitFor(() => expect(requested).toContain('def:daily-1:2026-07-05'))
+    expect((screen.getByLabelText('Day') as HTMLInputElement).value).toBe('2026-07-05')
+  })
+
+  it('shows no date picker for a static game', async () => {
+    server.use(...defDefaultHandlers())
+    renderPage()
+    await waitFor(() => expect(screen.getByText('Tricky')).toBeInTheDocument())
+    expect(screen.queryByLabelText('Day')).not.toBeInTheDocument()
   })
 
   it('Play launches the selected 3D game by id', async () => {

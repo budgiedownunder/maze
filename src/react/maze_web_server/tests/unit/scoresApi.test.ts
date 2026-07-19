@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { getCompletedChallenges, getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
+import { getBoardDates, getCompletedChallenges, getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
 import { gameChallengeKey, todayUtc } from '../../src/utils/gameDefinitions'
 import type { ScoreboardResponse } from '../../src/types/api'
 
@@ -203,6 +203,34 @@ describe('getCompletedChallenges', () => {
     expect(res.completed).toEqual(['def:a'])
     expect(body).toEqual({ challenges: ['def:a', 'def:b'] })
     expect(auth).toContain(TOKEN)
+  })
+})
+
+describe('getBoardDates', () => {
+  it('hits /scores/board-dates with the encoded definition id + bearer token', async () => {
+    let captured: Request | null = null
+    server.use(
+      http.get('/api/v1/scores/board-dates', ({ request }) => {
+        captured = request
+        return HttpResponse.json({ dates: [] })
+      }),
+    )
+    await getBoardDates(TOKEN, 'def id/1')
+    const req = captured as unknown as Request
+    const url = new URL(req.url)
+    expect(url.pathname).toBe('/api/v1/scores/board-dates')
+    expect(url.searchParams.get('definition_id')).toBe('def id/1')
+    expect(req.headers.get('Authorization')).toBe(`Bearer ${TOKEN}`)
+  })
+
+  it('returns the dates, most recent first as the server sends them', async () => {
+    server.use(
+      http.get('/api/v1/scores/board-dates', () =>
+        HttpResponse.json({ dates: ['2026-07-10', '2026-07-05'] }),
+      ),
+    )
+    const res = await getBoardDates(TOKEN, 'abc')
+    expect(res.dates).toEqual(['2026-07-10', '2026-07-05'])
   })
 })
 

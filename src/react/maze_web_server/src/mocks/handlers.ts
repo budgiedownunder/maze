@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, CompletedChallengesResponse, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, CompletedChallengesResponse, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -450,6 +450,51 @@ function seedCommunity(): void {
   }
 }
 seedCommunity()
+
+// Seed a **daily** curated game + a curated "Daily Challenges" collection holding
+// it, so the Today's Challenge Home tile (which client-resolves that collection)
+// and the daily leaderboard date picker have content in dev:mock. Curated ⇒ both
+// surface under Featured. The daily game reports a couple of past days with runs
+// (see the board-dates handler) so the quick-pick chips are exercisable.
+// Idempotent by id. Mirrors the server's G-phase bootstrap seed.
+const DAILY_GAME_ID = 'def-daily'
+const DAILY_COLLECTION_ID = 'col-daily-challenges'
+// Past days this daily game has a non-empty board — literal dates so the fixture
+// is clock-independent (today is always browsable via the date input regardless).
+const DAILY_BOARD_DATES = ['2026-07-10', '2026-07-05']
+
+function seedDailyChallenges(): void {
+  const owner = mockUserDirectory.find(u => u.username === 'cleo')!.id
+  const now = '2026-01-01T00:00:00.000Z'
+  if (!mockGameDefinitions.some(d => d.id === DAILY_GAME_ID)) {
+    mockGameDefinitions = [...mockGameDefinitions, {
+      id: DAILY_GAME_ID,
+      ownerId: owner,
+      name: 'Daily Maze',
+      description: 'A fresh maze every day.',
+      visibility: 'curated',
+      seed: 505050,
+      rotation: 'daily',
+      config: { rows: 9, cols: 9, seed: 505050 },
+      createdAt: now,
+      updatedAt: now,
+    }]
+  }
+  if (!mockGameCollections.some(c => c.id === DAILY_COLLECTION_ID)) {
+    mockGameCollections = [...mockGameCollections, {
+      id: DAILY_COLLECTION_ID,
+      ownerId: owner,
+      name: 'Daily Challenges',
+      description: 'A new challenge every day.',
+      visibility: 'curated',
+      playMode: 'arcade',
+      items: [{ definitionId: DAILY_GAME_ID, sortOrder: 0 }],
+      createdAt: now,
+      updatedAt: now,
+    }]
+  }
+}
+seedDailyChallenges()
 
 // A few directory users have an avatar (id → marker) so the grantee list's
 // `<Avatar>` fetch path is exercisable in the dev:mock run; the rest fall back
@@ -1067,6 +1112,15 @@ export const handlers = [
   // Default: none. Tests override with server.use to mark specific games complete.
   http.post(`${BASE}/scores/me/completed`, () =>
     HttpResponse.json<CompletedChallengesResponse>({ completed: [] })),
+
+  // Dated boards a daily game has runs on (most recent first) — the quick-picks
+  // for the daily leaderboard date picker. Only the seeded daily game reports
+  // days; every other game (or an unplayed daily one) is empty.
+  http.get(`${BASE}/scores/board-dates`, ({ request }) => {
+    const definitionId = new URL(request.url).searchParams.get('definition_id')
+    const dates = definitionId === DAILY_GAME_ID ? DAILY_BOARD_DATES : []
+    return HttpResponse.json<BoardDatesResponse>({ dates })
+  }),
 
   http.get(`${BASE}/scores`, ({ request }) => {
     const url = new URL(request.url)

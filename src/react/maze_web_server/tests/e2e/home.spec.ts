@@ -15,6 +15,14 @@ test('successful sign-in lands on the Home page with the tiles visible', async (
   await expect(page.getByRole('heading', { name: /^leaderboards$/i })).toBeVisible()
 })
 
+test("clicking Today's Challenge launches the seeded daily game", async ({ page }) => {
+  await login(page)
+  // The tile client-resolves the curated "Daily Challenges" collection and
+  // launches its daily member (dev:mock seeds `def-daily`) via the host page.
+  await page.getByRole('button', { name: /today's challenge/i }).click()
+  await expect(page).toHaveURL(/\/game\/\?def=def-daily/)
+})
+
 test('clicking the 3D Games tile navigates to /play-3d', async ({ page }) => {
   await login(page)
   await page.getByRole('button', { name: /browse and play 3d games/i }).click()
