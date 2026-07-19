@@ -22,7 +22,7 @@ interface Props {
 // everything after the current with no score is `locked`. Play launches the
 // current level; completed levels are replayable; locked levels are disabled.
 export function CampaignCollectionModal({ name, definitions, completed, onClose }: Props) {
-  const done = definitions.map(d => new Set(completed).has(gameChallengeKey(d.id)))
+  const done = definitions.map(d => new Set(completed).has(gameChallengeKey(d.id, d.rotation)))
   const currentIndex = done.findIndex(isDone => !isDone)
   const allComplete = currentIndex === -1
 

@@ -69,7 +69,7 @@ beforeEach(() => { vi.clearAllMocks() })
 describe('LeaderboardGamePicker', () => {
   it('is collapsed until Choose a game, and shows the selected name', async () => {
     server.use(...handlers())
-    render(<LeaderboardGamePicker value={{ id: 'd1', name: 'Tricky', ownerId: ME }} onSelect={vi.fn()} />)
+    render(<LeaderboardGamePicker value={{ id: 'd1', name: 'Tricky', ownerId: ME, rotation: 'static' }} onSelect={vi.fn()} />)
     expect(screen.getByText('Tricky')).toBeInTheDocument()
     // The panel (scope tabs) is hidden until expanded.
     expect(screen.queryByRole('tab', { name: 'Featured' })).not.toBeInTheDocument()
@@ -94,7 +94,7 @@ describe('LeaderboardGamePicker', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Show leaderboard for Easy' })).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Show leaderboard for Easy' }))
-    expect(onSelect).toHaveBeenCalledWith({ id: 'f1', name: 'Easy', ownerId: 'admin' })
+    expect(onSelect).toHaveBeenCalledWith({ id: 'f1', name: 'Easy', ownerId: 'admin', rotation: 'static' })
     // Collapsed again.
     expect(screen.queryByRole('tab', { name: 'Featured' })).not.toBeInTheDocument()
   })
@@ -114,7 +114,7 @@ describe('LeaderboardGamePicker', () => {
     await userEvent.click(toggle)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Show leaderboard for Tricky' })).toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'Show leaderboard for Tricky' }))
-    expect(onSelect).toHaveBeenCalledWith({ id: 'm1', name: 'Tricky', ownerId: 'admin' })
+    expect(onSelect).toHaveBeenCalledWith({ id: 'm1', name: 'Tricky', ownerId: 'admin', rotation: 'static' })
   })
 
   it('My Games shows the caller’s collections above their games', async () => {

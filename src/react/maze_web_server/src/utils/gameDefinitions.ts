@@ -72,13 +72,40 @@ export function reshuffleConfirmMessage(hasScores: boolean): string {
 export const ROTATIONS = ['static', 'daily'] as const
 export type Rotation = (typeof ROTATIONS)[number]
 
+// User-facing label + one-line description for each rotation, shown by the
+// definition editor's Rotation control.
+const ROTATION_LABELS: Record<Rotation, string> = {
+  static: 'Static',
+  daily: 'Daily',
+}
+
+const ROTATION_DESCRIPTIONS: Record<Rotation, string> = {
+  static: 'One fixed layout with a single, permanent leaderboard.',
+  daily: 'A fresh layout and leaderboard each day (UTC).',
+}
+
+export function rotationLabel(rotation: Rotation): string {
+  return ROTATION_LABELS[rotation]
+}
+
+export function rotationDescription(rotation: Rotation): string {
+  return ROTATION_DESCRIPTIONS[rotation]
+}
+
+// Today's date in UTC as `yyyy-mm-dd` — the day boundary the server uses for
+// Daily boards (`compute_play_subject` mixes the UTC date).
+export function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
 // The leaderboard challenge key for a game, matching the server's play-fetch
-// subject (game_definitions.rs `compute_play_subject`) for a Static game: `def:<id>`.
-// Used to check per-game completion (a score on this key) for campaign progress.
-// Only Static games can be created today; Daily rotation (whose board key folds in
-// the UTC date, `def:<id>:<yyyy-mm-dd>`) is not yet supported here.
-export function gameChallengeKey(id: string): string {
-  return `def:${id}`
+// subject (game_definitions.rs `compute_play_subject`): `def:<id>` for a Static
+// game, `def:<id>:<yyyy-mm-dd>` for a Daily one. `dateUtc` selects which day's
+// board for a Daily game (defaults to today, UTC); it is ignored for Static.
+// Used to check per-game completion (a score on this key) for campaign progress
+// and to key the leaderboard board.
+export function gameChallengeKey(id: string, rotation: Rotation = 'static', dateUtc?: string): string {
+  return rotation === 'daily' ? `def:${id}:${dateUtc ?? todayUtc()}` : `def:${id}`
 }
 
 // The game id behind a `def:<id>` (or Daily `def:<id>:<yyyy-mm-dd>`) leaderboard

@@ -3,6 +3,7 @@ import { usePagedList } from '../hooks/usePagedList'
 import { getFeaturedGameItems, getGameCollection, listGameCollections, listGameDefinitions } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import type { FeaturedGameItem, GameCollection, GameDefinition } from '../types/api'
+import type { Rotation } from '../utils/gameDefinitions'
 
 const DEBOUNCE_MS = 300
 
@@ -30,6 +31,9 @@ export interface PickedGame {
   id: string
   name: string
   ownerId: string
+  // Static → one fixed `def:<id>` board; Daily → a per-UTC-day
+  // `def:<id>:<date>` board (the leaderboard page adds a date control for it).
+  rotation: Rotation
 }
 
 interface Props {
@@ -47,7 +51,7 @@ function featuredItemName(item: FeaturedGameItem): string {
 }
 
 function toPicked(def: GameDefinition): PickedGame {
-  return { id: def.id, name: def.name, ownerId: def.ownerId }
+  return { id: def.id, name: def.name, ownerId: def.ownerId, rotation: def.rotation }
 }
 
 // A selectable game row.

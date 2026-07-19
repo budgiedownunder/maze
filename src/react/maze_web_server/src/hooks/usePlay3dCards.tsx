@@ -47,7 +47,7 @@ export function usePlay3dCards(): {
         // Resolve per-game completion in one query; a failure shows no progress.
         let completed: string[] = []
         try {
-          completed = (await getCompletedChallenges(token!, defs.map(d => gameChallengeKey(d.id)))).completed
+          completed = (await getCompletedChallenges(token!, defs.map(d => gameChallengeKey(d.id, d.rotation)))).completed
         } catch { /* treat as none completed */ }
         setCampaign({ name: c.name, definitions: defs, completed })
       } else {

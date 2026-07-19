@@ -57,6 +57,19 @@ describe('GameDefinitionEditor — steps', () => {
     expect(within(screen.getByRole('group', { name: 'Time limit (seconds)' })).getByRole('spinbutton')).toBeVisible()
   })
 
+  it('has a Rotation control defaulting to Static, switchable to Daily', () => {
+    renderEditor()
+    // Single-field group: the heading is the label, so query the control by role.
+    const rotation = within(screen.getByRole('group', { name: 'Rotation' })).getByRole('combobox') as HTMLSelectElement
+    expect(rotation.value).toBe('static')
+    expect(screen.getByText(/one fixed layout/i)).toBeVisible()
+
+    fireEvent.change(rotation, { target: { value: 'daily' } })
+    expect(rotation.value).toBe('daily')
+    // The hint follows the selection.
+    expect(screen.getByText(/fresh layout and leaderboard each day/i)).toBeVisible()
+  })
+
   it('shows the Grid group on the Layout step', async () => {
     renderEditor()
     await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))

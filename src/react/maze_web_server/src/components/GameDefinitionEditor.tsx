@@ -17,7 +17,7 @@ import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { validateMazeGenerationFields } from '../utils/validation'
-import { MAX_LEVEL_COUNT, FINISH_TYPES, isGameplayChange, reshuffleConfirmMessage, type FinishType } from '../utils/gameDefinitions'
+import { MAX_LEVEL_COUNT, FINISH_TYPES, ROTATIONS, isGameplayChange, reshuffleConfirmMessage, rotationLabel, rotationDescription, type FinishType, type Rotation } from '../utils/gameDefinitions'
 import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
 import type { GameDefinitionRequest } from '../types/api'
@@ -216,6 +216,18 @@ export function GameDefinitionEditor({
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
             />
           </label>
+        </FieldGroup>
+
+        <FieldGroup title="Rotation" id="rotation">
+          <select
+            className="input"
+            aria-label="Rotation"
+            value={form.rotation}
+            onChange={e => setForm(f => ({ ...f, rotation: e.target.value as Rotation }))}
+          >
+            {ROTATIONS.map(r => <option key={r} value={r}>{rotationLabel(r)}</option>)}
+          </select>
+          <p className="access-tier-desc">{rotationDescription(form.rotation)}</p>
         </FieldGroup>
 
         {/* Single-field groups: the group heading is the field's label, so the

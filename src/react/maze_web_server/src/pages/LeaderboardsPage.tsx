@@ -45,7 +45,7 @@ async function defaultSelection(
   if (gameId) {
     try {
       const def = await getGameDefinition(token, gameId)
-      return { gameType: 'play3d', game: { id: def.id, name: def.name, ownerId: def.ownerId } }
+      return { gameType: 'play3d', game: { id: def.id, name: def.name, ownerId: def.ownerId, rotation: def.rotation } }
     } catch {
       // Gone or no longer accessible — fall through to a maze.
     }
@@ -124,7 +124,9 @@ export function LeaderboardsPage() {
     if (selection.gameType === 'my-mazes') {
       return selection.mazeId ? { mazeId: selection.mazeId } : null
     }
-    return selection.game ? { challenge: gameChallengeKey(selection.game.id) } : null
+    return selection.game
+      ? { challenge: gameChallengeKey(selection.game.id, selection.game.rotation) }
+      : null
   }, [selection])
 
   // Launch the selected subject in 3D: a personal maze with its saved settings,

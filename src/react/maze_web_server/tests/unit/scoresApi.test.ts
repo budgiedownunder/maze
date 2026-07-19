@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { getCompletedChallenges, getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
-import { gameChallengeKey } from '../../src/utils/gameDefinitions'
+import { gameChallengeKey, todayUtc } from '../../src/utils/gameDefinitions'
 import type { ScoreboardResponse } from '../../src/types/api'
 
 const TOKEN = 'test-token'
@@ -207,7 +207,22 @@ describe('getCompletedChallenges', () => {
 })
 
 describe('gameChallengeKey', () => {
-  it('is def:<id> for a game', () => {
+  it('is def:<id> for a Static game (the default)', () => {
     expect(gameChallengeKey('abc')).toBe('def:abc')
+    expect(gameChallengeKey('abc', 'static')).toBe('def:abc')
+    // The date is ignored for a Static game.
+    expect(gameChallengeKey('abc', 'static', '2026-07-14')).toBe('def:abc')
+  })
+
+  it('is def:<id>:<date> for a Daily game, defaulting to today (UTC)', () => {
+    expect(gameChallengeKey('abc', 'daily', '2026-07-14')).toBe('def:abc:2026-07-14')
+    expect(gameChallengeKey('abc', 'daily')).toBe(`def:abc:${todayUtc()}`)
+  })
+})
+
+describe('todayUtc', () => {
+  it('is a yyyy-mm-dd date matching the current UTC day', () => {
+    expect(todayUtc()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(todayUtc()).toBe(new Date().toISOString().slice(0, 10))
   })
 })

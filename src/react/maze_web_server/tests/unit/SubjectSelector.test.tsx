@@ -8,11 +8,11 @@ import { SubjectSelector, type SubjectSelection } from '../../src/components/Sub
 vi.mock('../../src/components/LeaderboardGamePicker', () => ({
   LeaderboardGamePicker: ({ value, onSelect }: {
     value: { name: string } | null
-    onSelect: (game: { id: string; name: string; ownerId: string }) => void
+    onSelect: (game: { id: string; name: string; ownerId: string; rotation: string }) => void
   }) => (
     <div>
       <span>{value ? value.name : 'no game'}</span>
-      <button type="button" onClick={() => onSelect({ id: 'g1', name: 'Picked', ownerId: 'owner-1' })}>
+      <button type="button" onClick={() => onSelect({ id: 'g1', name: 'Picked', ownerId: 'owner-1', rotation: 'static' })}>
         Pick game
       </button>
     </div>
@@ -44,7 +44,7 @@ describe('SubjectSelector', () => {
     render(
       <SubjectSelector
         mazes={MAZES}
-        value={{ gameType: 'play3d', game: { id: 'g9', name: 'Tricky', ownerId: 'o9' } }}
+        value={{ gameType: 'play3d', game: { id: 'g9', name: 'Tricky', ownerId: 'o9', rotation: 'static' } }}
         onChange={vi.fn()}
       />,
     )
@@ -77,7 +77,7 @@ describe('SubjectSelector', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Pick game' }))
     expect(onChange).toHaveBeenCalledWith({
       gameType: 'play3d',
-      game: { id: 'g1', name: 'Picked', ownerId: 'owner-1' },
+      game: { id: 'g1', name: 'Picked', ownerId: 'owner-1', rotation: 'static' },
     } satisfies SubjectSelection)
   })
 
