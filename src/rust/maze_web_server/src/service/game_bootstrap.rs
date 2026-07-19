@@ -116,6 +116,34 @@ const DIFFICULTY_PRESETS: [DifficultyPreset; 3] = [EASY, TRICKY, HARD];
 /// The name of the seeded curated collection.
 const DIFFICULTY_COLLECTION_NAME: &str = "Difficulty";
 
+/// The shipped daily-challenge definition. A single `Daily`-rotation game: the
+/// stored `seed` is the base the server folds today's UTC date into, so the
+/// layout + its board rotate each day while the size/counts stay fixed. A
+/// mid-weight preset (between Easy and Tricky), so the daily is approachable but
+/// not trivial.
+const DAILY: DifficultyPreset = DifficultyPreset {
+    name: "Daily Maze",
+    title: "DAILY 3D",
+    mode: "Daily",
+    rows: 20,
+    cols: 20,
+    timer_seconds: 180,
+    seed: 20_260_101,
+    min_solution_length: 25,
+    door_count: 3,
+    spare_doors: 1,
+    spare_keys: 1,
+    enemy_count: 2,
+    health_count: 3,
+    treasure_count: 4,
+    enemy_move_period_ms: 1500,
+    max_hp: 3,
+    level_count: 1,
+};
+
+/// The name of the seeded curated daily-challenge collection.
+const DAILY_COLLECTION_NAME: &str = "Daily Challenges";
+
 /// Turns a [`DifficultyPreset`] into a full [`Play3dDifficultyConfig`]. The
 /// varying values come from the preset; the scene, landmark, minimap and
 /// remaining level-meta fields are identical across all three shipped presets
@@ -159,13 +187,16 @@ fn build_difficulty_config(preset: &DifficultyPreset) -> Result<serde_json::Valu
     Ok(value)
 }
 
-/// Creates a curated definition for `preset` (or reuses an existing one of the
-/// same name), returning its id. Reuse keeps re-seeding idempotent even if the
-/// collection was deleted while the definitions were kept.
-async fn ensure_difficulty_definition(
+/// Creates a curated definition for `preset` with the given `rotation` (or reuses
+/// an existing one of the same name), returning its id. `Static` builds a fixed
+/// board; `Daily` makes the server date-mix the seed + challenge key per UTC day.
+/// Reuse keeps re-seeding idempotent even if the collection was deleted while the
+/// definitions were kept.
+async fn ensure_curated_definition(
     store: &mut Box<dyn Store>,
     admin: &User,
     preset: &DifficultyPreset,
+    rotation: Rotation,
 ) -> Result<Uuid, StoreError> {
     let now = Utc::now();
     let mut definition = GameDefinition {
@@ -175,7 +206,7 @@ async fn ensure_difficulty_definition(
         description: None,
         visibility: Visibility::Curated,
         seed: preset.seed,
-        rotation: Rotation::Static,
+        rotation,
         config: build_difficulty_config(preset)?,
         image_updated_at: None,
         created_at: now,
@@ -225,7 +256,7 @@ pub async fn init_difficulty_collection(
 
     let mut definition_ids = Vec::with_capacity(DIFFICULTY_PRESETS.len());
     for preset in &DIFFICULTY_PRESETS {
-        definition_ids.push(ensure_difficulty_definition(store, &admin, preset).await?);
+        definition_ids.push(ensure_curated_definition(store, &admin, preset, Rotation::Static).await?);
     }
 
     let now = Utc::now();
@@ -243,6 +274,53 @@ pub async fn init_difficulty_collection(
     };
     store.create_game_collection(&admin, &mut collection).await?;
     store.set_game_collection_items(&admin, collection.id, &definition_ids).await?;
+
+    Ok(())
+}
+
+/// Seeds the curated "Daily Challenges" collection and its `Daily` definition
+/// under the default admin, if not already present. Idempotent — a no-op once the
+/// curated "Daily Challenges" collection exists — so it runs safely on every
+/// launch, mirroring [`init_difficulty_collection`]. The `Daily` definition's
+/// board rotates by UTC date, which the server derives at play-fetch; nothing
+/// here schedules or rolls anything over.
+pub async fn init_daily_challenges_collection(
+    store: &mut Box<dyn Store>,
+    admin_username: &str,
+) -> Result<(), StoreError> {
+    let admins: Vec<User> = store.get_admin_users().await?;
+    let admin = match admins.iter().find(|u| u.username == admin_username).or_else(|| admins.first()) {
+        Some(user) => user.clone(),
+        None => return Ok(()),
+    };
+
+    // Idempotent: nothing to do once the curated "Daily Challenges" collection
+    // exists.
+    let existing = store.get_game_collections_for_owner(&admin).await?;
+    if existing
+        .iter()
+        .any(|c| c.visibility == Visibility::Curated && c.name == DAILY_COLLECTION_NAME)
+    {
+        return Ok(());
+    }
+
+    let daily_id = ensure_curated_definition(store, &admin, &DAILY, Rotation::Daily).await?;
+
+    let now = Utc::now();
+    let mut collection = GameCollection {
+        id: Uuid::nil(),
+        owner_id: Uuid::nil(),
+        name: DAILY_COLLECTION_NAME.to_string(),
+        visibility: Visibility::Curated,
+        play_mode: PlayMode::Arcade,
+        description: Some("A fresh maze every day — how fast can you clear today's?".to_string()),
+        image_updated_at: None,
+        items: Vec::new(),
+        created_at: now,
+        updated_at: now,
+    };
+    store.create_game_collection(&admin, &mut collection).await?;
+    store.set_game_collection_items(&admin, collection.id, &[daily_id]).await?;
 
     Ok(())
 }
@@ -325,5 +403,51 @@ mod tests {
         // Adding an admin afterwards, the earlier no-op left nothing to own.
         let admin = seed_admin(&mut store).await;
         assert!(store.get_game_collections_for_owner(&admin).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn seeds_the_daily_definition_and_collection() {
+        let (mut store, _temp) = fresh_store();
+        let admin = seed_admin(&mut store).await;
+
+        init_daily_challenges_collection(&mut store, "admin").await.expect("bootstrap");
+
+        // The daily definition is a curated, Daily-rotation game.
+        let defs = store.get_game_definitions_for_owner(&admin).await.expect("admin defs");
+        let daily = defs.iter().find(|d| d.name == "Daily Maze").expect("daily def");
+        assert_eq!(daily.visibility, Visibility::Curated);
+        assert_eq!(daily.rotation, Rotation::Daily);
+        assert_eq!(daily.seed, 20_260_101);
+        assert!(daily.config.get("difficulty").is_none(), "stored config carries no difficulty tag");
+
+        // The curated "Daily Challenges" collection references it.
+        let cols = store.get_game_collections_for_owner(&admin).await.expect("admin collections");
+        let daily_collection = cols
+            .iter()
+            .find(|c| c.name == DAILY_COLLECTION_NAME)
+            .expect("daily collection");
+        assert_eq!(daily_collection.visibility, Visibility::Curated);
+        let ordered: Vec<Uuid> = daily_collection.items.iter().map(|i| i.definition_id).collect();
+        assert_eq!(ordered, vec![daily.id]);
+    }
+
+    #[tokio::test]
+    async fn daily_seeding_is_idempotent_and_independent_of_difficulty() {
+        let (mut store, _temp) = fresh_store();
+        let admin = seed_admin(&mut store).await;
+
+        // Both bootstraps run every launch; the daily one seeds exactly one def +
+        // one collection however many times it runs, and doesn't disturb Difficulty.
+        init_difficulty_collection(&mut store, "admin").await.expect("difficulty");
+        init_daily_challenges_collection(&mut store, "admin").await.expect("daily first");
+        init_daily_challenges_collection(&mut store, "admin").await.expect("daily second");
+
+        let defs = store.get_game_definitions_for_owner(&admin).await.unwrap();
+        assert_eq!(defs.iter().filter(|d| d.name == "Daily Maze").count(), 1);
+        let cols = store.get_game_collections_for_owner(&admin).await.unwrap();
+        assert_eq!(cols.iter().filter(|c| c.name == DAILY_COLLECTION_NAME).count(), 1);
+        // The Difficulty content is untouched — three defs + its collection.
+        assert!(cols.iter().any(|c| c.name == DIFFICULTY_COLLECTION_NAME));
+        assert_eq!(defs.iter().filter(|d| ["Easy", "Tricky", "Hard"].contains(&d.name.as_str())).count(), 3);
     }
 }

@@ -701,7 +701,7 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 
 A **game collection** is an ordered, presentation-only grouping of game definitions — it does not affect generation or scoring (leaderboards stay per-definition). Membership is order-only: an item is just a `definitionId` + position, and each game's name/description/image is intrinsic to its definition and shared across every collection it appears in.
 
-On first launch the server seeds a curated **"Difficulty"** collection — the `Easy` / `Tricky` / `Hard` games (values lifted from the shipped `game.play3d.*` presets) — owned by the default admin. The seeding is idempotent, so it runs safely on every launch.
+On first launch the server seeds two curated collections owned by the default admin: a **"Difficulty"** collection — the `Easy` / `Tricky` / `Hard` games (values lifted from the shipped `game.play3d.*` presets) — and a **"Daily Challenges"** collection holding a single `Daily`-rotation game whose layout and board rotate by UTC date (the server derives the per-day seed at play-fetch; nothing is scheduled). Each seeding is idempotent, so both run safely on every launch.
 
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|
