@@ -2481,6 +2481,25 @@ textarea.input {
   display: flex;
   flex-direction: column;
 }
+/* Groupbox around the board's filter controls (game selector + optional daily
+   date picker), inset with a subtle surface + border so it reads as a distinct
+   control panel above the results table rather than blending into it. */
+.leaderboard-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+/* Child spacing is owned by the groupbox's column gap. */
+.leaderboard-filters > .subject-label,
+.leaderboard-filters > .subject-selector,
+.leaderboard-filters > .daily-board-picker {
+  margin-bottom: 0;
+}
 .subject-selector {
   display: flex;
   align-items: center;

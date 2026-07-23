@@ -223,24 +223,26 @@ export function LeaderboardsPage() {
         )}
         {!isLoadingSubjects && !subjectsError && (
           <>
-            <span className="subject-label" aria-hidden="true">Game</span>
-            <SubjectSelector
-              mazes={mazes}
-              value={selection}
-              onChange={setSelection}
-            >
-              <button type="button" className="btn-primary leaderboard-play" onClick={handlePlay} disabled={!canPlay}>
-                {hasPlayed ? '↻ Play Again' : '▶ Play'}
-              </button>
-            </SubjectSelector>
-            {isDailyGame && pickedGame && token && (
-              <DailyBoardDatePicker
-                token={token}
-                gameId={pickedGame.id}
-                value={selectedDate}
-                onChange={setSelectedDate}
-              />
-            )}
+            <div className="leaderboard-filters" role="group" aria-label="Leaderboard filters">
+              <span className="subject-label" aria-hidden="true">Game</span>
+              <SubjectSelector
+                mazes={mazes}
+                value={selection}
+                onChange={setSelection}
+              >
+                <button type="button" className="btn-primary leaderboard-play" onClick={handlePlay} disabled={!canPlay}>
+                  {hasPlayed ? '↻ Play Again' : '▶ Play'}
+                </button>
+              </SubjectSelector>
+              {isDailyGame && pickedGame && token && (
+                <DailyBoardDatePicker
+                  token={token}
+                  gameId={pickedGame.id}
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                />
+              )}
+            </div>
             {boardSubject && token && (
               <Leaderboard
                 token={token}
