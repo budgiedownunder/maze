@@ -59,12 +59,10 @@ pub struct GameCollectionRequest {
     pub description: Option<String>,
     /// Access tier. Defaults to `private`. Setting `curated` requires an admin.
     #[serde(default)]
-    #[schema(value_type = String)]
     pub visibility: Visibility,
     /// How the collection is played (`arcade` free-choice or `campaign` ordered).
     /// Defaults to `arcade` when omitted.
     #[serde(default)]
-    #[schema(value_type = String)]
     pub play_mode: PlayMode,
 }
 
@@ -119,10 +117,8 @@ pub struct GameCollectionDetailResponse {
     /// Optional collection-level description.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[schema(value_type = String)]
     /// Access tier gating the grouping.
     pub visibility: Visibility,
-    #[schema(value_type = String)]
     /// How the collection is played (`arcade` free-choice or `campaign` ordered).
     pub play_mode: PlayMode,
     /// Cache-key for the optional collection-level image; `None` when unset.

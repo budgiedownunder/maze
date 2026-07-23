@@ -71,6 +71,31 @@ impl<'de> Deserialize<'de> for PlayMode {
     }
 }
 
+// Hand-written schema so the OpenAPI enum lists the lowercase wire values (see
+// the note on `Visibility`'s schema in `game_definition.rs`).
+impl utoipa::PartialSchema for PlayMode {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, Type};
+        utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(Type::String)
+                .enum_values(Some(["arcade", "campaign"]))
+                .description(Some(
+                    "How a collection is played: `arcade` (free choice of member game) \
+                     or `campaign` (ordered progression). An unrecognised value is read \
+                     as `arcade`.",
+                ))
+                .build(),
+        ))
+    }
+}
+
+impl utoipa::ToSchema for PlayMode {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("PlayMode")
+    }
+}
+
 /// One game definition's membership in a [`GameCollection`], carrying only its
 /// position within that collection.
 ///
@@ -108,10 +133,8 @@ pub struct GameCollection {
     pub owner_id: Uuid,
     /// Display name.
     pub name: String,
-    #[schema(value_type = String)]
     /// Access tier — who may see this collection.
     pub visibility: Visibility,
-    #[schema(value_type = String)]
     /// How the collection is played (free-choice `Arcade` or ordered `Campaign`).
     /// `#[serde(default)]` so a collection written before this field existed still
     /// loads (as `Arcade`).

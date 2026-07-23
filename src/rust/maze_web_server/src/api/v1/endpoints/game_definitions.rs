@@ -76,11 +76,9 @@ pub struct GameDefinitionRequest {
     pub description: Option<String>,
     /// Access tier. Defaults to `private`. Setting `curated` requires an admin.
     #[serde(default)]
-    #[schema(value_type = String)]
     pub visibility: Visibility,
     /// Layout/board rotation policy. Defaults to `static`.
     #[serde(default)]
-    #[schema(value_type = String)]
     pub rotation: Rotation,
     /// Opaque, client-owned generation + render parameters. Stored and forwarded
     /// verbatim; only its byte size is validated (by the storage layer).

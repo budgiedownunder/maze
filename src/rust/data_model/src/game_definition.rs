@@ -77,6 +77,33 @@ impl<'de> Deserialize<'de> for Visibility {
     }
 }
 
+// Hand-written schema (rather than `#[derive(ToSchema)]`) so the OpenAPI document
+// lists the lowercase *wire* values as the enum's allowed set — the derive would
+// emit the PascalCase variant names, which don't match what the manual
+// `Serialize`/`Deserialize` above actually accept.
+impl utoipa::PartialSchema for Visibility {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, Type};
+        utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(Type::String)
+                .enum_values(Some(["private", "shared", "public", "curated"]))
+                .description(Some(
+                    "Access tier: `private` (owner only), `shared` (explicit grantees), \
+                     `public` (any signed-in user), or `curated` (admin-featured). An \
+                     unrecognised value is read as `private`.",
+                ))
+                .build(),
+        ))
+    }
+}
+
+impl utoipa::ToSchema for Visibility {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("Visibility")
+    }
+}
+
 /// How a game definition's maze layout (and thus its leaderboard) rotates.
 ///
 /// `Static` keeps one fixed layout and board for the life of the definition;
@@ -142,6 +169,31 @@ impl<'de> Deserialize<'de> for Rotation {
     }
 }
 
+// Hand-written schema so the OpenAPI enum lists the lowercase wire values (see
+// the note on `Visibility`'s schema).
+impl utoipa::PartialSchema for Rotation {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, Type};
+        utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
+            ObjectBuilder::new()
+                .schema_type(Type::String)
+                .enum_values(Some(["static", "daily"]))
+                .description(Some(
+                    "Layout/board rotation: `static` (one fixed layout and board) or \
+                     `daily` (a fresh layout and per-date board each UTC day). An \
+                     unrecognised value is read as `static`.",
+                ))
+                .build(),
+        ))
+    }
+}
+
+impl utoipa::ToSchema for Rotation {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("Rotation")
+    }
+}
+
 /// A stored, parametric 3D game.
 ///
 /// Unlike a [`Maze`](crate::Maze), a game definition stores no maze grid: its
@@ -167,13 +219,11 @@ pub struct GameDefinition {
     /// game, not per-collection). `None` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[schema(value_type = String)]
     /// Access tier — who may see and play this definition.
     pub visibility: Visibility,
     /// Generation seed. Fixed per definition so the layout is stable and the
     /// board fair; auto-minted and hidden from the editor.
     pub seed: u64,
-    #[schema(value_type = String)]
     /// Layout/board rotation policy.
     pub rotation: Rotation,
     #[schema(value_type = Object)]
