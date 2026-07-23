@@ -32,8 +32,8 @@ use actix_web::{
     },
     http::header::{CacheControl, CacheDirective, ETag, EntityTag},
 };
-use chrono::{DateTime, Utc};
-use data_model::{GameCollection, GameDefinition, GranteeSummary, PlayMode, User, Visibility};
+use chrono::Utc;
+use data_model::{GameCollection, GameCollectionMeta, GameDefinition, GranteeSummary, PlayMode, User, Visibility};
 use serde::{Deserialize, Serialize};
 use storage::{Error as StoreError, SharedStore};
 use utoipa::ToSchema;
@@ -106,49 +106,24 @@ pub struct GameCollectionListResponse {
 #[derive(Serialize, ToSchema, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GameCollectionDetailResponse {
-    #[schema(value_type = String)]
-    /// Unique identifier.
-    pub id: Uuid,
-    #[schema(value_type = String)]
-    /// The user that owns the collection.
-    pub owner_id: Uuid,
-    /// Display name.
-    pub name: String,
-    /// Optional collection-level description.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    /// Access tier gating the grouping.
-    pub visibility: Visibility,
-    /// How the collection is played (`arcade` free-choice or `campaign` ordered).
-    pub play_mode: PlayMode,
-    /// Cache-key for the optional collection-level image; `None` when unset.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub image_updated_at: Option<DateTime<Utc>>,
-    /// Creation timestamp.
-    pub created_at: DateTime<Utc>,
-    /// Last-update timestamp.
-    pub updated_at: DateTime<Utc>,
+    /// The collection's own metadata (id, owner, name, visibility, play mode,
+    /// image, timestamps). Flattened, so on the wire these fields sit at the top
+    /// level — and any new field on [`GameCollectionMeta`] propagates here
+    /// automatically, exactly as it does for the stored collection.
+    #[serde(flatten)]
+    pub meta: GameCollectionMeta,
     /// The accessible member definitions, in collection order. Members the viewer
     /// cannot access, and dangling refs to since-deleted definitions, are omitted.
+    /// This replaces the collection's raw `items` (membership references).
     pub definitions: Vec<GameDefinition>,
 }
 
 impl GameCollectionDetailResponse {
-    /// Builds a detail response from a collection's own metadata and its already
-    /// access-filtered, ordered member definitions.
+    /// Builds a detail response from a collection and its already access-filtered,
+    /// ordered member definitions. The collection's raw `items` are dropped — the
+    /// response exposes the hydrated `definitions` instead.
     fn from_parts(collection: GameCollection, definitions: Vec<GameDefinition>) -> Self {
-        Self {
-            id: collection.id,
-            owner_id: collection.owner_id,
-            name: collection.name,
-            description: collection.description,
-            visibility: collection.visibility,
-            play_mode: collection.play_mode,
-            image_updated_at: collection.image_updated_at,
-            created_at: collection.created_at,
-            updated_at: collection.updated_at,
-            definitions,
-        }
+        Self { meta: collection.meta, definitions }
     }
 }
 
@@ -225,7 +200,7 @@ async fn owned_collection(
     id: Uuid,
 ) -> Result<GameCollection, Error> {
     match store_lock.get_game_collection(id).await {
-        Ok(collection) if collection.owner_id == user.id => Ok(collection),
+        Ok(collection) if collection.meta.owner_id == user.id => Ok(collection),
         Ok(_) | Err(StoreError::GameCollectionIdNotFound(_)) => {
             Err(ErrorNotFound(format!("Game collection '{id}' not found")))
         }
@@ -274,22 +249,24 @@ pub async fn create_game_collection(
 
     let now = Utc::now();
     let mut collection = GameCollection {
-        id: Uuid::nil(),
-        owner_id: Uuid::nil(),
-        name: body.name,
-        visibility: body.visibility,
-        play_mode: body.play_mode,
-        description: body.description,
-        image_updated_at: None,
+        meta: GameCollectionMeta {
+            id: Uuid::nil(),
+            owner_id: Uuid::nil(),
+            name: body.name,
+            visibility: body.visibility,
+            play_mode: body.play_mode,
+            description: body.description,
+            image_updated_at: None,
+            created_at: now,
+            updated_at: now,
+        },
         items: Vec::new(),
-        created_at: now,
-        updated_at: now,
     };
 
     let mut store_lock = store.write().await;
     match store_lock.create_game_collection(&user, &mut collection).await {
         Ok(()) => Ok(HttpResponse::Created()
-            .insert_header(("Location", format!("/api/v1/game-collections/{}", collection.id)))
+            .insert_header(("Location", format!("/api/v1/game-collections/{}", collection.meta.id)))
             .json(collection)),
         Err(err) => Err(map_write_error(err)),
     }
@@ -365,7 +342,7 @@ pub async fn list_game_collections(
                     log::warn!("list game collections store error: {err}");
                     ErrorInternalServerError("Failed to list game collections")
                 })?;
-            page_owned(all, q.q.as_deref(), |c| c.name.as_str(), limit, offset)
+            page_owned(all, q.q.as_deref(), |c| c.meta.name.as_str(), limit, offset)
         }
         ListScope::Shared => {
             // Storage composes + pages the "shared with me" set; over-fetch one
@@ -454,7 +431,7 @@ pub async fn get_game_collection(
 
     // Collection-level access is composed here; an inaccessible collection is
     // reported as absent so its existence is not leaked.
-    if !can_access(collection.owner_id, collection.visibility, user.id, &col_grantees) {
+    if !can_access(collection.meta.owner_id, collection.meta.visibility, user.id, &col_grantees) {
         return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
     }
 
@@ -542,25 +519,27 @@ pub async fn update_game_collection(
         }
     };
     let admin_override = user.is_admin
-        && (existing.visibility == Visibility::Curated || body.visibility == Visibility::Curated);
-    if existing.owner_id != user.id && !admin_override {
+        && (existing.meta.visibility == Visibility::Curated || body.visibility == Visibility::Curated);
+    if existing.meta.owner_id != user.id && !admin_override {
         return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
     }
     // Owner-scoped update keys on the collection's own owner, so an admin editing
     // someone else's collection preserves its ownership (no transfer).
-    let owner = resolve_owner(&**store_lock, &user, existing.owner_id).await?;
+    let owner = resolve_owner(&**store_lock, &user, existing.meta.owner_id).await?;
 
     let mut collection = GameCollection {
-        id: existing.id,
-        owner_id: owner.id,
-        name: body.name,
-        visibility: body.visibility,
-        play_mode: body.play_mode,
-        description: body.description,
-        image_updated_at: existing.image_updated_at, // image bytes managed separately
-        items: existing.items,                        // membership is managed by the item endpoints
-        created_at: existing.created_at,
-        updated_at: existing.updated_at,
+        meta: GameCollectionMeta {
+            id: existing.meta.id,
+            owner_id: owner.id,
+            name: body.name,
+            visibility: body.visibility,
+            play_mode: body.play_mode,
+            description: body.description,
+            image_updated_at: existing.meta.image_updated_at, // image bytes managed separately
+            created_at: existing.meta.created_at,
+            updated_at: existing.meta.updated_at,
+        },
+        items: existing.items, // membership is managed by the item endpoints
     };
 
     store_lock
@@ -666,13 +645,13 @@ pub async fn set_game_collection_items(
             return Err(ErrorInternalServerError("Failed to load game collection"));
         }
     };
-    let admin_override = user.is_admin && existing.visibility == Visibility::Curated;
-    if existing.owner_id != user.id && !admin_override {
+    let admin_override = user.is_admin && existing.meta.visibility == Visibility::Curated;
+    if existing.meta.owner_id != user.id && !admin_override {
         return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
     }
     // Owner-scoped storage call keys on the collection's own owner, so an admin
     // editing someone else's featured collection preserves its ownership.
-    let owner = resolve_owner(&**store_lock, &user, existing.owner_id).await?;
+    let owner = resolve_owner(&**store_lock, &user, existing.meta.owner_id).await?;
 
     match store_lock.set_game_collection_items(&owner, id, &definition_ids).await {
         Ok(()) => {}
@@ -824,6 +803,7 @@ pub async fn upload_game_collection_image(
             log::warn!("get collection after image set: {err}");
             ErrorInternalServerError("Failed to store image")
         })?
+        .meta
         .image_updated_at
         .ok_or_else(|| ErrorInternalServerError("image marker missing after store"))?;
     Ok(HttpResponse::Ok().json(ImageUpdatedResponse { image_updated_at }))
@@ -903,7 +883,7 @@ pub async fn serve_game_collection_image(
         log::warn!("get collection grantees store error: {err}");
         ErrorInternalServerError("Failed to load image")
     })?;
-    if !can_access(collection.owner_id, collection.visibility, user.id, &col_grantees) {
+    if !can_access(collection.meta.owner_id, collection.meta.visibility, user.id, &col_grantees) {
         return Err(ErrorNotFound(format!("Game collection '{id}' not found")));
     }
 
@@ -918,7 +898,7 @@ pub async fn serve_game_collection_image(
     let mut builder = HttpResponse::Ok();
     builder.content_type("image/png");
     builder.insert_header(CacheControl(vec![CacheDirective::Private, CacheDirective::NoCache]));
-    if let Some(ts) = collection.image_updated_at {
+    if let Some(ts) = collection.meta.image_updated_at {
         builder.insert_header(ETag(EntityTag::new_strong(ts.timestamp_millis().to_string())));
     }
     Ok(builder.body(data))

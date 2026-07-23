@@ -114,16 +114,16 @@ pub struct CollectionItem {
     pub sort_order: u32,
 }
 
-/// An ordered, described, optionally-illustrated grouping of game definitions.
+/// The presentation metadata of a [`GameCollection`] — everything about the
+/// collection except its membership.
 ///
-/// A collection is presentation only — it groups [`GameDefinition`](crate::GameDefinition)s
-/// for browsing and does not affect generation or scoring (leaderboards stay
-/// per-definition). It carries its own [`Visibility`] the same way a definition
-/// does; the visibility gates the grouping, while each item still enforces its
-/// own access when viewed or played.
+/// Held as a distinct struct and flattened into both the stored [`GameCollection`]
+/// and the collection-detail response, so a new metadata field is declared here
+/// once and propagates to both. On the wire these fields sit at the top level
+/// (flattened), exactly as if they were declared directly on the collection.
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct GameCollection {
+pub struct GameCollectionMeta {
     #[schema(value_type = String)]
     /// Unique identifier.
     pub id: Uuid,
@@ -146,13 +146,30 @@ pub struct GameCollection {
     /// Cache-key for the optional collection-level image; `None` when unset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_updated_at: Option<DateTime<Utc>>,
-    /// The member games, in display order (kept sorted by `sort_order`).
-    #[serde(default)]
-    pub items: Vec<CollectionItem>,
     /// Creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Last-update timestamp.
     pub updated_at: DateTime<Utc>,
+}
+
+/// An ordered, described, optionally-illustrated grouping of game definitions.
+///
+/// A collection is presentation only — it groups [`GameDefinition`](crate::GameDefinition)s
+/// for browsing and does not affect generation or scoring (leaderboards stay
+/// per-definition). It carries its own [`Visibility`] the same way a definition
+/// does; the visibility gates the grouping, while each item still enforces its
+/// own access when viewed or played.
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GameCollection {
+    /// Presentation metadata (id, owner, name, visibility, play mode, image,
+    /// timestamps). Flattened, so on the wire these sit at the top level next to
+    /// `items` exactly as before.
+    #[serde(flatten)]
+    pub meta: GameCollectionMeta,
+    /// The member games, in display order (kept sorted by `sort_order`).
+    #[serde(default)]
+    pub items: Vec<CollectionItem>,
 }
 
 #[cfg(test)]
@@ -173,16 +190,18 @@ mod tests {
 
     fn sample() -> GameCollection {
         GameCollection {
-            id: Uuid::nil(),
-            owner_id: Uuid::nil(),
-            name: "Difficulty".to_string(),
-            visibility: Visibility::Curated,
-            play_mode: PlayMode::Campaign,
-            description: Some("Warm up then climb".to_string()),
-            image_updated_at: Some(ts()),
+            meta: GameCollectionMeta {
+                id: Uuid::nil(),
+                owner_id: Uuid::nil(),
+                name: "Difficulty".to_string(),
+                visibility: Visibility::Curated,
+                play_mode: PlayMode::Campaign,
+                description: Some("Warm up then climb".to_string()),
+                image_updated_at: Some(ts()),
+                created_at: ts(),
+                updated_at: ts(),
+            },
             items: vec![item(0), item(1), item(2)],
-            created_at: ts(),
-            updated_at: ts(),
         }
     }
 
@@ -206,16 +225,18 @@ mod tests {
     #[test]
     fn empty_collection_omits_optionals() {
         let collection = GameCollection {
-            id: Uuid::nil(),
-            owner_id: Uuid::nil(),
-            name: "Empty".to_string(),
-            visibility: Visibility::Private,
-            play_mode: PlayMode::Arcade,
-            description: None,
-            image_updated_at: None,
+            meta: GameCollectionMeta {
+                id: Uuid::nil(),
+                owner_id: Uuid::nil(),
+                name: "Empty".to_string(),
+                visibility: Visibility::Private,
+                play_mode: PlayMode::Arcade,
+                description: None,
+                image_updated_at: None,
+                created_at: ts(),
+                updated_at: ts(),
+            },
             items: vec![],
-            created_at: ts(),
-            updated_at: ts(),
         };
         let value = serde_json::to_value(&collection).expect("serialize");
         let object = value.as_object().expect("object");
@@ -237,9 +258,9 @@ mod tests {
         });
         let loaded: GameCollection = serde_json::from_value(json).expect("deserialize");
         assert!(loaded.items.is_empty());
-        assert!(loaded.description.is_none());
+        assert!(loaded.meta.description.is_none());
         // A collection JSON written before `play_mode` existed loads as Arcade.
-        assert_eq!(loaded.play_mode, PlayMode::Arcade);
+        assert_eq!(loaded.meta.play_mode, PlayMode::Arcade);
     }
 
     #[test]
@@ -276,7 +297,7 @@ mod tests {
             "updatedAt": "2026-01-01T00:00:00Z"
         });
         let loaded: GameCollection = serde_json::from_value(json).expect("deserialize");
-        assert_eq!(loaded.play_mode, PlayMode::Campaign);
+        assert_eq!(loaded.meta.play_mode, PlayMode::Campaign);
     }
 
     #[test]

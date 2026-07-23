@@ -79,13 +79,16 @@ impl FeaturedGameItem {
     /// # Examples
     ///
     /// ```
-    /// use data_model::{FeaturedGameItem, FeaturedGameItemKind, GameCollection, PlayMode, Visibility};
+    /// use data_model::{FeaturedGameItem, FeaturedGameItemKind, GameCollection, GameCollectionMeta, PlayMode, Visibility};
     /// use uuid::Uuid;
     /// let collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Difficulty".into(),
-    ///     visibility: Visibility::Curated, play_mode: PlayMode::Arcade,
-    ///     description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Difficulty".into(),
+    ///         visibility: Visibility::Curated, play_mode: PlayMode::Arcade,
+    ///         description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// let item = FeaturedGameItem::Collection(collection);
     /// assert_eq!(item.kind(), FeaturedGameItemKind::Collection);
@@ -102,21 +105,24 @@ impl FeaturedGameItem {
     /// # Examples
     ///
     /// ```
-    /// use data_model::{FeaturedGameItem, GameCollection, PlayMode, Visibility};
+    /// use data_model::{FeaturedGameItem, GameCollection, GameCollectionMeta, PlayMode, Visibility};
     /// use uuid::Uuid;
     /// let id = Uuid::new_v4();
     /// let collection = GameCollection {
-    ///     id, owner_id: Uuid::nil(), name: "Difficulty".into(),
-    ///     visibility: Visibility::Curated, play_mode: PlayMode::Arcade,
-    ///     description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id, owner_id: Uuid::nil(), name: "Difficulty".into(),
+    ///         visibility: Visibility::Curated, play_mode: PlayMode::Arcade,
+    ///         description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// assert_eq!(FeaturedGameItem::Collection(collection).id(), id);
     /// ```
     pub fn id(&self) -> uuid::Uuid {
         match self {
             Self::Definition(d) => d.id,
-            Self::Collection(c) => c.id,
+            Self::Collection(c) => c.meta.id,
         }
     }
 }

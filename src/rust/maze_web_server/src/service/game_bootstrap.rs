@@ -14,7 +14,7 @@
 //! identical shape a difficulty preset does today.
 
 use chrono::Utc;
-use data_model::{GameCollection, GameDefinition, PlayMode, Rotation, User, Visibility};
+use data_model::{GameCollection, GameCollectionMeta, GameDefinition, PlayMode, Rotation, User, Visibility};
 use storage::{Error as StoreError, Store};
 use uuid::Uuid;
 
@@ -249,7 +249,7 @@ pub async fn init_difficulty_collection(
     let existing = store.get_game_collections_for_owner(&admin).await?;
     if existing
         .iter()
-        .any(|c| c.visibility == Visibility::Curated && c.name == DIFFICULTY_COLLECTION_NAME)
+        .any(|c| c.meta.visibility == Visibility::Curated && c.meta.name == DIFFICULTY_COLLECTION_NAME)
     {
         return Ok(());
     }
@@ -261,19 +261,21 @@ pub async fn init_difficulty_collection(
 
     let now = Utc::now();
     let mut collection = GameCollection {
-        id: Uuid::nil(),
-        owner_id: Uuid::nil(),
-        name: DIFFICULTY_COLLECTION_NAME.to_string(),
-        visibility: Visibility::Curated,
-        play_mode: PlayMode::Arcade,
-        description: Some("Warm up on Easy, then climb through Tricky and Hard.".to_string()),
-        image_updated_at: None,
+        meta: GameCollectionMeta {
+            id: Uuid::nil(),
+            owner_id: Uuid::nil(),
+            name: DIFFICULTY_COLLECTION_NAME.to_string(),
+            visibility: Visibility::Curated,
+            play_mode: PlayMode::Arcade,
+            description: Some("Warm up on Easy, then climb through Tricky and Hard.".to_string()),
+            image_updated_at: None,
+            created_at: now,
+            updated_at: now,
+        },
         items: Vec::new(),
-        created_at: now,
-        updated_at: now,
     };
     store.create_game_collection(&admin, &mut collection).await?;
-    store.set_game_collection_items(&admin, collection.id, &definition_ids).await?;
+    store.set_game_collection_items(&admin, collection.meta.id, &definition_ids).await?;
 
     Ok(())
 }
@@ -299,7 +301,7 @@ pub async fn init_daily_challenges_collection(
     let existing = store.get_game_collections_for_owner(&admin).await?;
     if existing
         .iter()
-        .any(|c| c.visibility == Visibility::Curated && c.name == DAILY_COLLECTION_NAME)
+        .any(|c| c.meta.visibility == Visibility::Curated && c.meta.name == DAILY_COLLECTION_NAME)
     {
         return Ok(());
     }
@@ -308,19 +310,21 @@ pub async fn init_daily_challenges_collection(
 
     let now = Utc::now();
     let mut collection = GameCollection {
-        id: Uuid::nil(),
-        owner_id: Uuid::nil(),
-        name: DAILY_COLLECTION_NAME.to_string(),
-        visibility: Visibility::Curated,
-        play_mode: PlayMode::Arcade,
-        description: Some("A fresh maze every day — how fast can you clear today's?".to_string()),
-        image_updated_at: None,
+        meta: GameCollectionMeta {
+            id: Uuid::nil(),
+            owner_id: Uuid::nil(),
+            name: DAILY_COLLECTION_NAME.to_string(),
+            visibility: Visibility::Curated,
+            play_mode: PlayMode::Arcade,
+            description: Some("A fresh maze every day — how fast can you clear today's?".to_string()),
+            image_updated_at: None,
+            created_at: now,
+            updated_at: now,
+        },
         items: Vec::new(),
-        created_at: now,
-        updated_at: now,
     };
     store.create_game_collection(&admin, &mut collection).await?;
-    store.set_game_collection_items(&admin, collection.id, &[daily_id]).await?;
+    store.set_game_collection_items(&admin, collection.meta.id, &[daily_id]).await?;
 
     Ok(())
 }
@@ -370,7 +374,7 @@ mod tests {
 
         // The collection references the three, in easy → tricky → hard order.
         let cols = store.get_game_collections_for_owner(&admin).await.expect("admin collections");
-        let difficulty = cols.iter().find(|c| c.name == DIFFICULTY_COLLECTION_NAME).expect("difficulty collection");
+        let difficulty = cols.iter().find(|c| c.meta.name == DIFFICULTY_COLLECTION_NAME).expect("difficulty collection");
         let ordered: Vec<Uuid> = difficulty.items.iter().map(|i| i.definition_id).collect();
         let expected: Vec<Uuid> = ["Easy", "Tricky", "Hard"]
             .iter()
@@ -390,7 +394,7 @@ mod tests {
         assert_eq!(store.get_game_definitions_for_owner(&admin).await.unwrap().len(), 3);
         assert_eq!(
             store.get_game_collections_for_owner(&admin).await.unwrap().iter()
-                .filter(|c| c.name == DIFFICULTY_COLLECTION_NAME).count(),
+                .filter(|c| c.meta.name == DIFFICULTY_COLLECTION_NAME).count(),
             1
         );
     }
@@ -424,9 +428,9 @@ mod tests {
         let cols = store.get_game_collections_for_owner(&admin).await.expect("admin collections");
         let daily_collection = cols
             .iter()
-            .find(|c| c.name == DAILY_COLLECTION_NAME)
+            .find(|c| c.meta.name == DAILY_COLLECTION_NAME)
             .expect("daily collection");
-        assert_eq!(daily_collection.visibility, Visibility::Curated);
+        assert_eq!(daily_collection.meta.visibility, Visibility::Curated);
         let ordered: Vec<Uuid> = daily_collection.items.iter().map(|i| i.definition_id).collect();
         assert_eq!(ordered, vec![daily.id]);
     }
@@ -445,9 +449,9 @@ mod tests {
         let defs = store.get_game_definitions_for_owner(&admin).await.unwrap();
         assert_eq!(defs.iter().filter(|d| d.name == "Daily Maze").count(), 1);
         let cols = store.get_game_collections_for_owner(&admin).await.unwrap();
-        assert_eq!(cols.iter().filter(|c| c.name == DAILY_COLLECTION_NAME).count(), 1);
+        assert_eq!(cols.iter().filter(|c| c.meta.name == DAILY_COLLECTION_NAME).count(), 1);
         // The Difficulty content is untouched — three defs + its collection.
-        assert!(cols.iter().any(|c| c.name == DIFFICULTY_COLLECTION_NAME));
+        assert!(cols.iter().any(|c| c.meta.name == DIFFICULTY_COLLECTION_NAME));
         assert_eq!(defs.iter().filter(|d| ["Easy", "Tricky", "Hard"].contains(&d.name.as_str())).count(), 3);
     }
 }

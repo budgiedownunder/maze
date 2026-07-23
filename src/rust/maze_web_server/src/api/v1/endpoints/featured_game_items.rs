@@ -75,7 +75,7 @@ impl FeaturedGameItemResponse {
 fn featured_owner_id(item: &FeaturedGameItem) -> Uuid {
     match item {
         FeaturedGameItem::Definition(d) => d.owner_id,
-        FeaturedGameItem::Collection(c) => c.owner_id,
+        FeaturedGameItem::Collection(c) => c.meta.owner_id,
     }
 }
 

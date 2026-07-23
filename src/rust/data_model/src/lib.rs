@@ -22,7 +22,7 @@ pub use email_audit::{
 };
 pub use error::{Error, UserValidationError};
 pub use featured_game_item::{FeaturedGameItem, FeaturedGameItemKind};
-pub use game_collection::{CollectionItem, GameCollection, PlayMode};
+pub use game_collection::{CollectionItem, GameCollection, GameCollectionMeta, PlayMode};
 pub use game_definition::{GameDefinition, Rotation, Visibility};
 pub use maze_definition::{
     CellEntity, DoorOverride, DoorStyle, EnemyOverride, EnemyType, HealthOverride, HealthStyle,

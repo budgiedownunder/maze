@@ -714,15 +714,15 @@ impl FileStore {
         collection: &GameCollection,
         overwrite: bool,
     ) -> Result<(), Error> {
-        let dir = self.game_collection_dir_path(collection.id);
+        let dir = self.game_collection_dir_path(collection.meta.id);
         if !dir_exists(&dir) {
             fs::create_dir_all(&dir)?;
         }
-        let target = self.game_collection_file_path(collection.id);
+        let target = self.game_collection_file_path(collection.meta.id);
         if !overwrite && file_exists(&target) {
             return Err(Error::Other(format!(
                 "game collection {} already exists",
-                collection.id
+                collection.meta.id
             )));
         }
         let json = serde_json::to_string(collection)?;
@@ -809,7 +809,7 @@ impl FileStore {
         // the user from every remaining collection's grantee list.
         for collection_id in self.get_game_collection_ids()? {
             match self.read_game_collection_raw(collection_id) {
-                Ok(collection) if collection.owner_id == id => {
+                Ok(collection) if collection.meta.owner_id == id => {
                     delete_dir(&self.game_collection_dir_path(collection_id));
                 }
                 Ok(_) => {
@@ -858,7 +858,7 @@ impl FileStore {
     // Sorts collections case-insensitively by name (the list-read ordering).
     fn sort_collections_by_name(collections: &mut [GameCollection]) {
         collections
-            .sort_by(|a, b| UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())));
+            .sort_by(|a, b| UniCase::new(a.meta.name.as_str()).cmp(&UniCase::new(b.meta.name.as_str())));
     }
 
     // Returns the id of `owner`'s collection named `name` (case-insensitive), or
@@ -870,8 +870,8 @@ impl FileStore {
     ) -> Result<Option<Uuid>, Error> {
         let target = UniCase::new(name);
         for collection in self.read_all_game_collections()? {
-            if collection.owner_id == owner_id && UniCase::new(collection.name.as_str()) == target {
-                return Ok(Some(collection.id));
+            if collection.meta.owner_id == owner_id && UniCase::new(collection.meta.name.as_str()) == target {
+                return Ok(Some(collection.meta.id));
             }
         }
         Ok(None)
@@ -5644,7 +5644,7 @@ impl GameStore for FileStore {
     /// Create a collection and read it back by id
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5662,16 +5662,19 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// assert!(!collection.id.is_nil());
+    /// assert!(!collection.meta.id.is_nil());
     ///
-    /// let loaded = store.get_game_collection(collection.id).await.unwrap();
-    /// assert_eq!(loaded.name, "Campaign");
-    /// assert_eq!(loaded.owner_id, owner.id);
+    /// let loaded = store.get_game_collection(collection.meta.id).await.unwrap();
+    /// assert_eq!(loaded.meta.name, "Campaign");
+    /// assert_eq!(loaded.meta.owner_id, owner.id);
     /// # });
     /// ```
     async fn create_game_collection(
@@ -5679,31 +5682,31 @@ impl GameStore for FileStore {
         owner: &User,
         collection: &mut GameCollection,
     ) -> Result<(), Error> {
-        if collection.name.trim().is_empty() {
+        if collection.meta.name.trim().is_empty() {
             return Err(Error::GameCollectionNameMissing());
         }
         if self
-            .find_owner_collection_id_by_name(owner.id, &collection.name)?
+            .find_owner_collection_id_by_name(owner.id, &collection.meta.name)?
             .is_some()
         {
-            return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+            return Err(Error::GameCollectionNameAlreadyExists(collection.meta.name.clone()));
         }
         // Enforce the per-user collection cap.
-        let count = self.read_all_game_collections()?.iter().filter(|c| c.owner_id == owner.id).count();
+        let count = self.read_all_game_collections()?.iter().filter(|c| c.meta.owner_id == owner.id).count();
         if count >= crate::MAX_COLLECTIONS_PER_USER {
             return Err(Error::GameCollectionCountLimitReached { count, max: crate::MAX_COLLECTIONS_PER_USER });
         }
-        collection.owner_id = owner.id;
-        if collection.id.is_nil() {
-            collection.id = Uuid::new_v4();
+        collection.meta.owner_id = owner.id;
+        if collection.meta.id.is_nil() {
+            collection.meta.id = Uuid::new_v4();
         }
         let now = generate_now_millis();
-        collection.created_at = now;
-        collection.updated_at = now;
+        collection.meta.created_at = now;
+        collection.meta.updated_at = now;
         normalize_item_order(&mut collection.items);
         self.write_game_collection_file(collection, false)?;
-        if collection.visibility == Visibility::Curated {
-            self.featured_game_items_append(FeaturedGameItemKind::Collection, collection.id)?;
+        if collection.meta.visibility == Visibility::Curated {
+            self.featured_game_items_append(FeaturedGameItemKind::Collection, collection.meta.id)?;
         }
         Ok(())
     }
@@ -5716,7 +5719,7 @@ impl GameStore for FileStore {
     /// Create a collection and read it back by id
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5734,14 +5737,17 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// let loaded = store.get_game_collection(collection.id).await.unwrap();
-    /// assert_eq!(loaded.name, "Campaign");
+    /// let loaded = store.get_game_collection(collection.meta.id).await.unwrap();
+    /// assert_eq!(loaded.meta.name, "Campaign");
     /// # });
     /// ```
     async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, Error> {
@@ -5757,7 +5763,7 @@ impl GameStore for FileStore {
     /// Rename a collection and read the new name back
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5775,15 +5781,18 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// collection.name = "Saga".to_string();
+    /// collection.meta.name = "Saga".to_string();
     /// store.update_game_collection(&owner, &mut collection).await.unwrap();
-    /// assert_eq!(store.get_game_collection(collection.id).await.unwrap().name, "Saga");
+    /// assert_eq!(store.get_game_collection(collection.meta.id).await.unwrap().meta.name, "Saga");
     /// # });
     /// ```
     async fn update_game_collection(
@@ -5791,30 +5800,30 @@ impl GameStore for FileStore {
         owner: &User,
         collection: &mut GameCollection,
     ) -> Result<(), Error> {
-        let existing = self.read_game_collection_raw(collection.id)?;
-        if existing.owner_id != owner.id {
-            return Err(Error::GameCollectionIdNotFound(collection.id.to_string()));
+        let existing = self.read_game_collection_raw(collection.meta.id)?;
+        if existing.meta.owner_id != owner.id {
+            return Err(Error::GameCollectionIdNotFound(collection.meta.id.to_string()));
         }
-        if collection.name.trim().is_empty() {
+        if collection.meta.name.trim().is_empty() {
             return Err(Error::GameCollectionNameMissing());
         }
-        if let Some(other) = self.find_owner_collection_id_by_name(owner.id, &collection.name)?
-            && other != collection.id
+        if let Some(other) = self.find_owner_collection_id_by_name(owner.id, &collection.meta.name)?
+            && other != collection.meta.id
         {
-            return Err(Error::GameCollectionNameAlreadyExists(collection.name.clone()));
+            return Err(Error::GameCollectionNameAlreadyExists(collection.meta.name.clone()));
         }
         // Metadata-only update: items are managed by the item methods, so keep
         // the persisted membership regardless of what the caller passed.
-        collection.owner_id = owner.id;
-        collection.created_at = existing.created_at;
-        collection.updated_at = generate_now_millis();
+        collection.meta.owner_id = owner.id;
+        collection.meta.created_at = existing.meta.created_at;
+        collection.meta.updated_at = generate_now_millis();
         collection.items = existing.items;
         self.write_game_collection_file(collection, true)?;
         self.featured_game_items_reconcile_visibility(
             FeaturedGameItemKind::Collection,
-            collection.id,
-            existing.visibility,
-            collection.visibility,
+            collection.meta.id,
+            existing.meta.visibility,
+            collection.meta.visibility,
         )?;
         Ok(())
     }
@@ -5827,7 +5836,7 @@ impl GameStore for FileStore {
     /// Create then delete a collection; the id is gone afterwards
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5845,19 +5854,22 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.delete_game_collection(&owner, collection.id).await.unwrap();
-    /// assert!(store.get_game_collection(collection.id).await.is_err());
+    /// store.delete_game_collection(&owner, collection.meta.id).await.unwrap();
+    /// assert!(store.get_game_collection(collection.meta.id).await.is_err());
     /// # });
     /// ```
     async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         let existing = self.read_game_collection_raw(id)?;
-        if existing.owner_id != owner.id {
+        if existing.meta.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         delete_dir(&self.game_collection_dir_path(id));
@@ -5874,7 +5886,7 @@ impl GameStore for FileStore {
     /// Set two members, then reconcile to a new set (drop one, add one, reorder)
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5892,17 +5904,20 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     /// let (a, b, c) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    /// store.set_game_collection_items(&owner, collection.id, &[a, b]).await.unwrap();
-    /// store.set_game_collection_items(&owner, collection.id, &[c, a]).await.unwrap();
+    /// store.set_game_collection_items(&owner, collection.meta.id, &[a, b]).await.unwrap();
+    /// store.set_game_collection_items(&owner, collection.meta.id, &[c, a]).await.unwrap();
     ///
     /// let order: Vec<Uuid> = store
-    ///     .get_game_collection(collection.id).await.unwrap()
+    ///     .get_game_collection(collection.meta.id).await.unwrap()
     ///     .items.iter().map(|i| i.definition_id).collect();
     /// assert_eq!(order, vec![c, a]);
     /// # });
@@ -5914,7 +5929,7 @@ impl GameStore for FileStore {
         ordered: &[Uuid],
     ) -> Result<(), Error> {
         let mut collection = self.read_game_collection_raw(collection_id)?;
-        if collection.owner_id != owner.id {
+        if collection.meta.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(collection_id.to_string()));
         }
         let mut seen = std::collections::HashSet::new();
@@ -5927,7 +5942,7 @@ impl GameStore for FileStore {
                 sort_order: index as u32,
             })
             .collect();
-        collection.updated_at = generate_now_millis();
+        collection.meta.updated_at = generate_now_millis();
         self.write_game_collection_file(&collection, true)?;
         Ok(())
     }
@@ -5940,7 +5955,7 @@ impl GameStore for FileStore {
     /// Grant access, then confirm the grantee appears in the grantee list
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -5959,14 +5974,17 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let grantee = Uuid::new_v4();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.grant_game_collection_access(&owner, collection.id, grantee).await.unwrap();
-    /// assert!(store.get_game_collection_grantees(collection.id).await.unwrap().contains(&grantee));
+    /// store.grant_game_collection_access(&owner, collection.meta.id, grantee).await.unwrap();
+    /// assert!(store.get_game_collection_grantees(collection.meta.id).await.unwrap().contains(&grantee));
     /// # });
     /// ```
     async fn grant_game_collection_access(
@@ -5976,7 +5994,7 @@ impl GameStore for FileStore {
         grantee: Uuid,
     ) -> Result<(), Error> {
         let existing = self.read_game_collection_raw(id)?;
-        if existing.owner_id != owner.id {
+        if existing.meta.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         let mut grantees = self.read_game_collection_grantees(id)?;
@@ -5995,7 +6013,7 @@ impl GameStore for FileStore {
     /// Grant then revoke; the grantee list is empty afterwards
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6014,15 +6032,18 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// let grantee = Uuid::new_v4();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.grant_game_collection_access(&owner, collection.id, grantee).await.unwrap();
+    /// store.grant_game_collection_access(&owner, collection.meta.id, grantee).await.unwrap();
     ///
-    /// store.revoke_game_collection_access(&owner, collection.id, grantee).await.unwrap();
-    /// assert!(store.get_game_collection_grantees(collection.id).await.unwrap().is_empty());
+    /// store.revoke_game_collection_access(&owner, collection.meta.id, grantee).await.unwrap();
+    /// assert!(store.get_game_collection_grantees(collection.meta.id).await.unwrap().is_empty());
     /// # });
     /// ```
     async fn revoke_game_collection_access(
@@ -6032,7 +6053,7 @@ impl GameStore for FileStore {
         grantee: Uuid,
     ) -> Result<(), Error> {
         let existing = self.read_game_collection_raw(id)?;
-        if existing.owner_id != owner.id {
+        if existing.meta.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         let mut grantees = self.read_game_collection_grantees(id)?;
@@ -6052,7 +6073,7 @@ impl GameStore for FileStore {
     /// Replace the grant list, then clear it
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6070,18 +6091,21 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Set".to_string(),
-    ///     description: None, image_updated_at: None, visibility: Visibility::Shared,
-    ///     play_mode: PlayMode::Arcade,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Set".to_string(),
+    ///         description: None, image_updated_at: None, visibility: Visibility::Shared,
+    ///         play_mode: PlayMode::Arcade,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
     /// let a = Uuid::new_v4();
-    /// store.set_game_collection_grantees(&owner, collection.id, &[a]).await.unwrap();
-    /// assert_eq!(store.get_game_collection_grantees(collection.id).await.unwrap(), vec![a]);
-    /// store.set_game_collection_grantees(&owner, collection.id, &[]).await.unwrap();
-    /// assert!(store.get_game_collection_grantees(collection.id).await.unwrap().is_empty());
+    /// store.set_game_collection_grantees(&owner, collection.meta.id, &[a]).await.unwrap();
+    /// assert_eq!(store.get_game_collection_grantees(collection.meta.id).await.unwrap(), vec![a]);
+    /// store.set_game_collection_grantees(&owner, collection.meta.id, &[]).await.unwrap();
+    /// assert!(store.get_game_collection_grantees(collection.meta.id).await.unwrap().is_empty());
     /// # });
     /// ```
     async fn set_game_collection_grantees(
@@ -6091,7 +6115,7 @@ impl GameStore for FileStore {
         grantees: &[Uuid],
     ) -> Result<(), Error> {
         let existing = self.read_game_collection_raw(id)?;
-        if existing.owner_id != owner.id {
+        if existing.meta.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         self.write_game_collection_grantees(id, &normalize_grantees(grantees, owner.id))?;
@@ -6106,7 +6130,7 @@ impl GameStore for FileStore {
     /// Two collections come back sorted by name
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6125,16 +6149,19 @@ impl GameStore for FileStore {
     /// store.create_user(&mut owner).await.unwrap();
     /// for name in ["Zeta", "Alpha"] {
     ///     let mut collection = GameCollection {
-    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
-    ///         visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///         items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///         meta: GameCollectionMeta {
+    ///             id: Uuid::nil(), owner_id: Uuid::nil(), name: name.to_string(),
+    ///             visibility: Visibility::Private, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///             created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///         },
+    ///         items: vec![],
     ///     };
     ///     store.create_game_collection(&owner, &mut collection).await.unwrap();
     /// }
     ///
     /// let names: Vec<String> = store
     ///     .get_game_collections_for_owner(&owner).await.unwrap()
-    ///     .into_iter().map(|c| c.name).collect();
+    ///     .into_iter().map(|c| c.meta.name).collect();
     /// assert_eq!(names, vec!["Alpha", "Zeta"]);
     /// # });
     /// ```
@@ -6142,7 +6169,7 @@ impl GameStore for FileStore {
         let mut collections: Vec<GameCollection> = self
             .read_all_game_collections()?
             .into_iter()
-            .filter(|c| c.owner_id == owner.id)
+            .filter(|c| c.meta.owner_id == owner.id)
             .collect();
         Self::sort_collections_by_name(&mut collections);
         Ok(collections)
@@ -6157,7 +6184,7 @@ impl GameStore for FileStore {
     /// A public collection is visible to another user
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6184,14 +6211,17 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut viewer).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
-    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open".to_string(),
+    ///         visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
     /// let visible = store.get_visible_game_collections(&viewer, 10, 0).await.unwrap();
-    /// assert_eq!(visible.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
+    /// assert_eq!(visible.iter().map(|c| c.meta.name.as_str()).collect::<Vec<_>>(), vec!["Open"]);
     /// # });
     /// ```
     async fn get_visible_game_collections(
@@ -6202,16 +6232,16 @@ impl GameStore for FileStore {
     ) -> Result<Vec<GameCollection>, Error> {
         let mut collections: Vec<GameCollection> = Vec::new();
         for collection in self.read_all_game_collections()? {
-            let visible = collection.owner_id == viewer.id
-                || matches!(collection.visibility, Visibility::Public | Visibility::Curated)
-                || (collection.visibility == Visibility::Shared
-                    && self.read_game_collection_grantees(collection.id)?.contains(&viewer.id));
+            let visible = collection.meta.owner_id == viewer.id
+                || matches!(collection.meta.visibility, Visibility::Public | Visibility::Curated)
+                || (collection.meta.visibility == Visibility::Shared
+                    && self.read_game_collection_grantees(collection.meta.id)?.contains(&viewer.id));
             if visible {
                 collections.push(collection);
             }
         }
         collections.sort_by(|a, b| {
-            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+            UniCase::new(a.meta.name.as_str()).cmp(&UniCase::new(b.meta.name.as_str())).then(a.meta.id.cmp(&b.meta.id))
         });
         Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
@@ -6225,7 +6255,7 @@ impl GameStore for FileStore {
     /// A shared collection granted to the viewer is listed
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6252,15 +6282,18 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut viewer).await.unwrap();
     /// let mut shared = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Shared".to_string(),
-    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Shared".to_string(),
+    ///         visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut shared).await.unwrap();
-    /// store.grant_game_collection_access(&owner, shared.id, viewer.id).await.unwrap();
+    /// store.grant_game_collection_access(&owner, shared.meta.id, viewer.id).await.unwrap();
     ///
     /// let shared_list = store.get_shared_game_collections(&viewer, 10, 0).await.unwrap();
-    /// assert_eq!(shared_list.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Shared"]);
+    /// assert_eq!(shared_list.iter().map(|c| c.meta.name.as_str()).collect::<Vec<_>>(), vec!["Shared"]);
     /// # });
     /// ```
     async fn get_shared_game_collections(
@@ -6271,15 +6304,15 @@ impl GameStore for FileStore {
     ) -> Result<Vec<GameCollection>, Error> {
         let mut collections: Vec<GameCollection> = Vec::new();
         for collection in self.read_all_game_collections()? {
-            let shared = collection.owner_id != viewer.id
-                && collection.visibility == Visibility::Shared
-                && self.read_game_collection_grantees(collection.id)?.contains(&viewer.id);
+            let shared = collection.meta.owner_id != viewer.id
+                && collection.meta.visibility == Visibility::Shared
+                && self.read_game_collection_grantees(collection.meta.id)?.contains(&viewer.id);
             if shared {
                 collections.push(collection);
             }
         }
         collections.sort_by(|a, b| {
-            UniCase::new(a.name.as_str()).cmp(&UniCase::new(b.name.as_str())).then(a.id.cmp(&b.id))
+            UniCase::new(a.meta.name.as_str()).cmp(&UniCase::new(b.meta.name.as_str())).then(a.meta.id.cmp(&b.meta.id))
         });
         Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
@@ -6292,7 +6325,7 @@ impl GameStore for FileStore {
     /// Another user's public collection is listed
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameListSort, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6319,9 +6352,12 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut viewer).await.unwrap();
     /// let mut theirs = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open Set".to_string(),
-    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Open Set".to_string(),
+    ///         visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&author, &mut theirs).await.unwrap();
     ///
@@ -6329,7 +6365,7 @@ impl GameStore for FileStore {
     ///     .get_public_game_collections(&viewer, None, GameListSort::Name, 10, 0)
     ///     .await
     ///     .unwrap();
-    /// assert_eq!(public.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
+    /// assert_eq!(public.iter().map(|c| c.meta.name.as_str()).collect::<Vec<_>>(), vec!["Open Set"]);
     /// # });
     /// ```
     async fn get_public_game_collections(
@@ -6343,14 +6379,14 @@ impl GameStore for FileStore {
         let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
         let mut collections: Vec<GameCollection> = Vec::new();
         for collection in self.read_all_game_collections()? {
-            let matches = collection.visibility == Visibility::Public
-                && collection.owner_id != viewer.id
-                && needle.as_ref().is_none_or(|n| collection.name.to_lowercase().contains(n));
+            let matches = collection.meta.visibility == Visibility::Public
+                && collection.meta.owner_id != viewer.id
+                && needle.as_ref().is_none_or(|n| collection.meta.name.to_lowercase().contains(n));
             if matches {
                 collections.push(collection);
             }
         }
-        collections.sort_by(|a, b| game_list_cmp(sort, (&a.name, a.created_at, a.id), (&b.name, b.created_at, b.id)));
+        collections.sort_by(|a, b| game_list_cmp(sort, (&a.meta.name, a.meta.created_at, a.meta.id), (&b.meta.name, b.meta.created_at, b.meta.id)));
         Ok(collections.into_iter().skip(offset as usize).take(limit as usize).collect())
     }
 
@@ -6362,7 +6398,7 @@ impl GameStore for FileStore {
     /// A freshly-created collection has no grantees
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6380,13 +6416,16 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// assert!(store.get_game_collection_grantees(collection.id).await.unwrap().is_empty());
+    /// assert!(store.get_game_collection_grantees(collection.meta.id).await.unwrap().is_empty());
     /// # });
     /// ```
     async fn get_game_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error> {
@@ -6401,7 +6440,7 @@ impl GameStore for FileStore {
     /// Read back the resolved grantee list after a grant
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, GranteeSummary, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, GranteeSummary, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6428,14 +6467,17 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut friend).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
-    ///     visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Campaign".to_string(),
+    ///         visibility: Visibility::Shared, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.grant_game_collection_access(&owner, collection.id, friend.id).await.unwrap();
+    /// store.grant_game_collection_access(&owner, collection.meta.id, friend.id).await.unwrap();
     ///
-    /// let grantees = store.get_game_collection_grantee_summaries(collection.id).await.unwrap();
+    /// let grantees = store.get_game_collection_grantee_summaries(collection.meta.id).await.unwrap();
     /// assert_eq!(grantees, vec![GranteeSummary { id: friend.id, username: "friend".into(), avatar_updated_at: None }]);
     /// # });
     /// ```
@@ -6455,7 +6497,7 @@ impl GameStore for FileStore {
     /// Set, read back, then clear a collection's image
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6473,17 +6515,20 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
-    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
+    ///         visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.set_game_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
-    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    /// store.set_game_collection_image(&owner, collection.meta.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.meta.id).await.unwrap(), Some(vec![9, 9]));
     ///
-    /// store.clear_game_collection_image(&owner, collection.id).await.unwrap();
-    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), None);
+    /// store.clear_game_collection_image(&owner, collection.meta.id).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.meta.id).await.unwrap(), None);
     /// # });
     /// ```
     async fn set_game_collection_image(
@@ -6493,11 +6538,11 @@ impl GameStore for FileStore {
         png_bytes: Vec<u8>,
     ) -> Result<(), Error> {
         let mut collection = self.read_game_collection_raw(id)?;
-        if collection.owner_id != owner.id {
+        if collection.meta.owner_id != owner.id {
             return Err(Error::GameCollectionIdNotFound(id.to_string()));
         }
         write_image_atomically(&self.game_collection_image_file_path(id), &png_bytes)?;
-        collection.image_updated_at = Some(generate_now_millis());
+        collection.meta.image_updated_at = Some(generate_now_millis());
         self.write_game_collection_file(&collection, true)?;
         Ok(())
     }
@@ -6510,7 +6555,7 @@ impl GameStore for FileStore {
     /// Set a collection image, then read the bytes back
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6528,14 +6573,17 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
-    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
+    ///         visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
     ///
-    /// store.set_game_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
-    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), Some(vec![9, 9]));
+    /// store.set_game_collection_image(&owner, collection.meta.id, vec![9, 9]).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.meta.id).await.unwrap(), Some(vec![9, 9]));
     /// # });
     /// ```
     async fn get_game_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error> {
@@ -6550,7 +6598,7 @@ impl GameStore for FileStore {
     /// Set then clear a collection's image; the bytes are gone afterwards
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{GameCollection, PlayMode, User, UserEmail, Visibility};
+    /// use data_model::{GameCollectionMeta, GameCollection, PlayMode, User, UserEmail, Visibility};
     /// use storage::{FileStore, FileStoreConfig, GameStore, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -6568,26 +6616,29 @@ impl GameStore for FileStore {
     /// };
     /// store.create_user(&mut owner).await.unwrap();
     /// let mut collection = GameCollection {
-    ///     id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
-    ///     visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
-    ///     items: vec![], created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     meta: GameCollectionMeta {
+    ///         id: Uuid::nil(), owner_id: Uuid::nil(), name: "Framed".to_string(),
+    ///         visibility: Visibility::Public, play_mode: PlayMode::Arcade, description: None, image_updated_at: None,
+    ///         created_at: chrono::Utc::now(), updated_at: chrono::Utc::now(),
+    ///     },
+    ///     items: vec![],
     /// };
     /// store.create_game_collection(&owner, &mut collection).await.unwrap();
-    /// store.set_game_collection_image(&owner, collection.id, vec![9, 9]).await.unwrap();
+    /// store.set_game_collection_image(&owner, collection.meta.id, vec![9, 9]).await.unwrap();
     ///
-    /// store.clear_game_collection_image(&owner, collection.id).await.unwrap();
-    /// assert_eq!(store.get_game_collection_image(collection.id).await.unwrap(), None);
+    /// store.clear_game_collection_image(&owner, collection.meta.id).await.unwrap();
+    /// assert_eq!(store.get_game_collection_image(collection.meta.id).await.unwrap(), None);
     /// # });
     /// ```
     async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error> {
         let mut collection = match self.read_game_collection_raw(id) {
-            Ok(collection) if collection.owner_id == owner.id => collection,
+            Ok(collection) if collection.meta.owner_id == owner.id => collection,
             Ok(_) | Err(Error::GameCollectionIdNotFound(_)) => return Ok(()),
             Err(error) => return Err(error),
         };
         remove_image_if_present(&self.game_collection_image_file_path(id))?;
-        if collection.image_updated_at.is_some() {
-            collection.image_updated_at = None;
+        if collection.meta.image_updated_at.is_some() {
+            collection.meta.image_updated_at = None;
             self.write_game_collection_file(&collection, true)?;
         }
         Ok(())
@@ -6649,7 +6700,7 @@ impl GameStore for FileStore {
         for (kind, id) in &deduped {
             let visibility = match kind {
                 FeaturedGameItemKind::Definition => self.read_game_definition_raw(*id)?.visibility,
-                FeaturedGameItemKind::Collection => self.read_game_collection_raw(*id)?.visibility,
+                FeaturedGameItemKind::Collection => self.read_game_collection_raw(*id)?.meta.visibility,
             };
             if visibility != Visibility::Curated {
                 return Err(Error::FeaturedGameItemNotCurated {
@@ -6785,12 +6836,12 @@ impl GameStore for FileStore {
         let mut collections = self.read_all_game_collections()?;
         Self::sort_collections_by_name(&mut collections);
         for collection in collections {
-            if collection.visibility == Visibility::Curated
-                && have.insert((FeaturedGameItemKind::Collection, collection.id))
+            if collection.meta.visibility == Visibility::Curated
+                && have.insert((FeaturedGameItemKind::Collection, collection.meta.id))
             {
                 refs.push(FeaturedGameItemRef {
                     entity_kind: FeaturedGameItemKind::Collection,
-                    entity_id: collection.id,
+                    entity_id: collection.meta.id,
                 });
             }
         }

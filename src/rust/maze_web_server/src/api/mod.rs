@@ -88,7 +88,9 @@ mod tests {
         // `allOf` to carry the field description) — never an inline string.
         let visibility = schemas["GameDefinition"]["properties"]["visibility"].to_string();
         assert!(visibility.contains("#/components/schemas/Visibility"), "visibility should ref the component, got {visibility}");
-        let play_mode = schemas["GameCollection"]["properties"]["playMode"].to_string();
+        // `playMode` lives on the flattened `GameCollectionMeta` (shared by the
+        // stored collection and the collection-detail response).
+        let play_mode = schemas["GameCollectionMeta"]["properties"]["playMode"].to_string();
         assert!(play_mode.contains("#/components/schemas/PlayMode"), "playMode should ref the component, got {play_mode}");
     }
 }

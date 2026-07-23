@@ -17,7 +17,7 @@ mod test_definitions {
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
-    use data_model::{CollectionItem, FeaturedGameItem, FeaturedGameItemKind, GameCollection, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, PlayMode, Rotation, User, UserLogin, Visibility};
+    use data_model::{CollectionItem, FeaturedGameItem, FeaturedGameItemKind, GameCollection, GameCollectionMeta, GameDefinition, GranteeSummary, Maze, MazeDefinition, MazePoint, PlayMode, Rotation, User, UserLogin, Visibility};
     use crate::api::v1::endpoints::game_definitions::{GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest};
     use crate::api::v1::endpoints::game_shared::SetGameSharesRequest;
     use crate::api::v1::endpoints::game_collections::{GameCollectionSharesResponse, GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest};
@@ -178,14 +178,14 @@ mod test_definitions {
 
         /// Owner-scoping check for a game collection.
         fn owned_collection_or_not_found(&self, owner: &User, id: Uuid) -> Result<(), StoreError> {
-            match self.game_collections.iter().find(|c| c.id == id) {
-                Some(c) if c.owner_id == owner.id => Ok(()),
+            match self.game_collections.iter().find(|c| c.meta.id == id) {
+                Some(c) if c.meta.owner_id == owner.id => Ok(()),
                 _ => Err(StoreError::GameCollectionIdNotFound(id.to_string())),
             }
         }
 
         fn game_collection_mut(&mut self, id: Uuid) -> Option<&mut GameCollection> {
-            self.game_collections.iter_mut().find(|c| c.id == id)
+            self.game_collections.iter_mut().find(|c| c.meta.id == id)
         }
 
         /// Appends `(kind, id)` to the featured list unless already present.
@@ -1205,65 +1205,65 @@ mod test_definitions {
         // ── Collections ──
 
         async fn create_game_collection(&mut self, owner: &User, collection: &mut GameCollection) -> Result<(), StoreError> {
-            if collection.name.trim().is_empty() {
+            if collection.meta.name.trim().is_empty() {
                 return Err(StoreError::GameCollectionNameMissing());
             }
-            if self.game_collections.iter().any(|c| c.owner_id == owner.id && c.name.eq_ignore_ascii_case(&collection.name)) {
-                return Err(StoreError::GameCollectionNameAlreadyExists(collection.name.clone()));
+            if self.game_collections.iter().any(|c| c.meta.owner_id == owner.id && c.meta.name.eq_ignore_ascii_case(&collection.meta.name)) {
+                return Err(StoreError::GameCollectionNameAlreadyExists(collection.meta.name.clone()));
             }
-            let count = self.game_collections.iter().filter(|c| c.owner_id == owner.id).count();
+            let count = self.game_collections.iter().filter(|c| c.meta.owner_id == owner.id).count();
             if count >= MOCK_MAX_COLLECTIONS_PER_USER {
                 return Err(StoreError::GameCollectionCountLimitReached { count, max: MOCK_MAX_COLLECTIONS_PER_USER });
             }
-            collection.owner_id = owner.id;
-            if collection.id.is_nil() {
-                collection.id = Uuid::new_v4();
+            collection.meta.owner_id = owner.id;
+            if collection.meta.id.is_nil() {
+                collection.meta.id = Uuid::new_v4();
             }
             let now = Utc::now();
-            collection.created_at = now;
-            collection.updated_at = now;
+            collection.meta.created_at = now;
+            collection.meta.updated_at = now;
             renumber_items(&mut collection.items);
             self.game_collections.push(collection.clone());
-            if collection.visibility == Visibility::Curated {
-                self.featured_game_items_append(FeaturedGameItemKind::Collection, collection.id);
+            if collection.meta.visibility == Visibility::Curated {
+                self.featured_game_items_append(FeaturedGameItemKind::Collection, collection.meta.id);
             }
             Ok(())
         }
 
         async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, StoreError> {
-            let mut collection = self.game_collections.iter().find(|c| c.id == id).cloned()
+            let mut collection = self.game_collections.iter().find(|c| c.meta.id == id).cloned()
                 .ok_or_else(|| StoreError::GameCollectionIdNotFound(id.to_string()))?;
             collection.items.sort_by_key(|i| i.sort_order);
             Ok(collection)
         }
 
         async fn update_game_collection(&mut self, owner: &User, collection: &mut GameCollection) -> Result<(), StoreError> {
-            let existing = self.game_collections.iter().find(|c| c.id == collection.id).cloned()
-                .ok_or_else(|| StoreError::GameCollectionIdNotFound(collection.id.to_string()))?;
-            if existing.owner_id != owner.id {
-                return Err(StoreError::GameCollectionIdNotFound(collection.id.to_string()));
+            let existing = self.game_collections.iter().find(|c| c.meta.id == collection.meta.id).cloned()
+                .ok_or_else(|| StoreError::GameCollectionIdNotFound(collection.meta.id.to_string()))?;
+            if existing.meta.owner_id != owner.id {
+                return Err(StoreError::GameCollectionIdNotFound(collection.meta.id.to_string()));
             }
-            if collection.name.trim().is_empty() {
+            if collection.meta.name.trim().is_empty() {
                 return Err(StoreError::GameCollectionNameMissing());
             }
-            if self.game_collections.iter().any(|c| c.id != collection.id && c.owner_id == owner.id && c.name.eq_ignore_ascii_case(&collection.name)) {
-                return Err(StoreError::GameCollectionNameAlreadyExists(collection.name.clone()));
+            if self.game_collections.iter().any(|c| c.meta.id != collection.meta.id && c.meta.owner_id == owner.id && c.meta.name.eq_ignore_ascii_case(&collection.meta.name)) {
+                return Err(StoreError::GameCollectionNameAlreadyExists(collection.meta.name.clone()));
             }
             // Metadata-only: preserve membership + created_at.
-            collection.owner_id = owner.id;
-            collection.created_at = existing.created_at;
+            collection.meta.owner_id = owner.id;
+            collection.meta.created_at = existing.meta.created_at;
             collection.items = existing.items;
-            collection.updated_at = Utc::now();
-            if let Some(slot) = self.game_collection_mut(collection.id) {
+            collection.meta.updated_at = Utc::now();
+            if let Some(slot) = self.game_collection_mut(collection.meta.id) {
                 *slot = collection.clone();
             }
-            self.featured_game_items_reconcile(FeaturedGameItemKind::Collection, collection.id, existing.visibility, collection.visibility);
+            self.featured_game_items_reconcile(FeaturedGameItemKind::Collection, collection.meta.id, existing.meta.visibility, collection.meta.visibility);
             Ok(())
         }
 
         async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
             self.owned_collection_or_not_found(owner, id)?;
-            self.game_collections.retain(|c| c.id != id);
+            self.game_collections.retain(|c| c.meta.id != id);
             self.col_grantees.remove(&id);
             self.featured_game_items_remove(FeaturedGameItemKind::Collection, id);
             Ok(())
@@ -1279,7 +1279,7 @@ mod test_definitions {
                 .enumerate()
                 .map(|(index, id)| CollectionItem { definition_id: *id, sort_order: index as u32 })
                 .collect();
-            collection.updated_at = Utc::now();
+            collection.meta.updated_at = Utc::now();
             Ok(())
         }
 
@@ -1309,42 +1309,42 @@ mod test_definitions {
         }
 
         async fn get_game_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, StoreError> {
-            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.owner_id == owner.id).cloned().collect();
-            sort_by_name_ci(&mut cols, |c| &c.name);
+            let mut cols: Vec<GameCollection> = self.game_collections.iter().filter(|c| c.meta.owner_id == owner.id).cloned().collect();
+            sort_by_name_ci(&mut cols, |c| &c.meta.name);
             Ok(cols)
         }
 
         async fn get_visible_game_collections(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
             let mut cols: Vec<GameCollection> = self.game_collections.iter()
-                .filter(|c| c.owner_id == viewer.id
-                    || matches!(c.visibility, Visibility::Public | Visibility::Curated)
-                    || (c.visibility == Visibility::Shared
-                        && self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&viewer.id))))
+                .filter(|c| c.meta.owner_id == viewer.id
+                    || matches!(c.meta.visibility, Visibility::Public | Visibility::Curated)
+                    || (c.meta.visibility == Visibility::Shared
+                        && self.col_grantees.get(&c.meta.id).is_some_and(|g| g.contains(&viewer.id))))
                 .cloned().collect();
-            cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            cols.sort_by(|a, b| a.meta.name.to_lowercase().cmp(&b.meta.name.to_lowercase()).then(a.meta.id.cmp(&b.meta.id)));
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
         async fn get_shared_game_collections(&self, viewer: &User, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
             let mut cols: Vec<GameCollection> = self.game_collections.iter()
-                .filter(|c| c.owner_id != viewer.id
-                    && c.visibility == Visibility::Shared
-                    && self.col_grantees.get(&c.id).is_some_and(|g| g.contains(&viewer.id)))
+                .filter(|c| c.meta.owner_id != viewer.id
+                    && c.meta.visibility == Visibility::Shared
+                    && self.col_grantees.get(&c.meta.id).is_some_and(|g| g.contains(&viewer.id)))
                 .cloned().collect();
-            cols.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)));
+            cols.sort_by(|a, b| a.meta.name.to_lowercase().cmp(&b.meta.name.to_lowercase()).then(a.meta.id.cmp(&b.meta.id)));
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
 
         async fn get_public_game_collections(&self, viewer: &User, name_query: Option<&str>, sort: GameListSort, limit: u32, offset: u32) -> Result<Vec<GameCollection>, StoreError> {
             let needle = name_query.map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty());
             let mut cols: Vec<GameCollection> = self.game_collections.iter()
-                .filter(|c| c.visibility == Visibility::Public
-                    && c.owner_id != viewer.id
-                    && needle.as_ref().is_none_or(|n| c.name.to_lowercase().contains(n)))
+                .filter(|c| c.meta.visibility == Visibility::Public
+                    && c.meta.owner_id != viewer.id
+                    && needle.as_ref().is_none_or(|n| c.meta.name.to_lowercase().contains(n)))
                 .cloned().collect();
             cols.sort_by(|a, b| match sort {
-                GameListSort::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.id.cmp(&b.id)),
-                GameListSort::Newest => b.created_at.cmp(&a.created_at).then(a.id.cmp(&b.id)),
+                GameListSort::Name => a.meta.name.to_lowercase().cmp(&b.meta.name.to_lowercase()).then(a.meta.id.cmp(&b.meta.id)),
+                GameListSort::Newest => b.meta.created_at.cmp(&a.meta.created_at).then(a.meta.id.cmp(&b.meta.id)),
             });
             Ok(cols.into_iter().skip(offset as usize).take(limit as usize).collect())
         }
@@ -1364,9 +1364,9 @@ mod test_definitions {
         }
 
         async fn set_game_collection_image(&mut self, owner: &User, id: Uuid, png_bytes: Vec<u8>) -> Result<(), StoreError> {
-            let collection = self.game_collections.iter_mut().find(|c| c.id == id && c.owner_id == owner.id)
+            let collection = self.game_collections.iter_mut().find(|c| c.meta.id == id && c.meta.owner_id == owner.id)
                 .ok_or_else(|| StoreError::GameCollectionIdNotFound(id.to_string()))?;
-            collection.image_updated_at = Some(Utc::now());
+            collection.meta.image_updated_at = Some(Utc::now());
             self.col_images.insert(id, png_bytes);
             Ok(())
         }
@@ -1376,8 +1376,8 @@ mod test_definitions {
         }
 
         async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), StoreError> {
-            if let Some(collection) = self.game_collections.iter_mut().find(|c| c.id == id && c.owner_id == owner.id) {
-                collection.image_updated_at = None;
+            if let Some(collection) = self.game_collections.iter_mut().find(|c| c.meta.id == id && c.meta.owner_id == owner.id) {
+                collection.meta.image_updated_at = None;
                 self.col_images.remove(&id);
             }
             Ok(())
@@ -1389,7 +1389,7 @@ mod test_definitions {
             for (kind, id) in &deduped {
                 let visibility = match kind {
                     FeaturedGameItemKind::Definition => self.get_game_definition(*id).await?.visibility,
-                    FeaturedGameItemKind::Collection => self.get_game_collection(*id).await?.visibility,
+                    FeaturedGameItemKind::Collection => self.get_game_collection(*id).await?.meta.visibility,
                 };
                 if visibility != Visibility::Curated {
                     return Err(StoreError::FeaturedGameItemNotCurated { kind: kind.as_wire_str(), id: id.to_string() });
@@ -1409,7 +1409,7 @@ mod test_definitions {
                         }
                     }
                     FeaturedGameItemKind::Collection => {
-                        if let Some(collection) = self.game_collections.iter().find(|c| c.id == *id) {
+                        if let Some(collection) = self.game_collections.iter().find(|c| c.meta.id == *id) {
                             items.push(FeaturedGameItem::Collection(collection.clone()));
                         }
                     }
@@ -1431,8 +1431,8 @@ mod test_definitions {
                 }
             }
             let mut cols: Vec<(String, Uuid)> = self.game_collections.iter()
-                .filter(|c| c.visibility == Visibility::Curated)
-                .map(|c| (c.name.to_lowercase(), c.id)).collect();
+                .filter(|c| c.meta.visibility == Visibility::Curated)
+                .map(|c| (c.meta.name.to_lowercase(), c.meta.id)).collect();
             cols.sort();
             for (_, id) in cols {
                 if !have.contains(&(FeaturedGameItemKind::Collection, id)) {
@@ -9157,16 +9157,18 @@ mod test_definitions {
     ) -> GameCollection {
         let now = Utc::now();
         let mut collection = GameCollection {
-            id: Uuid::nil(),
-            owner_id: Uuid::nil(),
-            name: name.to_string(),
-            visibility,
-            play_mode: PlayMode::Arcade,
-            description: None,
-            image_updated_at: None,
+            meta: GameCollectionMeta {
+                id: Uuid::nil(),
+                owner_id: Uuid::nil(),
+                name: name.to_string(),
+                visibility,
+                play_mode: PlayMode::Arcade,
+                description: None,
+                image_updated_at: None,
+                created_at: now,
+                updated_at: now,
+            },
             items: Vec::new(),
-            created_at: now,
-            updated_at: now,
         };
         store.write().await.create_game_collection(owner, &mut collection).await.expect("seed collection");
         collection
@@ -9201,10 +9203,10 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
         let created: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert!(!created.id.is_nil());
-        assert_eq!(created.owner_id, owner.id);
+        assert!(!created.meta.id.is_nil());
+        assert_eq!(created.meta.owner_id, owner.id);
         assert!(created.items.is_empty());
-        assert_eq!(created.play_mode, PlayMode::Arcade);
+        assert_eq!(created.meta.play_mode, PlayMode::Arcade);
 
         // Duplicate name for the same owner → 409.
         let req = create_test_post_request("/api/v1/game-collections", Some(key), None, Some(&body));
@@ -9233,7 +9235,7 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
         let created: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(created.play_mode, PlayMode::Arcade);
+        assert_eq!(created.meta.play_mode, PlayMode::Arcade);
 
         // Create with campaign → round-trips on the create body and the detail GET.
         let campaign = serde_json::json!({ "name": "Campaign", "visibility": "private", "playMode": "campaign" });
@@ -9241,12 +9243,12 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
         let created: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(created.play_mode, PlayMode::Campaign);
+        assert_eq!(created.meta.play_mode, PlayMode::Campaign);
         let detail: serde_json::Value = serde_json::from_slice(
             &test::read_body(
                 test::call_service(
                     &app,
-                    create_test_get_request(&format!("/api/v1/game-collections/{}", created.id), Some(key), None),
+                    create_test_get_request(&format!("/api/v1/game-collections/{}", created.meta.id), Some(key), None),
                 )
                 .await,
             )
@@ -9257,11 +9259,11 @@ mod test_definitions {
 
         // Update back to arcade → persists.
         let edit = serde_json::json!({ "name": "Campaign", "visibility": "private", "playMode": "arcade" });
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", created.id), Some(key), None, &edit);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", created.meta.id), Some(key), None, &edit);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let updated: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(updated.play_mode, PlayMode::Arcade);
+        assert_eq!(updated.meta.play_mode, PlayMode::Arcade);
     }
 
     #[actix_web::test]
@@ -9282,7 +9284,7 @@ mod test_definitions {
             .await
             .set_game_collection_items(
                 &owner,
-                collection.id,
+                collection.meta.id,
                 &[def_public.id, def_owner_private.id, def_other_private.id, Uuid::new_v4()],
             )
             .await
@@ -9290,21 +9292,21 @@ mod test_definitions {
 
         // The owner sees the public member + their own private one (not the other
         // user's private, not the dangling ref), in insertion order.
-        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", collection.id), Some(owner.api_key), None);
+        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", collection.meta.id), Some(owner.api_key), None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let body: serde_json::Value = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(detail_definition_ids(&body), vec![def_public.id.to_string(), def_owner_private.id.to_string()]);
 
         // The other user sees the public member + their own private one.
-        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", collection.id), Some(other.api_key), None);
+        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", collection.meta.id), Some(other.api_key), None);
         let body: serde_json::Value =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(detail_definition_ids(&body), vec![def_public.id.to_string(), def_other_private.id.to_string()]);
 
         // A private collection is invisible to a non-owner.
         let private = seed_game_collection(&store, &owner, "Secret", Visibility::Private).await;
-        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", private.id), Some(other.api_key), None);
+        let req = create_test_get_request(&format!("/api/v1/game-collections/{}", private.meta.id), Some(other.api_key), None);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 
@@ -9320,7 +9322,7 @@ mod test_definitions {
         let d1 = seed_game_definition(&store, &owner, "D1", Visibility::Public, Rotation::Static).await;
         let d2 = seed_game_definition(&store, &owner, "D2", Visibility::Public, Rotation::Static).await;
         let d3 = seed_game_definition(&store, &owner, "D3", Visibility::Public, Rotation::Static).await;
-        let url = format!("/api/v1/game-collections/{}", collection.id);
+        let url = format!("/api/v1/game-collections/{}", collection.meta.id);
 
         // Set the membership in one call → stored in the given order.
         let body = SetGameCollectionItemsRequest { definition_ids: vec![d1.id, d2.id, d3.id] };
@@ -9356,7 +9358,7 @@ mod test_definitions {
         let mine = seed_game_collection(&store, &me, "A mine", Visibility::Private).await;
         let public = seed_game_collection(&store, &other, "B public", Visibility::Public).await;
         let shared = seed_game_collection(&store, &other, "C shared", Visibility::Shared).await;
-        store.write().await.grant_game_collection_access(&other, shared.id, me.id).await.expect("grant");
+        store.write().await.grant_game_collection_access(&other, shared.meta.id, me.id).await.expect("grant");
         let curated = seed_game_collection(&store, &admin, "D curated", Visibility::Curated).await;
         let others_private = seed_game_collection(&store, &other, "E others private", Visibility::Private).await;
 
@@ -9365,19 +9367,19 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
-        assert!(ids.contains(&mine.id));
-        assert!(ids.contains(&public.id));
-        assert!(ids.contains(&shared.id));
-        assert!(ids.contains(&curated.id));
-        assert!(!ids.contains(&others_private.id));
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.meta.id).collect();
+        assert!(ids.contains(&mine.meta.id));
+        assert!(ids.contains(&public.meta.id));
+        assert!(ids.contains(&shared.meta.id));
+        assert!(ids.contains(&curated.meta.id));
+        assert!(!ids.contains(&others_private.meta.id));
         assert_eq!(ids.len(), 4);
 
         // First page of two (sorted A, B, C, D) → A, B, more to come.
         let req = create_test_get_request("/api/v1/game-collections?limit=2&offset=0", Some(me.api_key), None);
         let page: GameCollectionListResponse =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
-        assert_eq!(page.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["A mine", "B public"]);
+        assert_eq!(page.collections.iter().map(|c| c.meta.name.clone()).collect::<Vec<_>>(), vec!["A mine", "B public"]);
         assert_eq!(page.limit, 2);
         assert!(page.has_more);
 
@@ -9401,23 +9403,23 @@ mod test_definitions {
         seed_game_collection(&store, &me, "Beta", Visibility::Public).await;
         let others_public = seed_game_collection(&store, &other, "Others public", Visibility::Public).await;
         let shared = seed_game_collection(&store, &other, "Shared to me", Visibility::Shared).await;
-        store.write().await.grant_game_collection_access(&other, shared.id, me.id).await.expect("grant");
+        store.write().await.grant_game_collection_access(&other, shared.meta.id, me.id).await.expect("grant");
 
         // scope=mine → only my two, name-ordered; none of the others'.
         let req = create_test_get_request("/api/v1/game-collections?scope=mine", Some(me.api_key), None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(list.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Alpha", "Beta"]);
-        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
-        assert!(!ids.contains(&others_public.id));
-        assert!(!ids.contains(&shared.id));
+        assert_eq!(list.collections.iter().map(|c| c.meta.name.clone()).collect::<Vec<_>>(), vec!["Alpha", "Beta"]);
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.meta.id).collect();
+        assert!(!ids.contains(&others_public.meta.id));
+        assert!(!ids.contains(&shared.meta.id));
 
         // q filters case-insensitively within scope=mine.
         let req = create_test_get_request("/api/v1/game-collections?scope=mine&q=ALPHA", Some(me.api_key), None);
         let page: GameCollectionListResponse =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
-        assert_eq!(page.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Alpha"]);
+        assert_eq!(page.collections.iter().map(|c| c.meta.name.clone()).collect::<Vec<_>>(), vec!["Alpha"]);
 
         // Invalid scope → 400.
         let req = create_test_get_request("/api/v1/game-collections?scope=bogus", Some(me.api_key), None);
@@ -9435,18 +9437,18 @@ mod test_definitions {
         let my_own = seed_game_collection(&store, &me, "My Own", Visibility::Shared).await;
         let others_public = seed_game_collection(&store, &other, "Public", Visibility::Public).await;
         let shared = seed_game_collection(&store, &other, "Shared to me", Visibility::Shared).await;
-        store.write().await.grant_game_collection_access(&other, shared.id, me.id).await.expect("grant");
+        store.write().await.grant_game_collection_access(&other, shared.meta.id, me.id).await.expect("grant");
         let ungranted = seed_game_collection(&store, &other, "Shared to others", Visibility::Shared).await;
 
         let req = create_test_get_request("/api/v1/game-collections?scope=shared", Some(me.api_key), None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(list.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Shared to me"]);
-        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
-        assert!(!ids.contains(&my_own.id));
-        assert!(!ids.contains(&others_public.id));
-        assert!(!ids.contains(&ungranted.id));
+        assert_eq!(list.collections.iter().map(|c| c.meta.name.clone()).collect::<Vec<_>>(), vec!["Shared to me"]);
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.meta.id).collect();
+        assert!(!ids.contains(&my_own.meta.id));
+        assert!(!ids.contains(&others_public.meta.id));
+        assert!(!ids.contains(&ungranted.meta.id));
     }
 
     #[actix_web::test]
@@ -9465,15 +9467,15 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let list: GameCollectionListResponse = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(list.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Open Sky"]);
-        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.id).collect();
-        assert!(!ids.contains(&my_own.id));
-        assert!(!ids.contains(&private.id));
+        assert_eq!(list.collections.iter().map(|c| c.meta.name.clone()).collect::<Vec<_>>(), vec!["Open Sky"]);
+        let ids: Vec<Uuid> = list.collections.iter().map(|c| c.meta.id).collect();
+        assert!(!ids.contains(&my_own.meta.id));
+        assert!(!ids.contains(&private.meta.id));
 
         let req = create_test_get_request("/api/v1/game-collections?scope=public&q=sky", Some(me.api_key), None);
         let page: GameCollectionListResponse =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
-        assert_eq!(page.collections.iter().map(|c| c.name.clone()).collect::<Vec<_>>(), vec!["Open Sky"]);
+        assert_eq!(page.collections.iter().map(|c| c.meta.name.clone()).collect::<Vec<_>>(), vec!["Open Sky"]);
     }
 
     #[actix_web::test]
@@ -9485,7 +9487,7 @@ mod test_definitions {
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
 
         let collection = seed_game_collection(&store, &owner, "Shared", Visibility::Shared).await;
-        let url = format!("/api/v1/game-collections/{}/shares", collection.id);
+        let url = format!("/api/v1/game-collections/{}/shares", collection.meta.id);
 
         let body = SetGameSharesRequest { user_ids: vec![other.id, owner.id] };
         let req = create_test_put_request(&url, Some(owner.api_key), None, &body);
@@ -9685,7 +9687,7 @@ mod test_definitions {
         let owner = user_by_name(&mock_users, VALID_USERNAME_1);
         let other = user_by_name(&mock_users, VALID_USERNAME_2);
         let col = seed_game_collection(&store, &owner, "Framed", Visibility::Public).await;
-        let url = format!("/api/v1/game-collections/{}/image", col.id);
+        let url = format!("/api/v1/game-collections/{}/image", col.meta.id);
 
         let png = encode_test_image(16, 8, image::ImageFormat::Png);
         let (body, boundary) = multipart_file_body("c.png", "image/png", &png);
@@ -9881,7 +9883,7 @@ mod test_definitions {
         // Non-owner non-admin → 404.
         let stranger_key = api_key_for(&mock_users, VALID_USERNAME_2);
         let body = collection_request("Owned Set", Visibility::Public);
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(stranger_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.meta.id), Some(stranger_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
 
         // An admin editing this non-featured collection they don't own, WITHOUT
@@ -9889,29 +9891,29 @@ mod test_definitions {
         // ignored only for Featured collections (or when featuring one).
         let admin_key = api_key_for(&mock_users, VALID_ADMIN_USERNAME_1);
         let body = collection_request("Owned Set", Visibility::Public);
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.meta.id), Some(admin_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
 
         // Admin features it (body sets curated); ownership preserved.
         let body = collection_request("Owned Set", Visibility::Curated);
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.meta.id), Some(admin_key), None, &body);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let updated: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(updated.owner_id, owner.id, "admin edit preserves ownership");
-        assert_eq!(updated.visibility, Visibility::Curated);
+        assert_eq!(updated.meta.owner_id, owner.id, "admin edit preserves ownership");
+        assert_eq!(updated.meta.visibility, Visibility::Curated);
 
         let req = create_test_get_request("/api/v1/featured-game-items", Some(admin_key), None);
         let body: serde_json::Value =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(body["items"][0]["kind"], serde_json::json!("collection"));
-        assert_eq!(featured_game_item_ids(&body), vec![col.id.to_string()]);
+        assert_eq!(featured_game_item_ids(&body), vec![col.meta.id.to_string()]);
 
         // Now that it is Featured, an admin may also un-feature it (the override
         // applies because the collection is currently curated, even though the new
         // visibility is not) — and it drops off the featured catalogue.
         let body = collection_request("Owned Set", Visibility::Public);
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.id), Some(admin_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}", col.meta.id), Some(admin_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
         let req = create_test_get_request("/api/v1/featured-game-items", Some(admin_key), None);
         let body: serde_json::Value =
@@ -9934,21 +9936,21 @@ mod test_definitions {
         // A Featured (curated) collection owned by user1: an admin (non-owner) may
         // set its games — curating the featured set — and ownership is preserved.
         let featured = seed_game_collection(&store, &owner, "Featured Set", Visibility::Curated).await;
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", featured.id), Some(admin_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", featured.meta.id), Some(admin_key), None, &body);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let updated: GameCollection = serde_json::from_slice(&test::read_body(resp).await).expect("json");
-        assert_eq!(updated.owner_id, owner.id, "ownership preserved (no transfer)");
+        assert_eq!(updated.meta.owner_id, owner.id, "ownership preserved (no transfer)");
         assert_eq!(collection_item_ids(&updated), vec![game.id]);
 
         // A stranger (non-owner non-admin) still cannot.
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", featured.id), Some(stranger_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", featured.meta.id), Some(stranger_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
 
         // A PRIVATE collection owned by user1: ownership is ignored only for
         // Featured collections, so even an admin cannot edit its games.
         let private = seed_game_collection(&store, &owner, "Private Set", Visibility::Private).await;
-        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", private.id), Some(admin_key), None, &body);
+        let req = create_test_put_request(&format!("/api/v1/game-collections/{}/items", private.meta.id), Some(admin_key), None, &body);
         assert_eq!(test::call_service(&app, req).await.status(), StatusCode::NOT_FOUND);
     }
 
@@ -9969,7 +9971,7 @@ mod test_definitions {
         let req = create_test_get_request("/api/v1/featured-game-items?limit=2&offset=0", Some(key), None);
         let body: serde_json::Value =
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
-        assert_eq!(featured_game_item_ids(&body), vec![a.id.to_string(), b.id.to_string()]);
+        assert_eq!(featured_game_item_ids(&body), vec![a.id.to_string(), b.meta.id.to_string()]);
         assert_eq!(body["items"][1]["kind"], serde_json::json!("collection"));
         // Each item carries its owner's username, resolved server-side.
         assert_eq!(body["items"][0]["ownerUsername"], serde_json::json!(admin.username));
@@ -10005,7 +10007,7 @@ mod test_definitions {
 
         let reorder = serde_json::json!({ "entries": [
             { "kind": "definition", "id": c.id.to_string() },
-            { "kind": "collection", "id": b.id.to_string() },
+            { "kind": "collection", "id": b.meta.id.to_string() },
             { "kind": "definition", "id": a.id.to_string() },
         ]});
 
@@ -10021,7 +10023,7 @@ mod test_definitions {
         let body: serde_json::Value = serde_json::from_slice(&test::read_body(resp).await).expect("json");
         assert_eq!(
             featured_game_item_ids(&body),
-            vec![c.id.to_string(), b.id.to_string(), a.id.to_string()]
+            vec![c.id.to_string(), b.meta.id.to_string(), a.id.to_string()]
         );
 
         // A subsequent GET reflects the persisted new order.
@@ -10030,7 +10032,7 @@ mod test_definitions {
             serde_json::from_slice(&test::read_body(test::call_service(&app, req).await).await).expect("json");
         assert_eq!(
             featured_game_item_ids(&body),
-            vec![c.id.to_string(), b.id.to_string(), a.id.to_string()]
+            vec![c.id.to_string(), b.meta.id.to_string(), a.id.to_string()]
         );
     }
 
