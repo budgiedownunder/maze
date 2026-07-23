@@ -1,4 +1,4 @@
-import { fetchUserAvatar } from '../api/client'
+import { fetchUserAvatar, fetchGameImage } from '../api/client'
 
 // Session-scoped cache of object URLs for **guarded images** the app renders
 // from an authenticated fetch (the serve routes require the bearer token, so a
@@ -72,7 +72,17 @@ export function resetImageCache(): void {
 
 // ── Per-kind wrappers ───────────────────────────────────────────────────────
 
-/** Shared object URL for a user's avatar (the only kind wired so far). */
+/** Shared object URL for a user's avatar. */
 export function getAvatarObjectUrl(token: string, userId: string, marker: string): Promise<string | null> {
   return getCachedImageUrl('user', userId, marker, () => fetchUserAvatar(token, userId, marker))
+}
+
+/** Shared object URL for a game definition's image. */
+export function getGameDefinitionImageObjectUrl(token: string, id: string, marker: string): Promise<string | null> {
+  return getCachedImageUrl('game-definition', id, marker, () => fetchGameImage(token, 'definition', id, marker))
+}
+
+/** Shared object URL for a game collection's image. */
+export function getGameCollectionImageObjectUrl(token: string, id: string, marker: string): Promise<string | null> {
+  return getCachedImageUrl('game-collection', id, marker, () => fetchGameImage(token, 'collection', id, marker))
 }

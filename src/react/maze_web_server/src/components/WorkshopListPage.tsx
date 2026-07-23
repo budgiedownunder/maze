@@ -2,7 +2,37 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { AppHeader } from './AppHeader'
 import { useToken } from '../context/AuthContext'
 import { usePagedList } from '../hooks/usePagedList'
+import { getGameDefinitionImageObjectUrl, getGameCollectionImageObjectUrl } from '../utils/imageCache'
 import { accessDescription, playModeLabel, type PlayMode, type Visibility } from '../utils/gameDefinitions'
+
+// The entity whose uploaded image (when present) replaces the base placeholder
+// art. `imageUpdatedAt` is both the has-image gate and the cache-buster; absent
+// ⇒ the placeholder shows and no request is made.
+export interface ThumbnailImageSubject {
+  kind: 'definition' | 'collection'
+  id: string
+  imageUpdatedAt?: string | null
+}
+
+// Resolves a subject's uploaded image to a shared object URL (or null) via the
+// guarded-image cache, keyed by kind+id+marker so a re-used row instance never
+// shows a stale image after its subject changes.
+function useThumbnailImage(subject?: ThumbnailImageSubject): string | null {
+  const token = useToken()
+  const marker = subject?.imageUpdatedAt ?? null
+  const key = subject && marker ? `${subject.kind}:${subject.id}:${marker}` : ''
+  const [loaded, setLoaded] = useState<{ key: string; url: string | null }>({ key: '', url: null })
+
+  useEffect(() => {
+    if (!key || !token || !subject || !marker) return
+    let cancelled = false
+    const resolve = subject.kind === 'definition' ? getGameDefinitionImageObjectUrl : getGameCollectionImageObjectUrl
+    resolve(token, subject.id, marker).then(url => { if (!cancelled) setLoaded({ key, url }) })
+    return () => { cancelled = true }
+  }, [key, token, subject, marker])
+
+  return loaded.key === key ? loaded.url : null
+}
 
 // A workshop row thumbnail: the base art with the visibility marker overhanging
 // its bottom-right corner, titled with the access description. Shared by the
@@ -10,10 +40,13 @@ import { accessDescription, playModeLabel, type PlayMode, type Visibility } from
 // dropped in contexts where a game's own visibility is irrelevant (the collection
 // membership editor, where the collection carries the visibility). `playMode`,
 // when given (collection rows), adds the matching badge on the bottom-left corner.
-export function WorkshopThumbnail({ baseSrc, visibility, showMarker = true, playMode }: { baseSrc: string; visibility: Visibility; showMarker?: boolean; playMode?: PlayMode }) {
+// `imageSubject`, when given, swaps the placeholder base art for the entity's own
+// uploaded image once it has one.
+export function WorkshopThumbnail({ baseSrc, visibility, showMarker = true, playMode, imageSubject }: { baseSrc: string; visibility: Visibility; showMarker?: boolean; playMode?: PlayMode; imageSubject?: ThumbnailImageSubject }) {
+  const imageUrl = useThumbnailImage(imageSubject)
   return (
     <div className="game-thumb" title={showMarker ? accessDescription(visibility) : undefined}>
-      <img className="game-thumb-base" src={baseSrc} alt="" aria-hidden="true" />
+      <img className="game-thumb-base" src={imageUrl ?? baseSrc} alt="" aria-hidden="true" />
       {showMarker && <img className="game-thumb-marker" src={`/images/workshop/marker-${visibility}.svg`} alt="" aria-hidden="true" />}
       {playMode && <img className="game-thumb-mode" src={`/images/workshop/mode-${playMode}.svg`} alt="" aria-hidden="true" title={playModeLabel(playMode)} />}
     </div>

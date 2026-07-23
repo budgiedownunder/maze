@@ -177,7 +177,7 @@ export function WorkshopCollectionsPage() {
       row={c => ({
         name: c.name,
         subtitle: collectionSummary(c),
-        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game-collection.svg" visibility={c.visibility} playMode={c.playMode} />,
+        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game-collection.svg" visibility={c.visibility} playMode={c.playMode} imageSubject={{ kind: 'collection', id: c.id, imageUpdatedAt: c.imageUpdatedAt }} />,
         onOpen: () => setEditing({ collection: c, busy: false, error: null }),
         actions: [
           { key: 'edit', label: 'Edit', ariaLabel: `Edit ${c.name}`, icon: '/images/icons/icon_rename.png', onClick: () => setEditing({ collection: c, busy: false, error: null }) },

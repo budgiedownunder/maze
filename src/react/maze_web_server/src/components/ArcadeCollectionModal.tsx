@@ -45,7 +45,7 @@ export function ArcadeCollectionModal({ name, definitions, onClose }: Props) {
                       checked={selectedId === d.id}
                       onChange={() => setSelectedId(d.id)}
                     />
-                    <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} showMarker={false} />
+                    <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} showMarker={false} imageSubject={{ kind: 'definition', id: d.id, imageUpdatedAt: d.imageUpdatedAt }} />
                     <span className="arcade-pick-text">
                       <span className="arcade-pick-name" title={d.name}>{d.name}</span>
                       {d.description && <span className="arcade-pick-desc">{d.description}</span>}

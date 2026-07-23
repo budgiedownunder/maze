@@ -49,7 +49,7 @@ export function CampaignCollectionModal({ name, definitions, completed, onClose 
                     aria-label={`${verb} ${d.name}`}
                   >
                     <span className="campaign-level-num" aria-hidden="true">{i + 1}</span>
-                    <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} showMarker={false} />
+                    <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} showMarker={false} imageSubject={{ kind: 'definition', id: d.id, imageUpdatedAt: d.imageUpdatedAt }} />
                     <span className="campaign-level-text">
                       <span className="campaign-level-name" title={d.name}>{d.name}</span>
                       {d.description && <span className="campaign-level-desc">{d.description}</span>}

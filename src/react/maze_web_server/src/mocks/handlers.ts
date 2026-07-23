@@ -578,6 +578,27 @@ export function resetMockAvatar(): void {
   mockAvatarUpdatedAt = null
 }
 
+// In-memory game/collection image markers, keyed `definition:<id>` /
+// `collection:<id>` → `imageUpdatedAt`. Upload stamps a marker (so the list
+// records + serve reflect it), remove clears it; the serve route returns the
+// mock PNG for any keyed id, else 404. Seeded below with one image so the
+// display path (WorkshopThumbnail) is exercisable out of the box.
+const mockGameImages: Record<string, string> = {
+  [`definition:${COMMUNITY_GAME_ID}`]: '2026-03-01T00:00:00.000Z',
+}
+
+export function resetMockGameImages(): void {
+  for (const k of Object.keys(mockGameImages)) delete mockGameImages[k]
+  mockGameImages[`definition:${COMMUNITY_GAME_ID}`] = '2026-03-01T00:00:00.000Z'
+}
+
+// Mirror the seeded image marker onto the community game's record so its
+// `imageUpdatedAt` drives the thumbnail (the list endpoints read the record).
+{
+  const idx = mockGameDefinitions.findIndex(d => d.id === COMMUNITY_GAME_ID)
+  if (idx !== -1) mockGameDefinitions[idx] = { ...mockGameDefinitions[idx], imageUpdatedAt: mockGameImages[`definition:${COMMUNITY_GAME_ID}`] }
+}
+
 export const handlers = [
   http.get(`${BASE}/features`, () => {
     return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [], email_enabled: true, max_maze_cells: null })
@@ -631,6 +652,42 @@ export const handlers = [
   http.delete(`${BASE}/users/me/avatar`, () => {
     mockAvatarUpdatedAt = null
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  // Game / collection images — serve the mock PNG for any id with a marker (else
+  // 404 → placeholder); upload stamps a marker + syncs the record's
+  // `imageUpdatedAt`; delete clears both. Stateful so the upload→display flow
+  // works end to end through the service worker (e2e).
+  ...(['definition', 'collection'] as const).flatMap(kind => {
+    const entity = kind === 'definition' ? 'game-definitions' : 'game-collections'
+    // Mirror a marker change onto the entity's record so its `imageUpdatedAt`
+    // (which the list endpoints return) drives the thumbnail.
+    const syncMarker = (id: string, marker: string | undefined) => {
+      if (kind === 'definition') {
+        mockGameDefinitions = mockGameDefinitions.map(e => (e.id === id ? { ...e, imageUpdatedAt: marker } : e))
+      } else {
+        mockGameCollections = mockGameCollections.map(e => (e.id === id ? { ...e, imageUpdatedAt: marker } : e))
+      }
+    }
+    return [
+      http.get(`${BASE}/${entity}/:id/image`, ({ params }) => {
+        if (mockGameImages[`${kind}:${String(params.id)}`] == null) return new HttpResponse(null, { status: 404 })
+        return new HttpResponse(MOCK_AVATAR_PNG, { headers: { 'Content-Type': 'image/png' } })
+      }),
+      http.post(`${BASE}/${entity}/:id/image`, ({ params }) => {
+        const id = String(params.id)
+        const marker = new Date().toISOString()
+        mockGameImages[`${kind}:${id}`] = marker
+        syncMarker(id, marker)
+        return HttpResponse.json({ imageUpdatedAt: marker })
+      }),
+      http.delete(`${BASE}/${entity}/:id/image`, ({ params }) => {
+        const id = String(params.id)
+        delete mockGameImages[`${kind}:${id}`]
+        syncMarker(id, undefined)
+        return new HttpResponse(null, { status: 204 })
+      }),
+    ]
   }),
 
   http.put(`${BASE}/users/me/profile`, async ({ request }) => {

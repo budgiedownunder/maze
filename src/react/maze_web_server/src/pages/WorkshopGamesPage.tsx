@@ -324,7 +324,7 @@ export function WorkshopGamesPage() {
       row={d => ({
         name: d.name,
         subtitle: gameSummary(d),
-        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} />,
+        thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} imageSubject={{ kind: 'definition', id: d.id, imageUpdatedAt: d.imageUpdatedAt }} />,
         onOpen: () => void handleEdit(d.id),
         actions: [
           { key: 'edit', label: 'Edit', ariaLabel: `Edit ${d.name}`, icon: '/images/icons/icon_rename.png', onClick: () => void handleEdit(d.id) },

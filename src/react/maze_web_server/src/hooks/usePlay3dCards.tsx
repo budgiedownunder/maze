@@ -63,7 +63,7 @@ export function usePlay3dCards(): {
   const definitionCard = (d: GameDefinition): Play3dCard => ({
     name: d.name,
     description: d.description,
-    thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} />,
+    thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={d.visibility} imageSubject={{ kind: 'definition', id: d.id, imageUpdatedAt: d.imageUpdatedAt }} />,
     actions: [
       { key: 'play', label: 'Play', ariaLabel: `Play ${d.name}`, variant: 'primary', icon: '/images/icons/icon_play_3d.png', onClick: () => launchDefinition(d.id) },
       { key: 'board', label: 'Leaderboard', ariaLabel: `Leaderboard for ${d.name}`, icon: '/images/icons/icon_leaderboard.svg', onClick: () => setViewingBoard({ id: d.id, name: d.name }) },
@@ -73,7 +73,7 @@ export function usePlay3dCards(): {
   const collectionCard = (c: GameCollection): Play3dCard => ({
     name: c.name,
     description: c.description,
-    thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game-collection.svg" visibility={c.visibility} playMode={c.playMode} />,
+    thumbnail: <WorkshopThumbnail baseSrc="/images/workshop/workshop-game-collection.svg" visibility={c.visibility} playMode={c.playMode} imageSubject={{ kind: 'collection', id: c.id, imageUpdatedAt: c.imageUpdatedAt }} />,
     // Every collection resolves its accessible members on click (see
     // playCollection) — launch the sole game, open the Campaign modal or the
     // Arcade picker, or the picker's guarded state — so an inaccessible member is

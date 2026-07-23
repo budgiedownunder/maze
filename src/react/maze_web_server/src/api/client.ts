@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, ImageUpdatedResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -478,6 +478,58 @@ export function setGameCollectionItems(token: string, collectionId: string, defi
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify({ definitionIds }),
+  })
+}
+
+// --- Game / collection images ------------------------------------------------
+
+// Which entity an image belongs to — selects the endpoint family.
+export type GameImageKind = 'definition' | 'collection'
+
+function gameImagePath(kind: GameImageKind, id: string): string {
+  const entity = kind === 'definition' ? 'game-definitions' : 'game-collections'
+  return `/${entity}/${encodeURIComponent(id)}/image`
+}
+
+// The image request URL for a game/collection, appending the `imageUpdatedAt`
+// marker as a `?v=` cache-buster when known. This is the URL `fetchGameImage`
+// requests — NOT an `<img src>`: the serve route is access-checked, so the image
+// is loaded via an authenticated fetch (a bare `<img>` can't carry the token).
+export function gameImageUrl(kind: GameImageKind, id: string, updatedAt?: string | null): string {
+  const base = `${BASE}${gameImagePath(kind, id)}`
+  return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
+}
+
+// Fetches a game/collection image as a Blob over an authenticated request.
+// Resolves to the Blob on success and throws (with a `.status`) on a non-OK
+// response — callers treat a 404 as "no image" and fall back to the placeholder.
+export async function fetchGameImage(token: string, kind: GameImageKind, id: string, updatedAt?: string | null): Promise<Blob> {
+  const response = await fetch(gameImageUrl(kind, id, updatedAt), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) await throwForStatus(response)
+  return response.blob()
+}
+
+// Uploads (or replaces) a game/collection image (owner-only). The server
+// canonicalises to a 256x256 PNG and returns the new `imageUpdatedAt` marker.
+// No `Content-Type` header — the browser sets the multipart boundary for the
+// `FormData` body (`authHeaders` would wrongly force JSON).
+export function uploadGameImage(token: string, kind: GameImageKind, id: string, file: File): Promise<ImageUpdatedResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  return request<ImageUpdatedResponse>(gameImagePath(kind, id), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+}
+
+// Removes a game/collection image (idempotent server-side — 204 even if none set).
+export function deleteGameImage(token: string, kind: GameImageKind, id: string): Promise<void> {
+  return requestEmpty(gameImagePath(kind, id), {
+    method: 'DELETE',
+    headers: authHeaders(token),
   })
 }
 

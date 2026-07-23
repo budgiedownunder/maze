@@ -225,7 +225,7 @@ export function GameCollectionFormModal({
                       className={`collection-member${selectedId === m.id ? ' selected' : ''}`}
                       onClick={() => setSelectedId(m.id)}
                     >
-                      <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={m.visibility} showMarker={false} />
+                      <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={m.visibility} showMarker={false} imageSubject={{ kind: 'definition', id: m.id, imageUpdatedAt: m.imageUpdatedAt }} />
                       <span className="collection-member-name" title={m.name}>{m.name}</span>
                       <div className="collection-member-actions">
                         <button type="button" className="btn-icon" aria-label={`Move ${m.name} up`} disabled={!gamesLoaded || i === 0} onClick={e => { e.stopPropagation(); setSelectedId(m.id); move(i, -1) }}>
@@ -264,7 +264,7 @@ export function GameCollectionFormModal({
                               className={`collection-picker-item${selectedSourceId === g.id ? ' selected' : ''}`}
                               onClick={() => setSelectedSourceId(g.id)}
                             >
-                              <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={g.visibility} showMarker={false} />
+                              <WorkshopThumbnail baseSrc="/images/workshop/workshop-game.svg" visibility={g.visibility} showMarker={false} imageSubject={{ kind: 'definition', id: g.id, imageUpdatedAt: g.imageUpdatedAt }} />
                               <span className="collection-member-name" title={g.name}>{g.name}</span>
                               <div className="collection-member-actions">
                                 <button type="button" className="btn-icon collection-add-btn" onClick={e => { e.stopPropagation(); stageAdd(g) }} aria-label={`Add ${g.name}`}>+</button>

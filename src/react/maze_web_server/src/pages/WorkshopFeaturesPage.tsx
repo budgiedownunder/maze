@@ -314,7 +314,7 @@ export function WorkshopFeaturesPage() {
                         <img src="/images/icons/icon_move_down.svg" alt="" aria-hidden="true" />
                       </button>
                     </div>
-                    <WorkshopThumbnail baseSrc={isDef ? '/images/workshop/workshop-game.svg' : '/images/workshop/workshop-game-collection.svg'} visibility={e.visibility} playMode={item.collection?.playMode} />
+                    <WorkshopThumbnail baseSrc={isDef ? '/images/workshop/workshop-game.svg' : '/images/workshop/workshop-game-collection.svg'} visibility={e.visibility} playMode={item.collection?.playMode} imageSubject={{ kind: isDef ? 'definition' : 'collection', id: e.id, imageUpdatedAt: (isDef ? item.definition : item.collection)?.imageUpdatedAt }} />
                     <div className="maze-item-text">
                       <span className="maze-item-name" title={e.name}>{e.name}</span>
                       <span className="maze-item-subtitle">{featuredSummary(item)}</span>

@@ -261,6 +261,12 @@ export interface GameCollectionDetailResponse {
   definitions: GameDefinition[]
 }
 
+// Response from a game/collection image upload: the new cache-buster marker
+// (RFC 3339), which the client stores as the entity's `imageUpdatedAt`.
+export interface ImageUpdatedResponse {
+  imageUpdatedAt: string
+}
+
 // --- Featured catalogue -----------------------------------------------------
 
 // Which kind of entity a featured-catalogue row points at.
