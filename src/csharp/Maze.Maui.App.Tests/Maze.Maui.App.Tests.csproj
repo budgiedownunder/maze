@@ -108,6 +108,8 @@
              Link="LinkedSource\Models\CompletedChallengesResponse.cs" />
     <Compile Include="..\Maze.Maui.App\Services\GameLibraryRequestPaths.cs"
              Link="LinkedSource\Services\GameLibraryRequestPaths.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\Play3dGameHostUrl.cs"
+             Link="LinkedSource\Services\Play3dGameHostUrl.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IAvatarService.cs"
              Link="LinkedSource\Services\IAvatarService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IImagePickerService.cs"
