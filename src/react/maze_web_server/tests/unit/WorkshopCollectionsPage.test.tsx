@@ -267,7 +267,8 @@ describe('WorkshopCollectionsPage', () => {
     expect(within(dialog).getByText('Beta')).toBeInTheDocument()
 
     // Save is idle until something changes.
-    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
+    // Nothing changed yet → Save is hidden (Close only).
+    expect(within(dialog).queryByRole('button', { name: 'Save' })).toBeNull()
 
     // The picker offers the owner's other game; add it (wait for the background
     // load that enables the picker).

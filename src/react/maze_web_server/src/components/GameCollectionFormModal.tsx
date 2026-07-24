@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useToken } from '../context/AuthContext'
 import { WorkshopThumbnail } from './WorkshopListPage'
+import { GameImageEditor } from './GameImageEditor'
 import { getGameCollection, listGameDefinitions } from '../api/client'
 import type { GameDefinition, PlayMode } from '../types/api'
 import { PLAY_MODES, playModeDescription, playModeLabel } from '../utils/gameDefinitions'
@@ -22,6 +23,11 @@ interface Props {
   // Edit mode: the collection whose membership this modal also manages. Omitted
   // for Create (a new collection has no id to attach members to yet).
   collectionId?: string
+  // Edit mode: the collection's current image marker + a change reporter, so the
+  // modal can show the image control (mirrors the definition editor). Omitted for
+  // Create.
+  imageUpdatedAt?: string | null
+  onImageChange?: (imageUpdatedAt: string | null) => void
   isLoading?: boolean
   error?: string | null
   // `memberIds` is supplied (Edit only) when the membership changed — the parent
@@ -41,6 +47,8 @@ export function GameCollectionFormModal({
   initialDescription = '',
   initialPlayMode = 'arcade',
   collectionId,
+  imageUpdatedAt,
+  onImageChange,
   isLoading = false,
   error,
   onSubmit,
@@ -114,8 +122,10 @@ export function GameCollectionFormModal({
   const membersDirty = members != null
     && (memberIds.length !== originalIds.length || memberIds.some((id, i) => id !== originalIds[i]))
   const metaDirty = name !== initialName || description !== initialDescription || playMode !== initialPlayMode
-  // Create Save stays always-enabled (validates on submit); Edit gates on dirty.
-  const saveDisabled = isLoading || (collectionId != null && !metaDirty && !membersDirty)
+  // Edit mode with no metadata/membership change → nothing to save. Hide Save and
+  // relabel Cancel "Close" (the image is a separate, immediately-saved resource,
+  // so it never counts as an unsaved change). Create always offers its button.
+  const nothingToSave = collectionId != null && !metaDirty && !membersDirty
 
   function stageAdd(game: GameDefinition) {
     // Insert after the highlighted row (if any), else append.
@@ -177,6 +187,14 @@ export function GameCollectionFormModal({
         <h2 className="modal-title">{title}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <div className="collection-form-body">
+          {collectionId && onImageChange && (
+            <GameImageEditor
+              kind="collection"
+              id={collectionId}
+              imageUpdatedAt={imageUpdatedAt}
+              onChange={onImageChange}
+            />
+          )}
           <label>
             Name
             <input
@@ -283,8 +301,8 @@ export function GameCollectionFormModal({
 
           {displayError && <p role="alert" className="error-msg">{displayError}</p>}
           <div className="modal-actions-row">
-            <button type="button" onClick={onCancel} className="btn-gray" disabled={isLoading}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={saveDisabled}>{confirmLabel}</button>
+            <button type="button" onClick={onCancel} className="btn-gray" disabled={isLoading}>{nothingToSave ? 'Close' : 'Cancel'}</button>
+            {!nothingToSave && <button type="submit" className="btn-primary" disabled={isLoading}>{confirmLabel}</button>}
           </div>
         </form>
       </div>

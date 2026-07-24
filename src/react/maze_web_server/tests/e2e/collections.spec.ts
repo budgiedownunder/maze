@@ -127,6 +127,8 @@ test('the Edit modal keeps Cancel/Save on-screen on a short window', async ({ pa
 
   await page.getByRole('button', { name: `Edit ${colName}` }).click()
   const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  // Save appears once there's something to save — make a change first.
+  await edit.getByLabel('Description (optional)').fill('changed')
   const save = edit.getByRole('button', { name: 'Save' })
   await expect(save).toBeVisible()
   // The footer stays within the viewport rather than being pushed below the fold.
@@ -177,4 +179,39 @@ test('Delete removes a collection after confirmation', async ({ page }) => {
   await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
   await page.reload()
   await expect(page.getByRole('button', { name: `Delete ${name}` })).toBeHidden()
+})
+
+test('editing a collection lets you upload then remove its image', async ({ page }) => {
+  await login(page)
+
+  const name = `Imaged ${Date.now()}`
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(name)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  // Edit → the image control shows the collection placeholder + Upload.
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  const editor = page.getByRole('dialog', { name: 'Edit Collection' })
+  const image = editor.locator('.game-image-editor')
+  const preview = image.locator('.game-thumb-base')
+  await expect(preview).toHaveAttribute('src', /workshop-game-collection\.svg$/)
+
+  await image.locator('input[type="file"]').setInputFiles('public/images/avatar-placeholder.png')
+  await expect(preview).toHaveAttribute('src', /^blob:/)
+  await expect(image.getByText('Image updated')).toBeVisible()
+
+  // Persists past Cancel (separate resource); the row thumbnail shows it.
+  await expect(editor.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await editor.getByRole('button', { name: 'Close' }).click()
+  await expect(editor).toBeHidden()
+  await expect(page.locator('.game-list-item', { hasText: name }).locator('.game-thumb-base')).toHaveAttribute('src', /^blob:/)
+
+  // Remove → back to the placeholder.
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  const image2 = page.getByRole('dialog', { name: 'Edit Collection' }).locator('.game-image-editor')
+  await image2.getByRole('button', { name: /^Remove$/ }).click()
+  await expect(image2.getByText('Image removed')).toBeVisible()
+  await expect(image2.locator('.game-thumb-base')).toHaveAttribute('src', /workshop-game-collection\.svg$/)
 })

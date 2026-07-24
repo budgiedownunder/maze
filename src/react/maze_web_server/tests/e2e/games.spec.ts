@@ -258,3 +258,45 @@ test('the multi-level controls appear only when the level count is raised above 
   await dialog.getByRole('tab', { name: 'Objects' }).click()
   await expect(dialog.getByLabel('Finish Cell')).toBeHidden()
 })
+
+test('editing a game lets you upload then remove its image', async ({ page }) => {
+  await login(page)
+
+  // Create a game to edit (a new game has no image control — no id yet).
+  const name = `Imaged ${Date.now()}`
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(wizard).toBeHidden()
+
+  // Open Edit → the Details tab shows the image control: placeholder + Upload.
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  const editor = page.getByRole('dialog', { name: 'Edit Game' })
+  const image = editor.locator('.game-image-editor')
+  const preview = image.locator('.game-thumb-base')
+  await expect(preview).toHaveAttribute('src', /workshop-game\.svg$/)
+  await expect(image.getByRole('button', { name: /^Remove$/ })).toHaveCount(0)
+
+  // Upload a real PNG → the preview swaps to the fetched image, a status shows,
+  // and Change/Remove appear.
+  await image.locator('input[type="file"]').setInputFiles('public/images/avatar-placeholder.png')
+  await expect(preview).toHaveAttribute('src', /^blob:/)
+  await expect(image.getByText('Image updated')).toBeVisible()
+  await expect(image.getByRole('button', { name: /^Remove$/ })).toBeVisible()
+
+  // The image is a separate resource, so Cancelling the editor keeps it — the row
+  // thumbnail now shows it.
+  await expect(editor.getByRole('button', { name: 'Save' })).toHaveCount(0)
+  await editor.getByRole('button', { name: 'Close' }).click()
+  await expect(editor).toBeHidden()
+  const row = page.locator('.game-list-item', { hasText: name })
+  await expect(row.locator('.game-thumb-base')).toHaveAttribute('src', /^blob:/)
+
+  // Reopen and Remove → back to the placeholder.
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  const image2 = page.getByRole('dialog', { name: 'Edit Game' }).locator('.game-image-editor')
+  await image2.getByRole('button', { name: /^Remove$/ }).click()
+  await expect(image2.getByText('Image removed')).toBeVisible()
+  await expect(image2.locator('.game-thumb-base')).toHaveAttribute('src', /workshop-game\.svg$/)
+})

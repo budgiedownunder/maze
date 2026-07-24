@@ -1876,6 +1876,48 @@ textarea.input {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
+/* Inline image control in the game / collection editors: an enlarged preview
+   (the same row thumbnail) beside Change/Remove, mirroring the account avatar. */
+.game-image-editor {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.game-image-editor .game-thumb,
+.game-image-editor .game-thumb-base {
+  width: 88px;
+  height: 88px;
+}
+/* The preview doubles as the picker trigger (like the account avatar). */
+.game-image-editor-preview {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+.game-image-editor-preview:disabled {
+  cursor: default;
+}
+.game-image-editor-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.game-image-editor-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.game-image-editor-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 @media (max-width: 540px) {
   .maze-item-action-label {
     display: none;

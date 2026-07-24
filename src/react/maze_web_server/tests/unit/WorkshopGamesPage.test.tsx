@@ -147,8 +147,9 @@ describe('WorkshopGamesPage', () => {
     await waitFor(() => expect(screen.getByText('Tower')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit Tower' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument())
-    expect(screen.getByLabelText('Name')).toHaveValue('Tower')
+    // Editor opens with no unsaved change → Save is hidden until the form changes.
+    await waitFor(() => expect(screen.getByLabelText('Name')).toHaveValue('Tower'))
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
 
     await userEvent.clear(screen.getByLabelText('Name'))
     await userEvent.type(screen.getByLabelText('Name'), 'Spire')

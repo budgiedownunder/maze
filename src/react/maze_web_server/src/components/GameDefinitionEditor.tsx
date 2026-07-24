@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { StepModalShell } from './StepModalShell'
+import { GameImageEditor } from './GameImageEditor'
 import { MazeGenerationFields, type MazeGenerationFieldsValue } from './MazeGenerationFields'
 import { ObjectGroupsFields } from './ObjectGroupsFields'
 import { GameSceneFields } from './GameSceneFields'
@@ -80,6 +81,14 @@ interface GameDefinitionEditorProps {
    * (a name is NOT required — unlike Finish — since a preview is not saved).
    */
   onPreview?: (config: GameDefinitionRequest['config']) => void
+  /**
+   * Image control for the saved game. Present only when editing an existing
+   * definition (a brand-new game has no id to attach an upload to); its Details
+   * tab then shows a preview + Change/Remove. The image is a separate resource
+   * (uploaded/removed immediately), so it is independent of this form's Save.
+   * `onImageChange` reports the new marker so the workshop row can refresh.
+   */
+  image?: { id: string; imageUpdatedAt?: string | null; onImageChange: (imageUpdatedAt: string | null) => void }
 }
 
 export function GameDefinitionEditor({
@@ -92,6 +101,7 @@ export function GameDefinitionEditor({
   onReshuffle,
   hasScores = false,
   onPreview,
+  image,
 }: GameDefinitionEditorProps) {
   const { max_maze_cells } = useAppFeatures()
   const [activeStep, setActiveStep] = useState<EditorStep>('general')
@@ -147,6 +157,16 @@ export function GameDefinitionEditor({
   // Preview only needs a generatable config — a name is a save-only requirement.
   const canPreview = generationError === null
 
+  // In edit (tabs) mode, only offer Save when the form actually changed. The
+  // image and seed (reshuffle) are separate, immediately-persisted resources, so
+  // they don't count as unsaved form changes — compare the editable form holding
+  // the seed constant. In wizard (create) mode there is always something to do.
+  const isEdit = mode === 'tabs'
+  const isDirty = useMemo(
+    () => JSON.stringify({ ...form, seed: 0 }) !== JSON.stringify({ ...initialForm, seed: 0 }),
+    [form, initialForm],
+  )
+
   // A pending save awaiting confirmation because it changes gameplay and would
   // reset a scored board. Null when no confirmation is needed.
   const [pendingSave, setPendingSave] = useState<GameDefinitionRequest | null>(null)
@@ -191,6 +211,8 @@ export function GameDefinitionEditor({
       onCancel={onCancel}
       onCommit={handleCommit}
       canCommit={canCommit}
+      showCommit={!isEdit || isDirty}
+      cancelLabel={isEdit && !isDirty ? 'Close' : 'Cancel'}
       commitLabel={commitLabel}
       onPreview={onPreview && handlePreview}
       canPreview={canPreview}
@@ -198,6 +220,14 @@ export function GameDefinitionEditor({
     >
       <div {...modalTabPanelProps(ID_PREFIX, 'general', activeStep)}>
         <FieldGroup title="Details" id="details">
+          {image && (
+            <GameImageEditor
+              kind="definition"
+              id={image.id}
+              imageUpdatedAt={image.imageUpdatedAt}
+              onChange={image.onImageChange}
+            />
+          )}
           <label className="modal-stacked-input">
             Name
             <input

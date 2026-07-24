@@ -27,6 +27,13 @@ interface StepModalShellProps<T extends string> {
    * the whole form validates (not gated to the last step).
    */
   canCommit: boolean
+  /** Whether to render the commit button at all. Defaults to true; pass false to
+   *  hide it — e.g. an edit form with nothing to save (paired with a "Close"
+   *  `cancelLabel`). */
+  showCommit?: boolean
+  /** Label for the cancel/close button. Defaults to "Cancel"; an edit form with
+   *  nothing to save passes "Close". */
+  cancelLabel?: string
   /** Commit-button label; defaults to Finish (wizard) / Save (tabs). */
   commitLabel?: string
   /** Wizard-only: step ids to mark complete in the rail. */
@@ -56,6 +63,8 @@ export function StepModalShell<T extends string>({
   onCancel,
   onCommit,
   canCommit,
+  showCommit = true,
+  cancelLabel = 'Cancel',
   commitLabel,
   completed,
   onPreview,
@@ -109,7 +118,7 @@ export function StepModalShell<T extends string>({
                 Preview
               </button>
             )}
-            <button type="button" className="btn-gray" onClick={onCancel}>Cancel</button>
+            <button type="button" className="btn-gray" onClick={onCancel}>{cancelLabel}</button>
             {mode === 'wizard' && (
               <button type="button" className="btn-gray" onClick={() => onStepChange(steps[activeIndex - 1].id)} disabled={isFirst}>
                 Back
@@ -120,9 +129,11 @@ export function StepModalShell<T extends string>({
                 Next
               </button>
             )}
-            <button type="button" className="btn-primary" onClick={onCommit} disabled={!canCommit}>
-              {commit}
-            </button>
+            {showCommit && (
+              <button type="button" className="btn-primary" onClick={onCommit} disabled={!canCommit}>
+                {commit}
+              </button>
+            )}
           </div>
         </div>
       </div>

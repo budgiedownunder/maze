@@ -44,7 +44,7 @@ export function WorkshopGamesPage() {
   const refresh = () => listRef.current?.refresh()
 
   const [isCreating, setIsCreating] = useState(false)
-  const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
+  const [editing, setEditing] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean; imageUpdatedAt?: string | null } | null>(null)
   const [duplicating, setDuplicating] = useState<{ source: GameDefinition; error: string | null; busy: boolean } | null>(null)
   const [sharing, setSharing] = useState<GameDefinition | null>(null)
   const [viewingBoard, setViewingBoard] = useState<GameDefinition | null>(null)
@@ -125,7 +125,7 @@ export function WorkshopGamesPage() {
       // The play-fetch splices an *effective* seed into `config` (date-mixed for
       // a Daily game), so hydrate the seed from the record's own field instead —
       // otherwise a Save would bake one day's layout into the stored config.
-      setEditing({ id, form: { ...form, seed: def.seed }, hasScores: await hasScores(def) })
+      setEditing({ id, form: { ...form, seed: def.seed }, hasScores: await hasScores(def), imageUpdatedAt: def.imageUpdatedAt })
     } catch (ex: unknown) {
       setActionError((ex as { message?: string }).message ?? 'Failed to load game.')
     } finally {
@@ -245,6 +245,14 @@ export function WorkshopGamesPage() {
           onReshuffle={() => reshuffleGameDefinition(token!, editing.id).then(d => d.seed)}
           // A saved definition has a real seed → the preview is the actual layout.
           onPreview={config => launchDefinitionPreview(config, true)}
+          image={{
+            id: editing.id,
+            imageUpdatedAt: editing.imageUpdatedAt,
+            onImageChange: marker => {
+              setEditing(e => (e ? { ...e, imageUpdatedAt: marker } : e))
+              listRef.current?.patchItem(editing.id, { imageUpdatedAt: marker ?? undefined })
+            },
+          }}
         />
       )}
       {duplicating && (

@@ -359,6 +359,9 @@ describe('GameDefinitionEditor — commit', () => {
       mode: 'tabs',
       initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower', visibility: 'public', rotation: 'daily', seed: 99 },
     })
+    // Save only appears once the form changes; a description edit leaves the
+    // pass-through visibility / rotation / seed untouched.
+    await userEvent.type(screen.getByLabelText('Description'), 'x')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     const request = onSubmit.mock.calls[0][0]
     expect(request.visibility).toBe('public')
@@ -423,7 +426,10 @@ describe('GameDefinitionEditor — reshuffle', () => {
     expect(onReshuffle).toHaveBeenCalledOnce()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reshuffle Layout' })).toBeNull())
 
-    // The new seed flows into the form — a subsequent Save carries it.
+    // A reshuffle persists on its own, so it doesn't itself enable Save — but it
+    // adopts the new seed into the form, which a later edit's Save then carries.
+    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    await userEvent.type(screen.getByLabelText('Description'), 'x')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(onSubmit.mock.calls[0][0].config).toMatchObject({ seed: 777 })
   })

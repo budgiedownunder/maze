@@ -125,6 +125,11 @@ export function WorkshopCollectionsPage() {
           initialDescription={editing.collection.description ?? ''}
           initialPlayMode={editing.collection.playMode}
           collectionId={editing.collection.id}
+          imageUpdatedAt={editing.collection.imageUpdatedAt}
+          onImageChange={marker => {
+            setEditing(e => (e ? { ...e, collection: { ...e.collection, imageUpdatedAt: marker ?? undefined } } : e))
+            listRef.current?.patchItem(editing.collection.id, { imageUpdatedAt: marker ?? undefined })
+          }}
           isLoading={editing.busy}
           error={editing.error}
           onSubmit={(name, description, playMode, memberIds) => void handleEdit(editing.collection, name, description, playMode, memberIds)}
