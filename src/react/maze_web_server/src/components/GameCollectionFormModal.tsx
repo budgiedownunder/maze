@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useToken } from '../context/AuthContext'
 import { WorkshopThumbnail } from './WorkshopListPage'
+import { FieldGroup } from './FieldGroup'
 import { GameImageEditor } from './GameImageEditor'
 import { getGameCollection, listGameDefinitions } from '../api/client'
 import type { GameDefinition, PlayMode } from '../types/api'
@@ -187,46 +188,48 @@ export function GameCollectionFormModal({
         <h2 className="modal-title">{title}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <div className="collection-form-body">
-          {collectionId && onImageChange && (
-            <GameImageEditor
-              kind="collection"
-              id={collectionId}
-              imageUpdatedAt={imageUpdatedAt}
-              onChange={onImageChange}
-            />
-          )}
-          <label>
-            Name
-            <input
-              type="text"
-              className="input"
-              value={name}
-              onChange={e => { setName(e.target.value); setValidationError(null) }}
-              autoFocus
-            />
-          </label>
-          <label>
-            Description (optional)
-            <textarea
-              className="input"
-              rows={3}
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-            />
-          </label>
-          <label>
-            Play mode
-            <select
-              className="input"
-              value={playMode}
-              onChange={e => setPlayMode(e.target.value as PlayMode)}
-            >
-              {PLAY_MODES.map(mode => (
-                <option key={mode} value={mode}>{playModeLabel(mode)}</option>
-              ))}
-            </select>
-          </label>
-          <p className="access-tier-desc">{playModeDescription(playMode)}</p>
+          <FieldGroup title="Details" id="details">
+            {collectionId && onImageChange && (
+              <GameImageEditor
+                kind="collection"
+                id={collectionId}
+                imageUpdatedAt={imageUpdatedAt}
+                onChange={onImageChange}
+              />
+            )}
+            <label>
+              Name
+              <input
+                type="text"
+                className="input"
+                value={name}
+                onChange={e => { setName(e.target.value); setValidationError(null) }}
+                autoFocus
+              />
+            </label>
+            <label>
+              Description (optional)
+              <textarea
+                className="input"
+                rows={3}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+              />
+            </label>
+            <label>
+              Play mode
+              <select
+                className="input"
+                value={playMode}
+                onChange={e => setPlayMode(e.target.value as PlayMode)}
+              >
+                {PLAY_MODES.map(mode => (
+                  <option key={mode} value={mode}>{playModeLabel(mode)}</option>
+                ))}
+              </select>
+            </label>
+            <p className="access-tier-desc">{playModeDescription(playMode)}</p>
+          </FieldGroup>
 
           {collectionId != null && (
             <div className="field-group">
