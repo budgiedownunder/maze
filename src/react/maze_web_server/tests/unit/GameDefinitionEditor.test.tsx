@@ -52,8 +52,7 @@ describe('GameDefinitionEditor — steps', () => {
     const details = within(screen.getByRole('group', { name: 'Details' }))
     expect(details.getByLabelText('Name')).toBeVisible()
     expect(details.getByLabelText('Description')).toBeVisible()
-    // The count + time limit are single-field groups (the heading is the label).
-    expect(within(screen.getByRole('group', { name: 'Number of Levels' })).getByRole('spinbutton')).toBeVisible()
+    // Time limit is a single-field group (the heading is the label)
     expect(within(screen.getByRole('group', { name: 'Time limit (seconds)' })).getByRole('spinbutton')).toBeVisible()
   })
 
@@ -82,9 +81,9 @@ describe('GameDefinitionEditor — steps', () => {
 
   it('relabels the Grid group and adds the Levels group when the game is multi-level', async () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
-    // Raise the count on General, then look at the Layout tab.
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '3' } })
+    // The count is at the top of the Layout tab; raise it there.
     await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '3' } })
 
     // The grid group is now captioned for the ground floor…
     expect(screen.queryByRole('group', { name: 'Grid' })).toBeNull()
@@ -112,13 +111,13 @@ describe('GameDefinitionEditor — steps', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     expect(screen.queryByLabelText('Finish Cell')).toBeNull()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '3' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     expect(within(screen.getByRole('group', { name: 'Levels' })).getByLabelText('Finish Cell')).toBeVisible()
 
     // Back to single-level hides it again.
-    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '1' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Objects' }))
     expect(screen.queryByLabelText('Finish Cell')).toBeNull()
@@ -135,8 +134,8 @@ describe('GameDefinitionEditor — steps', () => {
     // No Levels group at count 1.
     expect(screen.queryByRole('group', { name: 'Levels' })).toBeNull()
 
-    // Raising the count reveals the Advanced Levels group with the per-level toggles.
-    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    // Raising the count (on Layout) reveals the Advanced Levels group with the per-level toggles.
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '2' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
     const levels = within(screen.getByRole('group', { name: 'Levels' }))
@@ -232,7 +231,8 @@ describe('GameDefinitionEditor — commit', () => {
   it('flows the distributed multi-level controls and the Scene final-level override into the built config', async () => {
     const { onSubmit } = renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
 
-    // The count is on General and reveals the multi-level controls across tabs.
+    // The count is at the top of Layout and reveals the multi-level controls across tabs.
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '4' } })
 
     // The Finish Cell is in the Objects tab's Levels group.
@@ -298,8 +298,8 @@ describe('GameDefinitionEditor — commit', () => {
     expect(screen.queryByLabelText('Final Level Sky')).toBeNull()
     expect(screen.queryByLabelText('Final Level Perimeter')).toBeNull()
 
-    // Raise the count on General → a Final Level select appears in Sky and Walls.
-    await userEvent.click(screen.getByRole('tab', { name: 'General' }))
+    // Raise the count on Layout → a Final Level select appears in Sky and Walls.
+    await userEvent.click(screen.getByRole('tab', { name: 'Layout' }))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Number of Levels' }), { target: { value: '2' } })
     await userEvent.click(screen.getByRole('tab', { name: 'Scene' }))
     expect(within(screen.getByRole('group', { name: 'Sky' })).getByLabelText('Final Level Sky')).toBeVisible()

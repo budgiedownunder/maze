@@ -262,18 +262,6 @@ export function GameDefinitionEditor({
 
         {/* Single-field groups: the group heading is the field's label, so the
             lone input carries an aria-label for its accessible name. */}
-        <FieldGroup title="Number of Levels" id="number-of-levels">
-          <input
-            type="number"
-            className="input"
-            aria-label="Number of Levels"
-            value={form.levels.count}
-            min={1}
-            max={MAX_LEVEL_COUNT}
-            onChange={e => patchLevels({ count: e.target.value })}
-          />
-        </FieldGroup>
-
         <FieldGroup title="Time limit (seconds)" id="time-limit">
           <input
             type="number"
@@ -287,6 +275,19 @@ export function GameDefinitionEditor({
       </div>
 
       <div {...modalTabPanelProps(ID_PREFIX, 'layout', activeStep)}>
+        {/* Number of stacked levels — drives the multi-level layout controls
+            below (and the single-field group's heading is its label). */}
+        <FieldGroup title="Number of Levels" id="number-of-levels">
+          <input
+            type="number"
+            className="input"
+            aria-label="Number of Levels"
+            value={form.levels.count}
+            min={1}
+            max={MAX_LEVEL_COUNT}
+            onChange={e => patchLevels({ count: e.target.value })}
+          />
+        </FieldGroup>
         {/* The grid is the ground floor when the game stacks multiple levels. */}
         <FieldGroup title={isMultiLevel ? 'Ground Floor Grid' : 'Grid'} id="grid">
           <MazeGenerationFields value={form.generation} onChange={patchGeneration} />

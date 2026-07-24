@@ -245,14 +245,14 @@ test('the multi-level controls appear only when the level count is raised above 
   await dialog.getByRole('tab', { name: 'Objects' }).click()
   await expect(dialog.getByLabel('Finish Cell')).toBeHidden()
 
-  // Raise the count on General → Finish Cell appears at the bottom of Objects.
-  await dialog.getByRole('tab', { name: 'General' }).click()
+  // Raise the count (top of Layout) → Finish Cell appears at the bottom of Objects.
+  await dialog.getByRole('tab', { name: 'Layout' }).click()
   await dialog.getByRole('spinbutton', { name: 'Number of Levels' }).fill('3')
   await dialog.getByRole('tab', { name: 'Objects' }).click()
   await expect(dialog.getByLabel('Finish Cell')).toBeVisible()
 
   // Back to a single level hides it again.
-  await dialog.getByRole('tab', { name: 'General' }).click()
+  await dialog.getByRole('tab', { name: 'Layout' }).click()
   await dialog.getByRole('spinbutton', { name: 'Number of Levels' }).fill('1')
   await dialog.getByRole('tab', { name: 'Objects' }).click()
   await expect(dialog.getByLabel('Finish Cell')).toBeHidden()
