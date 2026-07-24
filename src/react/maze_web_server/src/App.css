@@ -1761,10 +1761,15 @@ textarea.input {
 }
 .play3d-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 .play3d-card-actions > button {
+  /* Grow to share the row, but shrink + wrap to a new line rather than spill past
+     the card edge as it narrows. `min-width: 0` lets a button shrink below its
+     content width so it stays inside the card even before it wraps. */
   flex: 1 1 auto;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;

@@ -34,8 +34,8 @@ import type { GameDefinitionRequest } from '../types/api'
 
 const STEPS = [
   { id: 'general', label: 'General' },
-  { id: 'scene', label: 'Scene' },
   { id: 'layout', label: 'Layout' },
+  { id: 'scene', label: 'Scene' },
   { id: 'objects', label: 'Objects' },
   { id: 'advanced', label: 'Advanced' },
 ] as const satisfies readonly WizardStep[]

@@ -40,7 +40,7 @@ const commitButton = () => screen.getByRole('button', { name: 'Finish' })
 describe('GameDefinitionEditor — steps', () => {
   it('renders the five tabs (General first) with the General fields; no Levels or Decor tab', () => {
     renderEditor()
-    for (const label of ['General', 'Scene', 'Layout', 'Objects', 'Advanced']) {
+    for (const label of ['General', 'Layout', 'Scene', 'Objects', 'Advanced']) {
       expect(screen.getByRole('tab', { name: label })).toBeInTheDocument()
     }
     // There is no Levels tab — the multi-level settings are distributed across

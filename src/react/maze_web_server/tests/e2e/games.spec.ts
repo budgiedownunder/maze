@@ -219,8 +219,7 @@ test('New game wizard steps through General → Layout and blocks an invalid siz
   await page.getByRole('button', { name: 'New game' }).click()
   const dialog = page.getByRole('dialog', { name: 'New Game' })
   await dialog.getByLabel('Name').fill('Invalid')
-  // General → Scene → Layout (Scene now precedes Layout).
-  await dialog.getByRole('button', { name: 'Next' }).click()
+  // General → Layout (Layout is the second step, right after General).
   await dialog.getByRole('button', { name: 'Next' }).click()
 
   await expect(dialog.getByLabel('Rows')).toBeVisible()
