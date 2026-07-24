@@ -109,3 +109,36 @@ test('featuring a game via Access surfaces it on Manage Features', async ({ page
   await confirm.getByRole('button', { name: 'Unfeature' }).click()
   await expect(page.locator('.game-list-item', { hasText: name })).toHaveCount(0)
 })
+
+test('editing a Featured game exposes its image control only when the admin owns it', async ({ page }) => {
+  await loginAsAdmin(page)
+
+  // Create + feature a game (owned by this admin).
+  await page.goto('/workshop/games')
+  await page.getByRole('button', { name: 'New game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  const name = `FeatImg ${Date.now()}`
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(wizard).toBeHidden()
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // Editing it from Manage Features shows the image control (owned) — and it works.
+  await page.goto('/workshop/features')
+  await page.getByRole('button', { name: `Edit ${name}` }).click()
+  const owned = page.getByRole('dialog', { name: 'Edit Game' }).locator('.game-image-editor')
+  await expect(owned.locator('.game-thumb-base')).toHaveAttribute('src', /workshop-game\.svg$/)
+  await owned.locator('input[type="file"]').setInputFiles('public/images/avatar-placeholder.png')
+  await expect(owned.locator('.game-thumb-base')).toHaveAttribute('src', /^blob:/)
+  await expect(owned.getByText('Image updated')).toBeVisible()
+  await page.getByRole('dialog', { name: 'Edit Game' }).getByRole('button', { name: /^(Close|Cancel)$/ }).click()
+
+  // The seeded "Daily Maze" is Featured but owned by someone else — image mutate
+  // is owner-only, so its editor offers no image control.
+  await page.getByRole('button', { name: 'Edit Daily Maze' }).click()
+  await expect(page.getByRole('dialog', { name: 'Edit Game' }).locator('.game-image-editor')).toHaveCount(0)
+})

@@ -86,7 +86,7 @@ export function WorkshopFeaturesPage() {
   const items = list.items
   const refresh = useCallback(() => setRefreshCount(c => c + 1), [])
 
-  const [editingDef, setEditingDef] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean } | null>(null)
+  const [editingDef, setEditingDef] = useState<{ id: string; form: DefinitionFormState; hasScores: boolean; imageUpdatedAt?: string | null; ownerId: string } | null>(null)
   const [editingCol, setEditingCol] = useState<{ collection: GameCollection; busy: boolean; error: string | null } | null>(null)
   const [unfeaturing, setUnfeaturing] = useState<{ item: FeaturedGameItem; busy: boolean; error: string | null } | null>(null)
   const [viewingBoard, setViewingBoard] = useState<GameDefinition | null>(null)
@@ -148,7 +148,7 @@ export function WorkshopFeaturesPage() {
       })
       // The play-fetch splices an effective seed into config, so hydrate the seed
       // from the record's own field (as Manage Games does).
-      setEditingDef({ id, form: { ...form, seed: def.seed }, hasScores: await hasScores(def) })
+      setEditingDef({ id, form: { ...form, seed: def.seed }, hasScores: await hasScores(def), imageUpdatedAt: def.imageUpdatedAt, ownerId: def.ownerId })
     } catch (ex: unknown) {
       setActionError((ex as { message?: string }).message ?? 'Failed to load game.')
     } finally {
@@ -245,6 +245,17 @@ export function WorkshopFeaturesPage() {
           hasScores={editingDef.hasScores}
           onReshuffle={() => reshuffleGameDefinition(token!, editingDef.id).then(d => d.seed)}
           onPreview={config => launchDefinitionPreview(config, true)}
+          // Image mutate is owner-only, so only offer the control on games this
+          // admin owns (an admin can edit a Featured game they don't own, but
+          // can't change its image).
+          image={editingDef.ownerId === profile.id ? {
+            id: editingDef.id,
+            imageUpdatedAt: editingDef.imageUpdatedAt,
+            onImageChange: marker => {
+              setEditingDef(e => (e ? { ...e, imageUpdatedAt: marker } : e))
+              refresh()
+            },
+          } : undefined}
         />
       )}
       {editingCol && (
@@ -255,6 +266,12 @@ export function WorkshopFeaturesPage() {
           initialDescription={editingCol.collection.description ?? ''}
           initialPlayMode={editingCol.collection.playMode}
           collectionId={editingCol.collection.id}
+          imageUpdatedAt={editingCol.collection.imageUpdatedAt}
+          // Owner-only image mutate (see the definition editor above).
+          onImageChange={editingCol.collection.ownerId === profile.id ? marker => {
+            setEditingCol(e => (e ? { ...e, collection: { ...e.collection, imageUpdatedAt: marker ?? undefined } } : e))
+            refresh()
+          } : undefined}
           isLoading={editingCol.busy}
           error={editingCol.error}
           onSubmit={(name, description, playMode, memberIds) => void handleSaveCollection(name, description, playMode, memberIds)}
