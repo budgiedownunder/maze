@@ -48,5 +48,24 @@ namespace Maze.Maui.App.Services
         /// <param name="subject">The board's subject (maze or challenge)</param>
         /// <returns>The number of score rows removed</returns>
         Task<long> ClearLeaderboardAsync(ScoreSubject subject);
+
+        /// <summary>
+        /// Reads the UTC dates a daily game has a non-empty leaderboard for (the
+        /// days someone has scored on that day's board), most recent first. A static
+        /// game — or an unplayed daily one — returns an empty list. Access-checked
+        /// like the board read.
+        /// </summary>
+        /// <param name="definitionId">The daily game's definition id</param>
+        /// <returns>The dates with a board, most recent first</returns>
+        Task<BoardDatesResponse> GetBoardDatesAsync(string definitionId);
+
+        /// <summary>
+        /// Given challenge board keys (e.g. a campaign's games as
+        /// <c>def:&lt;id&gt;</c>), returns the subset the caller has scored on — one
+        /// request for campaign progress instead of paging the whole history.
+        /// </summary>
+        /// <param name="challenges">The challenge board keys to check</param>
+        /// <returns>The subset the caller has completed</returns>
+        Task<CompletedChallengesResponse> GetCompletedChallengesAsync(IReadOnlyList<string> challenges);
     }
 }

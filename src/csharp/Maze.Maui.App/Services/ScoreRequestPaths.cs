@@ -82,5 +82,23 @@ namespace Maze.Maui.App.Services
             if (offset is not null) query.Add($"offset={offset.Value}");
             return query.Count > 0 ? $"scores/me?{string.Join("&", query)}" : "scores/me";
         }
+
+        /// <summary>
+        /// Assembles the relative <c>scores/board-dates</c> request path — the UTC
+        /// dates a daily game has a leaderboard for. The definition id is passed as
+        /// the snake_case <c>definition_id</c> query param the server expects.
+        /// </summary>
+        /// <param name="definitionId">The daily game's definition id</param>
+        /// <returns>The relative request path</returns>
+        public static string BuildBoardDatesPath(string definitionId)
+            => $"scores/board-dates?definition_id={Uri.EscapeDataString(definitionId)}";
+
+        /// <summary>
+        /// The relative <c>scores/me/completed</c> request path (POST) — given a set
+        /// of challenge board keys, the subset the caller has scored on. The keys
+        /// travel in the request body, so there is no query string.
+        /// </summary>
+        /// <returns>The relative request path</returns>
+        public static string BuildCompletedPath() => "scores/me/completed";
     }
 }

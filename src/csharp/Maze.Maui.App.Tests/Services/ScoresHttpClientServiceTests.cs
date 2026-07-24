@@ -186,5 +186,49 @@ namespace Maze.Maui.App.Tests.Services
             Assert.Equal("hard", config!.Difficulty);
             Assert.Equal(12345678ul, config.Seed);
         }
+
+        [Fact]
+        public void BuildBoardDatesPath_PassesDefinitionIdAsSnakeCaseParam()
+        {
+            // The board-dates endpoint uses the snake_case `definition_id` param.
+            Assert.Equal("scores/board-dates?definition_id=g1", ScoreRequestPaths.BuildBoardDatesPath("g1"));
+        }
+
+        [Fact]
+        public void BuildBoardDatesPath_EncodesDefinitionId()
+        {
+            Assert.Equal("scores/board-dates?definition_id=a%2Fb", ScoreRequestPaths.BuildBoardDatesPath("a/b"));
+        }
+
+        [Fact]
+        public void BuildCompletedPath_IsBarePostPath()
+        {
+            Assert.Equal("scores/me/completed", ScoreRequestPaths.BuildCompletedPath());
+        }
+
+        [Fact]
+        public void BoardDatesResponse_DeserializesDates()
+        {
+            const string json = """{ "dates": ["2026-07-10", "2026-07-05"] }""";
+
+            var result = JsonSerializer.Deserialize<BoardDatesResponse>(json)!;
+
+            Assert.Equal(2, result.Dates.Count);
+            Assert.Equal("2026-07-10", result.Dates[0]);
+        }
+
+        [Fact]
+        public void CompletedChallenges_RoundTripsRequestAndResponse()
+        {
+            // Request serialises the caller's challenge keys under `challenges`.
+            var request = new CompletedChallengesRequest { Challenges = new() { "def:a", "def:b" } };
+            string requestJson = JsonSerializer.Serialize(request);
+            Assert.Contains("\"challenges\":[\"def:a\",\"def:b\"]", requestJson);
+
+            // Response reports the completed subset under `completed`.
+            var response = JsonSerializer.Deserialize<CompletedChallengesResponse>("""{ "completed": ["def:a"] }""")!;
+            Assert.Single(response.Completed);
+            Assert.Equal("def:a", response.Completed[0]);
+        }
     }
 }

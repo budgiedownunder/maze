@@ -89,6 +89,7 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<IAvatarService, AvatarHttpClientService>();
             builder.Services.AddSingleton<IImagePickerService, ImagePickerService>();
             builder.Services.AddSingleton<IGameConfigService, GameConfigHttpClientService>();
+            builder.Services.AddSingleton<IGameLibraryService, GameLibraryHttpClientService>();
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
             builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
