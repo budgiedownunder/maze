@@ -87,6 +87,15 @@
         /// </summary>
         /// <returns>A task resolving to the chosen <see cref="PauseMenuResult"/> (<see cref="PauseMenuResult.Resume"/> if dismissed)</returns>
         public Task<PauseMenuResult> ShowPauseMenu();
+        /// <summary>
+        /// Displays the Arcade collection picker — a radio list of the collection's
+        /// accessible member games, defaulting to the first — so the user chooses
+        /// one to play.
+        /// </summary>
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in order</param>
+        /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.GameDefinition?> ShowArcadePickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions);
 
         /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) for a

@@ -14,13 +14,14 @@ namespace Maze.Maui.App.Services
         /// <summary>
         /// Plays a card: a game launches directly; a collection resolves its
         /// access-filtered members first (so a collection whose only member is
-        /// inaccessible guards instead of 404ing), then launches the sole member or
-        /// guards a multi-member / empty collection.
+        /// inaccessible guards instead of 404ing), then launches the sole member,
+        /// opens the Arcade free-choice picker for a multi-game Arcade collection, or
+        /// guards an empty / Campaign collection.
         /// </summary>
         /// <param name="card">The card to play</param>
         /// <param name="navigationService">The navigation service</param>
         /// <param name="gameLibrary">The game-library read service</param>
-        /// <param name="dialogService">The dialog service (launch guards)</param>
+        /// <param name="dialogService">The dialog service (picker + launch guards)</param>
         /// <returns>Task</returns>
         public static async Task PlayAsync(Play3dCardItem card, INavigationService navigationService, IGameLibraryService gameLibrary, IDialogService dialogService)
         {
@@ -33,17 +34,22 @@ namespace Maze.Maui.App.Services
             try
             {
                 GameCollectionDetailResponse detail = await gameLibrary.GetGameCollectionAsync(card.Id);
-                Play3dCollectionPlay play = Play3dCollectionLaunch.Resolve(detail.Definitions);
+                Play3dCollectionPlay play = Play3dCollectionLaunch.Resolve(detail.Definitions, detail.PlayMode);
                 switch (play.Kind)
                 {
                     case Play3dCollectionPlayKind.LaunchSingle:
                         await Play3dLauncher.LaunchDefinitionAsync(navigationService, play.DefinitionId!);
                         break;
-                    case Play3dCollectionPlayKind.NoneAccessible:
-                        await dialogService.ShowAlert("Unavailable", "This collection has no games you can play.", "OK");
+                    case Play3dCollectionPlayKind.Arcade:
+                        GameDefinition? chosen = await dialogService.ShowArcadePickerAsync(card.Name, detail.Definitions);
+                        if (chosen is not null)
+                            await Play3dLauncher.LaunchDefinitionAsync(navigationService, chosen.Id);
+                        break;
+                    case Play3dCollectionPlayKind.Campaign:
+                        await dialogService.ShowAlert("Coming soon", "Campaign collections aren't playable yet.", "OK");
                         break;
                     default:
-                        await dialogService.ShowAlert("Coming soon", "Playing multi-game collections isn't available yet.", "OK");
+                        await dialogService.ShowAlert("Unavailable", "This collection has no games you can play.", "OK");
                         break;
                 }
             }

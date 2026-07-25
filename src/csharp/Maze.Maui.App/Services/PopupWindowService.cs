@@ -73,6 +73,19 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
+        /// Displays the Arcade collection picker (radio list of member games) as a popup window.
+        /// </summary>
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in order</param>
+        /// <returns>The chosen game, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.GameDefinition?> ShowArcadePickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions)
+        {
+            var popup = new Views.ArcadePickerPopup(collectionName, definitions);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.GameDefinition?>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) as a popup window.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title</param>
