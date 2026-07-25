@@ -122,6 +122,9 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<Play3dGamePage>();
             builder.Services.AddTransient<Play3dHubPage>();
             builder.Services.AddTransient<Play3dFeaturedPage>();
+            builder.Services.AddTransient<Play3dMyGamesPage>();
+            builder.Services.AddTransient<Play3dSharedPage>();
+            builder.Services.AddTransient<Play3dCommunityPage>();
             builder.Services.AddTransient<AccountPage>();
 
 #if DEBUG

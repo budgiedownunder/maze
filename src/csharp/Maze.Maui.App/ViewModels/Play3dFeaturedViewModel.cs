@@ -22,6 +22,9 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <inheritdoc />
+        public override string SearchPlaceholder => "Filter featured…";
+
+        /// <inheritdoc />
         protected override async Task<Play3dCardPage> FetchPageAsync(int offset, int limit)
         {
             FeaturedGameItemsListResponse response = await GameLibrary.GetFeaturedGameItemsAsync(limit, offset);

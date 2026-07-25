@@ -46,6 +46,9 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(LeaderboardsPage), typeof(LeaderboardsPage));
             Routing.RegisterRoute(nameof(Play3dHubPage), typeof(Play3dHubPage));
             Routing.RegisterRoute(nameof(Play3dFeaturedPage), typeof(Play3dFeaturedPage));
+            Routing.RegisterRoute(nameof(Play3dMyGamesPage), typeof(Play3dMyGamesPage));
+            Routing.RegisterRoute(nameof(Play3dSharedPage), typeof(Play3dSharedPage));
+            Routing.RegisterRoute(nameof(Play3dCommunityPage), typeof(Play3dCommunityPage));
         }
 
         /// <summary>

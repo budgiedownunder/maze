@@ -12,18 +12,22 @@ namespace Maze.Maui.App.ViewModels
     public sealed record Play3dCardPage(IReadOnlyList<Play3dCardItem> Items, bool HasMore);
 
     /// <summary>
-    /// Reusable base for a Play 3D browse list — a name-ordered, paged
+    /// Reusable base for a single Play 3D browse list — a name-ordered, paged
     /// (<see cref="LoadMoreCommand"/>) card list with pull-to-refresh, per-id
-    /// thumbnail loading, and the shared Play / Leaderboard actions. Subclasses
-    /// supply one page fetch (<see cref="FetchPageAsync"/>); everything else —
-    /// paging, image cache, launch routing — is common. A game (or a single-member
-    /// collection) launches straight into the host page via <see cref="Play3dLauncher"/>;
-    /// a multi-member collection is guarded until the Arcade / Campaign pickers exist.
+    /// thumbnail loading, a search box, and the shared Play / Leaderboard actions.
+    /// Subclasses supply one page fetch (<see cref="FetchPageAsync"/>); everything
+    /// else — paging, image cache, search, launch routing — is common, so the
+    /// Featured list and each scope tab reuse it (mirroring the web client's single
+    /// list body). Search is <b>client-side</b> by default (filters the loaded pages
+    /// by name); a subclass whose scope is unbounded overrides <see cref="UsesServerSearch"/>
+    /// so the query goes to the server instead.
     /// </summary>
     public abstract partial class Play3dListViewModel : BaseViewModel
     {
         /// <summary>Page size for both the first page and each Load-more.</summary>
         protected const int PageSize = 20;
+
+        private const int SearchDebounceMs = 300;
 
         private readonly INavigationService _navigationService;
         private readonly IDialogService _dialogService;
@@ -32,11 +36,22 @@ namespace Maze.Maui.App.ViewModels
         // game with no image is fetched at most once.
         private readonly Dictionary<string, byte[]?> _imageCache = new();
 
+        private CancellationTokenSource? _searchCts;
+        private GameListSort? _sort;
+
         /// <summary>The game-library reads (list fetch, collection detail, images).</summary>
         protected IGameLibraryService GameLibrary { get; }
 
-        /// <summary>The cards currently loaded, appended in place across pages.</summary>
+        /// <summary>Every card loaded from the server, across all fetched pages.</summary>
         public ObservableCollection<Play3dCardItem> Rows { get; } = new();
+
+        /// <summary>
+        /// The cards the list actually shows: <see cref="Rows"/> filtered by
+        /// <see cref="FilterText"/> when this list searches client-side, or identical
+        /// to <see cref="Rows"/> when it searches server-side (the server already
+        /// filtered). The <c>CollectionView</c> binds to this.
+        /// </summary>
+        public ObservableCollection<Play3dCardItem> VisibleRows { get; } = new();
 
         /// <summary>Whether a further page exists beyond what is loaded.</summary>
         [ObservableProperty]
@@ -50,13 +65,17 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool isLoadingMore;
 
-        /// <summary>Empty/error text shown when the list has no rows.</summary>
+        /// <summary>Empty/error/no-match text shown when the list has no visible rows.</summary>
         [ObservableProperty]
         private string statusMessage = "";
 
         /// <summary>Whether <see cref="StatusMessage"/> should be shown.</summary>
         [ObservableProperty]
         private bool showStatusMessage;
+
+        /// <summary>The search box text (client filter or server query per <see cref="UsesServerSearch"/>).</summary>
+        [ObservableProperty]
+        private string filterText = "";
 
         /// <summary>Constructor</summary>
         /// <param name="gameLibrary">Injected game-library read service</param>
@@ -69,11 +88,34 @@ namespace Maze.Maui.App.ViewModels
             _dialogService = dialogService;
         }
 
+        /// <summary>The placeholder shown in this list's search box.</summary>
+        public virtual string SearchPlaceholder => "Filter…";
+
+        /// <summary>The message shown when the list loads empty; subclasses tailor it per scope.</summary>
+        protected virtual string EmptyMessage => "Nothing here yet.";
+
+        /// <summary>
+        /// True when the search text is sent to the server (an unbounded scope like
+        /// Community, where a match may not be in the loaded pages) rather than
+        /// filtering the already-loaded pages client-side.
+        /// </summary>
+        protected virtual bool UsesServerSearch => false;
+
+        /// <summary>The query forwarded to the server — server-search lists only, else <c>null</c>.</summary>
+        protected string? ServerQuery => UsesServerSearch && !string.IsNullOrWhiteSpace(FilterText) ? FilterText.Trim() : null;
+
+        /// <summary>The sort forwarded to the server — server-search lists only, else <c>null</c>.</summary>
+        protected GameListSort? SortOrder => _sort;
+
         /// <summary>Fetches one page of cards at the given offset.</summary>
         /// <param name="offset">Row offset to start at</param>
         /// <param name="limit">Page size</param>
         /// <returns>The page of cards plus whether more remain</returns>
         protected abstract Task<Play3dCardPage> FetchPageAsync(int offset, int limit);
+
+        /// <summary>Stores the server sort for the next load (does not itself reload).</summary>
+        /// <param name="sort">The sort, or <c>null</c> for the server default</param>
+        public void SetSort(GameListSort? sort) => _sort = sort;
 
         /// <summary>
         /// Loads the first page from scratch — clears the list, fetches offset 0,
@@ -88,11 +130,10 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 Rows.Clear();
+                VisibleRows.Clear();
                 HasMore = false;
                 Play3dCardPage page = await FetchPageAsync(0, PageSize);
                 AppendCards(page);
-                if (Rows.Count == 0)
-                    SetStatus("Nothing here yet.");
             }
             catch (Exception ex)
             {
@@ -141,58 +182,68 @@ namespace Maze.Maui.App.ViewModels
         }
 
         [RelayCommand]
-        private async Task PlayAsync(Play3dCardItem? card)
-        {
-            if (card is null)
-                return;
-
-            if (!card.IsCollection)
-            {
-                await Play3dLauncher.LaunchDefinitionAsync(_navigationService, card.Id);
-                return;
-            }
-
-            // Collection: resolve the access-filtered members before launching, so a
-            // collection whose only member is inaccessible guards instead of 404ing.
-            try
-            {
-                GameCollectionDetailResponse detail = await GameLibrary.GetGameCollectionAsync(card.Id);
-                Play3dCollectionPlay play = Play3dCollectionLaunch.Resolve(detail.Definitions);
-                switch (play.Kind)
-                {
-                    case Play3dCollectionPlayKind.LaunchSingle:
-                        await Play3dLauncher.LaunchDefinitionAsync(_navigationService, play.DefinitionId!);
-                        break;
-                    case Play3dCollectionPlayKind.NoneAccessible:
-                        await _dialogService.ShowAlert("Unavailable", "This collection has no games you can play.", "OK");
-                        break;
-                    default:
-                        await _dialogService.ShowAlert("Coming soon", "Playing multi-game collections isn't available yet.", "OK");
-                        break;
-                }
-            }
-            catch (Exception ex)
-            {
-                await _dialogService.ShowAlert("Error", ex.Message, "OK");
-            }
-        }
+        private Task PlayAsync(Play3dCardItem? card)
+            => card is null ? Task.CompletedTask : Play3dCardActions.PlayAsync(card, _navigationService, GameLibrary, _dialogService);
 
         [RelayCommand]
-        private async Task ShowLeaderboardAsync(Play3dCardItem? card)
-        {
-            if (card is null || card.IsCollection)
-                return;
+        private Task ShowLeaderboardAsync(Play3dCardItem? card)
+            => card is null ? Task.CompletedTask : Play3dCardActions.ShowLeaderboardAsync(card, _navigationService);
 
-            // Opens the Leaderboards page; preselecting this game's board is wired
-            // when the board selector learns stored-game subjects.
-            await _navigationService.GoToAsync("LeaderboardsPage");
+        partial void OnFilterTextChanged(string value)
+        {
+            if (UsesServerSearch)
+                DebounceServerReload();
+            else
+                ApplyClientFilter();
         }
+
+        // Coalesce rapid keystrokes into one server reload, mirroring the web client.
+        private void DebounceServerReload()
+        {
+            _searchCts?.Cancel();
+            var cts = new CancellationTokenSource();
+            _searchCts = cts;
+            _ = DebounceAsync(cts.Token);
+        }
+
+        private async Task DebounceAsync(CancellationToken token)
+        {
+            try
+            {
+                await Task.Delay(SearchDebounceMs, token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+            await LoadFirstPageAsync();
+        }
+
+        // Rebuild the shown rows from the loaded pages (client-search lists only).
+        private void ApplyClientFilter()
+        {
+            VisibleRows.Clear();
+            foreach (Play3dCardItem card in Rows)
+                if (Matches(card))
+                    VisibleRows.Add(card);
+            UpdateStatus();
+        }
+
+        private bool Matches(Play3dCardItem card)
+            => UsesServerSearch
+               || string.IsNullOrWhiteSpace(FilterText)
+               || card.Name.Contains(FilterText.Trim(), StringComparison.CurrentCultureIgnoreCase);
 
         private void AppendCards(Play3dCardPage page)
         {
             foreach (Play3dCardItem card in page.Items)
+            {
                 Rows.Add(card);
+                if (Matches(card))
+                    VisibleRows.Add(card);
+            }
             HasMore = page.HasMore;
+            UpdateStatus();
             _ = LoadImagesAsync(page.Items);
         }
 
@@ -213,6 +264,16 @@ namespace Maze.Maui.App.ViewModels
                 if (bytes is not null)
                     card.ImageBytes = bytes;
             }
+        }
+
+        // Cleared when something is shown; "No matches." when a search (client or
+        // server) yields nothing; otherwise the scope's empty-state message.
+        private void UpdateStatus()
+        {
+            if (VisibleRows.Count > 0)
+                SetStatus("");
+            else
+                SetStatus(string.IsNullOrWhiteSpace(FilterText) ? EmptyMessage : "No matches.");
         }
 
         private void SetStatus(string message)

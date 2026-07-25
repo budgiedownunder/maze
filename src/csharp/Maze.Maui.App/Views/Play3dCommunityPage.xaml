@@ -3,10 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
              xmlns:controls="clr-namespace:Maze.Maui.App"
-             x:DataType="viewmodel:Play3dFeaturedViewModel"
-             x:Class="Maze.Maui.App.Views.Play3dFeaturedPage"
+             x:DataType="viewmodel:Play3dScopeBrowserViewModel"
+             x:Class="Maze.Maui.App.Views.Play3dCommunityPage"
              Title="{Binding Title}">
-    <Grid Padding="10">
-        <controls:Play3dListView />
-    </Grid>
+    <controls:Play3dScopeBrowserView />
 </ContentPage>

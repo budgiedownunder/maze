@@ -23,11 +23,21 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Opens the Featured sub-page.</summary>
         /// <returns>Task</returns>
         [RelayCommand]
-        private async Task GoToFeaturedAsync()
-        {
-            // String route (not nameof) — the test project file-links this view
-            // model but not the Page types, mirroring HomeViewModel.
-            await _navigationService.GoToAsync("Play3dFeaturedPage");
-        }
+        private Task GoToFeatured() => _navigationService.GoToAsync("Play3dFeaturedPage");
+
+        /// <summary>Opens the My Games sub-page.</summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        private Task GoToMyGames() => _navigationService.GoToAsync("Play3dMyGamesPage");
+
+        /// <summary>Opens the Shared with me sub-page.</summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        private Task GoToShared() => _navigationService.GoToAsync("Play3dSharedPage");
+
+        /// <summary>Opens the Community sub-page.</summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        private Task GoToCommunity() => _navigationService.GoToAsync("Play3dCommunityPage");
     }
 }

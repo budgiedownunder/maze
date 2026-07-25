@@ -10,7 +10,6 @@
         <VerticalStackLayout Padding="20"
                              Spacing="16">
 
-            <!-- Featured: the live sub-page. -->
             <Border Padding="12"
                     StrokeThickness="1"
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
@@ -20,75 +19,65 @@
                     <TapGestureRecognizer Command="{Binding GoToFeaturedCommand}"/>
                 </Border.GestureRecognizers>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
-                    <Image Grid.Column="0"
-                           Source="workshop_features.png"
-                           WidthRequest="72"
-                           HeightRequest="72"
-                           Aspect="AspectFit"/>
+                    <Image Grid.Column="0" Source="workshop_features.png" WidthRequest="72" HeightRequest="72" Aspect="AspectFit"/>
                     <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                        <Label Text="Featured"
-                               FontSize="22"
+                        <Label Text="Featured" FontSize="22"
                                TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
                         <Label Text="Games and collections featured for everyone" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>
 
-            <!-- My Games / Shared with me / Community: their sub-pages ship next;
-                 shown dimmed and non-interactive until then. -->
             <Border Padding="12"
-                    Opacity="0.5"
                     StrokeThickness="1"
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                     StrokeShape="RoundRectangle 8"
                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding GoToMyGamesCommand}"/>
+                </Border.GestureRecognizers>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
-                    <Image Grid.Column="0"
-                           Source="workshop_my_games.png"
-                           WidthRequest="72"
-                           HeightRequest="72"
-                           Aspect="AspectFit"/>
+                    <Image Grid.Column="0" Source="workshop_my_games.png" WidthRequest="72" HeightRequest="72" Aspect="AspectFit"/>
                     <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                        <Label Text="My Games" FontSize="22" />
-                        <Label Text="Coming soon" FontSize="14"/>
+                        <Label Text="My Games" FontSize="22"
+                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                        <Label Text="Your own 3D games and collections" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>
 
             <Border Padding="12"
-                    Opacity="0.5"
                     StrokeThickness="1"
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                     StrokeShape="RoundRectangle 8"
                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding GoToSharedCommand}"/>
+                </Border.GestureRecognizers>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
-                    <Image Grid.Column="0"
-                           Source="workshop_shared.png"
-                           WidthRequest="72"
-                           HeightRequest="72"
-                           Aspect="AspectFit"/>
+                    <Image Grid.Column="0" Source="workshop_shared.png" WidthRequest="72" HeightRequest="72" Aspect="AspectFit"/>
                     <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                        <Label Text="Shared with me" FontSize="22" />
-                        <Label Text="Coming soon" FontSize="14"/>
+                        <Label Text="Shared with me" FontSize="22"
+                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                        <Label Text="Games and collections others have shared with you" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>
 
             <Border Padding="12"
-                    Opacity="0.5"
                     StrokeThickness="1"
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                     StrokeShape="RoundRectangle 8"
                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding GoToCommunityCommand}"/>
+                </Border.GestureRecognizers>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
-                    <Image Grid.Column="0"
-                           Source="workshop_community.png"
-                           WidthRequest="72"
-                           HeightRequest="72"
-                           Aspect="AspectFit"/>
+                    <Image Grid.Column="0" Source="workshop_community.png" WidthRequest="72" HeightRequest="72" Aspect="AspectFit"/>
                     <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                        <Label Text="Community" FontSize="22" />
-                        <Label Text="Coming soon" FontSize="14"/>
+                        <Label Text="Community" FontSize="22"
+                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                        <Label Text="Public games and collections from everyone" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:model="clr-namespace:Maze.Maui.App.Models"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
+             x:Name="ListRoot"
+             x:DataType="viewmodel:Play3dListViewModel"
+             x:Class="Maze.Maui.App.Play3dListView">
+
+    <ContentView.Resources>
+        <!-- The browse card. Its Play / Leaderboard actions target this list's view
+             model (via the root), so every list surface reuses one card template. -->
+        <DataTemplate x:Key="CardTemplate" x:DataType="model:Play3dCardItem">
+            <Border Margin="0,0,0,8"
+                    Padding="12"
+                    StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    StrokeShape="RoundRectangle 8"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                    <controls:GameImageView Grid.Column="0"
+                                            Bytes="{Binding ImageBytes}"
+                                            PlaceholderFile="{Binding PlaceholderImage}"
+                                            Size="64"
+                                            VerticalOptions="Center" />
+                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                        <Label Text="{Binding Name}"
+                               FontSize="18"
+                               FontAttributes="Bold"
+                               LineBreakMode="TailTruncation" />
+                        <Label Text="{Binding Description}"
+                               FontSize="13"
+                               MaxLines="2"
+                               LineBreakMode="TailTruncation" />
+                    </VerticalStackLayout>
+                    <VerticalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                        <Border StrokeThickness="0"
+                                StrokeShape="RoundRectangle 6"
+                                BackgroundColor="{StaticResource PlayButton}"
+                                Padding="12,0"
+                                HeightRequest="38"
+                                WidthRequest="150"
+                                HorizontalOptions="End">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding BindingContext.PlayCommand, Source={x:Reference ListRoot}}"
+                                                      CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+                            <HorizontalStackLayout Spacing="6" HorizontalOptions="Center" VerticalOptions="Center">
+                                <Image Source="icon_play_3d.png" WidthRequest="18" HeightRequest="18" VerticalOptions="Center" />
+                                <Label Text="Play" TextColor="White" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                        </Border>
+                        <Border StrokeThickness="1"
+                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                StrokeShape="RoundRectangle 6"
+                                Padding="12,0"
+                                HeightRequest="38"
+                                WidthRequest="150"
+                                HorizontalOptions="End"
+                                IsVisible="{Binding ShowLeaderboard}">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding BindingContext.ShowLeaderboardCommand, Source={x:Reference ListRoot}}"
+                                                      CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+                            <HorizontalStackLayout Spacing="6" HorizontalOptions="Center" VerticalOptions="Center">
+                                <Image Source="icon_leaderboard.png" WidthRequest="18" HeightRequest="18" VerticalOptions="Center" />
+                                <Label Text="Leaderboard" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                        </Border>
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </ContentView.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+        <Entry Grid.Row="0"
+               Placeholder="{Binding SearchPlaceholder}"
+               Text="{Binding FilterText}" />
+
+        <Grid Grid.Row="1">
+            <RefreshView Command="{Binding RefreshCommand}" IsRefreshing="{Binding IsRefreshing}">
+                <CollectionView ItemsSource="{Binding VisibleRows}"
+                                SelectionMode="None"
+                                ItemTemplate="{StaticResource CardTemplate}" />
+            </RefreshView>
+
+            <!-- Empty/no-match/error status overlaid on the list area rather than via
+                 CollectionView.EmptyView — the EmptyView doesn't inherit the
+                 BindingContext on Android, so its bindings silently fail. -->
+            <Label Text="{Binding StatusMessage}"
+                   IsVisible="{Binding ShowStatusMessage}"
+                   HorizontalOptions="Center" VerticalOptions="Center" />
+
+            <ActivityIndicator IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}"
+                               HorizontalOptions="Center" VerticalOptions="Center" />
+        </Grid>
+
+        <Button Grid.Row="2"
+                x:Name="LoadMoreButton"
+                Text="Load more"
+                Command="{Binding LoadMoreCommand}"
+                IsVisible="{Binding HasMore}"
+                HorizontalOptions="Start" />
+    </Grid>
+</ContentView>
