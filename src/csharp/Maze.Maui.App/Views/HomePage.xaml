@@ -16,7 +16,7 @@
                     StrokeShape="RoundRectangle 8"
                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
                 <Border.GestureRecognizers>
-                    <TapGestureRecognizer Command="{Binding PlayRandom3dCommand}"/>
+                    <TapGestureRecognizer Command="{Binding GoTo3dGamesCommand}"/>
                 </Border.GestureRecognizers>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
                     <Grid Grid.Column="0" WidthRequest="120" HeightRequest="120">
@@ -25,10 +25,10 @@
                                Margin="16"/>
                     </Grid>
                     <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
-                        <Label Text="Play 3D"
+                        <Label Text="3D Games"
                                FontSize="24"
                                TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
-                        <Label Text="Play single-level and multi-level 3D games in easy, tricky or hard mode" FontSize="14"/>
+                        <Label Text="Browse and play 3D games" FontSize="14"/>
                     </VerticalStackLayout>
                 </Grid>
             </Border>

@@ -1,7 +1,6 @@
 using CommunityToolkit.Maui.Extensions;
 using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Messages;
-using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
@@ -45,6 +44,8 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(AccountPage), typeof(AccountPage));
             Routing.RegisterRoute(nameof(MazesPage), typeof(MazesPage));
             Routing.RegisterRoute(nameof(LeaderboardsPage), typeof(LeaderboardsPage));
+            Routing.RegisterRoute(nameof(Play3dHubPage), typeof(Play3dHubPage));
+            Routing.RegisterRoute(nameof(Play3dFeaturedPage), typeof(Play3dFeaturedPage));
         }
 
         /// <summary>
@@ -109,22 +110,14 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
-        /// Launches a 3D game (Bevy via WebView) — same entry point as the
-        /// Play 3D tile on the Home page. Prompts the user for a difficulty,
-        /// then navigates to Play3dGamePage with it. Cancelling the picker
-        /// leaves the user where they were.
+        /// Opens the 3D Games browser hub — the same entry point as the 3D Games
+        /// tile on the Home page. The hub's own tiles reach the individual scopes
+        /// (Featured, …); the flyout has no sub-menus, so it lists only the hub.
         /// </summary>
-        private async void OnPlay3dMenuItemClicked(object sender, EventArgs e)
+        private async void OnGames3dMenuItemClicked(object sender, EventArgs e)
         {
             FlyoutIsPresented = false;
-
-            var difficulty = await _dialogService.ShowPlay3dDifficultyAsync();
-            if (difficulty is null) return;
-
-            await GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
-            {
-                { "difficulty", difficulty.Value.ToQueryValue() },
-            });
+            await GoToAsync(nameof(Play3dHubPage));
         }
 
         /// <summary>

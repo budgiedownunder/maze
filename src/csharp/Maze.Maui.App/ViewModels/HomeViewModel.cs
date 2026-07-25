@@ -46,6 +46,18 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <summary>
+        /// Opens the 3D Games browser hub (Featured / My Games / Shared / Community).
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        async Task GoTo3dGamesAsync()
+        {
+            // String route (not nameof) — the test project file-links this view
+            // model but not the Page types, so the symbols aren't in scope there.
+            await _navigationService.GoToAsync("Play3dHubPage");
+        }
+
+        /// <summary>
         /// Navigates to the maze list page.
         /// </summary>
         /// <returns>Task</returns>

@@ -77,7 +77,6 @@
              Link="LinkedSource\Services\ScoreRequestPaths.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IScoresService.cs"
              Link="LinkedSource\Services\IScoresService.cs" />
-    <!-- Read-side game library (E1): DTOs + pure request-path/vocabulary helpers. -->
     <Compile Include="..\Maze.Maui.App\Models\GameVocabulary.cs"
              Link="LinkedSource\Models\GameVocabulary.cs" />
     <Compile Include="..\Maze.Maui.App\Models\GameLibraryVocabulary.cs"
@@ -110,6 +109,10 @@
              Link="LinkedSource\Services\GameLibraryRequestPaths.cs" />
     <Compile Include="..\Maze.Maui.App\Services\Play3dGameHostUrl.cs"
              Link="LinkedSource\Services\Play3dGameHostUrl.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\Play3dCollectionLaunch.cs"
+             Link="LinkedSource\Services\Play3dCollectionLaunch.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\Play3dCardItem.cs"
+             Link="LinkedSource\Models\Play3dCardItem.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IAvatarService.cs"
              Link="LinkedSource\Services\IAvatarService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IImagePickerService.cs"

@@ -5,7 +5,7 @@ namespace Maze.Maui.App.Services
     /// Play 3D page's launch branches (stored maze, curated difficulty, stored
     /// game definition, or a bare authenticated launch). Kept free of HTTP /
     /// WebView dependencies so the base-URL derivation and query-string assembly
-    /// are unit-testable in isolation (<see cref="Play3dGamePage"/> delegates to
+    /// are unit-testable in isolation (<see cref="Views.Play3dGamePage"/> delegates to
     /// these). The host page lives alongside the API — its base is the API root
     /// with the trailing <c>/api/…</c> segment stripped and <c>/game/</c> appended.
     /// The bearer token rides as <c>&amp;t=</c> and is passed through verbatim

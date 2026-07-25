@@ -106,6 +106,8 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<MazeGameViewModel>();
             builder.Services.AddSingleton<AccountViewModel>();
             builder.Services.AddTransient<EmailAddressesViewModel>();
+            builder.Services.AddTransient<Play3dHubViewModel>();
+            builder.Services.AddTransient<Play3dFeaturedViewModel>();
 
             builder.Services.AddTransient<LoginPage>();
             builder.Services.AddTransient<SignUpPage>();
@@ -118,6 +120,8 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<MazePage>();
             builder.Services.AddTransient<MazeGamePage>();
             builder.Services.AddTransient<Play3dGamePage>();
+            builder.Services.AddTransient<Play3dHubPage>();
+            builder.Services.AddTransient<Play3dFeaturedPage>();
             builder.Services.AddTransient<AccountPage>();
 
 #if DEBUG

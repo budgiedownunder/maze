@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:model="clr-namespace:Maze.Maui.App.Models"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
+             x:Name="FeaturedRoot"
+             x:DataType="viewmodel:Play3dFeaturedViewModel"
+             x:Class="Maze.Maui.App.Views.Play3dFeaturedPage"
+             Title="{Binding Title}">
+
+    <Grid RowDefinitions="*,Auto" Padding="10" RowSpacing="8">
+
+        <Grid Grid.Row="0">
+            <RefreshView Command="{Binding RefreshCommand}"
+                         IsRefreshing="{Binding IsRefreshing}">
+                <CollectionView ItemsSource="{Binding Rows}"
+                                SelectionMode="None">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="model:Play3dCardItem">
+                            <Border Margin="0,0,0,8"
+                                    Padding="12"
+                                    StrokeThickness="1"
+                                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                    StrokeShape="RoundRectangle 8"
+                                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                    <controls:GameImageView Grid.Column="0"
+                                                            Bytes="{Binding ImageBytes}"
+                                                            PlaceholderFile="{Binding PlaceholderImage}"
+                                                            Size="64"
+                                                            VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                        <Label Text="{Binding Name}"
+                                               FontSize="18"
+                                               FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation" />
+                                        <Label Text="{Binding Description}"
+                                               FontSize="13"
+                                               MaxLines="2"
+                                               LineBreakMode="TailTruncation" />
+                                    </VerticalStackLayout>
+                                    <!-- Actions as tappable Borders (not Buttons) so the icon size is
+                                         explicit — a Button renders ImageSource at its native pixel size,
+                                         which made the 96px Play icon inflate that button. Fixed Height +
+                                         Width keep every action the same size (so a collection's lone Play
+                                         matches a game's Play/Leaderboard) and stop them growing with the
+                                         row; the stack is centred beside the thumbnail. -->
+                                    <VerticalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                                        <Border StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 6"
+                                                BackgroundColor="{StaticResource PlayButton}"
+                                                Padding="12,0"
+                                                HeightRequest="38"
+                                                WidthRequest="150"
+                                                HorizontalOptions="End">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Command="{Binding BindingContext.PlayCommand, Source={x:Reference FeaturedRoot}}"
+                                                                      CommandParameter="{Binding .}" />
+                                            </Border.GestureRecognizers>
+                                            <HorizontalStackLayout Spacing="6" HorizontalOptions="Center" VerticalOptions="Center">
+                                                <Image Source="icon_play_3d.png" WidthRequest="18" HeightRequest="18" VerticalOptions="Center" />
+                                                <Label Text="Play" TextColor="White" VerticalOptions="Center" />
+                                            </HorizontalStackLayout>
+                                        </Border>
+                                        <Border StrokeThickness="1"
+                                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                                StrokeShape="RoundRectangle 6"
+                                                Padding="12,0"
+                                                HeightRequest="38"
+                                                WidthRequest="150"
+                                                HorizontalOptions="End"
+                                                IsVisible="{Binding ShowLeaderboard}">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Command="{Binding BindingContext.ShowLeaderboardCommand, Source={x:Reference FeaturedRoot}}"
+                                                                      CommandParameter="{Binding .}" />
+                                            </Border.GestureRecognizers>
+                                            <HorizontalStackLayout Spacing="6" HorizontalOptions="Center" VerticalOptions="Center">
+                                                <Image Source="icon_leaderboard.png" WidthRequest="18" HeightRequest="18" VerticalOptions="Center" />
+                                                <Label Text="Leaderboard" VerticalOptions="Center" />
+                                            </HorizontalStackLayout>
+                                        </Border>
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </RefreshView>
+
+            <!-- Empty/error status overlaid on the list area rather than via
+                 CollectionView.EmptyView — the EmptyView doesn't inherit the
+                 page BindingContext on Android, so its bindings silently fail. -->
+            <Label Text="{Binding StatusMessage}"
+                   IsVisible="{Binding ShowStatusMessage}"
+                   HorizontalOptions="Center" VerticalOptions="Center" />
+
+            <ActivityIndicator IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}"
+                               HorizontalOptions="Center" VerticalOptions="Center" />
+        </Grid>
+
+        <Button Grid.Row="1"
+                Text="Load more"
+                Command="{Binding LoadMoreCommand}"
+                IsVisible="{Binding HasMore}"
+                HorizontalOptions="Start" />
+
+    </Grid>
+</ContentPage>

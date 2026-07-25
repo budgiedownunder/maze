@@ -54,6 +54,18 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public async Task GoTo3dGamesCommand_NavigatesToHub()
+        {
+            var (vm, nav, _) = BuildVm();
+
+            await vm.GoTo3dGamesCommand.ExecuteAsync(null);
+
+            nav.Verify(
+                n => n.GoToAsync("Play3dHubPage", It.IsAny<IDictionary<string, object>?>()),
+                Times.Once);
+        }
+
+        [Fact]
         public async Task GoToMazesCommand_NavigatesToMazesPage()
         {
             var (vm, nav, _) = BuildVm();
