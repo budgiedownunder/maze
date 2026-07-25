@@ -87,11 +87,6 @@
         /// </summary>
         /// <returns>A task resolving to the chosen <see cref="PauseMenuResult"/> (<see cref="PauseMenuResult.Resume"/> if dismissed)</returns>
         public Task<PauseMenuResult> ShowPauseMenu();
-        /// <summary>
-        /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard).
-        /// </summary>
-        /// <returns>A task containing the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>
-        public Task<Models.Difficulty?> ShowPlay3dDifficultyAsync();
 
         /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) for a

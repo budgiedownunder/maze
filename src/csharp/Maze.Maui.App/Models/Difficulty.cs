@@ -1,10 +1,10 @@
 namespace Maze.Maui.App.Models
 {
     /// <summary>
-    /// Play 3D difficulty level chosen via <see cref="Views.Play3dDifficultyPopup"/>.
-    /// The lowercase token (see <see cref="DifficultyExtensions.ToQueryValue"/>)
-    /// is what the <c>/game/?difficulty=…</c> query expects; the server maps it
-    /// to a maze-size / timer / seed preset.
+    /// Play 3D difficulty level. The lowercase token (see
+    /// <see cref="DifficultyExtensions.ToQueryValue"/>) is what the
+    /// <c>/game/?difficulty=…</c> query expects; the server maps it to a
+    /// maze-size / timer / seed preset.
     /// </summary>
     public enum Difficulty { Easy, Tricky, Hard }
 

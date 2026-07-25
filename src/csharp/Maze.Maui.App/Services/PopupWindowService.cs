@@ -73,17 +73,6 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
-        /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard) as a popup window
-        /// </summary>
-        /// <returns>A task that contains the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>
-        public async Task<Models.Difficulty?> ShowPlay3dDifficultyAsync()
-        {
-            var popup = new Views.Play3dDifficultyPopup();
-            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.Difficulty?>(popup);
-            return result.Result;
-        }
-
-        /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) as a popup window.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title</param>
