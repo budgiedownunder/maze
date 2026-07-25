@@ -96,6 +96,15 @@
         /// <param name="definitions">The accessible member games, in order</param>
         /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
         public Task<Models.GameDefinition?> ShowArcadePickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions);
+        /// <summary>
+        /// Displays the Campaign collection picker — the ordered member games with
+        /// per-level completed / current / locked state (resolved from the caller's
+        /// scores) — so the user chooses a playable level to launch.
+        /// </summary>
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in campaign order</param>
+        /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.GameDefinition?> ShowCampaignPickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions);
 
         /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) for a

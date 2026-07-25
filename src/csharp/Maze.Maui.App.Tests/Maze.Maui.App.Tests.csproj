@@ -113,6 +113,8 @@
              Link="LinkedSource\Services\Play3dCollectionLaunch.cs" />
     <Compile Include="..\Maze.Maui.App\Models\Play3dCardItem.cs"
              Link="LinkedSource\Models\Play3dCardItem.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\CampaignLevel.cs"
+             Link="LinkedSource\Models\CampaignLevel.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IAvatarService.cs"
              Link="LinkedSource\Services\IAvatarService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IImagePickerService.cs"

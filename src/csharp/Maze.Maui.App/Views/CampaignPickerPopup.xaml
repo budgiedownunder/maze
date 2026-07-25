@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               xmlns:model="clr-namespace:Maze.Maui.App.Models"
+               x:Class="Maze.Maui.App.Views.CampaignPickerPopup"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <Border Padding="20"
+            HorizontalOptions="Center"
+            VerticalOptions="Center"
+            MinimumWidthRequest="340"
+            MaximumWidthRequest="480"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12"
+              MaximumHeightRequest="480">
+
+            <Label Grid.Row="0"
+                   x:Name="TitleLabel"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center" />
+
+            <Label Grid.Row="1"
+                   Text="Play the levels in order"
+                   FontSize="13"
+                   HorizontalOptions="Center" />
+
+            <!-- Ordered levels: number · radio (dot) · name/description · state. The
+                 whole card is tappable (input-transparent radio), locked levels are
+                 dimmed + non-selectable, and the state text is coloured by state. -->
+            <ScrollView Grid.Row="2">
+                <VerticalStackLayout x:Name="GamesList" Spacing="8" RadioButtonGroup.GroupName="campaignLevel">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="model:CampaignLevel">
+                            <Border StrokeShape="RoundRectangle 8"
+                                    StrokeThickness="1"
+                                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                    Padding="10,8">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnCardTapped" />
+                                </Border.GestureRecognizers>
+                                <Border.Triggers>
+                                    <DataTrigger TargetType="Border" Binding="{Binding IsChecked, Source={x:Reference Radio}}" Value="True">
+                                        <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}" />
+                                    </DataTrigger>
+                                    <DataTrigger TargetType="Border" Binding="{Binding IsLocked}" Value="True">
+                                        <Setter Property="Opacity" Value="0.55" />
+                                    </DataTrigger>
+                                </Border.Triggers>
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+                                    <Label Grid.Column="0"
+                                           Text="{Binding Number}"
+                                           FontAttributes="Bold"
+                                           FontSize="15"
+                                           WidthRequest="22"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalOptions="Center" />
+                                    <RadioButton Grid.Column="1"
+                                                 x:Name="Radio"
+                                                 Value="{Binding Definition}"
+                                                 InputTransparent="True"
+                                                 IsEnabled="{Binding IsSelectable}"
+                                                 VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="2" Spacing="2" VerticalOptions="Center">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light=Black, Dark=White}" />
+                                        <Label Text="{Binding Description}" FontSize="12"
+                                               MaxLines="2" LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="3"
+                                           Text="{Binding StatusText}"
+                                           FontAttributes="Bold"
+                                           FontSize="12"
+                                           VerticalOptions="Center">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding State}" Value="Completed">
+                                                <Setter Property="TextColor" Value="{AppThemeBinding Light=#15803D, Dark=#4ADE80}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Label" Binding="{Binding State}" Value="Current">
+                                                <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                            </DataTrigger>
+                                            <DataTrigger TargetType="Label" Binding="{Binding State}" Value="Locked">
+                                                <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray600}}" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0"
+                        Text="Cancel"
+                        Clicked="OnCancelClicked"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
+                <Button Grid.Column="1"
+                        Text="Play"
+                        Clicked="OnPlayClicked"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="{StaticResource PlayButton}"
+                        TextColor="White" />
+            </Grid>
+        </Grid>
+    </Border>
+</toolkit:Popup>

@@ -14,9 +14,9 @@ namespace Maze.Maui.App.Services
         /// <summary>
         /// Plays a card: a game launches directly; a collection resolves its
         /// access-filtered members first (so a collection whose only member is
-        /// inaccessible guards instead of 404ing), then launches the sole member,
-        /// opens the Arcade free-choice picker for a multi-game Arcade collection, or
-        /// guards an empty / Campaign collection.
+        /// inaccessible guards instead of 404ing), then launches the sole member or
+        /// opens the Arcade free-choice picker / Campaign progression for a multi-game
+        /// collection (guarding an empty one).
         /// </summary>
         /// <param name="card">The card to play</param>
         /// <param name="navigationService">The navigation service</param>
@@ -46,7 +46,9 @@ namespace Maze.Maui.App.Services
                             await Play3dLauncher.LaunchDefinitionAsync(navigationService, chosen.Id);
                         break;
                     case Play3dCollectionPlayKind.Campaign:
-                        await dialogService.ShowAlert("Coming soon", "Campaign collections aren't playable yet.", "OK");
+                        GameDefinition? level = await dialogService.ShowCampaignPickerAsync(card.Name, detail.Definitions);
+                        if (level is not null)
+                            await Play3dLauncher.LaunchDefinitionAsync(navigationService, level.Id);
                         break;
                     default:
                         await dialogService.ShowAlert("Unavailable", "This collection has no games you can play.", "OK");
