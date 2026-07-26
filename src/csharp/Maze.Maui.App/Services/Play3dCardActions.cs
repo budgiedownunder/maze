@@ -62,14 +62,15 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
-        /// Opens the Leaderboards page for a game card (collections have no board).
-        /// Preselecting this game's board is wired when the board selector learns
-        /// stored-game subjects.
+        /// Opens the Leaderboards page for a game card (collections have no board),
+        /// preselecting that game's <c>def:&lt;id&gt;</c> board.
         /// </summary>
         /// <param name="card">The card whose board to open</param>
         /// <param name="navigationService">The navigation service</param>
         /// <returns>Task</returns>
         public static Task ShowLeaderboardAsync(Play3dCardItem card, INavigationService navigationService)
-            => card.IsCollection ? Task.CompletedTask : navigationService.GoToAsync("LeaderboardsPage");
+            => card.IsCollection
+                ? Task.CompletedTask
+                : navigationService.GoToAsync("LeaderboardsPage", new Dictionary<string, object> { { "def", card.Id } });
     }
 }

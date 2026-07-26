@@ -7,8 +7,8 @@ namespace Maze.Maui.App.Tests.Services
     /// Tests for the pure hosted-game URL helper in <see cref="Play3dGameHostUrl"/>.
     /// As with the other client helpers the WebView send path itself is not
     /// exercised; these pin the base-URL derivation (stripping <c>/api/…</c>), the
-    /// per-branch query assembly (<c>?id=</c> / <c>?difficulty=</c> / <c>?def=</c> /
-    /// <c>&amp;t=</c>), and id/param encoding.
+    /// per-branch query assembly (<c>?id=</c> / <c>?def=</c> / <c>&amp;t=</c>), and
+    /// id/param encoding.
     /// </summary>
     public class Play3dGameHostUrlTests
     {
@@ -48,14 +48,6 @@ namespace Maze.Maui.App.Tests.Services
             Assert.Equal(
                 "https://maze.example.com/game/?def=g1",
                 Play3dGameHostUrl.BuildForDefinition(ApiRoot, "g1", null));
-        }
-
-        [Fact]
-        public void BuildForDifficulty_AppendsDifficultyAndToken()
-        {
-            Assert.Equal(
-                "https://maze.example.com/game/?difficulty=easy&t=tok",
-                Play3dGameHostUrl.BuildForDifficulty(ApiRoot, "easy", "tok"));
         }
 
         [Fact]

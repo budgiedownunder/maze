@@ -2,8 +2,8 @@ namespace Maze.Maui.App.Services
 {
     /// <summary>
     /// Pure helpers that assemble the hosted <c>/game/</c> WebView URL for the
-    /// Play 3D page's launch branches (stored maze, curated difficulty, stored
-    /// game definition, or a bare authenticated launch). Kept free of HTTP /
+    /// Play 3D page's launch branches (stored maze, stored game definition, or a
+    /// bare authenticated launch). Kept free of HTTP /
     /// WebView dependencies so the base-URL derivation and query-string assembly
     /// are unit-testable in isolation (<see cref="Views.Play3dGamePage"/> delegates to
     /// these). The host page lives alongside the API — its base is the API root
@@ -44,21 +44,6 @@ namespace Maze.Maui.App.Services
             var url = BuildBaseUrl(apiRootUri) + $"?id={Uri.EscapeDataString(mazeId)}";
             if (bearerToken is not null) url += $"&t={bearerToken}";
             if (!string.IsNullOrEmpty(settingsQuery)) url += "&" + settingsQuery;
-            return url;
-        }
-
-        /// <summary>
-        /// Assembles the launch URL for a curated difficulty preset
-        /// (<c>?difficulty=&lt;value&gt;&amp;t=&lt;token&gt;</c>).
-        /// </summary>
-        /// <param name="apiRootUri">The configured API root URI</param>
-        /// <param name="difficulty">The difficulty token (e.g. <c>easy</c>)</param>
-        /// <param name="bearerToken">The bearer token, or <c>null</c> when signed out</param>
-        /// <returns>The full hosted game URL</returns>
-        public static string BuildForDifficulty(string apiRootUri, string difficulty, string? bearerToken)
-        {
-            var url = BuildBaseUrl(apiRootUri) + $"?difficulty={Uri.EscapeDataString(difficulty)}";
-            if (bearerToken is not null) url += $"&t={bearerToken}";
             return url;
         }
 

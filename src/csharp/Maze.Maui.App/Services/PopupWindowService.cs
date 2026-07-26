@@ -8,12 +8,15 @@ namespace Maze.Maui.App.Services
     public class PopupWindowService : IDialogService
     {
         private readonly IScoresService _scoresService;
+        private readonly IGameLibraryService _gameLibrary;
 
         /// <summary>Constructor</summary>
         /// <param name="scoresService">Injected scores service (campaign progress lookup)</param>
-        public PopupWindowService(IScoresService scoresService)
+        /// <param name="gameLibrary">Injected game-library service (leaderboard game picker)</param>
+        public PopupWindowService(IScoresService scoresService, IGameLibraryService gameLibrary)
         {
             _scoresService = scoresService;
+            _gameLibrary = gameLibrary;
         }
 
         /// <summary>
@@ -108,6 +111,17 @@ namespace Maze.Maui.App.Services
             IReadOnlyList<Models.CampaignLevel> levels = Models.CampaignLevel.Build(definitions, completed.Completed);
 
             var popup = new Views.CampaignPickerPopup(collectionName, levels);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.GameDefinition?>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
+        /// Displays the Leaderboards game picker as a popup window.
+        /// </summary>
+        /// <returns>The chosen game, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.GameDefinition?> ShowGamePickerAsync()
+        {
+            var popup = new Views.LeaderboardGamePickerPopup(_gameLibrary);
             var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.GameDefinition?>(popup);
             return result.Result;
         }

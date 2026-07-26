@@ -88,11 +88,12 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<IScoresService, ScoresHttpClientService>();
             builder.Services.AddSingleton<IAvatarService, AvatarHttpClientService>();
             builder.Services.AddSingleton<IImagePickerService, ImagePickerService>();
-            builder.Services.AddSingleton<IGameConfigService, GameConfigHttpClientService>();
             builder.Services.AddSingleton<IGameLibraryService, GameLibraryHttpClientService>();
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
-            builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService(provider.GetRequiredService<IScoresService>()));
+            builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService(
+                provider.GetRequiredService<IScoresService>(),
+                provider.GetRequiredService<IGameLibraryService>()));
             builder.Services.AddSingleton<INavigationService, ShellNavigationService>();
 
             builder.Services.AddTransient<LoginViewModel>();

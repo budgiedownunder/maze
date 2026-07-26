@@ -5,13 +5,14 @@ using Maze.Maui.Controls.Pointer;
 namespace Maze.Maui.App.Views;
 
 /// <summary>
-/// The Leaderboards page: a cascading Game Type → Game selector over a paged
-/// board (metric toggle + load-more). The page-level <see cref="LeaderboardsViewModel"/>
-/// holds the logic; this code-behind triggers the first load, forwards the Game
-/// picker's selection change to the reload command (the view model keeps its
-/// property hooks free of async work so it stays unit-testable), and reflects
-/// the view model's busy state as a wait cursor while a board (re)loads.
+/// The Leaderboards page: a Game Type → Game selector (maze picker, or a scoped
+/// 3D-game picker) over a paged board (metric toggle + load-more). The page-level
+/// <see cref="LeaderboardsViewModel"/> holds the logic; this code-behind triggers
+/// the first load, forwards the maze picker's selection change to the reload
+/// command, applies a <c>def</c> preselect from a card's Leaderboard button, and
+/// reflects the view model's busy state as a wait cursor while a board (re)loads.
 /// </summary>
+[QueryProperty(nameof(PreselectDefinitionId), "def")]
 public partial class LeaderboardsPage : ContentPage
 {
     // Cap for the left-aligned, page-width-responsive Load more button.
@@ -21,6 +22,18 @@ public partial class LeaderboardsPage : ContentPage
 
     private readonly LeaderboardsViewModel viewModel;
     private bool _loaded;
+    private string? _preselectDefinitionId;
+
+    /// <summary>The 3D game to preselect, from the <c>def</c> nav argument (a card's Leaderboard button).</summary>
+    public string? PreselectDefinitionId
+    {
+        get => _preselectDefinitionId;
+        set
+        {
+            _preselectDefinitionId = value;
+            viewModel.SetPreselectGame(value);
+        }
+    }
 
     /// <summary>
     /// Constructor

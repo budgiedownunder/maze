@@ -9,20 +9,20 @@ using Maze.Maui.App.Views;
 namespace Maze.Maui.App.ViewModels
 {
     /// <summary>
-    /// Drives the Leaderboards page: discovers the player's played subjects,
-    /// cascades a Game Type → Game selection into a board subject, and loads that
-    /// subject's paged leaderboard (metric toggle + load-more). Reads only through
-    /// the service interfaces — no MAUI runtime types — so it is unit-testable in
-    /// isolation. The scoring data layer stays <c>Scores*</c>; this UI layer is
-    /// <c>Leaderboards*</c>.
+    /// Drives the Leaderboards page: discovers the player's played subjects, resolves
+    /// a Game Type → Game selection into a board subject (a stored maze, or a stored
+    /// 3D game chosen from the scoped game picker), and loads that subject's paged
+    /// leaderboard (metric toggle + load-more). Reads only through the service
+    /// interfaces — no MAUI runtime types — so it is unit-testable in isolation.
     /// </summary>
     public partial class LeaderboardsViewModel : BaseViewModel
     {
         private const int BoardPageSize = 20;
         private const string EmptyMessage = "No winning scores yet";
+        private const string ChooseGameMessage = "Choose a game to see its leaderboard.";
 
         private readonly IScoresService _scoresService;
-        private readonly IGameConfigService _gameConfigService;
+        private readonly IGameLibraryService _gameLibrary;
         private readonly IMazeService _mazeService;
         private readonly IAuthService _authService;
         private readonly INavigationService _navigationService;
@@ -30,22 +30,23 @@ namespace Maze.Maui.App.ViewModels
         private readonly IDialogService _dialogService;
 
         // Whether the caller is an administrator (resolved with their profile) —
-        // gates resetting a curated Play-3D board.
+        // gates resetting a 3D-game board they don't own.
         private bool _isAdmin;
 
         // Resolved avatar per player (user_id → PNG bytes or null when none),
         // so a player appearing on multiple rows/pages is fetched once.
         private readonly Dictionary<string, byte[]?> _avatarCache = new();
 
-        // difficulty → fixed seed; the seeds don't change, so resolve each once.
-        private readonly Dictionary<Difficulty, ulong> _seedCache = new();
         private List<MazeOption> _mazes = new();
         private ScoreEntry? _mostRecent;
         private string? _currentUserId;
 
-        // The currently loaded board, so a redundant reselect (e.g. the same
-        // subject firing both picker changes) is a no-op and load-more knows the
-        // subject.
+        // A game id to preselect (set by the page from a `?def=` nav argument when
+        // the Leaderboards page is opened from a game card's Leaderboard button).
+        private string? _preselectDefinitionId;
+
+        // The currently loaded board, so a redundant reselect is a no-op and
+        // load-more knows the subject.
         private string? _loadedKey;
         private ScoreSubject? _currentSubject;
         private ScoreMetric _metric = ScoreMetric.Time;
@@ -54,10 +55,10 @@ namespace Maze.Maui.App.ViewModels
         public ObservableCollection<GameTypeOption> GameTypes { get; } = new()
         {
             new GameTypeOption(LeaderboardGameType.MyMazes, "Mazes"),
-            new GameTypeOption(LeaderboardGameType.Play3d, "Play 3D"),
+            new GameTypeOption(LeaderboardGameType.Play3d, "3D Games"),
         };
 
-        /// <summary>The Game picker options for the selected Game Type.</summary>
+        /// <summary>The maze Game picker options (Mazes type only).</summary>
         public ObservableCollection<GameOption> Games { get; } = new();
 
         /// <summary>The loaded board rows.</summary>
@@ -65,13 +66,24 @@ namespace Maze.Maui.App.ViewModels
 
         /// <summary>The selected Game Type (first cascade level).</summary>
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanPlay))]
+        [NotifyPropertyChangedFor(nameof(IsMazeType))]
+        [NotifyPropertyChangedFor(nameof(Is3dType))]
+        [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
         private GameTypeOption? selectedGameType;
 
-        /// <summary>The selected Game (second cascade level).</summary>
+        /// <summary>The selected maze (Mazes type only).</summary>
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanPlay))]
         [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
         private GameOption? selectedGame;
+
+        /// <summary>The picked 3D game (3D Games type only).</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanPlay))]
+        [NotifyPropertyChangedFor(nameof(PickedGameLabel))]
+        [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
+        private PickedGame? pickedGame;
 
         /// <summary>Whether a further board page exists.</summary>
         [ObservableProperty]
@@ -82,7 +94,7 @@ namespace Maze.Maui.App.ViewModels
         private bool isLoadingMore;
 
         /// <summary>Whether to show the Player column + the caller highlight
-        /// (Play-3D boards only).</summary>
+        /// (3D-game boards only).</summary>
         [ObservableProperty]
         private bool showPlayerColumn;
 
@@ -109,9 +121,9 @@ namespace Maze.Maui.App.ViewModels
         private bool hasPlayed;
 
         /// <summary>Whether the Reset control is offered for the loaded board — true
-        /// only when the board has rows AND the caller may clear it (a curated
-        /// Play-3D board is admin-only; a stored maze's board is the owner's, and
-        /// this page lists only the caller's own mazes).</summary>
+        /// only when the board has rows AND the caller may clear it (a 3D game's board
+        /// is the game owner's or an admin's; a stored maze's board is the owner's,
+        /// and this page lists only the caller's own mazes).</summary>
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(ResetBoardCommand))]
         private bool showReset;
@@ -120,26 +132,37 @@ namespace Maze.Maui.App.ViewModels
         /// run, "↻ Play Again" once they have a row on the loaded board.</summary>
         public string PlayLabel => HasPlayed ? "↻ Play Again" : "▶ Play";
 
-        /// <summary>Whether the Play button can launch — true when a game subject
-        /// is selected (false e.g. for the Mazes type when the player has none).</summary>
-        public bool CanPlay => SelectedGame is not null;
+        /// <summary>Whether the Play button can launch — a maze (Mazes type) or a
+        /// picked 3D game (3D Games type) is selected.</summary>
+        public bool CanPlay => SelectedGameType?.Kind == LeaderboardGameType.Play3d
+            ? PickedGame is not null
+            : SelectedGame is not null;
 
         /// <summary>Whether the Reset command can run — mirrors <see cref="ShowReset"/>.</summary>
         public bool CanReset => ShowReset;
+
+        /// <summary>Whether the Mazes game type is selected (shows the maze picker).</summary>
+        public bool IsMazeType => SelectedGameType?.Kind == LeaderboardGameType.MyMazes;
+
+        /// <summary>Whether the 3D Games type is selected (shows the game picker).</summary>
+        public bool Is3dType => SelectedGameType?.Kind == LeaderboardGameType.Play3d;
+
+        /// <summary>The picked 3D game's name, or a prompt when none is chosen yet.</summary>
+        public string PickedGameLabel => PickedGame?.Name ?? "Choose a game";
 
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="scoresService">Injected scores service</param>
-        /// <param name="gameConfigService">Injected game-config service (curated seeds)</param>
+        /// <param name="gameLibrary">Injected game-library service (3D game lookup/picker)</param>
         /// <param name="mazeService">Injected maze service (maze names + Play launch)</param>
         /// <param name="authService">Injected auth service (caller identity)</param>
         /// <param name="navigationService">Injected navigation service (Play → 3D game)</param>
         /// <param name="avatarService">Injected avatar service (player avatars)</param>
-        /// <param name="dialogService">Injected dialog service (reset confirmation + errors)</param>
+        /// <param name="dialogService">Injected dialog service (game picker + reset confirmation + errors)</param>
         public LeaderboardsViewModel(
             IScoresService scoresService,
-            IGameConfigService gameConfigService,
+            IGameLibraryService gameLibrary,
             IMazeService mazeService,
             IAuthService authService,
             INavigationService navigationService,
@@ -148,7 +171,7 @@ namespace Maze.Maui.App.ViewModels
         {
             Title = "Leaderboards";
             _scoresService = scoresService;
-            _gameConfigService = gameConfigService;
+            _gameLibrary = gameLibrary;
             _mazeService = mazeService;
             _authService = authService;
             _navigationService = navigationService;
@@ -156,8 +179,12 @@ namespace Maze.Maui.App.ViewModels
             _dialogService = dialogService;
         }
 
-        // Repopulating the Game list is synchronous; the board reload is driven by
-        // the page (picker change → ReloadBoardCommand) and InitializeAsync.
+        /// <summary>Sets the game to preselect (from a card's Leaderboard button); applied on Initialize.</summary>
+        /// <param name="definitionId">The game definition id, or <c>null</c></param>
+        public void SetPreselectGame(string? definitionId) => _preselectDefinitionId = definitionId;
+
+        // Repopulating the maze Game list is synchronous; the board reload is driven
+        // by the page (picker change → ReloadBoardCommand) and InitializeAsync.
         partial void OnSelectedGameTypeChanged(GameTypeOption? value) => PopulateGames();
 
         /// <summary>
@@ -177,7 +204,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 _currentUserId = await ResolveCurrentUserIdAsync();
                 await DiscoverSubjectsAsync();
-                ApplyDefaultSelection();
+                await ApplyDefaultSelectionAsync();
                 await LoadBoardCoreAsync(force: true);
             }
             catch (Exception ex)
@@ -218,6 +245,21 @@ namespace Maze.Maui.App.ViewModels
         private Task SelectScoreMetricAsync() => SetMetricAsync(ScoreMetric.Score);
 
         /// <summary>
+        /// Opens the scoped game picker; on a selection, shows that game's board.
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommand]
+        private async Task PickGameAsync()
+        {
+            GameDefinition? picked = await _dialogService.ShowGamePickerAsync();
+            if (picked is null)
+                return;
+
+            SelectGame(PickedGame.From(picked));
+            await ReloadWithBusyAsync(force: true);
+        }
+
+        /// <summary>
         /// Appends the next page to the current board.
         /// </summary>
         /// <returns>Task</returns>
@@ -246,51 +288,48 @@ namespace Maze.Maui.App.ViewModels
 
         /// <summary>
         /// Launches the selected subject in 3D — a personal maze with its saved
-        /// settings, or a curated difficulty (server resolves the preset). Direct
-        /// launch, no prompt.
+        /// settings, or the picked stored game (the host page fetches its config by
+        /// id). Direct launch, no prompt.
         /// </summary>
         /// <returns>Task</returns>
         [RelayCommand(CanExecute = nameof(CanPlay))]
         private async Task PlayAsync()
         {
+            if (Is3dType)
+            {
+                if (PickedGame is null)
+                    return;
+                await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
+                {
+                    { "def", PickedGame.Id },
+                });
+                return;
+            }
+
             GameOption? game = SelectedGame;
             if (game is null)
                 return;
 
-            if (game.Difficulty is Difficulty difficulty)
+            // Load the full maze for its saved settings; Play3dGamePage appends them
+            // to the /game/?id= URL (the MAUI WebView can't read the SPA's
+            // localStorage, so settings ride the query string).
+            MazeItem full = await _mazeService.GetMazeItem(game.MazeId) ?? new MazeItem { ID = game.MazeId };
+
+            // Reject an empty / cleared maze before launching (Definition.Solve()
+            // throws when unsolvable), the same validation the Mazes page and Maze
+            // Editor Play-3D buttons use.
+            try { full.Definition?.Solve(); }
+            catch (Exception ex)
             {
-                await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
-                {
-                    { "difficulty", difficulty.ToQueryValue() },
-                });
+                await _dialogService.ShowAlert("MAZE", $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
                 return;
             }
 
-            if (game.MazeId is not null)
+            await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
             {
-                // Load the full maze for its saved settings; Play3dGamePage appends
-                // them to the /game/?id= URL (the MAUI WebView can't read the SPA's
-                // localStorage, so settings ride the query string).
-                MazeItem full = await _mazeService.GetMazeItem(game.MazeId) ?? new MazeItem { ID = game.MazeId };
-
-                // Reject an empty / cleared maze before launching, using the same
-                // validation the Mazes page Play-3D button and the Maze Editor's
-                // Play-3D toolbar use (Definition.Solve() throws when unsolvable).
-                // Curated Play-3D difficulties are server-generated and always valid,
-                // so they skip this (handled in the difficulty branch above).
-                try { full.Definition?.Solve(); }
-                catch (Exception ex)
-                {
-                    await _dialogService.ShowAlert("MAZE", $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
-                    return;
-                }
-
-                await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
-                {
-                    { "MazeItem", full },
-                    { "LaunchSettings", full.GameSettings ?? new MazeGameSettings() },
-                });
-            }
+                { "MazeItem", full },
+                { "LaunchSettings", full.GameSettings ?? new MazeGameSettings() },
+            });
         }
 
         /// <summary>
@@ -365,14 +404,14 @@ namespace Maze.Maui.App.ViewModels
 
         private async Task LoadBoardCoreAsync(bool force)
         {
-            ScoreSubject? subject = await ResolveSubjectAsync();
+            ScoreSubject? subject = ResolveSubject();
             string? key = subject is null ? null : $"{_metric}|{SubjectKey(subject.Value)}";
             if (!force && key == _loadedKey)
                 return;
 
             _loadedKey = key;
             _currentSubject = subject;
-            ShowPlayerColumn = SelectedGameType?.Kind == LeaderboardGameType.Play3d;
+            ShowPlayerColumn = Is3dType;
             Rows.Clear();
             HasMore = false;
             HasPlayed = false;
@@ -380,7 +419,7 @@ namespace Maze.Maui.App.ViewModels
 
             if (subject is null)
             {
-                SetStatus(EmptyMessage);
+                SetStatus(Is3dType && PickedGame is null ? ChooseGameMessage : EmptyMessage);
                 return;
             }
 
@@ -393,35 +432,25 @@ namespace Maze.Maui.App.ViewModels
         }
 
         // The Reset control shows only when the board has rows and the caller may
-        // clear it: a curated (Play-3D) board is admin-only; a stored maze's board
-        // is the owner's (this page lists only the caller's own mazes).
-        private bool SubjectAllowsReset() =>
-            _currentSubject is ScoreSubject subject
-            && (subject.Challenge is not null ? _isAdmin : subject.MazeId is not null);
+        // clear it: a 3D game's board is the game owner's or an admin's; a stored
+        // maze's board is the owner's (this page lists only the caller's own mazes).
+        private bool SubjectAllowsReset()
+        {
+            if (_currentSubject is not ScoreSubject subject)
+                return false;
+            if (subject.MazeId is not null)
+                return true;
+            return _isAdmin || (PickedGame is not null && PickedGame.OwnerId == _currentUserId);
+        }
 
         private void UpdateShowReset() => ShowReset = Rows.Count > 0 && SubjectAllowsReset();
 
-        private async Task<ScoreSubject?> ResolveSubjectAsync()
+        private ScoreSubject? ResolveSubject()
         {
-            GameOption? game = SelectedGame;
-            if (game is null)
-                return null;
+            if (Is3dType)
+                return PickedGame is null ? null : ScoreSubject.ForChallenge(GameChallenge.For(PickedGame.Id, PickedGame.Rotation));
 
-            if (game.MazeId is not null)
-                return ScoreSubject.ForMaze(game.MazeId);
-
-            if (game.Difficulty is Difficulty difficulty)
-            {
-                if (!_seedCache.TryGetValue(difficulty, out ulong seed))
-                {
-                    Play3dConfig config = await _gameConfigService.GetPlay3dConfigAsync(difficulty);
-                    seed = config.Seed;
-                    _seedCache[difficulty] = seed;
-                }
-                return ScoreSubject.ForCuratedGame(difficulty.ToQueryValue(), seed);
-            }
-
-            return null;
+            return SelectedGame is null ? null : ScoreSubject.ForMaze(SelectedGame.MazeId);
         }
 
         private List<LeaderboardRow> AppendRows(ScoreboardResponse resp)
@@ -446,8 +475,7 @@ namespace Maze.Maui.App.ViewModels
         /// Resolves and swaps in player avatars for the given rows. Only runs on
         /// boards that show the Player column; each player is fetched at most once
         /// (cached by user id across rows and pages). Rows for players with no
-        /// avatar keep their <c>null</c> source, so the control shows the
-        /// placeholder.
+        /// avatar keep their <c>null</c> source, so the control shows the placeholder.
         /// </summary>
         private async Task LoadAvatarsForRowsAsync(IReadOnlyList<LeaderboardRow> rows)
         {
@@ -472,8 +500,7 @@ namespace Maze.Maui.App.ViewModels
 
         private async Task DiscoverSubjectsAsync()
         {
-            // The Mazes game type lists ALL the player's mazes (scored or not),
-            // mirroring the Play-3D list showing every difficulty.
+            // The Mazes game type lists ALL the player's mazes (scored or not).
             List<MazeItem> mazes = await _mazeService.GetMazeItems(false);
             _mazes = mazes
                 .Select(maze => new MazeOption(maze.ID, maze.Name))
@@ -485,8 +512,16 @@ namespace Maze.Maui.App.ViewModels
             _mostRecent = history.Scores.FirstOrDefault();
         }
 
-        private void ApplyDefaultSelection()
+        // The board to show first: a game preselected from its card, else the subject
+        // of the caller's most-recent run (their maze, or the 3D game behind a
+        // `def:<id>` challenge — resolved via the access-checked play-fetch so a
+        // gone / inaccessible game falls through), else their first maze, else
+        // 3D Games with no game picked.
+        private async Task ApplyDefaultSelectionAsync()
         {
+            if (!string.IsNullOrEmpty(_preselectDefinitionId) && await TrySelectGameByIdAsync(_preselectDefinitionId))
+                return;
+
             if (_mostRecent?.MazeId is not null)
             {
                 string? resolved = ResolveMazeId(_mostRecent.MazeId);
@@ -496,17 +531,33 @@ namespace Maze.Maui.App.ViewModels
                     return;
                 }
             }
-            if (_mostRecent?.Challenge is not null)
-            {
-                SelectDifficulty(ParseDifficulty(_mostRecent.Challenge));
+
+            string? gameId = _mostRecent?.Challenge is not null ? GameChallenge.DefinitionIdFromChallenge(_mostRecent.Challenge) : null;
+            if (gameId is not null && await TrySelectGameByIdAsync(gameId))
                 return;
-            }
+
             if (_mazes.Count > 0)
             {
                 SelectMaze(_mazes[0].MazeId);
                 return;
             }
-            SelectDifficulty(Difficulty.Easy);
+
+            SelectedGameType = GameTypes.First(t => t.Kind == LeaderboardGameType.Play3d);
+            PickedGame = null;
+        }
+
+        private async Task<bool> TrySelectGameByIdAsync(string definitionId)
+        {
+            try
+            {
+                GamePlayResponse def = await _gameLibrary.GetGameDefinitionAsync(definitionId);
+                SelectGame(PickedGame.From(def));
+                return true;
+            }
+            catch
+            {
+                return false; // gone / no longer accessible
+            }
         }
 
         // Resolve a history maze_id to a maze in the list — exact id, then by
@@ -526,26 +577,25 @@ namespace Maze.Maui.App.ViewModels
             SelectedGame = Games.FirstOrDefault(g => g.MazeId == mazeId) ?? Games.FirstOrDefault();
         }
 
-        private void SelectDifficulty(Difficulty difficulty)
+        private void SelectGame(PickedGame game)
         {
             SelectedGameType = GameTypes.First(t => t.Kind == LeaderboardGameType.Play3d);
-            SelectedGame = Games.FirstOrDefault(g => g.Difficulty == difficulty) ?? Games.FirstOrDefault();
+            PickedGame = game;
         }
 
         private void PopulateGames()
         {
             Games.Clear();
-            if (SelectedGameType?.Kind == LeaderboardGameType.Play3d)
-            {
-                foreach (Difficulty difficulty in new[] { Difficulty.Easy, Difficulty.Tricky, Difficulty.Hard })
-                    Games.Add(GameOption.ForDifficulty(difficulty));
-            }
-            else
+            if (IsMazeType)
             {
                 foreach (MazeOption maze in _mazes)
                     Games.Add(GameOption.ForMaze(maze.MazeId, maze.Name));
+                SelectedGame = Games.FirstOrDefault();
             }
-            SelectedGame = Games.FirstOrDefault();
+            else
+            {
+                SelectedGame = null;
+            }
         }
 
         private async Task<string?> ResolveCurrentUserIdAsync()
@@ -585,12 +635,6 @@ namespace Maze.Maui.App.ViewModels
 
         private static string SubjectKey(ScoreSubject subject) =>
             subject.MazeId is not null ? $"m:{subject.MazeId}" : $"c:{subject.Challenge}";
-
-        private static Difficulty ParseDifficulty(string challenge)
-        {
-            string token = challenge.Split(':')[0];
-            return Enum.TryParse(token, ignoreCase: true, out Difficulty difficulty) ? difficulty : Difficulty.Easy;
-        }
 
         private static string Basename(string id)
         {

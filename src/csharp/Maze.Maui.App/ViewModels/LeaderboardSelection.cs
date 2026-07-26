@@ -9,7 +9,7 @@ namespace Maze.Maui.App.ViewModels
     {
         /// <summary>The player's own stored mazes they have played.</summary>
         MyMazes,
-        /// <summary>The curated Play 3D difficulties (global boards).</summary>
+        /// <summary>A stored 3D game's board (keyed on <c>def:&lt;id&gt;</c>).</summary>
         Play3d,
     }
 
@@ -40,40 +40,63 @@ namespace Maze.Maui.App.ViewModels
     }
 
     /// <summary>
-    /// An option in the Game picker (the second cascade level): exactly one of a
-    /// played maze or a curated difficulty.
+    /// An option in the maze Game picker (the second cascade level for the Mazes type).
     /// </summary>
     public class GameOption
     {
-        /// <summary>Display label (maze name or difficulty name).</summary>
+        /// <summary>Display label (maze name).</summary>
         public string Label { get; }
 
-        /// <summary>The stored maze id, or <c>null</c> for a curated difficulty.</summary>
-        public string? MazeId { get; }
+        /// <summary>The stored maze id.</summary>
+        public string MazeId { get; }
 
-        /// <summary>The curated difficulty, or <c>null</c> for a stored maze.</summary>
-        public Difficulty? Difficulty { get; }
-
-        private GameOption(string label, string? mazeId, Difficulty? difficulty)
+        private GameOption(string label, string mazeId)
         {
             Label = label;
             MazeId = mazeId;
-            Difficulty = difficulty;
         }
 
         /// <summary>A game option for a played stored maze.</summary>
         /// <param name="mazeId">The maze id</param>
         /// <param name="name">Display name</param>
         /// <returns>The option</returns>
-        public static GameOption ForMaze(string mazeId, string name) => new(name, mazeId, null);
-
-        /// <summary>A game option for a curated difficulty.</summary>
-        /// <param name="difficulty">The difficulty</param>
-        /// <returns>The option</returns>
-        public static GameOption ForDifficulty(Difficulty difficulty) => new(difficulty.ToString(), null, difficulty);
+        public static GameOption ForMaze(string mazeId, string name) => new(name, mazeId);
 
         /// <inheritdoc/>
         public override string ToString() => Label;
+    }
+
+    /// <summary>
+    /// The stored 3D game whose leaderboard is shown — chosen via the game picker or
+    /// resolved from a card / the caller's most-recent run. <see cref="OwnerId"/>
+    /// gates whether the caller may reset that board (owner or admin);
+    /// <see cref="Rotation"/> decides static (<c>def:&lt;id&gt;</c>) vs daily
+    /// (<c>def:&lt;id&gt;:&lt;date&gt;</c>) board keying.
+    /// </summary>
+    public sealed class PickedGame
+    {
+        /// <summary>The game definition id.</summary>
+        public string Id { get; init; } = "";
+
+        /// <summary>Display name.</summary>
+        public string Name { get; init; } = "";
+
+        /// <summary>The owning user id (for the reset gate).</summary>
+        public string OwnerId { get; init; } = "";
+
+        /// <summary>The game's rotation (<c>static</c> / <c>daily</c>).</summary>
+        public string Rotation { get; init; } = GameVocabulary.Rotation.Static;
+
+        /// <summary>Builds a picked game from a definition / play-fetch response.</summary>
+        /// <param name="definition">The game definition</param>
+        /// <returns>The picked game</returns>
+        public static PickedGame From(GameDefinition definition) => new()
+        {
+            Id = definition.Id,
+            Name = definition.Name,
+            OwnerId = definition.OwnerId,
+            Rotation = definition.Rotation,
+        };
     }
 
     /// <summary>

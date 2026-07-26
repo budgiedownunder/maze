@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 namespace Maze.Maui.App.Views
 {
     [QueryProperty(nameof(MazeItem), "MazeItem")]
-    [QueryProperty(nameof(DifficultyValue), "difficulty")]
     [QueryProperty(nameof(DefinitionId), "def")]
     [QueryProperty(nameof(LaunchSettings), "LaunchSettings")]
     public partial class Play3dGamePage : ContentPage
@@ -15,14 +14,6 @@ namespace Maze.Maui.App.Views
         private readonly ILogger<Play3dGamePage> _logger;
 
         public MazeItem? MazeItem { get; set; }
-
-        /// <summary>
-        /// Difficulty token (e.g. "easy" / "tricky" / "hard") passed by the
-        /// Play 3D entry points. When set (and no <see cref="MazeItem"/> is
-        /// supplied), it is forwarded to the game as <c>/game/?difficulty=…</c>
-        /// so the server resolves the maze-size / timer / seed preset.
-        /// </summary>
-        public string? DifficultyValue { get; set; }
 
         /// <summary>
         /// Stored game-definition id passed by the Play 3D browser. When set (and
@@ -69,9 +60,7 @@ namespace Maze.Maui.App.Views
                 ? Play3dGameHostUrl.BuildForMaze(apiRootUri, MazeItem.ID, token, LaunchSettings?.ToQueryString())
                 : !string.IsNullOrEmpty(DefinitionId)
                     ? Play3dGameHostUrl.BuildForDefinition(apiRootUri, DefinitionId, token)
-                    : !string.IsNullOrEmpty(DifficultyValue)
-                        ? Play3dGameHostUrl.BuildForDifficulty(apiRootUri, DifficultyValue, token)
-                        : Play3dGameHostUrl.BuildForToken(apiRootUri, token);
+                    : Play3dGameHostUrl.BuildForToken(apiRootUri, token);
 
             MazeGameWebView.Source = new UrlWebViewSource { Url = gameUrl };
         }
@@ -81,7 +70,6 @@ namespace Maze.Maui.App.Views
             base.OnDisappearing();
             GameWebViewHandler.GameResultReceived -= OnGameResultReceived;
             MazeItem = null;
-            DifficultyValue = null;
             DefinitionId = null;
             LaunchSettings = null;
             MazeGameWebView.Source = new UrlWebViewSource { Url = "about:blank" };

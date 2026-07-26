@@ -53,8 +53,6 @@
              Link="LinkedSource\Utils\MazeCellCounter.cs" />
     <Compile Include="..\Maze.Maui.App\Utils\GenerateMazeOptionsParser.cs"
              Link="LinkedSource\Utils\GenerateMazeOptionsParser.cs" />
-    <Compile Include="..\Maze.Maui.App\Models\Difficulty.cs"
-             Link="LinkedSource\Models\Difficulty.cs" />
     <Compile Include="..\Maze.Maui.App\Models\MazeGameSettings.cs"
              Link="LinkedSource\Models\MazeGameSettings.cs" />
     <Compile Include="..\Maze.Maui.App\Models\GameResult.cs"
@@ -69,8 +67,6 @@
              Link="LinkedSource\Models\ScoreEntry.cs" />
     <Compile Include="..\Maze.Maui.App\Models\ScoreboardResponse.cs"
              Link="LinkedSource\Models\ScoreboardResponse.cs" />
-    <Compile Include="..\Maze.Maui.App\Models\Play3dConfig.cs"
-             Link="LinkedSource\Models\Play3dConfig.cs" />
     <Compile Include="..\Maze.Maui.App\Models\ScoreSubject.cs"
              Link="LinkedSource\Models\ScoreSubject.cs" />
     <Compile Include="..\Maze.Maui.App\Services\ScoreRequestPaths.cs"
@@ -107,6 +103,8 @@
              Link="LinkedSource\Models\CompletedChallengesResponse.cs" />
     <Compile Include="..\Maze.Maui.App\Services\GameLibraryRequestPaths.cs"
              Link="LinkedSource\Services\GameLibraryRequestPaths.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IGameLibraryService.cs"
+             Link="LinkedSource\Services\IGameLibraryService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\Play3dGameHostUrl.cs"
              Link="LinkedSource\Services\Play3dGameHostUrl.cs" />
     <Compile Include="..\Maze.Maui.App\Services\Play3dCollectionLaunch.cs"
@@ -115,12 +113,12 @@
              Link="LinkedSource\Models\Play3dCardItem.cs" />
     <Compile Include="..\Maze.Maui.App\Models\CampaignLevel.cs"
              Link="LinkedSource\Models\CampaignLevel.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\GameChallenge.cs"
+             Link="LinkedSource\Models\GameChallenge.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IAvatarService.cs"
              Link="LinkedSource\Services\IAvatarService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IImagePickerService.cs"
              Link="LinkedSource\Services\IImagePickerService.cs" />
-    <Compile Include="..\Maze.Maui.App\Services\IGameConfigService.cs"
-             Link="LinkedSource\Services\IGameConfigService.cs" />
     <Compile Include="..\Maze.Maui.App\Models\LeaderboardRow.cs"
              Link="LinkedSource\Models\LeaderboardRow.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\LeaderboardSelection.cs"

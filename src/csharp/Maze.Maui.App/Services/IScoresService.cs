@@ -4,8 +4,7 @@ namespace Maze.Maui.App.Services
 {
     /// <summary>
     /// Reads leaderboards and the authenticated player's run history from the
-    /// score endpoints. Scoring only — game configuration (e.g. the Play 3D
-    /// difficulty presets) lives in <see cref="IGameConfigService"/>.
+    /// score endpoints. Scoring only.
     /// </summary>
     public interface IScoresService
     {

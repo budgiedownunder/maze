@@ -105,6 +105,13 @@
         /// <param name="definitions">The accessible member games, in campaign order</param>
         /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
         public Task<Models.GameDefinition?> ShowCampaignPickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions);
+        /// <summary>
+        /// Displays the Leaderboards game picker — a scope-tabbed (Featured / My Games
+        /// / Shared / Community), searchable, paged browser of stored games and
+        /// collections — so the user chooses a game whose leaderboard to view.
+        /// </summary>
+        /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.GameDefinition?> ShowGamePickerAsync();
 
         /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) for a

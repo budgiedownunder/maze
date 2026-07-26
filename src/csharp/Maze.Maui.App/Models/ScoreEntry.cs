@@ -6,7 +6,8 @@ namespace Maze.Maui.App.Models
     /// A recorded completed run, as returned by the score endpoints. Mirrors the
     /// server's <c>ScoreResponse</c> (snake_case JSON keys). Exactly one of
     /// <see cref="MazeId"/> / <see cref="Challenge"/> is set: a stored user maze
-    /// or a curated <c>"&lt;difficulty&gt;:&lt;seed&gt;"</c> game.
+    /// or a stored 3D game (<c>"def:&lt;id&gt;"</c>, daily boards
+    /// <c>"def:&lt;id&gt;:&lt;date&gt;"</c>).
     /// </summary>
     public class ScoreEntry
     {
@@ -18,12 +19,12 @@ namespace Maze.Maui.App.Models
         [JsonPropertyName("user_id")]
         public string UserId { get; set; } = "";
 
-        /// <summary>The stored maze played, or <c>null</c> for a curated game.</summary>
+        /// <summary>The stored maze played, or <c>null</c> for a stored 3D game.</summary>
         [JsonPropertyName("maze_id")]
         public string? MazeId { get; set; }
 
-        /// <summary>The curated game played (<c>"&lt;difficulty&gt;:&lt;seed&gt;"</c>),
-        /// or <c>null</c> for a user maze.</summary>
+        /// <summary>The stored 3D game played (<c>"def:&lt;id&gt;"</c>, daily boards
+        /// <c>"def:&lt;id&gt;:&lt;date&gt;"</c>), or <c>null</c> for a user maze.</summary>
         [JsonPropertyName("challenge")]
         public string? Challenge { get; set; }
 

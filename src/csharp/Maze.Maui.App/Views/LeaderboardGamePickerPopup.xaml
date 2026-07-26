@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+               x:Class="Maze.Maui.App.Views.LeaderboardGamePickerPopup"
+               x:DataType="viewmodel:LeaderboardGamePickerViewModel"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <toolkit:Popup.Resources>
+        <!-- A selectable game / member row, or an expandable collection row. -->
+        <DataTemplate x:Key="PickerRow" x:DataType="viewmodel:GamePickerRow">
+            <Border StrokeThickness="0" BackgroundColor="Transparent">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnRowTapped" />
+                </Border.GestureRecognizers>
+                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6" Padding="0,8">
+                    <BoxView Grid.Column="0" WidthRequest="{Binding LeftIndent}" Color="Transparent" />
+                    <Label Grid.Column="1" Text="{Binding Glyph}" WidthRequest="14" VerticalOptions="Center" />
+                    <Label Grid.Column="2" Text="{Binding Name}" VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </toolkit:Popup.Resources>
+
+    <Border Padding="16"
+            HorizontalOptions="Center"
+            VerticalOptions="Center"
+            MinimumWidthRequest="340"
+            MaximumWidthRequest="480"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10" MaximumHeightRequest="520">
+
+            <Label Grid.Row="0" Text="Choose a game" FontSize="18" FontAttributes="Bold" HorizontalOptions="Center" />
+
+            <!-- Scope tabs. -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="4">
+                <Border Grid.Column="0" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding IsFeatured}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding SelectFeaturedCommand}" />
+                    </Border.GestureRecognizers>
+                    <Label Text="Featured" FontSize="12" Padding="0,8" HorizontalOptions="Center"
+                           TextColor="White" />
+                </Border>
+                <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding IsMineTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding SelectMineCommand}" />
+                    </Border.GestureRecognizers>
+                    <Label Text="My Games" FontSize="12" Padding="0,8" HorizontalOptions="Center"
+                           TextColor="White" />
+                </Border>
+                <Border Grid.Column="2" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding IsSharedTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding SelectSharedCommand}" />
+                    </Border.GestureRecognizers>
+                    <Label Text="Shared" FontSize="12" Padding="0,8" HorizontalOptions="Center"
+                           TextColor="White" />
+                </Border>
+                <Border Grid.Column="3" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding IsPublicTab}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding SelectPublicCommand}" />
+                    </Border.GestureRecognizers>
+                    <Label Text="Community" FontSize="12" Padding="0,8" HorizontalOptions="Center"
+                           TextColor="White" />
+                </Border>
+            </Grid>
+
+            <!-- Search (My Games / Community only). -->
+            <Entry Grid.Row="2"
+                   IsVisible="{Binding CanSearch}"
+                   Placeholder="Search games…"
+                   Text="{Binding SearchText}" />
+
+            <ScrollView Grid.Row="3">
+                <VerticalStackLayout Spacing="0">
+                    <!-- Featured: one mixed list. -->
+                    <VerticalStackLayout IsVisible="{Binding IsFeatured}" Spacing="0"
+                                         BindableLayout.ItemsSource="{Binding FeaturedRows}"
+                                         BindableLayout.ItemTemplate="{StaticResource PickerRow}" />
+                    <Button IsVisible="{Binding FeaturedHasMore}" Text="Load more"
+                            Command="{Binding LoadMoreFeaturedCommand}" HorizontalOptions="Start" Margin="0,6" />
+
+                    <!-- Non-featured: Collections then Games, each paged. -->
+                    <VerticalStackLayout IsVisible="{Binding IsNotFeatured}" Spacing="0">
+                        <Label Text="Collections" FontAttributes="Bold" Margin="0,4" />
+                        <VerticalStackLayout Spacing="0"
+                                             BindableLayout.ItemsSource="{Binding CollectionRows}"
+                                             BindableLayout.ItemTemplate="{StaticResource PickerRow}" />
+                        <Button IsVisible="{Binding CollectionsHasMore}" Text="Load more collections"
+                                Command="{Binding LoadMoreCollectionsCommand}" HorizontalOptions="Start" Margin="0,6" />
+                        <Label Text="Games" FontAttributes="Bold" Margin="0,8,0,4" />
+                        <VerticalStackLayout Spacing="0"
+                                             BindableLayout.ItemsSource="{Binding GameRows}"
+                                             BindableLayout.ItemTemplate="{StaticResource PickerRow}" />
+                        <Button IsVisible="{Binding GamesHasMore}" Text="Load more games"
+                                Command="{Binding LoadMoreGamesCommand}" HorizontalOptions="Start" Margin="0,6" />
+                    </VerticalStackLayout>
+
+                    <Label Text="{Binding StatusMessage}" IsVisible="{Binding ShowStatusMessage}"
+                           HorizontalOptions="Center" Margin="0,12" />
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <Button Grid.Row="4"
+                    Text="Cancel"
+                    Clicked="OnCancelClicked"
+                    HorizontalOptions="Fill"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
+        </Grid>
+    </Border>
+</toolkit:Popup>

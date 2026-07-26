@@ -42,12 +42,24 @@
                             ItemDisplayBinding="{Binding Label}"
                             SelectedItem="{Binding SelectedGameType}" />
                     <Label Text="→" FontSize="18" VerticalOptions="Center" />
+                    <!-- Mazes: cascading maze picker. -->
                     <Picker x:Name="GamePicker"
+                            IsVisible="{Binding IsMazeType}"
                             MinimumWidthRequest="110"
                             ItemsSource="{Binding Games}"
                             ItemDisplayBinding="{Binding Label}"
                             SelectedItem="{Binding SelectedGame}"
                             SelectedIndexChanged="OnGameSelectionChanged" />
+                    <!-- 3D Games: picked-game summary + Change. -->
+                    <Label IsVisible="{Binding Is3dType}"
+                           Text="{Binding PickedGameLabel}"
+                           VerticalOptions="Center"
+                           LineBreakMode="TailTruncation"
+                           MaximumWidthRequest="180" />
+                    <Button IsVisible="{Binding Is3dType}"
+                            Text="Change…"
+                            Command="{Binding PickGameCommand}"
+                            VerticalOptions="Center" />
                 </HorizontalStackLayout>
                 <Button Grid.Column="1"
                         Text="{Binding PlayLabel}"
