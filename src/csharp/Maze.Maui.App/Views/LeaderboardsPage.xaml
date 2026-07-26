@@ -30,10 +30,10 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="10" RowSpacing="8">
 
         <!-- Subject selector: a "Game" label (styled like the board column
-             headers), then a selection row (Game Type → maze picker / 3D-game
-             name) and a separate action row (Change + Play). The two-row split
-             keeps a long 3D-game name — which takes the remaining width and
-             truncates — from ever pushing the Change button behind Play. -->
+             headers) above the Game Type → maze picker / 3D-game name selection,
+             then the Change + Play actions. The action buttons share the metric
+             toggle's two-column 326-wide layout and sit directly above it, at the
+             same width on every screen size. -->
         <VerticalStackLayout Grid.Row="0" Spacing="6">
             <Label Text="Game" FontAttributes="Bold" />
             <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10" VerticalOptions="Center">
@@ -59,16 +59,15 @@
                        VerticalOptions="Center"
                        LineBreakMode="TailTruncation" />
             </Grid>
-            <Grid ColumnDefinitions="Auto,*">
+            <!-- Change (3D only) + Play, matching the metric toggle's width below. -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="6" HorizontalOptions="Start" WidthRequest="326">
                 <Button Grid.Column="0"
                         IsVisible="{Binding Is3dType}"
                         Text="Change…"
-                        Command="{Binding PickGameCommand}"
-                        HorizontalOptions="Start" />
+                        Command="{Binding PickGameCommand}" />
                 <Button Grid.Column="1"
                         Text="{Binding PlayLabel}"
                         Command="{Binding PlayCommand}"
-                        HorizontalOptions="End"
                         BackgroundColor="{StaticResource PlayButton}"
                         TextColor="White">
                     <!-- Dim while disabled (no winnable subject selected). A property Trigger
