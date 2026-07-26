@@ -519,7 +519,7 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 
 A **game collection** is an ordered, presentation-only grouping of game definitions — it does not affect generation or scoring (leaderboards stay per-definition). Membership is order-only: an item is just a `definitionId` + position, and each game's name/description/image is intrinsic to its definition and shared across every collection it appears in.
 
-On first launch the server seeds two curated collections owned by the default admin: a **"Difficulty"** collection — the `Easy` / `Tricky` / `Hard` games (built from the shipped presets in `service/game_bootstrap.rs`) — and a **"Daily Challenges"** collection holding a single `Daily`-rotation game whose layout and board rotate by UTC date (the server derives the per-day seed at play-fetch; nothing is scheduled). Each seeding is idempotent, so both run safely on every launch.
+On first launch the server seeds two curated collections owned by the default admin: a **"Difficulty"** collection — the `Easy` / `Tricky` / `Hard` games (built from the shipped presets in `service/game_bootstrap.rs`) — and a **"Daily Challenges"** collection holding a single `Daily`-rotation game whose layout and board rotate by UTC date (the server derives the per-day seed at play-fetch; nothing is scheduled). Seeding runs **only on a genuinely fresh store** (`Store::was_freshly_created`), so an admin who deletes the shipped content keeps it deleted across restarts — it is not re-seeded on the next launch.
 
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|

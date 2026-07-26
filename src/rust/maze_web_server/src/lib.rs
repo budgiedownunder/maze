@@ -249,8 +249,7 @@ pub async fn run_server() -> std::io::Result<()> {
     let mut store = get_store(store_config).await?;
 
     init_user_accounts(&config.security.password_hash, &mut store).await?;
-    service::game_bootstrap::init_difficulty_collection(&mut store, DEFAULT_ADMIN_ACCOUNT_USERNAME).await?;
-    service::game_bootstrap::init_daily_challenges_collection(&mut store, DEFAULT_ADMIN_ACCOUNT_USERNAME).await?;
+    service::game_bootstrap::seed_curated_content(&mut store, DEFAULT_ADMIN_ACCOUNT_USERNAME).await?;
     store.reconcile_featured_game_items().await?;
 
     let max_workers = std::thread::available_parallelism()?;

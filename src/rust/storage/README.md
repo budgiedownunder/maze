@@ -145,6 +145,8 @@ data_dir/
 
 2. **`apply_pending_migrations`** — the schema-versioned migration framework. Reads `<data_dir>/.schema_version` (defaulting to `0` if absent), runs every registered migration with a higher version in order, and writes the new version atomically **after each successful migration** so a failure mid-batch leaves the schema at the last successful step (not at zero).
 
+The pre-migration version also feeds `Manage::was_freshly_created()`: a store constructed over a version-`0` data dir (FileStore) or an unmigrated database — no rows in SQLx's `_sqlx_migrations` (SqlStore) — reports `true`, distinguishing a brand-new store from a reopened one. Callers use it to run one-time bootstrap seeding only on a genuinely fresh store, so deleted seed content is not resurrected on the next restart.
+
 The migration registry lives in `src/file_store_migration.rs`:
 
 | Version | Effect |

@@ -2,10 +2,12 @@
 //!
 //! On first launch this creates the `Easy` / `Tricky` / `Hard` **curated game
 //! definitions** and the ordered **"Difficulty" curated collection** that
-//! references them, owned by the default admin — the stored replacement for the
-//! old `config.toml [game.play3d.*]` difficulty presets. It is idempotent (a
-//! no-op once the "Difficulty" collection exists), so it runs safely on every
-//! launch, mirroring the default-admin bootstrap.
+//! references them (plus the **"Daily Challenges"** collection), owned by the
+//! default admin — the stored replacement for the old `config.toml
+//! [game.play3d.*]` difficulty presets. Seeding runs via [`seed_curated_content`]
+//! **only on a genuinely fresh store** (`Store::was_freshly_created`), so an
+//! admin's later deletion of the shipped content is not resurrected on the next
+//! launch. The individual `init_*` functions remain idempotent on their own.
 //!
 //! The per-difficulty preset values live here as code `const`s (the source of
 //! truth for the shipped curated games). Each definition's opaque `config` is
@@ -336,6 +338,23 @@ pub async fn init_daily_challenges_collection(
     Ok(())
 }
 
+/// Seeds the shipped curated content (the "Difficulty" and "Daily Challenges"
+/// collections) — but **only on a genuinely fresh store**. Gating on
+/// [`Store::was_freshly_created`] rather than on the collections being absent is
+/// deliberate: an admin who deletes the shipped content keeps it deleted across
+/// restarts, instead of having it re-seeded on the next launch.
+pub async fn seed_curated_content(
+    store: &mut Box<dyn Store>,
+    admin_username: &str,
+) -> Result<(), StoreError> {
+    if !store.was_freshly_created() {
+        return Ok(());
+    }
+    init_difficulty_collection(store, admin_username).await?;
+    init_daily_challenges_collection(store, admin_username).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,6 +373,39 @@ mod tests {
             .init_default_admin_user("admin", "admin@test.local", "hash")
             .await
             .expect("seed default admin")
+    }
+
+    #[tokio::test]
+    async fn seed_curated_content_seeds_a_fresh_store() {
+        let (mut store, _temp) = fresh_store();
+        assert!(store.was_freshly_created());
+        let admin = seed_admin(&mut store).await;
+
+        seed_curated_content(&mut store, "admin").await.expect("seed fresh");
+
+        let collections = store.get_game_collections_for_owner(&admin).await.expect("collections");
+        assert!(collections.iter().any(|c| c.meta.name == DIFFICULTY_COLLECTION_NAME));
+        assert!(collections.iter().any(|c| c.meta.name == DAILY_COLLECTION_NAME));
+    }
+
+    #[tokio::test]
+    async fn seed_curated_content_skips_a_non_fresh_store() {
+        // A store reopened over an already-migrated data dir is not fresh, so
+        // seeding is a no-op even though nothing was seeded before — the guard
+        // is on freshness, not on the content's absence.
+        let temp = tempfile::tempdir().expect("tempdir");
+        let data_dir = temp.path().to_string_lossy().to_string();
+        drop(FileStore::new(&FileStoreConfig { data_dir: data_dir.clone() }));
+
+        let mut store: Box<dyn Store> =
+            Box::new(FileStore::new(&FileStoreConfig { data_dir: data_dir.clone() }));
+        assert!(!store.was_freshly_created());
+        let admin = seed_admin(&mut store).await;
+
+        seed_curated_content(&mut store, "admin").await.expect("seed non-fresh");
+
+        let collections = store.get_game_collections_for_owner(&admin).await.expect("collections");
+        assert!(collections.is_empty(), "a non-fresh store is never seeded");
     }
 
     #[test]

@@ -221,6 +221,10 @@ impl Default for SqlStoreConfig {
 pub struct SqlStore {
     pool: AnyPool,
     kind: SqlBackend,
+    /// Whether the database had no migrations applied yet when this store was
+    /// constructed (a brand-new schema), as opposed to reopening an already-
+    /// migrated database. Drives [`Manage::was_freshly_created`].
+    freshly_created: bool,
 }
 
 impl SqlStore {
@@ -288,6 +292,16 @@ impl SqlStore {
             .await
             .map_err(map_sqlx_err)?;
 
+        // A brand-new schema has no rows in SQLx's `_sqlx_migrations` tracking
+        // table yet (and, before the first migration, no such table at all).
+        // Captured before the migration run so it reflects the pre-migration
+        // state, distinguishing a fresh database from a reopened one.
+        let freshly_created = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM _sqlx_migrations")
+            .fetch_one(&pool)
+            .await
+            .map(|count| count == 0)
+            .unwrap_or(true);
+
         sqlx::migrate!("./migrations")
             .run(&pool)
             .await
@@ -348,7 +362,7 @@ impl SqlStore {
         create_game_image_table(&pool, kind, "game_definition_images", "definition_id", "game_definitions").await?;
         create_game_image_table(&pool, kind, "game_collection_images", "collection_id", "game_collections").await?;
 
-        Ok(Self { pool, kind })
+        Ok(Self { pool, kind, freshly_created })
     }
 }
 
@@ -3887,6 +3901,10 @@ impl Manage for SqlStore {
                 .map_err(map_sqlx_err)?;
         }
         Ok(())
+    }
+
+    fn was_freshly_created(&self) -> bool {
+        self.freshly_created
     }
 }
 
@@ -8668,6 +8686,26 @@ impl Store for SqlStore {}
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[tokio::test]
+    async fn was_freshly_created_true_on_new_db_false_on_reopen() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("fresh.db");
+        let config = SqlStoreConfig {
+            url: format!("sqlite:{}", db_path.to_string_lossy()),
+            auto_create_database: true,
+            ..Default::default()
+        };
+
+        // A brand-new database (no applied migrations yet) is freshly created.
+        let fresh = SqlStore::new(config.clone()).await.expect("create store");
+        assert!(fresh.was_freshly_created());
+        drop(fresh);
+
+        // Reopening the same, now-migrated, database is not.
+        let reopened = SqlStore::new(config).await.expect("reopen store");
+        assert!(!reopened.was_freshly_created());
+    }
 
     #[test]
     fn datetime_format_is_fixed_width_rfc3339_with_z() {

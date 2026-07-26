@@ -97,6 +97,10 @@ pub struct FileStore {
     /// `<id>/` sub-folder holding `collection.json` (with its ordered items),
     /// its optional `shares.json`, and — later — its `image.png`.
     game_collections_dir: String,
+    /// Whether this store's data dir was brand-new (schema version `0`) when it
+    /// was constructed, as opposed to reopening an existing one. Drives
+    /// [`Manage::was_freshly_created`].
+    freshly_created: bool,
 }
 
 // Private trait used for accessing struct fields
@@ -184,6 +188,7 @@ impl FileStore {
             score_history_dir: "".to_string(),
             game_definitions_dir: "".to_string(),
             game_collections_dir: "".to_string(),
+            freshly_created: false,
         };
 
         match store.init() {
@@ -200,6 +205,9 @@ impl FileStore {
         // already-migrated files parse straight as the new shape and are
         // left alone).
         file_store_migration::migrate_users_dir(&self.users_dir)?;
+        // A schema version of 0 (no `.schema_version` yet) means a brand-new data
+        // dir — captured before the migration run below writes the version.
+        self.freshly_created = file_store_migration::current_schema_version(&self.data_dir)? == 0;
         // Run the schema-versioned migration framework. On a fresh data_dir
         // this writes `.schema_version` to the current value via no-op
         // migrations; on an existing data_dir already at the current
@@ -3642,6 +3650,10 @@ impl Manage for FileStore {
         }
         Ok(())
     }
+
+    fn was_freshly_created(&self) -> bool {
+        self.freshly_created
+    }
 }
 
 #[async_trait]
@@ -6870,6 +6882,22 @@ mod tests {
             data_dir: temp.path().to_string_lossy().to_string(),
         });
         (store, temp)
+    }
+
+    #[test]
+    fn was_freshly_created_true_on_new_dir_false_on_reopen() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let config = FileStoreConfig {
+            data_dir: temp.path().to_string_lossy().to_string(),
+        };
+
+        // A brand-new data dir (no `.schema_version` yet) is freshly created.
+        let fresh = FileStore::new(&config);
+        assert!(fresh.was_freshly_created());
+
+        // Reopening the same, now-migrated, data dir is not.
+        let reopened = FileStore::new(&config);
+        assert!(!reopened.was_freshly_created());
     }
 
     // Initialize a User struct

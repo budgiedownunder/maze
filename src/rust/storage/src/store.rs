@@ -852,6 +852,13 @@ pub(crate) fn normalize_item_order(items: &mut [CollectionItem]) {
 pub trait Manage {
     /// Resets the store to empty
     async fn empty(&mut self) -> Result<(), Error>;
+
+    /// Whether this store was created empty during this process's construction —
+    /// a brand-new data directory (FileStore) or an unmigrated database
+    /// (SqlStore) — as opposed to reopening an existing store. Lets one-time
+    /// bootstrap seeding run only on a genuinely fresh store, so an admin's later
+    /// deletion of the seeded content is not resurrected on the next restart.
+    fn was_freshly_created(&self) -> bool;
 }
 
 /// Represents a store

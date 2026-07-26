@@ -465,6 +465,13 @@ pub fn apply_pending_migrations(data_dir: &str) -> Result<(), Error> {
     apply_migrations_to(data_dir, MIGRATIONS)
 }
 
+/// The schema version currently recorded for `data_dir` (`0` when
+/// `.schema_version` is absent — a brand-new data dir). Read *before*
+/// [`apply_pending_migrations`] to tell a fresh store from a reopened one.
+pub fn current_schema_version(data_dir: &str) -> Result<u32, Error> {
+    read_schema_version(Path::new(data_dir))
+}
+
 /// Internal worker: same contract as `apply_pending_migrations` but takes
 /// the registry as a parameter so tests can inject custom migration sets
 /// without mutating the const.

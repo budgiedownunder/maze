@@ -730,6 +730,10 @@ mod test_definitions {
             self.users = HashMap::new();
             Ok(())
         }
+
+        fn was_freshly_created(&self) -> bool {
+            false
+        }
     }
 
     // In-memory TokenStore that mirrors the real storage backends'
