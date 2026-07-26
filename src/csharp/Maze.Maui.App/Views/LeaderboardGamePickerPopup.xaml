@@ -36,9 +36,11 @@
 
             <Label Grid.Row="0" Text="Choose a game" FontSize="18" FontAttributes="Bold" HorizontalOptions="Center" />
 
-            <!-- Scope tabs. -->
-            <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="4">
-                <Border Grid.Column="0" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+            <!-- Scope tabs: a 2x2 grid rather than a single row of four, so each
+                 tab keeps enough width for its label ("My Games" / "Community")
+                 on a narrow phone without truncating. -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="4" RowSpacing="4">
+                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" StrokeShape="RoundRectangle 6"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
                     <Border.Triggers>
                         <DataTrigger TargetType="Border" Binding="{Binding IsFeatured}" Value="True">
@@ -51,7 +53,7 @@
                     <Label Text="Featured" FontSize="12" Padding="0,8" HorizontalOptions="Center"
                            TextColor="White" />
                 </Border>
-                <Border Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 6"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
                     <Border.Triggers>
                         <DataTrigger TargetType="Border" Binding="{Binding IsMineTab}" Value="True">
@@ -64,7 +66,7 @@
                     <Label Text="My Games" FontSize="12" Padding="0,8" HorizontalOptions="Center"
                            TextColor="White" />
                 </Border>
-                <Border Grid.Column="2" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" StrokeShape="RoundRectangle 6"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
                     <Border.Triggers>
                         <DataTrigger TargetType="Border" Binding="{Binding IsSharedTab}" Value="True">
@@ -77,7 +79,7 @@
                     <Label Text="Shared" FontSize="12" Padding="0,8" HorizontalOptions="Center"
                            TextColor="White" />
                 </Border>
-                <Border Grid.Column="3" StrokeThickness="0" StrokeShape="RoundRectangle 6"
+                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" StrokeShape="RoundRectangle 6"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}">
                     <Border.Triggers>
                         <DataTrigger TargetType="Border" Binding="{Binding IsPublicTab}" Value="True">
@@ -98,7 +100,11 @@
                    Placeholder="Search games…"
                    Text="{Binding SearchText}" />
 
-            <ScrollView Grid.Row="3">
+            <!-- The list scrolls inside an explicitly bounded height. A bare
+                 MaximumHeightRequest on the outer Grid doesn't reliably clamp
+                 inside a Popup (it sizes to content), so the inner list overran
+                 and never scrolled — bounding the ScrollView itself fixes that. -->
+            <ScrollView Grid.Row="3" MinimumHeightRequest="120" MaximumHeightRequest="380">
                 <VerticalStackLayout Spacing="0">
                     <!-- Featured: one mixed list. -->
                     <VerticalStackLayout IsVisible="{Binding IsFeatured}" Spacing="0"
@@ -122,6 +128,12 @@
                 </VerticalStackLayout>
             </ScrollView>
 
+            <!-- Busy overlay while the list (re)loads on open / scope switch / search. -->
+            <ActivityIndicator Grid.Row="3"
+                               IsVisible="{Binding IsBusy}"
+                               IsRunning="{Binding IsBusy}"
+                               HorizontalOptions="Center" VerticalOptions="Center" />
+
             <!-- Load-more paginators live outside the scroll region so they never
                  sit behind the list scrollbar. Only the current scope's applicable
                  buttons are visible; each is self-labelled by its section. -->
@@ -132,6 +144,11 @@
                         Command="{Binding LoadMoreCollectionsCommand}" HorizontalOptions="Fill" />
                 <Button IsVisible="{Binding GamesHasMore}" Text="Load more games"
                         Command="{Binding LoadMoreGamesCommand}" HorizontalOptions="Fill" />
+                <!-- Spinner while a Load-more append is in flight (the pressed button
+                     auto-disables itself for the duration via its async command). -->
+                <ActivityIndicator IsVisible="{Binding IsLoadingMore}"
+                                   IsRunning="{Binding IsLoadingMore}"
+                                   HeightRequest="24" />
             </VerticalStackLayout>
 
             <Button Grid.Row="5"

@@ -103,6 +103,10 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool gamesHasMore;
 
+        /// <summary>Whether a load-more append is in flight (footer spinner).</summary>
+        [ObservableProperty]
+        private bool isLoadingMore;
+
         /// <summary>Empty/error status text.</summary>
         [ObservableProperty]
         private string statusMessage = "";
@@ -155,29 +159,53 @@ namespace Maze.Maui.App.ViewModels
         [RelayCommand]
         private async Task LoadMoreFeatured()
         {
-            FeaturedGameItemsListResponse resp = await _gameLibrary.GetFeaturedGameItemsAsync(PageSize, FeaturedRows.Count);
-            foreach (FeaturedGameItem item in resp.Items)
-                AddFeaturedItem(item);
-            FeaturedHasMore = resp.HasMore;
+            IsLoadingMore = true;
+            try
+            {
+                FeaturedGameItemsListResponse resp = await _gameLibrary.GetFeaturedGameItemsAsync(PageSize, FeaturedRows.Count);
+                foreach (FeaturedGameItem item in resp.Items)
+                    AddFeaturedItem(item);
+                FeaturedHasMore = resp.HasMore;
+            }
+            finally
+            {
+                IsLoadingMore = false;
+            }
         }
 
         [RelayCommand]
         private async Task LoadMoreCollections()
         {
-            int offset = CollectionRows.Count(r => r.IsCollection);
-            GameCollectionListResponse resp = await _gameLibrary.ListGameCollectionsAsync(ListScope, Query, null, PageSize, offset);
-            foreach (GameCollection collection in resp.Collections)
-                CollectionRows.Add(new GamePickerRow { IsCollection = true, Collection = collection });
-            CollectionsHasMore = resp.HasMore;
+            IsLoadingMore = true;
+            try
+            {
+                int offset = CollectionRows.Count(r => r.IsCollection);
+                GameCollectionListResponse resp = await _gameLibrary.ListGameCollectionsAsync(ListScope, Query, null, PageSize, offset);
+                foreach (GameCollection collection in resp.Collections)
+                    CollectionRows.Add(new GamePickerRow { IsCollection = true, Collection = collection });
+                CollectionsHasMore = resp.HasMore;
+            }
+            finally
+            {
+                IsLoadingMore = false;
+            }
         }
 
         [RelayCommand]
         private async Task LoadMoreGames()
         {
-            GameDefinitionListResponse resp = await _gameLibrary.ListGameDefinitionsAsync(ListScope, Query, null, PageSize, GameRows.Count);
-            foreach (GameDefinition game in resp.Definitions)
-                GameRows.Add(new GamePickerRow { Game = game });
-            GamesHasMore = resp.HasMore;
+            IsLoadingMore = true;
+            try
+            {
+                GameDefinitionListResponse resp = await _gameLibrary.ListGameDefinitionsAsync(ListScope, Query, null, PageSize, GameRows.Count);
+                foreach (GameDefinition game in resp.Definitions)
+                    GameRows.Add(new GamePickerRow { Game = game });
+                GamesHasMore = resp.HasMore;
+            }
+            finally
+            {
+                IsLoadingMore = false;
+            }
         }
 
         /// <summary>Expands or collapses a collection row, loading its members on first expand.</summary>
