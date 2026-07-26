@@ -150,14 +150,6 @@ export interface BoardDatesResponse {
   dates: string[]
 }
 
-// The subset of the server's Play3dConfigResponse the client consumes: the
-// curated difficulty's fixed maze seed, used to key its leaderboard
-// (`challenge = "<difficulty>:<seed>"`).
-export interface Play3dConfig {
-  difficulty: string
-  seed: number
-}
-
 // --- Game definitions & collections -----------------------------------------
 
 // A stored 3D game definition — presentation metadata plus an opaque, client-

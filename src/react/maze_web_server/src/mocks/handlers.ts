@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, CompletedChallengesResponse, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, Play3dConfig, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, CompletedChallengesResponse, FeaturedGameItem, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, GranteeSummary, LoginResponse, Maze, RenewResponse, ScoreboardResponse, ScoreEntry, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserLookupEntry, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -1148,14 +1148,15 @@ export const handlers = [
     return HttpResponse.json<FeaturedGameItemsListResponse>({ items: hydrated, limit: hydrated.length, offset: 0, hasMore: false })
   }),
 
-  // Scores — curated preset (for the leaderboard seed), personal history, and
-  // the leaderboard itself.
+  // Legacy curated-difficulty preset (still served for the host-page `?difficulty`
+  // path; retired with that path).
   http.get(`${BASE}/game/play3d-config`, ({ request }) => {
     const difficulty = new URL(request.url).searchParams.get('difficulty') ?? 'easy'
     const seeds: Record<string, number> = { easy: 111, tricky: 222, hard: 333 }
-    return HttpResponse.json<Play3dConfig>({ difficulty, seed: seeds[difficulty] ?? 999 })
+    return HttpResponse.json({ difficulty, seed: seeds[difficulty] ?? 999 })
   }),
 
+  // Scores — personal history and the leaderboard itself.
   http.get(`${BASE}/scores/me`, () => {
     // Most recent first — the page picks scores[0] as the default subject.
     const scores: ScoreEntry[] = [

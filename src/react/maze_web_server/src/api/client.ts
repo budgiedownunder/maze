@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, ImageUpdatedResponse, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, ImageUpdatedResponse, LoginResponse, Maze, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -342,12 +342,6 @@ export function getBoardDates(token: string, definitionId: string): Promise<Boar
   return request<BoardDatesResponse>(`/scores/board-dates?definition_id=${encodeURIComponent(definitionId)}`, {
     headers: authHeaders(token),
   })
-}
-
-// Reads a curated difficulty's preset (unauthenticated). The leaderboard UI
-// uses its fixed `seed` to build the challenge board key.
-export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
-  return request<Play3dConfig>(`/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`)
 }
 
 // --- Game definitions & collections -----------------------------------------
