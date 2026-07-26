@@ -56,14 +56,14 @@ test('a daily game shows a date picker and browses past days', async ({ page }) 
   await page.getByRole('button', { name: 'Choose a game' }).click()
   await page.getByRole('button', { name: 'Show leaderboard for Daily Maze' }).click()
 
-  // The date control appears, defaulting to today (UTC). Exact match — the
-  // quick-pick group's "Days with scores" label otherwise also matches "Day".
-  const dateInput = page.getByLabel('Day', { exact: true })
-  await expect(dateInput).toBeVisible()
-  await expect(dateInput).toHaveValue(new Date().toISOString().slice(0, 10))
+  // The date dropdown appears, defaulting to the most-recent day with runs
+  // (2026-07-10) rather than today, which has none.
+  const daySelect = page.getByRole('combobox', { name: 'Day' })
+  await expect(daySelect).toBeVisible()
+  await expect(daySelect).toHaveValue('2026-07-10')
 
-  // A past day with runs is offered as a quick-pick; picking it re-keys the board.
-  await page.getByRole('button', { name: '2026-07-05' }).click()
-  await expect(dateInput).toHaveValue('2026-07-05')
+  // Picking an earlier day with runs re-keys the board.
+  await daySelect.selectOption('2026-07-05')
+  await expect(daySelect).toHaveValue('2026-07-05')
   await expect(page.getByRole('table')).toBeVisible()
 })

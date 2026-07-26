@@ -119,6 +119,44 @@ export function gameIdFromChallenge(challenge: string): string | null {
   return id === '' ? null : id
 }
 
+// A selectable day for a Daily game's leaderboard: the raw `yyyy-mm-dd` board
+// key (`value`) with a display label — either "Today" (the pinned first entry)
+// or the date formatted, e.g. "20 Jul 2026".
+export interface BoardDateOption {
+  value: string
+  label: string
+}
+
+const BOARD_DATE_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// `yyyy-mm-dd` → e.g. "20 Jul 2026" (culture-invariant, and timezone-safe: no
+// Date parsing, so no UTC/local shift). Falls back to the raw value if malformed.
+export function formatBoardDate(dateUtc: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateUtc)
+  if (!m) return dateUtc
+  const month = BOARD_DATE_MONTHS[Number(m[2]) - 1]
+  return month ? `${Number(m[3])} ${month} ${m[1]}` : dateUtc
+}
+
+// The selectable days for a Daily game's leaderboard: "Today" pinned first
+// (always offered, even with no runs today), then the days that actually have a
+// board (`boardDates`, newest-first, today deduped since the pin covers it).
+// Native calendars can't disable the sparse non-scored days, so the UI is a list.
+export function boardDateOptions(boardDates: string[], today: string): BoardDateOption[] {
+  const options: BoardDateOption[] = [{ value: today, label: 'Today' }]
+  for (const date of boardDates) {
+    if (date !== today) options.push({ value: date, label: formatBoardDate(date) })
+  }
+  return options
+}
+
+// The day to select by default: the most-recent day that actually has runs (the
+// newest board-date — which is Today when today itself has runs), or Today when
+// the game has no runs at all.
+export function defaultBoardDate(boardDates: string[], today: string): string {
+  return boardDates[0] ?? today
+}
+
 // How a collection is played once opened: "arcade" = free choice (pick any
 // member game), "campaign" = an ordered progression through the members. The
 // lowercase wire values mirror the server's `data_model::PlayMode`.

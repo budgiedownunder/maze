@@ -2544,7 +2544,7 @@ textarea.input {
 /* Child spacing is owned by the groupbox's column gap. */
 .leaderboard-filters > .subject-label,
 .leaderboard-filters > .subject-selector,
-.leaderboard-filters > .daily-board-picker {
+.leaderboard-filters > .daily-board-date {
   margin-bottom: 0;
 }
 .subject-selector {
@@ -2591,43 +2591,18 @@ textarea.input {
   opacity: 0.5;
   cursor: not-allowed;
 }
-/* Daily leaderboard date control: a native date input plus a wrapping row of
-   "days with runs" quick-pick chips, shown between the game selector and the
-   board when a Daily game is picked. */
-.daily-board-picker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin-bottom: 16px;
-}
+/* Daily leaderboard date control: a dropdown of the days known to have a board
+   (Today pinned first, then past days most-recent first), shown between the game
+   selector and the board when a Daily game is picked. */
 .daily-board-date {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 16px;
 }
 .daily-board-label {
   font-weight: 600;
   color: var(--text-muted);
-}
-.daily-board-quickpicks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.daily-board-chip {
-  padding: 4px 10px;
-  border: 1px solid var(--border-input);
-  border-radius: 999px;
-  background: var(--button-bg);
-  color: var(--text, inherit);
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.daily-board-chip--active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
 }
 .leaderboard-tab {
   padding: 6px 14px;

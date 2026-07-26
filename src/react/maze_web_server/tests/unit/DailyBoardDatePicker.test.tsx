@@ -1,73 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { http, HttpResponse } from 'msw'
 import { DailyBoardDatePicker } from '../../src/components/DailyBoardDatePicker'
-import { server } from '../../src/mocks/server'
-import { todayUtc } from '../../src/utils/gameDefinitions'
+import type { BoardDateOption } from '../../src/utils/gameDefinitions'
 
-function boardDates(dates: string[]) {
-  return http.get('/api/v1/scores/board-dates', () => HttpResponse.json({ dates }))
-}
-
-beforeEach(() => {
-  vi.clearAllMocks()
-})
+const OPTIONS: BoardDateOption[] = [
+  { value: '2026-07-26', label: 'Today' },
+  { value: '2026-07-20', label: '20 Jul 2026' },
+  { value: '2026-07-12', label: '12 Jul 2026' },
+]
 
 describe('DailyBoardDatePicker', () => {
-  it('renders a date input capped at today with the selected value', async () => {
-    server.use(boardDates([]))
-    render(<DailyBoardDatePicker token="t" gameId="g1" value="2026-07-05" onChange={vi.fn()} />)
+  it('renders the day options and shows the selected value', () => {
+    render(<DailyBoardDatePicker options={OPTIONS} value="2026-07-20" onChange={vi.fn()} />)
 
-    const input = screen.getByLabelText('Day') as HTMLInputElement
-    expect(input.type).toBe('date')
-    expect(input.value).toBe('2026-07-05')
-    expect(input.max).toBe(todayUtc())
+    const select = screen.getByLabelText('Day') as HTMLSelectElement
+    expect(select.value).toBe('2026-07-20')
+    // Today pinned first, then the past days most-recent first.
+    expect(Array.from(select.options).map(o => o.textContent)).toEqual(['Today', '20 Jul 2026', '12 Jul 2026'])
   })
 
-  it('renders the days-with-runs as quick-pick chips and selects one on click', async () => {
-    server.use(boardDates(['2026-07-10', '2026-07-05']))
+  it('reports the chosen day through onChange', async () => {
     const onChange = vi.fn()
-    render(<DailyBoardDatePicker token="t" gameId="g1" value="2026-07-10" onChange={onChange} />)
+    render(<DailyBoardDatePicker options={OPTIONS} value="2026-07-26" onChange={onChange} />)
 
-    // The chips appear once the board-dates load.
-    const chip = await screen.findByRole('button', { name: '2026-07-05' })
-    // The selected day's chip is marked pressed.
-    expect(screen.getByRole('button', { name: '2026-07-10' })).toHaveAttribute('aria-pressed', 'true')
-    expect(chip).toHaveAttribute('aria-pressed', 'false')
-
-    await userEvent.click(chip)
-    expect(onChange).toHaveBeenCalledWith('2026-07-05')
-  })
-
-  it('reports a picked date through onChange but ignores a cleared input', () => {
-    server.use(boardDates([]))
-    const onChange = vi.fn()
-    render(<DailyBoardDatePicker token="t" gameId="g1" value="2026-07-05" onChange={onChange} />)
-    const input = screen.getByLabelText('Day')
-
-    // Clearing yields an empty value, which can't key a board — no callback.
-    fireEvent.change(input, { target: { value: '' } })
-    expect(onChange).not.toHaveBeenCalled()
-
-    fireEvent.change(input, { target: { value: '2026-07-08' } })
-    expect(onChange).toHaveBeenCalledWith('2026-07-08')
-  })
-
-  it('shows no quick-picks when the game has no dated boards', async () => {
-    server.use(boardDates([]))
-    render(<DailyBoardDatePicker token="t" gameId="g1" value={todayUtc()} onChange={vi.fn()} />)
-
-    // Give the (empty) fetch a chance to settle, then assert nothing rendered.
-    await waitFor(() => expect(screen.getByLabelText('Day')).toBeInTheDocument())
-    expect(screen.queryByRole('group', { name: 'Days with scores' })).not.toBeInTheDocument()
-  })
-
-  it('leaves quick-picks empty when the board-dates fetch fails', async () => {
-    server.use(http.get('/api/v1/scores/board-dates', () => new HttpResponse(null, { status: 403 })))
-    render(<DailyBoardDatePicker token="t" gameId="g1" value={todayUtc()} onChange={vi.fn()} />)
-
-    await waitFor(() => expect(screen.getByLabelText('Day')).toBeInTheDocument())
-    expect(screen.queryByRole('group', { name: 'Days with scores' })).not.toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Day'), '2026-07-12')
+    expect(onChange).toHaveBeenCalledWith('2026-07-12')
   })
 })

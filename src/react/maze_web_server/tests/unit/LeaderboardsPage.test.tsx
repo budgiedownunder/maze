@@ -309,32 +309,34 @@ describe('LeaderboardsPage', () => {
     expect(launchPlay3dWithSettings).not.toHaveBeenCalled()
   })
 
-  it('shows a date picker defaulting to today for a daily game', async () => {
+  it('shows a date dropdown defaulting to the most-recent day with runs for a daily game', async () => {
     const { handlers, requested } = dailyDefaultHandlers()
     server.use(...handlers)
     renderPage()
 
     // Defaults to the daily game behind the most-recent run.
     await waitFor(() => expect(screen.getByText('Daily Maze')).toBeInTheDocument())
-    const input = (await screen.findByLabelText('Day')) as HTMLInputElement
-    expect(input.value).toBe(todayUtc())
-    // Its board is keyed to today's dated challenge.
-    await waitFor(() => expect(requested).toContain(`def:daily-1:${todayUtc()}`))
-    // A past day with runs is offered as a quick-pick.
-    expect(await screen.findByRole('button', { name: '2026-07-05' })).toBeInTheDocument()
+    const select = (await screen.findByLabelText('Day')) as HTMLSelectElement
+    // Defaults to the newest day that has runs (2026-07-10), not today.
+    expect(select.value).toBe('2026-07-10')
+    await waitFor(() => expect(requested).toContain('def:daily-1:2026-07-10'))
+    // Never loaded today's (empty) board first.
+    expect(requested).not.toContain(`def:daily-1:${todayUtc()}`)
+    // Today is still offered (pinned first), then the days with runs.
+    expect(Array.from(select.options).map(o => o.value)).toEqual([todayUtc(), '2026-07-10', '2026-07-05'])
   })
 
-  it('re-keys the board to a past day when a quick-pick chip is clicked', async () => {
+  it('re-keys the board to a past day when another day is selected', async () => {
     const { handlers, requested } = dailyDefaultHandlers()
     server.use(...handlers)
     renderPage()
 
-    const chip = await screen.findByRole('button', { name: '2026-07-05' })
-    await userEvent.click(chip)
+    const select = (await screen.findByLabelText('Day')) as HTMLSelectElement
+    await userEvent.selectOptions(select, '2026-07-05')
 
-    // The board now asks for that day's dated challenge, and the input reflects it.
+    // The board now asks for that day's dated challenge, and the select reflects it.
     await waitFor(() => expect(requested).toContain('def:daily-1:2026-07-05'))
-    expect((screen.getByLabelText('Day') as HTMLInputElement).value).toBe('2026-07-05')
+    expect(select.value).toBe('2026-07-05')
   })
 
   it('shows no date picker for a static game', async () => {
