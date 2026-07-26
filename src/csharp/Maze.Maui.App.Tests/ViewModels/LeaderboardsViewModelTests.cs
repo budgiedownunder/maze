@@ -40,6 +40,8 @@ namespace Maze.Maui.App.Tests.ViewModels
             scores.Setup(s => s.GetLeaderboardAsync(
                 It.IsAny<ScoreSubject>(), It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(),
                 It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>())).ReturnsAsync(EmptyBoard());
+            scores.Setup(s => s.GetBoardDatesAsync(It.IsAny<string>()))
+                  .ReturnsAsync(new BoardDatesResponse { Dates = new List<string>() });
 
             return new Mocks(scores, gameLib, mazes, auth, nav, avatar, dialog);
         }
@@ -424,6 +426,98 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.True(vm.HasPlayed);
             Assert.Equal("↻ Play Again", vm.PlayLabel);
+        }
+
+        // ---- Daily board-date picker ----------------------------------------
+
+        [Fact]
+        public async Task Daily_OffersTodayThenPastDays_DefaultsToMostRecentWithRuns()
+        {
+            var (vm, scores, gameLib, _, _) = BuildVm();
+            scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { ChallengeRow("def:g1:2020-06-20") }, false));
+            gameLib.Setup(g => g.GetGameDefinitionAsync("g1")).ReturnsAsync(GameDef("g1", rotation: "daily"));
+            scores.Setup(s => s.GetBoardDatesAsync("g1"))
+                  .ReturnsAsync(new BoardDatesResponse { Dates = new List<string> { "2020-06-20", "2020-06-12" } });
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.True(vm.IsDailyGame);
+            // Today pinned first, then the days with boards, most-recent first.
+            string[] expected = { "Today", "20 Jun 2020", "12 Jun 2020" };
+            Assert.Equal(expected, vm.BoardDates.Select(o => o.Label).ToArray());
+            // Default = the most-recent day that has runs (not Today, which has none).
+            Assert.Equal("2020-06-20", vm.SelectedBoardDate!.DateUtc);
+            scores.Verify(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.Challenge == "def:g1:2020-06-20"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), true), Times.Once);
+        }
+
+        [Fact]
+        public async Task Daily_TodayHasRuns_PinnedOnce_AndIsTheDefault()
+        {
+            string today = GameChallenge.TodayUtc();
+            var (vm, scores, gameLib, _, _) = BuildVm();
+            scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { ChallengeRow($"def:g1:{today}") }, false));
+            gameLib.Setup(g => g.GetGameDefinitionAsync("g1")).ReturnsAsync(GameDef("g1", rotation: "daily"));
+            scores.Setup(s => s.GetBoardDatesAsync("g1"))
+                  .ReturnsAsync(new BoardDatesResponse { Dates = new List<string> { today, "2020-06-12" } });
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            // Today isn't duplicated — the pin covers it — and it's the default.
+            string[] expected = { "Today", "12 Jun 2020" };
+            Assert.Equal(expected, vm.BoardDates.Select(o => o.Label).ToArray());
+            Assert.Equal("Today", vm.SelectedBoardDate!.Label);
+            Assert.Equal(today, vm.SelectedBoardDate.DateUtc);
+        }
+
+        [Fact]
+        public async Task Daily_NoRuns_OffersOnlyTodayAndDefaultsToIt()
+        {
+            string today = GameChallenge.TodayUtc();
+            var (vm, scores, gameLib, _, _) = BuildVm();
+            gameLib.Setup(g => g.GetGameDefinitionAsync("g1")).ReturnsAsync(GameDef("g1", rotation: "daily"));
+            scores.Setup(s => s.GetBoardDatesAsync("g1")).ReturnsAsync(new BoardDatesResponse { Dates = new List<string>() });
+            vm.SetPreselectGame("g1");
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.True(vm.IsDailyGame);
+            Assert.Single(vm.BoardDates);
+            Assert.Equal("Today", vm.SelectedBoardDate!.Label);
+            Assert.Equal(today, vm.SelectedBoardDate.DateUtc);
+        }
+
+        [Fact]
+        public async Task Daily_SelectingAnEarlierDay_ReloadsThatDaysBoard()
+        {
+            var (vm, scores, gameLib, _, _) = BuildVm();
+            scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { ChallengeRow("def:g1:2020-06-20") }, false));
+            gameLib.Setup(g => g.GetGameDefinitionAsync("g1")).ReturnsAsync(GameDef("g1", rotation: "daily"));
+            scores.Setup(s => s.GetBoardDatesAsync("g1"))
+                  .ReturnsAsync(new BoardDatesResponse { Dates = new List<string> { "2020-06-20", "2020-06-12" } });
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            vm.SelectedBoardDate = vm.BoardDates.First(o => o.DateUtc == "2020-06-12");
+
+            scores.Verify(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.Challenge == "def:g1:2020-06-12"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), true), Times.Once);
+        }
+
+        [Fact]
+        public async Task Static3dGame_HasNoBoardDatePicker()
+        {
+            var (vm, scores, gameLib, _, _) = BuildVm();
+            scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { ChallengeRow("def:g1") }, false));
+            gameLib.Setup(g => g.GetGameDefinitionAsync("g1")).ReturnsAsync(GameDef("g1", rotation: "static"));
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.True(vm.Is3dType);
+            Assert.False(vm.IsDailyGame);
+            Assert.Empty(vm.BoardDates);
+            Assert.Null(vm.SelectedBoardDate);
+            scores.Verify(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.Challenge == "def:g1"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), true), Times.Once);
         }
 
         // ---- Reset leaderboard ----------------------------------------------

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Maze.Maui.App.Models;
 
 namespace Maze.Maui.App.ViewModels
@@ -97,6 +98,46 @@ namespace Maze.Maui.App.ViewModels
             OwnerId = definition.OwnerId,
             Rotation = definition.Rotation,
         };
+    }
+
+    /// <summary>
+    /// A selectable day for a daily game's leaderboard: the raw <c>yyyy-mm-dd</c>
+    /// board key (<see cref="DateUtc"/>) with a display label — either "Today" (the
+    /// pinned first entry) or the date formatted as e.g. <c>20 Jul 2026</c>.
+    /// </summary>
+    public sealed class BoardDateOption
+    {
+        /// <summary>Display label ("Today", or the formatted date).</summary>
+        public string Label { get; }
+
+        /// <summary>The <c>yyyy-mm-dd</c> UTC date keying the <c>def:&lt;id&gt;:&lt;date&gt;</c> board.</summary>
+        public string DateUtc { get; }
+
+        private BoardDateOption(string label, string dateUtc)
+        {
+            Label = label;
+            DateUtc = dateUtc;
+        }
+
+        /// <summary>The pinned "Today" option (today's board may be mid-day / empty).</summary>
+        /// <param name="dateUtc">Today's <c>yyyy-mm-dd</c> (UTC)</param>
+        /// <returns>The option</returns>
+        public static BoardDateOption Today(string dateUtc) => new("Today", dateUtc);
+
+        /// <summary>An option for a past day that has a board.</summary>
+        /// <param name="dateUtc">The <c>yyyy-mm-dd</c> (UTC)</param>
+        /// <returns>The option</returns>
+        public static BoardDateOption ForDate(string dateUtc) => new(FormatDate(dateUtc), dateUtc);
+
+        /// <inheritdoc/>
+        public override string ToString() => Label;
+
+        // Human-friendly, culture-invariant, unambiguous (e.g. "20 Jul 2026");
+        // falls back to the raw value if it isn't a yyyy-mm-dd date.
+        private static string FormatDate(string dateUtc) =>
+            DateTime.TryParseExact(dateUtc, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsed)
+                ? parsed.ToString("d MMM yyyy", CultureInfo.InvariantCulture)
+                : dateUtc;
     }
 
     /// <summary>

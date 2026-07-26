@@ -51,6 +51,10 @@ namespace Maze.Maui.App.ViewModels
         private ScoreSubject? _currentSubject;
         private ScoreMetric _metric = ScoreMetric.Time;
 
+        // Suppresses the SelectedBoardDate-changed reload while the date list is
+        // (re)populated for a new game (the caller reloads the board itself).
+        private bool _suppressDateReload;
+
         /// <summary>The Game Type picker options (fixed).</summary>
         public ObservableCollection<GameTypeOption> GameTypes { get; } = new()
         {
@@ -61,6 +65,10 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>The maze Game picker options (Mazes type only).</summary>
         public ObservableCollection<GameOption> Games { get; } = new();
 
+        /// <summary>The selectable board days for a daily 3D game (Today pinned first,
+        /// then the days that have boards, most-recent first).</summary>
+        public ObservableCollection<BoardDateOption> BoardDates { get; } = new();
+
         /// <summary>The loaded board rows.</summary>
         public ObservableCollection<LeaderboardRow> Rows { get; } = new();
 
@@ -69,6 +77,7 @@ namespace Maze.Maui.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanPlay))]
         [NotifyPropertyChangedFor(nameof(IsMazeType))]
         [NotifyPropertyChangedFor(nameof(Is3dType))]
+        [NotifyPropertyChangedFor(nameof(IsDailyGame))]
         [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
         private GameTypeOption? selectedGameType;
 
@@ -82,8 +91,14 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanPlay))]
         [NotifyPropertyChangedFor(nameof(PickedGameLabel))]
+        [NotifyPropertyChangedFor(nameof(IsDailyGame))]
         [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
         private PickedGame? pickedGame;
+
+        /// <summary>The selected board day (daily 3D games only); changing it reloads
+        /// that day's board.</summary>
+        [ObservableProperty]
+        private BoardDateOption? selectedBoardDate;
 
         /// <summary>Whether a further board page exists.</summary>
         [ObservableProperty]
@@ -147,6 +162,9 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Whether the 3D Games type is selected (shows the game picker).</summary>
         public bool Is3dType => SelectedGameType?.Kind == LeaderboardGameType.Play3d;
 
+        /// <summary>Whether a daily 3D game is picked (shows the board-day picker).</summary>
+        public bool IsDailyGame => Is3dType && PickedGame?.Rotation == GameVocabulary.Rotation.Daily;
+
         /// <summary>The picked 3D game's name, or a prompt when none is chosen yet.</summary>
         public string PickedGameLabel => PickedGame?.Name ?? "Choose a game";
 
@@ -187,6 +205,16 @@ namespace Maze.Maui.App.ViewModels
         // by the page (picker change → ReloadBoardCommand) and InitializeAsync.
         partial void OnSelectedGameTypeChanged(GameTypeOption? value) => PopulateGames();
 
+        // A user-driven board-day change reloads that day's board. Suppressed while
+        // the date list is (re)populated for a new game (the caller reloads then),
+        // and while a load is already in flight (InitializeAsync sets the default).
+        partial void OnSelectedBoardDateChanged(BoardDateOption? value)
+        {
+            if (_suppressDateReload || IsBusy)
+                return;
+            _ = ReloadWithBusyAsync(force: true);
+        }
+
         /// <summary>
         /// Discovers the player's played subjects, picks the default selection, and
         /// loads its board. Invoked by the page on first appearance.
@@ -205,6 +233,7 @@ namespace Maze.Maui.App.ViewModels
                 _currentUserId = await ResolveCurrentUserIdAsync();
                 await DiscoverSubjectsAsync();
                 await ApplyDefaultSelectionAsync();
+                await RefreshBoardDatesAsync();
                 await LoadBoardCoreAsync(force: true);
             }
             catch (Exception ex)
@@ -256,6 +285,7 @@ namespace Maze.Maui.App.ViewModels
                 return;
 
             SelectGame(PickedGame.From(picked));
+            await RefreshBoardDatesAsync();
             await ReloadWithBusyAsync(force: true);
         }
 
@@ -448,9 +478,64 @@ namespace Maze.Maui.App.ViewModels
         private ScoreSubject? ResolveSubject()
         {
             if (Is3dType)
-                return PickedGame is null ? null : ScoreSubject.ForChallenge(GameChallenge.For(PickedGame.Id, PickedGame.Rotation));
+                return PickedGame is null
+                    ? null
+                    : ScoreSubject.ForChallenge(GameChallenge.For(PickedGame.Id, PickedGame.Rotation, SelectedBoardDate?.DateUtc));
 
             return SelectedGame is null ? null : ScoreSubject.ForMaze(SelectedGame.MazeId);
+        }
+
+        // (Re)builds the board-day list for the picked game. For a daily game: Today
+        // is pinned first, then the days that have boards (GetBoardDatesAsync,
+        // newest-first, today deduped); the default selection is the most-recent day
+        // that actually has runs (Today only when today itself has runs, or when the
+        // game has no runs at all). For anything else the list is cleared/hidden.
+        // Repopulating is guarded so it doesn't trigger a board reload — the caller
+        // reloads once after this.
+        private async Task RefreshBoardDatesAsync()
+        {
+            _suppressDateReload = true;
+            try
+            {
+                BoardDates.Clear();
+                SelectedBoardDate = null;
+                if (!IsDailyGame || PickedGame is null)
+                    return;
+
+                string today = GameChallenge.TodayUtc();
+                var todayOption = BoardDateOption.Today(today);
+                BoardDates.Add(todayOption);
+
+                // The default is the most-recent day with runs: if that's today (or
+                // there are no runs) it's the Today pin, else the matching past-day
+                // option captured as it's added.
+                string? mostRecentWithRuns = null;
+                BoardDateOption? defaultPastDay = null;
+                try
+                {
+                    BoardDatesResponse resp = await _scoresService.GetBoardDatesAsync(PickedGame.Id);
+                    mostRecentWithRuns = resp.Dates.Count > 0 ? resp.Dates[0] : null;
+                    foreach (string date in resp.Dates)
+                    {
+                        if (date == today)
+                            continue;
+                        var option = BoardDateOption.ForDate(date);
+                        BoardDates.Add(option);
+                        if (date == mostRecentWithRuns)
+                            defaultPastDay = option;
+                    }
+                }
+                catch
+                {
+                    // Best-effort: at least Today stays selectable.
+                }
+
+                SelectedBoardDate = defaultPastDay ?? todayOption;
+            }
+            finally
+            {
+                _suppressDateReload = false;
+            }
         }
 
         private List<LeaderboardRow> AppendRows(ScoreboardResponse resp)

@@ -82,6 +82,17 @@
                     </Button.Triggers>
                 </Button>
             </Grid>
+            <!-- Daily games only: which day's frozen board to show. A dropdown of
+                 days known to have a board (Today pinned first, then past days
+                 most-recent first) — native calendars can't disable the sparse
+                 non-scored days, so this is a list, not a calendar. -->
+            <HorizontalStackLayout IsVisible="{Binding IsDailyGame}" Spacing="8" VerticalOptions="Center">
+                <Label Text="Date" VerticalOptions="Center" />
+                <Picker ItemsSource="{Binding BoardDates}"
+                        ItemDisplayBinding="{Binding Label}"
+                        SelectedItem="{Binding SelectedBoardDate}"
+                        MinimumWidthRequest="160" />
+            </HorizontalStackLayout>
         </VerticalStackLayout>
 
         <!-- Ranking-metric toggle. Borders (not Buttons) so the active/inactive
