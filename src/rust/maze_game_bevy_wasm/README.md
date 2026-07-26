@@ -4,7 +4,7 @@
 
 The `maze_game_bevy_wasm` crate is a thin `cdylib` wrapper around [`maze_game_bevy`](../maze_game_bevy/README.md) that targets the browser via WebAssembly. It owns all browser-specific concerns: the canvas selector, the `webgl2` Bevy feature, and the `wasm-bindgen` entry point.
 
-The `start_with_config` entry point accepts the JSON the host page (`public/game/index.html`) builds from the server's `play3d-config` response. Its nested `levels` object — `count`, `finishType`, `difficultyChange`, `resetBag`, `alignment` — drives a multi-level run: when `count > 1` the wrapper generates the whole stack up front (via `maze_game_bevy::generate_level_maze_jsons`) and hands it to the game as a `PendingLevels` resource. A `count` of 1 (the default, and the saved-maze `mazeJson` path) is an ordinary single-level game.
+The `start_with_config` entry point accepts the JSON the host page (`public/game/index.html`) builds from the launch subject (a stored maze's saved 3D settings, or a game definition's stored `config`). Its nested `levels` object — `count`, `finishType`, `difficultyChange`, `resetBag`, `alignment` — drives a multi-level run: when `count > 1` the wrapper generates the whole stack up front (via `maze_game_bevy::generate_level_maze_jsons`) and hands it to the game as a `PendingLevels` resource. A `count` of 1 (the default, and the saved-maze `mazeJson` path) is an ordinary single-level game.
 
 ## Getting Started
 

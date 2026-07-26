@@ -8,18 +8,15 @@
 //! launch, mirroring the default-admin bootstrap.
 //!
 //! The per-difficulty preset values live here as code `const`s (the source of
-//! truth once the config presets are retired). Each definition's opaque `config`
-//! is produced through the same [`build_play3d_config_response`] path the
-//! `play3d-config` endpoint uses, so a curated game reaches the host page in the
-//! identical shape a difficulty preset does today.
+//! truth for the shipped curated games). Each definition's opaque `config` is
+//! the camelCase `StartConfig` the host page forwards to Bevy verbatim, built by
+//! [`curated_config`] — the varying fields come from the preset, the rest are the
+//! shipped defaults.
 
 use chrono::Utc;
 use data_model::{GameCollection, GameCollectionMeta, GameDefinition, PlayMode, Rotation, User, Visibility};
 use storage::{Error as StoreError, Store};
 use uuid::Uuid;
-
-use crate::api::v1::endpoints::handlers::build_play3d_config_response;
-use crate::config::game::{LevelsConfig, Play3dDifficultyConfig};
 
 /// The shipped, per-difficulty preset values — the numbers that vary between
 /// `Easy` / `Tricky` / `Hard`. The scene, landmark and remaining level-meta
@@ -144,47 +141,57 @@ const DAILY: DifficultyPreset = DifficultyPreset {
 /// The name of the seeded curated daily-challenge collection.
 const DAILY_COLLECTION_NAME: &str = "Daily Challenges";
 
-/// Turns a [`DifficultyPreset`] into a full [`Play3dDifficultyConfig`]. The
-/// varying values come from the preset; the scene, landmark, minimap and
-/// remaining level-meta fields are identical across all three shipped presets
-/// and equal the config defaults, so they come from [`Default`] here.
-fn preset_difficulty_config(preset: &DifficultyPreset) -> Play3dDifficultyConfig {
-    Play3dDifficultyConfig {
-        title: Some(preset.title.to_string()),
-        mode: preset.mode.to_string(),
-        rows: preset.rows,
-        cols: preset.cols,
-        timer_seconds: preset.timer_seconds,
-        seed: preset.seed,
-        min_solution_length: preset.min_solution_length,
-        door_count: preset.door_count,
-        spare_doors: preset.spare_doors,
-        spare_keys: preset.spare_keys,
-        enemy_count: preset.enemy_count,
-        health_count: preset.health_count,
-        treasure_count: preset.treasure_count,
-        enemy_move_period_ms: preset.enemy_move_period_ms,
-        max_hp: preset.max_hp,
-        levels: LevelsConfig { count: preset.level_count, ..LevelsConfig::default() },
-        ..Play3dDifficultyConfig::default()
-    }
-}
-
-/// Builds a curated definition's stored `config` — the camelCase wire shape the
-/// host page consumes, minus the `difficulty` label (a stored game carries no
-/// difficulty tag).
-fn build_difficulty_config(preset: &DifficultyPreset) -> Result<serde_json::Value, StoreError> {
-    let wire = build_play3d_config_response(
-        &preset_difficulty_config(preset),
-        preset.name.to_ascii_lowercase(),
-        preset.title.to_string(),
-    );
-    let mut value = serde_json::to_value(&wire)
-        .map_err(|err| StoreError::Other(format!("failed to build curated config: {err}")))?;
-    if let Some(object) = value.as_object_mut() {
-        object.remove("difficulty");
-    }
-    Ok(value)
+/// Builds a curated definition's stored `config` — the camelCase `StartConfig`
+/// the host page forwards to Bevy verbatim. The varying values come from the
+/// preset; the scene, landmark, minimap and level-meta fields are identical
+/// across every shipped preset and are the game's defaults, so they are literals
+/// here. (A single-level game — `levels.count == 1` — leaves the rest of the
+/// `levels` group inert.)
+fn curated_config(preset: &DifficultyPreset) -> serde_json::Value {
+    serde_json::json!({
+        "rows": preset.rows,
+        "cols": preset.cols,
+        "timerSeconds": preset.timer_seconds,
+        "seed": preset.seed,
+        "minSolutionLength": preset.min_solution_length,
+        "minimapCellPx": 10,
+        "minimapRadius": 5,
+        "title": preset.title,
+        "mode": preset.mode,
+        "landmarks": {
+            "wallTint": true,
+            "deadEndObjects": true,
+            "wallDecorations": true,
+            "floorAccents": true,
+            "wallMaterialVariation": true
+        },
+        "skyType": "night",
+        "wallType": "brick",
+        "perimeterWalls": true,
+        "doorStyle": "swing",
+        "keyHolder": "pedestal",
+        "doorCount": preset.door_count,
+        "spareDoors": preset.spare_doors,
+        "spareKeys": preset.spare_keys,
+        "enemyCount": preset.enemy_count,
+        "healthCount": preset.health_count,
+        "treasureCount": preset.treasure_count,
+        "enemyType": "goblin",
+        "healthStyle": "heart",
+        "enemyMovePeriodMs": preset.enemy_move_period_ms,
+        "maxHp": preset.max_hp,
+        "levels": {
+            "count": preset.level_count,
+            "finishType": "ladder",
+            "difficultyChange": "easier",
+            "resetBag": true,
+            "alignment": "edge",
+            "taper": false,
+            "perimeterRandom": false,
+            "hideCompletedEnemies": false,
+            "top": null
+        }
+    })
 }
 
 /// Creates a curated definition for `preset` with the given `rotation` (or reuses
@@ -207,7 +214,7 @@ async fn ensure_curated_definition(
         visibility: Visibility::Curated,
         seed: preset.seed,
         rotation,
-        config: build_difficulty_config(preset)?,
+        config: curated_config(preset),
         image_updated_at: None,
         created_at: now,
         updated_at: now,
@@ -347,6 +354,51 @@ mod tests {
             .init_default_admin_user("admin", "admin@test.local", "hash")
             .await
             .expect("seed default admin")
+    }
+
+    #[test]
+    fn curated_config_easy_matches_golden() {
+        // Golden: the exact stored config the Easy preset produced before the
+        // config machinery was collapsed into curated_config. Any drift in the
+        // shipped defaults must be a deliberate edit to both sides.
+        let expected = serde_json::json!({
+            "rows": 10, "cols": 10, "timerSeconds": 120, "seed": 8_080_808u64,
+            "minSolutionLength": 15, "minimapCellPx": 10, "minimapRadius": 5,
+            "title": "EASY 3D", "mode": "Easy",
+            "landmarks": { "wallTint": true, "deadEndObjects": true, "wallDecorations": true, "floorAccents": true, "wallMaterialVariation": true },
+            "skyType": "night", "wallType": "brick", "perimeterWalls": true,
+            "doorStyle": "swing", "keyHolder": "pedestal",
+            "doorCount": 2, "spareDoors": 0, "spareKeys": 0,
+            "enemyCount": 1, "healthCount": 2, "treasureCount": 3,
+            "enemyType": "goblin", "healthStyle": "heart",
+            "enemyMovePeriodMs": 1800, "maxHp": 3,
+            "levels": { "count": 1, "finishType": "ladder", "difficultyChange": "easier", "resetBag": true, "alignment": "edge", "taper": false, "perimeterRandom": false, "hideCompletedEnemies": false, "top": null }
+        });
+        assert_eq!(curated_config(&EASY), expected);
+    }
+
+    #[test]
+    fn curated_config_carries_preset_values_and_shared_defaults() {
+        for preset in [&TRICKY, &HARD, &DAILY] {
+            let cfg = curated_config(preset);
+            // Varying, per preset.
+            assert_eq!(cfg["rows"], preset.rows);
+            assert_eq!(cfg["cols"], preset.cols);
+            assert_eq!(cfg["seed"], preset.seed);
+            assert_eq!(cfg["title"], preset.title);
+            assert_eq!(cfg["mode"], preset.mode);
+            assert_eq!(cfg["levels"]["count"], preset.level_count);
+            // Shared shipped defaults.
+            assert_eq!(cfg["skyType"], "night");
+            assert_eq!(cfg["wallType"], "brick");
+            assert_eq!(cfg["doorStyle"], "swing");
+            assert_eq!(cfg["keyHolder"], "pedestal");
+            assert_eq!(cfg["enemyType"], "goblin");
+            assert_eq!(cfg["levels"]["finishType"], "ladder");
+            assert_eq!(cfg["levels"]["top"], serde_json::Value::Null);
+            // No difficulty tag on a stored game.
+            assert!(cfg.get("difficulty").is_none());
+        }
     }
 
     #[tokio::test]

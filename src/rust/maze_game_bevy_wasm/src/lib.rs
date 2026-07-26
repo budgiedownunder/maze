@@ -27,10 +27,10 @@ pub fn start() {
     app.run();
 }
 
-/// Shape of the JSON payload accepted by `start_with_config`. Mirrors the
-/// `Play3dConfigResponse` from the server endpoint, plus an optional
-/// `mazeJson` escape hatch for the `/game/?id=…` path. All other fields are
-/// fixed-per-session config (difficulty / dimensions / timer / seed / splash
+/// Shape of the JSON payload accepted by `start_with_config` — the `StartConfig`
+/// the host page (`public/game/index.html`) builds from the launch subject, plus
+/// an optional `mazeJson` escape hatch for the `/game/?id=…` path. All other
+/// fields are fixed-per-session config (dimensions / timer / seed / splash
 /// title) handed straight through to Bevy as a `GameConfig` resource.
 ///
 /// Every field has a serde default so the host page can send a minimal
@@ -121,11 +121,9 @@ struct StartConfig {
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
-/// multi-level run settings. Mirrors the server's `LevelsResponse`
-/// field-for-field (the host page forwards the whole play3d-config response, so
-/// the nested object arrives intact); kept as a separate type so it defaults
-/// field-wise. The server may also send `perimeterRandom` / `top`, which serde
-/// ignores here until a later step consumes them.
+/// multi-level run settings. Kept as a separate type so it defaults field-wise.
+/// The payload may also carry `perimeterRandom` / `top`, which serde ignores
+/// here until a later step consumes them.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LevelsStartConfig {
@@ -309,9 +307,8 @@ fn default_title() -> String {
 }
 
 /// Start the Bevy game with a host-supplied session config. Called by
-/// `/game/index.html` after it fetches the preset from
-/// `GET /api/v1/game/play3d-config?difficulty=…` (with optional `?seed=`
-/// override).
+/// `/game/index.html` after it resolves the launch subject (a stored maze's
+/// settings for `?id=…`, or a game definition's `config` for `?def=…`).
 ///
 /// Generation happens here, *before* Bevy enters `AppState::Playing`, so any
 /// failure (e.g. `min_solution_length` too high for the chosen seed) surfaces
