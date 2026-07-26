@@ -109,6 +109,10 @@
              Link="LinkedSource\Services\Play3dGameHostUrl.cs" />
     <Compile Include="..\Maze.Maui.App\Services\Play3dCollectionLaunch.cs"
              Link="LinkedSource\Services\Play3dCollectionLaunch.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\DailyChallenge.cs"
+             Link="LinkedSource\Services\DailyChallenge.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\DailyChallengeLauncher.cs"
+             Link="LinkedSource\Services\DailyChallengeLauncher.cs" />
     <Compile Include="..\Maze.Maui.App\Models\Play3dCardItem.cs"
              Link="LinkedSource\Models\Play3dCardItem.cs" />
     <Compile Include="..\Maze.Maui.App\Models\CampaignLevel.cs"

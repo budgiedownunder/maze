@@ -82,6 +82,9 @@
               Clicked="OnHomeMenuItemClicked" />
     <MenuItem IsEnabled="False"
               Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
+    <MenuItem Text="Today's Challenge"
+              IconImageSource="daily_challenge.png"
+              Clicked="OnTodaysChallengeMenuItemClicked" />
     <MenuItem Text="3D Games"
               IconImageSource="{OnPlatform 'icon_play_3d.png', iOS='icon_play_3d_ios.png', MacCatalyst='icon_play_3d_ios.png'}"
               Clicked="OnGames3dMenuItemClicked" />

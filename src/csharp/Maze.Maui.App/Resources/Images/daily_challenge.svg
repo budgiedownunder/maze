@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Daily challenge">
+  <defs>
+    <linearGradient id="dailyTrophy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.45" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#d99a00"/>
+    </linearGradient>
+    <linearGradient id="dailyHeader" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b82ad"/>
+      <stop offset="1" stop-color="#37567a"/>
+    </linearGradient>
+  </defs>
+  <!-- binding rings -->
+  <g fill="#8aa1bd" stroke="#2f4a68" stroke-width="3">
+    <rect x="63" y="32" width="10" height="26" rx="5"/>
+    <rect x="127" y="32" width="10" height="26" rx="5"/>
+  </g>
+  <!-- calendar body -->
+  <rect x="34" y="44" width="132" height="120" rx="14" fill="#f4f8fd" stroke="#2f4a68" stroke-width="4"/>
+  <!-- header band (top rounded corners only) -->
+  <path d="M34 70 V58 A14 14 0 0 1 48 44 H152 A14 14 0 0 1 166 58 V70 Z"
+        fill="url(#dailyHeader)" stroke="#2f4a68" stroke-width="4" stroke-linejoin="round"/>
+  <!-- trophy, scaled down and centred on the calendar body -->
+  <g transform="translate(100 122) scale(0.6) translate(-100 -100)">
+    <g fill="none" stroke="#e0a700" stroke-width="9" stroke-linecap="round">
+      <path d="M62 52 C32 52 32 92 64 86"/>
+      <path d="M138 52 C168 52 168 92 136 86"/>
+    </g>
+    <path d="M58 42 H142 V58 C142 94 123 110 100 110 C77 110 58 94 58 58 Z"
+          fill="url(#dailyTrophy)" stroke="#e0a700" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="92" y="109" width="16" height="20" fill="url(#dailyTrophy)" stroke="#e0a700" stroke-width="3"/>
+    <path d="M84 129 H116 L122 143 H78 Z"
+          fill="url(#dailyTrophy)" stroke="#e0a700" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="64" y="143" width="72" height="14" rx="4" fill="url(#dailyTrophy)" stroke="#e0a700" stroke-width="3"/>
+    <path d="M100 56 L106 70 L121 71 L109 81 L113 96 L100 88 L87 96 L91 81 L79 71 L94 70 Z"
+          fill="#fff7df" stroke="#e0a700" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+</svg>

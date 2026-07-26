@@ -16,6 +16,29 @@
                     StrokeShape="RoundRectangle 8"
                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
                 <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding PlayTodaysChallengeCommand}"/>
+                </Border.GestureRecognizers>
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+                    <Grid Grid.Column="0" WidthRequest="120" HeightRequest="120">
+                        <Image Source="daily_challenge.png"
+                               Aspect="AspectFit"
+                               Margin="16"/>
+                    </Grid>
+                    <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                        <Label Text="Today's Challenge"
+                               FontSize="24"
+                               TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                        <Label Text="Play today's daily 3D game and climb the board" FontSize="14"/>
+                    </VerticalStackLayout>
+                </Grid>
+            </Border>
+
+            <Border Padding="12"
+                    StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    StrokeShape="RoundRectangle 8"
+                    BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
+                <Border.GestureRecognizers>
                     <TapGestureRecognizer Command="{Binding GoTo3dGamesCommand}"/>
                 </Border.GestureRecognizers>
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">

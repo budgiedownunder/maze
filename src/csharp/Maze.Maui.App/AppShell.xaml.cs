@@ -16,6 +16,8 @@ namespace Maze.Maui.App
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
         private readonly AccountViewModel _accountViewModel;
+        private readonly IGameLibraryService _gameLibrary;
+        private readonly INavigationService _navigationService;
 
         /// <summary>
         /// Constructor
@@ -23,11 +25,20 @@ namespace Maze.Maui.App
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="accountViewModel">Injected account view model</param>
-        public AppShell(IAuthService authService, IDialogService dialogService, AccountViewModel accountViewModel)
+        /// <param name="gameLibrary">Injected game-library read service (daily-challenge lookup)</param>
+        /// <param name="navigationService">Injected navigation service (Play 3D launch)</param>
+        public AppShell(
+            IAuthService authService,
+            IDialogService dialogService,
+            AccountViewModel accountViewModel,
+            IGameLibraryService gameLibrary,
+            INavigationService navigationService)
         {
             _authService = authService;
             _dialogService = dialogService;
             _accountViewModel = accountViewModel;
+            _gameLibrary = gameLibrary;
+            _navigationService = navigationService;
             InitializeComponent();
             // The flyout header binds to the account view model's Username.
             FlyoutHeaderRoot.BindingContext = _accountViewModel;
@@ -110,6 +121,16 @@ namespace Maze.Maui.App
         {
             FlyoutIsPresented = false;
             await GoToAsync("//MainPage");
+        }
+
+        /// <summary>
+        /// Resolves and plays today's daily challenge — the same entry point as the
+        /// Today's Challenge tile on the Home page.
+        /// </summary>
+        private async void OnTodaysChallengeMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await DailyChallengeLauncher.LaunchAsync(_gameLibrary, _navigationService, _dialogService);
         }
 
         /// <summary>
