@@ -179,6 +179,13 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 var result = await _authService.SignInWithOAuthAsync(providerName);
+                if (result is null)
+                {
+                    // The user cancelled at the provider — stay on the page with a
+                    // friendly note rather than an error.
+                    ErrorMessage = "Sign-in was cancelled at the provider.";
+                    return;
+                }
                 // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
                 // navigating so AccountPage renders the welcome banner on first
                 // arrival. First-time sign-ins are pushed straight onto AccountPage
@@ -200,11 +207,9 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (TimeoutException)
             {
+                // The OAuth flow exceeded its upper bound. (A clean user
+                // cancellation is handled above via a null result.)
                 ErrorMessage = "Sign-in was cancelled or did not complete in time. Please try again.";
-            }
-            catch (TaskCanceledException)
-            {
-                // Broker reported a clean cancellation.
             }
             catch (Exception ex)
             {

@@ -373,15 +373,17 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task SignInWithOAuth_TaskCancelled_DoesNotShowError()
+        public async Task SignInWithOAuth_CancelledAtProvider_ShowsCancelledMessageAndStays()
         {
-            var (vm, auth, _, _, _) = BuildVm();
+            var (vm, auth, _, nav, _) = BuildVm();
+            // A user cancellation at the provider surfaces as a null result.
             auth.Setup(a => a.SignInWithOAuthAsync("google"))
-                .ThrowsAsync(new TaskCanceledException());
+                .ReturnsAsync((OAuthSignInResult?)null);
 
             await vm.SignInWithOAuthCommand.ExecuteAsync("google");
 
-            Assert.Equal("", vm.ErrorMessage);
+            Assert.Equal("Sign-in was cancelled at the provider.", vm.ErrorMessage);
+            nav.Verify(n => n.GoToRootAsync(It.IsAny<string>()), Times.Never);
         }
 
         // ---- RefreshOAuthProviderItems --------------------------------------

@@ -122,9 +122,12 @@ namespace Maze.Maui.App.Services
         /// in the fragment; the <c>new_user</c> flag is present only on first-time sign-ups);
         /// the platform broker captures it. The token is stored, the user profile is fetched,
         /// and the <c>IsNewUser</c> flag is forwarded to the caller.
+        /// Returns <c>null</c> when the user cancels the provider's sign-in UI (a clean
+        /// cancellation, not an error), so the caller can show a friendly message rather
+        /// than a failure.
         /// </summary>
         /// <param name="providerName">Canonical provider name as exposed by <see cref="IAppFeaturesService"/>.</param>
-        Task<OAuthSignInResult> SignInWithOAuthAsync(string providerName);
+        Task<OAuthSignInResult?> SignInWithOAuthAsync(string providerName);
 
         /// <summary>Signs out, removing the stored bearer token.</summary>
         Task SignOutAsync();
