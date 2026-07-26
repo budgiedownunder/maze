@@ -32,7 +32,7 @@
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
 
-        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10" MaximumHeightRequest="520">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="10" MaximumHeightRequest="520">
 
             <Label Grid.Row="0" Text="Choose a game" FontSize="18" FontAttributes="Bold" HorizontalOptions="Center" />
 
@@ -104,8 +104,6 @@
                     <VerticalStackLayout IsVisible="{Binding IsFeatured}" Spacing="0"
                                          BindableLayout.ItemsSource="{Binding FeaturedRows}"
                                          BindableLayout.ItemTemplate="{StaticResource PickerRow}" />
-                    <Button IsVisible="{Binding FeaturedHasMore}" Text="Load more"
-                            Command="{Binding LoadMoreFeaturedCommand}" HorizontalOptions="Start" Margin="0,6" />
 
                     <!-- Non-featured: Collections then Games, each paged. -->
                     <VerticalStackLayout IsVisible="{Binding IsNotFeatured}" Spacing="0">
@@ -113,14 +111,10 @@
                         <VerticalStackLayout Spacing="0"
                                              BindableLayout.ItemsSource="{Binding CollectionRows}"
                                              BindableLayout.ItemTemplate="{StaticResource PickerRow}" />
-                        <Button IsVisible="{Binding CollectionsHasMore}" Text="Load more collections"
-                                Command="{Binding LoadMoreCollectionsCommand}" HorizontalOptions="Start" Margin="0,6" />
                         <Label Text="Games" FontAttributes="Bold" Margin="0,8,0,4" />
                         <VerticalStackLayout Spacing="0"
                                              BindableLayout.ItemsSource="{Binding GameRows}"
                                              BindableLayout.ItemTemplate="{StaticResource PickerRow}" />
-                        <Button IsVisible="{Binding GamesHasMore}" Text="Load more games"
-                                Command="{Binding LoadMoreGamesCommand}" HorizontalOptions="Start" Margin="0,6" />
                     </VerticalStackLayout>
 
                     <Label Text="{Binding StatusMessage}" IsVisible="{Binding ShowStatusMessage}"
@@ -128,7 +122,19 @@
                 </VerticalStackLayout>
             </ScrollView>
 
-            <Button Grid.Row="4"
+            <!-- Load-more paginators live outside the scroll region so they never
+                 sit behind the list scrollbar. Only the current scope's applicable
+                 buttons are visible; each is self-labelled by its section. -->
+            <VerticalStackLayout Grid.Row="4" Spacing="6">
+                <Button IsVisible="{Binding FeaturedHasMore}" Text="Load more"
+                        Command="{Binding LoadMoreFeaturedCommand}" HorizontalOptions="Fill" />
+                <Button IsVisible="{Binding CollectionsHasMore}" Text="Load more collections"
+                        Command="{Binding LoadMoreCollectionsCommand}" HorizontalOptions="Fill" />
+                <Button IsVisible="{Binding GamesHasMore}" Text="Load more games"
+                        Command="{Binding LoadMoreGamesCommand}" HorizontalOptions="Fill" />
+            </VerticalStackLayout>
+
+            <Button Grid.Row="5"
                     Text="Cancel"
                     Clicked="OnCancelClicked"
                     HorizontalOptions="Fill"
