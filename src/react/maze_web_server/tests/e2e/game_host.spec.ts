@@ -16,10 +16,12 @@ async function loadGameHostStubbed(page: Page) {
   await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
   await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
   // ?t=fake satisfies the auth-guard IIFE in index.html so the page
-  // doesn't redirect to /.
+  // doesn't redirect to /. No subject param is needed: the WASM abort makes
+  // the module script throw at init() before the routing chain runs, and the
+  // pause-menu wiring lives in a separate <script> that runs regardless.
   // Use the explicit index.html path so Vite's dev server serves the
   // static public/game/index.html rather than falling back to the SPA root.
-  await page.goto('/game/index.html?t=fake&difficulty=easy')
+  await page.goto('/game/index.html?t=fake')
   await expect(page.locator('#pause-menu')).toBeAttached()
 }
 
@@ -233,21 +235,6 @@ test.describe('Game host score submission (on win)', () => {
     expect(posted[0]).toEqual({ maze_id: 'test-id', score: 7, elapsed_ms: 42137 })
   })
 
-  test('submits the challenge subject (difficulty:seed) on a curated win', async ({ page }) => {
-    const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake&difficulty=easy')
-    await fireResult(page, {
-      outcome: 'win',
-      score: 3,
-      elapsedMs: 9001,
-      difficulty: 'easy',
-      seed: 42,
-      rows: 3,
-      cols: 3,
-    })
-    await expect.poll(() => posted.length).toBe(1)
-    expect(posted[0]).toEqual({ challenge: 'easy:42', score: 3, elapsed_ms: 9001 })
-  })
-
   test('does not submit on a loss', async ({ page }) => {
     const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake&id=test-id')
     await fireResult(page, { outcome: 'lose', score: 0, elapsedMs: 5000, rows: 3, cols: 3 })
@@ -257,7 +244,7 @@ test.describe('Game host score submission (on win)', () => {
   })
 
   test('does not submit when the run has no stable subject', async ({ page }) => {
-    // Demo / no-config path: no ?id and no difficulty/seed in the detail.
+    // No ?id and no ?def — nothing to key a board on.
     const posted = await loadAndCaptureScores(page, '/game/index.html?t=fake')
     await fireResult(page, { outcome: 'win', score: 4, elapsedMs: 1234, rows: 3, cols: 3 })
     await page.waitForTimeout(200)
@@ -512,10 +499,9 @@ test.describe('Game host stored game-definition launch (?def=...)', () => {
 })
 
 test.describe('Game host stored game-definition score submission (?def=)', () => {
-  // Unlike the curated ?difficulty path (which reconstructs the challenge from
-  // the result detail), a ?def run records against the server-computed
-  // challengeKey that the loader stashes on window during the play-fetch — so
-  // the module must actually run here (working wasm-JS stub), not be aborted.
+  // A ?def run records against the server-computed challengeKey that the loader
+  // stashes on window during the play-fetch — so the module must actually run
+  // here (working wasm-JS stub), not be aborted.
   async function setup(page: Page, opts: { challengeKey: string; leaderboardTracked: boolean }) {
     const posted: Array<Record<string, unknown>> = []
     await page.route('**/maze_game_bevy_wasm.js**', (route) => {

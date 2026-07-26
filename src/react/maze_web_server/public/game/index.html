@@ -320,20 +320,18 @@
       submitScoreOnWin(e.detail);
 
       // Offer a "Play Again" affordance — reloads /game/ with the same query
-      // string (difficulty / seed preserved). Works in both the React browser
-      // tab and the MAUI WebView.
+      // string (?id / ?def preserved). Works in both the React browser tab and
+      // the MAUI WebView.
       showPlayAgain();
     });
 
     // Records a won 3D run against the server leaderboard. Only wins are
     // recorded (no loss/quit). The subject is the user maze (?id) when present,
-    // a stored game definition's server-computed challengeKey (?def, published
-    // definitions only), or otherwise the curated challenge "<difficulty>:<seed>"
-    // assembled from the result detail — which carries both fields for curated
-    // runs. Runs with no stable subject (the demo / no-config path, or an
-    // unpublished definition preview) are not recorded. Server-owned fields (the
-    // player and the record timestamp) are set by the endpoint, never sent from
-    // here.
+    // or a stored game definition's server-computed challengeKey (?def, published
+    // definitions only). Runs with no stable subject (the demo / no-config path,
+    // or an unpublished definition preview) are not recorded. Server-owned fields
+    // (the player and the record timestamp) are set by the endpoint, never sent
+    // from here.
     function submitScoreOnWin(detail) {
       if (!detail || detail.outcome !== 'win') return;
 
@@ -353,11 +351,6 @@
         body.challenge = window.__mazeDefChallenge;
       } else if (mazeId) {
         body.maze_id = mazeId;
-      } else if (detail.difficulty != null && detail.seed != null) {
-        // "<difficulty>:<seed>" — canonical definition is buildChallenge() in
-        // src/utils/scores.ts; duplicated inline here because this vanilla host
-        // can't import the TS module.
-        body.challenge = detail.difficulty + ':' + detail.seed;
       } else {
         return; // no stable subject — nothing to record
       }
@@ -493,7 +486,7 @@
       });
 
       restartConfirm.addEventListener('click', function () {
-        // Preserves the current query string (difficulty / seed / id)
+        // Preserves the current query string (?id / ?def / ?preview)
         // for parity with the post-game "Play Again" button.
         location.reload();
       });
@@ -513,7 +506,6 @@
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
     const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=136';
-    const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -770,47 +762,9 @@
         }
       }
     } else {
-      // /game/?difficulty=<…> — fetch the server-side preset, allow a
-      // ?seed=<n> override for replay / share variety, then start Bevy with
-      // the assembled GameConfig.
-      const difficulty = (params.get('difficulty') ?? DEFAULT_DIFFICULTY).trim();
-      const configUrl = `/api/v1/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`;
-      const cfgRes = await fetch(configUrl);
-      if (cfgRes.ok) {
-        const preset = await cfgRes.json();
-
-        // Optional ?seed=<n> URL override — lets a user replay an exact maze
-        // (or share its URL). Must parse as a finite integer; otherwise the
-        // configured seed stays in effect.
-        const seedOverride = params.get('seed');
-        if (seedOverride !== null && seedOverride !== '') {
-          const parsed = Number(seedOverride);
-          if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
-            preset.seed = parsed;
-          }
-        }
-
-        // Win-banner record thresholds for this difficulty's board. The subject
-        // is the curated challenge "<difficulty>:<seed>" (matching
-        // submitScoreOnWin), using the resolved seed after any ?seed override.
-        // Token read the same way as the score submission; un-tracked → no banner.
-        const dAuth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
-        const dToken = (dAuth && dAuth.token) || params.get('t');
-        await applyRecordThresholds(
-          preset, `challenge=${encodeURIComponent(difficulty + ':' + preset.seed)}`, dToken);
-
-        try {
-          start_with_config(JSON.stringify(preset));
-          clearInterval(timer);
-          document.getElementById('loading').remove();
-          canvas.focus({ preventScroll: true });
-        } catch (err) {
-          showLoadingError(`Failed to start game: ${err}`);
-        }
-      } else {
-        const body = await cfgRes.text().catch(() => '');
-        showLoadingError(`Failed to load Play 3D config (${cfgRes.status}): ${body || cfgRes.statusText}`);
-      }
+      // No ?id / ?def / ?preview — nothing to load. The host page is only
+      // reached from the app, which always names a subject.
+      showLoadingError('No game specified — open a game from the app.');
     }
 
     function fire(key, type) {
