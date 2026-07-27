@@ -12,6 +12,8 @@ A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **Re
 
 ## Table of Contents
 - [Introduction](#introduction)
+- [Overview](#overview)
+- [Components](#components)
 - [Architecture](#architecture)
 - [Screenshots](#screenshots)
 - [Getting Started](#getting-started)
@@ -24,52 +26,65 @@ A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **Re
 
 This is an experimental project that has been created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
 
-At this stage, the following areas are covered:
+## Overview
 
-- Creating a simple `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for maze management/generate/solve  ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md))
+The project spans a set of `Rust` library crates and the interop layers, applications, APIs and tooling built on top of them, grouped by area below.
 
-- Implementing automated unit and mock testing (dependency injection) in `Rust` 
+### Core libraries & console
 
-- Automating `Rust` documentation-generation with `cargo doc`
+- A simple `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for maze management/generate/solve ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md))
+- Automated unit and mock testing (dependency injection)
+- Pluggable storage backends in `Rust` ([`storage`](./src/rust/storage/README.md)) — a file-on-disk default plus a SQL-backed implementation supporting `SQLite`, `PostgreSQL`, and `MySQL` via a single portable schema (built on [`SQLx`](https://crates.io/crates/sqlx)'s `Any` driver with automatic migrations)
+- Pluggable communications (e.g. email) via the [`comms`](./src/rust/comms/README.md) crate
 
-- Web Assembly implementation and generation (`wasm32` and `wasm-bindgen`) in `Rust` ([`maze_wasm`](./src/rust/maze_wasm/README.md), [`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md))
+### Interop & WebAssembly
 
-- Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows` and `Android`), [Wasmer](https://wasmer.io/) (for `Android` and `iOS` simulator), and a native C library via [`maze_c`](./src/rust/maze_c/README.md) (for `iOS`simulator and physical device)
+- Web Assembly libraries (`wasm32` and `wasm-bindgen`) written in `Rust` for maze generation/calculation ([`maze_wasm`](./src/rust/maze_wasm/README.md)) and 3D game visualisation ([`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md))
+- `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows` and `Android`), [Wasmer](https://wasmer.io/) (for `Android` and `iOS` simulator), and a native C library via [`maze_c`](./src/rust/maze_c/README.md) (for `iOS` simulator and physical device)
+- JavaScript API generation from `Rust` crates (`wasm-pack`)
+- Automated JavaScript API testing in `node.js` (`chai`, `mocha`)
+- Automated `.NET` API testing with `xUnit` ([`Maze.Interop.Tests`](./src/csharp/Maze.Interop.Tests/README.md))
 
-- Generating JavaScript APIs from `Rust` crates (`wasm-pack`)
+### Web server & REST API
 
-- Automating JavaScript API testing in `node.js` (`chai`, `mocha`)
-
-- Implementing pluggable storage backends in `Rust` ([`storage`](./src/rust/storage/README.md)) — a file-on-disk default plus a SQL-backed implementation supporting `SQLite`, `PostgreSQL`, and `MySQL` via a single portable schema (built on [`SQLx`](https://crates.io/crates/sqlx)'s `Any` driver with automatic migrations)
-
-- Creating a `Rust` web server application ([`maze_web_server`](./src/rust/maze_web_server/README.md)) that:
-  - Leverages the `Rust` library crates for calculation/gameplay ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md), with a choice of file-on-disk or SQL-backed persistence selected at runtime) and exposes them as a `REST`ful Web API
+- `Rust` web server application ([`maze_web_server`](./src/rust/maze_web_server/README.md)):
+  - Leverages the `Rust` library crates for calculation/gameplay ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md)), with a choice of file-on-disk or SQL-backed persistence (selected at runtime) and exposes them as a `REST`ful Web API
   - Uses [`actix`](https://actix.rs/) to serve the `HTTPS` API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/)
   - Supports interactive documentation in the form of [RapiDoc](https://github.com/rapi-doc/RapiDoc), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
   - Serves a React Single Page Application (SPA) from a configurable static directory
   - Supports OAuth / OIDC sign-in via a pluggable `OAuthConnector` (Google, GitHub and Facebook built-in)
   - Provides email-driven password-reset and email-verification flows, orchestrated through the [`comms`](./src/rust/comms/README.md) crate's pluggable email provider system (currently: Mailgun, SMTP+OAuth2 → Microsoft/GMail) + logging
 
-- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve, walk solution animation, and interactive maze gameplay — auto-collected keys & doors, real-time enemies, player HP with health pickups, collectible treasure, leaderboards and a pause menu — run entirely in-browser via the `maze_wasm` WebAssembly module; a **3D-game workshop** for authoring shareable 3D games (create, edit, reshuffle the layout, duplicate, preview, and give each an image thumbnail) grouped into free-choice **arcade** or ordered **campaign** collections, browsed across Featured / My Games / Shared / Community, plus **daily challenges** that rotate their layout and leaderboard each day; OAuth sign-in buttons (Google, GitHub, Facebook) when enabled; user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot/reset password, delete account); Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+### Applications (web & mobile)
 
-- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot password, delete account); OAuth sign-in (Google, GitHub, Facebook) when enabled; maze management (create, save, delete, rename, edit, generate, solve, walk solution, play — with keys & doors, real-time enemies, player HP + health pickups, collectible treasure, leaderboards and a pause menu); browsing and playing the shared library of 3D games (Featured / My Games / Shared / Community), daily challenges and campaign collections
-- Automating `C#` API documentation generation with `DocFX`
+- `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) — a browser-based UI for the `maze_web_server` REST API:
+  - Maze management — create, edit, generate, solve, and walk-solution animation
+  - 2D gameplay (in-browser via the [`maze_wasm`](./src/rust/maze_wasm/README.md) WebAssembly module) — auto-collected keys & doors, real-time enemies, player HP with health pickups, collectible treasure, leaderboards, and a pause menu
+  - 3D gameplay (in-browser via the [`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md) WebAssembly module) — the first-person Bevy 3D maze game, launched from the 3D-game library
+  - A 3D-game workshop — author shareable 3D games (create, edit, reshuffle, duplicate, preview, add an image thumbnail), grouped into free-choice arcade or ordered campaign collections and browsed across Featured / My Games / Shared / Community, plus daily challenges that rotate their layout and leaderboard each day
+  - Account & authentication — OAuth sign-in (Google, GitHub, Facebook) when enabled; self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot/reset password, delete account)
+  - Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+- `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) — built on the Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)):
+  - Maze management and 2D gameplay — create, save, delete, rename, edit, generate, solve, walk solution, and play (keys & doors, real-time enemies, player HP + health pickups, collectible treasure, leaderboards, and a pause menu)
+  - 3D-game library — browse and play 3D games (Featured / My Games / Shared / Community), daily challenges, and campaign collections
+  - Account & authentication — OAuth sign-in (Google, GitHub, Facebook) when enabled; self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot password, delete account)
 
-- Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, wall decorations,  minimap, camera tilt, gold-leaf rain on win, rain + lightning on lose, dead-end artifacts, auto-collected keys & doors, real-time chasing enemies, a heart-based HP HUD with health pickups, collectible treasure, multi-level stacked runs with ladder / portal level transitions, and touch support + D-pad for mobile
-- Compiling the `Bevy` game to WebAssembly ([`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md)) so the same game runs cross-platform — served at `/game/` by the Rust web server, launched from the React SPA, and embedded in the MAUI app via a `WebView`
+### 3D game (Bevy)
 
-- Implementing automated `.NET` API testing with `xUnit` ([`Maze.Interop.Tests`](./src/csharp/Maze.Interop.Tests/README.md))
+- A first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, wall decorations, minimap, camera tilt, gold-leaf rain on win, rain + lightning on lose, dead-end artifacts, auto-collected keys & doors, real-time chasing enemies, a heart-based HP HUD with health pickups, collectible treasure, multi-level stacked runs with ladder / portal level transitions, and touch support + D-pad for mobile
+- A cross-platform WebAssembly build of the `Bevy` game ([`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md)) — served at `/game/` by the Rust web server, launched from the React SPA, and embedded in the MAUI app via a `WebView`
 
-- Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
+### Tooling, documentation & CI/CD
 
+- Automated `Rust` documentation-generation with `cargo doc`
+- Automated `C#` API documentation generation with `DocFX`
+- Combined `C#` and `Rust` documentation in a single HTML help system with use of `iFrame` containers
 - Architecture diagramming using `PlantUML` ([`architecture.puml`](./docs/diagrams/architecture.puml))
+- Automated image generation workflows using GitHub Actions ([`generate-png-from-puml.yml`](./.github/workflows/generate-png-from-puml.yml))
+- Automated build and testing workflows using GitHub Actions ([`build-and-test-components-multi-os.yml`](./.github/workflows/build-and-test-components-multi-os.yml))
+- Automated GitHub Pages asset generation and deployment [`build-and-deploy-to-github-pages`](./.github/workflows/build-and-deploy-to-github-pages.yml)
 
-- Automating image generation workflows using GitHub Actions ([`generate-png-from-puml.yml`](./.github/workflows/generate-png-from-puml.yml))
-
-- Automating build and testing workflows using GitHub Actions ([`build-and-test-components-multi-os.yml`](./.github/workflows/build-and-test-components-multi-os.yml))
-
-- Automating GitHub Pages asset generation and deployment [`build-and-deploy-to-github-pages`](./.github/workflows/build-and-deploy-to-github-pages.yml)
-
+## Components
 
 The following components are present:
 
