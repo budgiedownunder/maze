@@ -444,8 +444,8 @@
   font-size: 0.82rem;
   color: var(--text-muted);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -509,9 +509,11 @@
 .campaign-level-desc {
   font-size: 0.82rem;
   color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .campaign-level-status {
   flex: 0 0 auto;
@@ -1754,8 +1756,8 @@ textarea.input {
   font-size: 0.85rem;
   color: var(--text-muted);
   display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
