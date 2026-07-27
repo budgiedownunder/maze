@@ -12,7 +12,7 @@
 //! The per-difficulty preset values live here as code `const`s (the source of
 //! truth for the shipped curated games). Each definition's opaque `config` is
 //! the camelCase `StartConfig` the host page forwards to Bevy verbatim, built by
-//! [`curated_config`] — the varying fields come from the preset, the rest are the
+//! `curated_config` — the varying fields come from the preset, the rest are the
 //! shipped defaults.
 
 use chrono::Utc;
@@ -340,7 +340,7 @@ pub async fn init_daily_challenges_collection(
 
 /// Seeds the shipped curated content (the "Difficulty" and "Daily Challenges"
 /// collections) — but **only on a genuinely fresh store**. Gating on
-/// [`Store::was_freshly_created`] rather than on the collections being absent is
+/// [`storage::Manage::was_freshly_created`] rather than on the collections being absent is
 /// deliberate: an admin who deletes the shipped content keeps it deleted across
 /// restarts, instead of having it re-seeded on the next launch.
 pub async fn seed_curated_content(
