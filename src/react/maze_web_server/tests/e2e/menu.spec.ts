@@ -47,11 +47,19 @@ test('Mazes menu item navigates to /mazes', async ({ page }) => {
 })
 
 test("hamburger menu Today's Challenge launches the seeded daily game", async ({ page }) => {
+  // The launch hard-navigates to the static /game/ host, which the Vite dev
+  // server used by these tests does not serve for the bare directory URL — it
+  // returns the SPA shell, which then bounces to /login. Stub /game/ so the
+  // navigation settles at the launch URL (same approach as maze_game.spec.ts).
+  await page.route(/\/game\//, route => route.fulfill({
+    contentType: 'text/html',
+    body: '<html><body>stub</body></html>',
+  }))
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /today's challenge/i }).click()
   // Resolves the curated "Daily Challenges" collection (dev:mock seeds `def-daily`)
   // and launches its daily member via the host page.
-  await expect(page).toHaveURL(/\/game\/\?def=def-daily/)
+  await page.waitForURL(/\/game\/\?def=def-daily/)
 })
 
 test('hamburger menu 3D Games item navigates to the Play-3D hub', async ({ page }) => {
