@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze/)
 
-A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript**, **WebAssembly**, and the **Bevy** game engine. Built around maze generation, solving, and both 2D and **first-person 3D** gameplay — with collectible keys & doors, real-time chasing enemies, player health, health pickups, collectible treasure, and scoring with leaderboards — it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API and E2E testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
+A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript**, **WebAssembly**, and the **Bevy** game engine. Built around maze generation, solving, and both 2D and **first-person 3D** gameplay — with collectible keys & doors, real-time chasing enemies, player health, health pickups, collectible treasure, scoring with leaderboards, and a browsable library of user-authored & curated 3D games (shareable, grouped into arcade & campaign collections, with daily challenges) — it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API and E2E testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
 
 <img src="./src/react/maze_web_server/screenshots/web-3d-intro.png" width="600">
 
@@ -50,9 +50,9 @@ At this stage, the following areas are covered:
   - Supports OAuth / OIDC sign-in via a pluggable `OAuthConnector` (Google, GitHub and Facebook built-in)
   - Provides email-driven password-reset and email-verification flows, orchestrated through the [`comms`](./src/rust/comms/README.md) crate's pluggable email provider system (currently: Mailgun, SMTP+OAuth2 → Microsoft/GMail) + logging
 
-- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve, walk solution animation, and interactive maze gameplay — auto-collected keys & doors, real-time enemies, player HP with health pickups, collectible treasure, leaderboards and a pause menu — run entirely in-browser via the `maze_wasm` WebAssembly module; OAuth sign-in buttons (Google, GitHub, Facebook) when enabled; user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot/reset password, delete account); Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve, walk solution animation, and interactive maze gameplay — auto-collected keys & doors, real-time enemies, player HP with health pickups, collectible treasure, leaderboards and a pause menu — run entirely in-browser via the `maze_wasm` WebAssembly module; a **3D-game workshop** for authoring shareable 3D games (create, edit, reshuffle the layout, duplicate, preview, and give each an image thumbnail) grouped into free-choice **arcade** or ordered **campaign** collections, browsed across Featured / My Games / Shared / Community, plus **daily challenges** that rotate their layout and leaderboard each day; OAuth sign-in buttons (Google, GitHub, Facebook) when enabled; user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot/reset password, delete account); Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
 
-- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot password, delete account); OAuth sign-in (Google, GitHub, Facebook) when enabled; maze management (create, save, delete, rename, edit, generate, solve, walk solution, play — with keys & doors, real-time enemies, player HP + health pickups, collectible treasure, leaderboards and a pause menu)
+- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, set a profile avatar, manage/verify email addresses, change/forgot password, delete account); OAuth sign-in (Google, GitHub, Facebook) when enabled; maze management (create, save, delete, rename, edit, generate, solve, walk solution, play — with keys & doors, real-time enemies, player HP + health pickups, collectible treasure, leaderboards and a pause menu); browsing and playing the shared library of 3D games (Featured / My Games / Shared / Community), daily challenges and campaign collections
 - Automating `C#` API documentation generation with `DocFX`
 
 - Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, wall decorations,  minimap, camera tilt, gold-leaf rain on win, rain + lightning on lose, dead-end artifacts, auto-collected keys & doors, real-time chasing enemies, a heart-based HP HUD with health pickups, collectible treasure, multi-level stacked runs with ladder / portal level transitions, and touch support + D-pad for mobile
@@ -119,7 +119,8 @@ The Maze MAUI application running on Windows, iOS, and Android.
 | **Home Page** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-home.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-home.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-home.png" width="250"> |
 | **Solved** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
 | **Walk Solution** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-walk.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-walk.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-walk.png" width="250"> |
-| **Game** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-game.png" width="250"> |
+| **2D Game** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-game.png" width="250"> |
+| **3D Games** (browse) | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-3d-games.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-3d-games.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-3d-games.png" width="250"> |
 | **3D Game** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-3d-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-3d-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-3d-game.png" width="250"> |
 
 ### Web UI
@@ -128,7 +129,7 @@ The React SPA running in a desktop browser.
 
 **Home Page**
 
-The home page, allowing the user to choose to play a 3D challenge game, create their own mazes or view the current game leaderboards.
+The home page, allowing the user to jump into today's daily challenge, browse and play 3D games, create their own 3D games and mazes, or view the leaderboards.
 
 <img src="./src/react/maze_web_server/screenshots/web-home.png" width="600">
 
@@ -160,6 +161,22 @@ Playing a maze — the player navigates using keyboard or D-pad, collecting keys
 
 <img src="./src/react/maze_web_server/screenshots/web-game.gif" width="600">
 
+**3D Games**
+
+Beyond their own mazes, players browse a library of first-person 3D games — **Featured**, **My Games**, **Shared** with them, and the wider **Community** — and can play any of them or view its leaderboard.
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-games.png" width="600">
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-games-featured.png" width="600">
+
+They also author their own in the workshop: create, edit, reshuffle the layout, duplicate, preview, share, and give each an image thumbnail.
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-game-editor.png" width="600">
+
+Games can be grouped into **collections**, played either as a free-choice **arcade** or an ordered **campaign** (levels unlock as you clear them):
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-game-collection.png" width="600">
+
 **3D Maze Game**
 
 Playing a maze in first-person 3D — chasing enemies, collectible keys & doors, and a heart-based HP HUD with health pickups — the Bevy engine runs entirely in-browser via WebAssembly.
@@ -178,9 +195,13 @@ A night game, but this time with water as walls:
 
 **Leaderboards**
 
-Per-maze and global (Play 3D) leaderboards rank completed runs by fastest time or highest score, showing each player's name and highlighting your own runs. A maze's owner — and an administrator, for a Play 3D board — can reset a board to empty.
+Per-maze and per-3D-game leaderboards rank completed runs by fastest time or highest score, showing each player's name and highlighting your own runs. A board can be reset to empty by its owner (of the maze or the game) or by an administrator.
 
 <img src="./src/react/maze_web_server/screenshots/web-leaderboards.png" width="600">
+
+A **daily-challenge** game keeps a separate board for each day (UTC); a date picker jumps between the days that have runs:
+
+<img src="./src/react/maze_web_server/screenshots/web-daily-challenge.png" width="600">
 
 ## API
 
