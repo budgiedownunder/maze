@@ -31,7 +31,7 @@
                                LineBreakMode="TailTruncation" />
                         <Label Text="{Binding Description}"
                                FontSize="13"
-                               MaxLines="2"
+                               MaxLines="4"
                                LineBreakMode="TailTruncation" />
                     </VerticalStackLayout>
                     <VerticalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
