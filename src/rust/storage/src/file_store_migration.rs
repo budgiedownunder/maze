@@ -225,6 +225,32 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// any file that lacks them — mirrors the Rust-side
 /// `backfill_user_timestamps_if_null` on the SQL side. Idempotent —
 /// files already carrying both fields are left alone.
+///
+/// **Version 9** creates the `<data_dir>/score_history/` directory used
+/// by the FileStore `ScoreStore` impl (one file per completed run).
+/// Idempotent.
+///
+/// **Version 11** creates the `<data_dir>/game_definitions/` parent directory
+/// used by the FileStore `GameStore` impl (each definition owns an `<id>/`
+/// sub-folder, created lazily on write). Version 10 is skipped — the SQL
+/// `0010_user_avatars` migration has no FileStore directory counterpart
+/// (avatars ride each user's dir as `avatar.png`). Idempotent.
+///
+/// **Version 12** creates the `<data_dir>/game_collections/` parent directory
+/// used by the FileStore `GameStore` collection impl (each collection owns an
+/// `<id>/` sub-folder, created lazily on write). Idempotent.
+///
+/// **Version 13** is a no-op that aligns the counter with the SQL
+/// `0013_featured_game_items.sql` migration. The FileStore keeps the featured
+/// list in a single root file `featured_game_items.json`, created lazily on the
+/// first feature — there is no directory to pre-create.
+///
+/// **Version 14 is a no-op.** The matching SQL migration adds a nullable
+/// `play_mode` column to `game_collections`. The FileStore data shape is updated
+/// by the `#[serde(default)]` on the new `GameCollection.play_mode` field —
+/// existing `collection.json` files round-trip without rewriting (an absent value
+/// loads as the default `Arcade`). The framework entry exists to advance the
+/// version counter in step with the SQL backend.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -235,6 +261,10 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (7, no_op_migration),
     (8, migrate_0008_user_timestamps),
     (9, migrate_0009_create_score_history_dir),
+    (11, migrate_0011_create_game_definitions_dir),
+    (12, migrate_0012_create_game_collections_dir),
+    (13, no_op_migration),
+    (14, no_op_migration),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -282,6 +312,30 @@ fn migrate_0006_create_email_audit_log_dir(data_dir: &Path) -> Result<(), Error>
 fn migrate_0009_create_score_history_dir(data_dir: &Path) -> Result<(), Error> {
     let dir = data_dir.join("score_history");
     fs::create_dir_all(&dir)?;
+    Ok(())
+}
+
+/// FileStore migration 0011 — counterpart to
+/// `migrations/0011_game_definitions.sql`. The SQL side creates the
+/// `game_definitions` + `game_definition_shares` tables; the FileStore side
+/// creates the `game_definitions/` parent directory. Each definition owns an
+/// `<id>/` sub-folder (`definition.json` + optional `shares.json`/`image.png`),
+/// created lazily on write. Version 10 is skipped — the SQL `0010_user_avatars`
+/// migration has no FileStore directory counterpart (avatars ride each user's
+/// dir as `avatar.png`). Idempotent.
+fn migrate_0011_create_game_definitions_dir(data_dir: &Path) -> Result<(), Error> {
+    fs::create_dir_all(data_dir.join("game_definitions"))?;
+    Ok(())
+}
+
+/// FileStore migration 0012 — counterpart to
+/// `migrations/0012_game_collections.sql`. The SQL side creates the
+/// `game_collections` + `game_collection_items` + `game_collection_shares`
+/// tables; the FileStore side creates the `game_collections/` parent directory.
+/// Each collection owns an `<id>/` sub-folder (`collection.json` + optional
+/// `shares.json` / `image.png`), created lazily on write. Idempotent.
+fn migrate_0012_create_game_collections_dir(data_dir: &Path) -> Result<(), Error> {
+    fs::create_dir_all(data_dir.join("game_collections"))?;
     Ok(())
 }
 
@@ -409,6 +463,13 @@ fn migrate_0008_user_file(path: &Path, now_iso: &str) -> Result<(), Error> {
 ///   with a clear error rather than silently downgrading the counter.
 pub fn apply_pending_migrations(data_dir: &str) -> Result<(), Error> {
     apply_migrations_to(data_dir, MIGRATIONS)
+}
+
+/// The schema version currently recorded for `data_dir` (`0` when
+/// `.schema_version` is absent — a brand-new data dir). Read *before*
+/// [`apply_pending_migrations`] to tell a fresh store from a reopened one.
+pub fn current_schema_version(data_dir: &str) -> Result<u32, Error> {
+    read_schema_version(Path::new(data_dir))
 }
 
 /// Internal worker: same contract as `apply_pending_migrations` but takes

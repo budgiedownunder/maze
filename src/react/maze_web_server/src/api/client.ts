@@ -1,4 +1,4 @@
-import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, Play3dConfig, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, BoardDatesResponse, ChangePasswordRequest, CompletedChallengesRequest, CompletedChallengesResponse, FeaturedGameItemEntry, FeaturedGameItemsListResponse, GameCollection, GameCollectionDetailResponse, GameCollectionListResponse, GameCollectionRequest, GameDefinition, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse, ImageUpdatedResponse, LoginResponse, Maze, RenewResponse, ResetScoresResponse, SaveMazeRequest, ScoreboardResponse, ScoreMetric, GameDefinitionSharesResponse, GameCollectionSharesResponse, SortDirection, UpdateProfileRequest, UserEmailsResponse, UserLookupResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -323,8 +323,285 @@ export function getScoreHistory(token: string, query: HistoryQuery = {}): Promis
   })
 }
 
-// Reads a curated difficulty's preset (unauthenticated). The leaderboard UI
-// uses its fixed `seed` to build the challenge board key.
-export function getPlay3dConfig(difficulty: string): Promise<Play3dConfig> {
-  return request<Play3dConfig>(`/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`)
+// Given challenge board keys (e.g. a campaign's games as `def:<id>`), returns the
+// subset the caller has scored on — one request for campaign progress instead of
+// paging the whole history.
+export function getCompletedChallenges(token: string, challenges: string[]): Promise<CompletedChallengesResponse> {
+  return request<CompletedChallengesResponse>('/scores/me/completed', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ challenges } satisfies CompletedChallengesRequest),
+  })
+}
+
+// The UTC dates a daily game has a non-empty leaderboard for (someone scored on
+// that day's `def:<id>:<date>` board), most recent first — access-checked like
+// the board read. A static game (or an unplayed daily one) returns an empty
+// list. Feeds the daily leaderboard's "days with runs" quick-picks.
+export function getBoardDates(token: string, definitionId: string): Promise<BoardDatesResponse> {
+  return request<BoardDatesResponse>(`/scores/board-dates?definition_id=${encodeURIComponent(definitionId)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// --- Game definitions & collections -----------------------------------------
+
+interface PageQuery {
+  limit?: number
+  offset?: number
+  // 'visible' (default), 'mine' (the caller's own items), 'shared' (items shared
+  // with the caller), or 'public' (the cross-owner Community pool); honoured by
+  // the game definition / collection list endpoints.
+  scope?: 'visible' | 'mine' | 'shared' | 'public'
+  // Case-insensitive name substring filter (honoured with scope=mine or
+  // scope=public).
+  q?: string
+  // Result ordering: 'name' (default, A–Z) or 'newest' (most recently created
+  // first). Honoured with scope=public; every other scope is name-ordered.
+  sort?: 'name' | 'newest'
+  // When true, the game-definition list blanks each game's opaque `config` blob
+  // (returning only the light metadata) — for callers that only list games, e.g.
+  // the collection membership picker. Ignored by the collection list endpoint.
+  excludeDefinitions?: boolean
+}
+
+function pageQuery(query: PageQuery): string {
+  const params = new URLSearchParams()
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  if (query.scope != null) params.set('scope', query.scope)
+  if (query.q != null && query.q !== '') params.set('q', query.q)
+  if (query.sort != null) params.set('sort', query.sort)
+  if (query.excludeDefinitions) params.set('excludeDefinitions', 'true')
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
+
+export function createGameDefinition(token: string, body: GameDefinitionRequest): Promise<GameDefinition> {
+  return request<GameDefinition>('/game-definitions', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+// Play-fetch of a single definition — access-gated (a 404 hides anything the
+// caller can't see). The returned `config` has the effective seed spliced in.
+export function getGameDefinition(token: string, id: string): Promise<GamePlayResponse> {
+  return request<GamePlayResponse>(`/game-definitions/${encodeURIComponent(id)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// A page of the definitions the caller may see (own ∨ shared ∨ public ∨ curated).
+export function listGameDefinitions(token: string, query: PageQuery = {}): Promise<GameDefinitionListResponse> {
+  return request<GameDefinitionListResponse>(`/game-definitions${pageQuery(query)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function updateGameDefinition(token: string, id: string, body: GameDefinitionRequest): Promise<GameDefinition> {
+  return request<GameDefinition>(`/game-definitions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteGameDefinition(token: string, id: string): Promise<void> {
+  return requestEmpty(`/game-definitions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// Re-mint a definition's seed to change its generated layout. The server owns
+// the seed (PUT preserves it), so reshuffling is its own endpoint; it also
+// resets the definition's leaderboard when published. Returns the definition
+// with its new seed.
+export function reshuffleGameDefinition(token: string, id: string): Promise<GameDefinition> {
+  return request<GameDefinition>(`/game-definitions/${encodeURIComponent(id)}/reshuffle`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+}
+
+export function createGameCollection(token: string, body: GameCollectionRequest): Promise<GameCollection> {
+  return request<GameCollection>('/game-collections', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+// Collection detail — the collection plus its accessible member definitions,
+// hydrated and in order (inaccessible / dangling members dropped server-side).
+export function getGameCollection(token: string, id: string): Promise<GameCollectionDetailResponse> {
+  return request<GameCollectionDetailResponse>(`/game-collections/${encodeURIComponent(id)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// A page of the collections the caller may see.
+export function listGameCollections(token: string, query: PageQuery = {}): Promise<GameCollectionListResponse> {
+  return request<GameCollectionListResponse>(`/game-collections${pageQuery(query)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function updateGameCollection(token: string, id: string, body: GameCollectionRequest): Promise<GameCollection> {
+  return request<GameCollection>(`/game-collections/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteGameCollection(token: string, id: string): Promise<void> {
+  return requestEmpty(`/game-collections/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// Replaces a collection's whole membership with `definitionIds` (in order) in
+// one operation — the server reconciles (drop absent, add new, reorder, dedupe).
+// Returns the updated collection with its raw membership (`items`).
+export function setGameCollectionItems(token: string, collectionId: string, definitionIds: string[]): Promise<GameCollection> {
+  return request<GameCollection>(`/game-collections/${encodeURIComponent(collectionId)}/items`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ definitionIds }),
+  })
+}
+
+// --- Game / collection images ------------------------------------------------
+
+// Which entity an image belongs to — selects the endpoint family.
+export type GameImageKind = 'definition' | 'collection'
+
+function gameImagePath(kind: GameImageKind, id: string): string {
+  const entity = kind === 'definition' ? 'game-definitions' : 'game-collections'
+  return `/${entity}/${encodeURIComponent(id)}/image`
+}
+
+// The image request URL for a game/collection, appending the `imageUpdatedAt`
+// marker as a `?v=` cache-buster when known. This is the URL `fetchGameImage`
+// requests — NOT an `<img src>`: the serve route is access-checked, so the image
+// is loaded via an authenticated fetch (a bare `<img>` can't carry the token).
+export function gameImageUrl(kind: GameImageKind, id: string, updatedAt?: string | null): string {
+  const base = `${BASE}${gameImagePath(kind, id)}`
+  return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
+}
+
+// Fetches a game/collection image as a Blob over an authenticated request.
+// Resolves to the Blob on success and throws (with a `.status`) on a non-OK
+// response — callers treat a 404 as "no image" and fall back to the placeholder.
+export async function fetchGameImage(token: string, kind: GameImageKind, id: string, updatedAt?: string | null): Promise<Blob> {
+  const response = await fetch(gameImageUrl(kind, id, updatedAt), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) await throwForStatus(response)
+  return response.blob()
+}
+
+// Uploads (or replaces) a game/collection image (owner-only). The server
+// canonicalises to a 256x256 PNG and returns the new `imageUpdatedAt` marker.
+// No `Content-Type` header — the browser sets the multipart boundary for the
+// `FormData` body (`authHeaders` would wrongly force JSON).
+export function uploadGameImage(token: string, kind: GameImageKind, id: string, file: File): Promise<ImageUpdatedResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  return request<ImageUpdatedResponse>(gameImagePath(kind, id), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+}
+
+// Removes a game/collection image (idempotent server-side — 204 even if none set).
+export function deleteGameImage(token: string, kind: GameImageKind, id: string): Promise<void> {
+  return requestEmpty(gameImagePath(kind, id), {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// --- Featured catalogue ------------------------------------------------------
+
+// A page of the admin-ordered featured catalogue — curated definitions +
+// collections, hydrated and in sort order. Readable by any signed-in user.
+// Named to avoid `getFeatures()` (the app-flags endpoint).
+export function getFeaturedGameItems(token: string, query: { limit?: number; offset?: number } = {}): Promise<FeaturedGameItemsListResponse> {
+  const params = new URLSearchParams()
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  const qs = params.toString()
+  return request<FeaturedGameItemsListResponse>(`/featured-game-items${qs ? `?${qs}` : ''}`, {
+    headers: authHeaders(token),
+  })
+}
+
+// Rewrites the featured catalogue's order to `entries` in one operation
+// (order-only; admin). Returns the full catalogue in its new order.
+export function setFeaturedGameItemsOrder(token: string, entries: FeaturedGameItemEntry[]): Promise<FeaturedGameItemsListResponse> {
+  return request<FeaturedGameItemsListResponse>('/featured-game-items/order', {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ entries }),
+  })
+}
+
+// --- Sharing & user lookup --------------------------------------------------
+
+// The share endpoints (definition + collection) return the updated grantee list.
+// `setGame*Shares` replaces the whole list with the supplied set (the server
+// reconciles — revoke absent, grant new — in one operation); a subject owned by
+// someone else returns 404, and the owner's own id is ignored.
+
+export function listGameDefinitionShares(token: string, id: string): Promise<GameDefinitionSharesResponse> {
+  return request<GameDefinitionSharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function setGameDefinitionShares(token: string, id: string, userIds: string[]): Promise<GameDefinitionSharesResponse> {
+  return request<GameDefinitionSharesResponse>(`/game-definitions/${encodeURIComponent(id)}/shares`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ userIds }),
+  })
+}
+
+export function listGameCollectionShares(token: string, id: string): Promise<GameCollectionSharesResponse> {
+  return request<GameCollectionSharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function setGameCollectionShares(token: string, id: string, userIds: string[]): Promise<GameCollectionSharesResponse> {
+  return request<GameCollectionSharesResponse>(`/game-collections/${encodeURIComponent(id)}/shares`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ userIds }),
+  })
+}
+
+export interface UserLookupQuery {
+  username: string
+  limit?: number
+  offset?: number
+}
+
+// Looks up users whose username starts with `username` (case-insensitive) for
+// the share people-picker. A blank prefix returns an empty page — the server
+// never enumerates every user. Returns only id + username per hit.
+export function lookupUsers(token: string, query: UserLookupQuery): Promise<UserLookupResponse> {
+  const params = new URLSearchParams()
+  params.set('username', query.username)
+  if (query.limit != null) params.set('limit', String(query.limit))
+  if (query.offset != null) params.set('offset', String(query.offset))
+  return request<UserLookupResponse>(`/users/lookup?${params.toString()}`, {
+    headers: authHeaders(token),
+  })
 }

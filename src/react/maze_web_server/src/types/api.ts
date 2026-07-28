@@ -1,8 +1,11 @@
 import type { CanonicalMazeDefinition } from './cellEntities'
 import type { MazeGameSettings } from '../utils/mazeGameSettings'
+import type { Visibility, Rotation, PlayMode } from '../utils/gameDefinitions'
 // Re-export score metrics so consumers can pull the DTO types and
 // the query vocabulary from one place.
 export type { ScoreMetric, SortDirection } from '../utils/scores'
+// Likewise the game-definition access/rotation/play-mode vocabulary.
+export type { Visibility, Rotation, PlayMode } from '../utils/gameDefinitions'
 
 export interface UserEmail {
   email: string
@@ -130,10 +133,202 @@ export interface ResetScoresResponse {
   deleted: number
 }
 
-// The subset of the server's Play3dConfigResponse the client consumes: the
-// curated difficulty's fixed maze seed, used to key its leaderboard
-// (`challenge = "<difficulty>:<seed>"`).
-export interface Play3dConfig {
-  difficulty: string
+// Request/response for POST /scores/me/completed: given a set of challenge board
+// keys, the subset the caller has scored on (used to derive campaign progress).
+export interface CompletedChallengesRequest {
+  challenges: string[]
+}
+export interface CompletedChallengesResponse {
+  completed: string[]
+}
+
+// Response for GET /scores/board-dates: the UTC dates a daily game has a
+// non-empty leaderboard for (`def:<id>:<date>` boards someone has scored on),
+// most recent first. A static game (or an unplayed daily one) returns an empty
+// list. Powers the daily leaderboard's "days with runs" quick-picks.
+export interface BoardDatesResponse {
+  dates: string[]
+}
+
+// --- Game definitions & collections -----------------------------------------
+
+// A stored 3D game definition — presentation metadata plus an opaque, client-
+// owned generation/render `config` (a StartConfig-shaped blob, stored and
+// forwarded verbatim). `seed` is server-owned: auto-minted and hidden from the
+// editor. `description` / `imageUpdatedAt` are absent when unset.
+export interface GameDefinition {
+  id: string
+  ownerId: string
+  name: string
+  description?: string
+  visibility: Visibility
   seed: number
+  rotation: Rotation
+  config: Record<string, unknown>
+  imageUpdatedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// The play-fetch of a single definition (`GET /game-definitions/{id}`): the
+// definition with the effective seed spliced into `config`, plus its leaderboard
+// subject key and whether that board is tracked (published definitions only).
+export interface GamePlayResponse extends GameDefinition {
+  challengeKey: string
+  leaderboardTracked: boolean
+}
+
+// Create / update body — the caller supplies only editable fields; id, seed,
+// ownerId, image and timestamps are server-owned. `visibility` / `rotation`
+// default server-side (private / static) when omitted.
+export interface GameDefinitionRequest {
+  name: string
+  description?: string | null
+  visibility?: Visibility
+  rotation?: Rotation
+  config: Record<string, unknown>
+}
+
+// A page of the definitions the caller may see (own ∨ shared ∨ public ∨ curated).
+export interface GameDefinitionListResponse {
+  definitions: GameDefinition[]
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+// One ordered member of a collection — a reference to a definition by id.
+export interface CollectionItem {
+  definitionId: string
+  sortOrder: number
+}
+
+// A collection: an ordered, presentation-only grouping of definitions. It
+// carries its own access `visibility`; membership is order-only (`items`).
+export interface GameCollection {
+  id: string
+  ownerId: string
+  name: string
+  visibility: Visibility
+  playMode: PlayMode
+  description?: string
+  imageUpdatedAt?: string
+  items: CollectionItem[]
+  createdAt: string
+  updatedAt: string
+}
+
+// Create / update body for a collection's own metadata; membership is managed
+// via the item endpoints, so it is not part of this body. `visibility` /
+// `playMode` default server-side (private / arcade) when omitted.
+export interface GameCollectionRequest {
+  name: string
+  description?: string | null
+  visibility?: Visibility
+  playMode?: PlayMode
+}
+
+// A page of the collections the caller may see.
+export interface GameCollectionListResponse {
+  collections: GameCollection[]
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+// Collection detail (`GET /game-collections/{id}`): the collection's metadata
+// plus its member definitions — hydrated, in order, and filtered to what the
+// viewer may access (inaccessible members and dangling refs omitted). This is
+// why it carries `definitions` rather than the raw `items`.
+export interface GameCollectionDetailResponse {
+  id: string
+  ownerId: string
+  name: string
+  description?: string
+  visibility: Visibility
+  playMode: PlayMode
+  imageUpdatedAt?: string
+  createdAt: string
+  updatedAt: string
+  definitions: GameDefinition[]
+}
+
+// Response from a game/collection image upload: the new cache-buster marker
+// (RFC 3339), which the client stores as the entity's `imageUpdatedAt`.
+export interface ImageUpdatedResponse {
+  imageUpdatedAt: string
+}
+
+// --- Featured catalogue -----------------------------------------------------
+
+// Which kind of entity a featured-catalogue row points at.
+export type FeaturedGameItemKind = 'definition' | 'collection'
+
+// One hydrated entry of the admin-ordered featured catalogue. Exactly one of
+// `definition` / `collection` is present, matching `kind` (mirrors the server's
+// `FeaturedGameItemResponse`). `ownerUsername` is resolved server-side so the
+// admin view can show who owns each item without a per-row lookup.
+export interface FeaturedGameItem {
+  kind: FeaturedGameItemKind
+  ownerUsername: string
+  definition?: GameDefinition
+  collection?: GameCollection
+}
+
+// A page of the featured catalogue, in admin (sort) order.
+export interface FeaturedGameItemsListResponse {
+  items: FeaturedGameItem[]
+  limit: number
+  offset: number
+  hasMore: boolean
+}
+
+// One `(kind, id)` reference in a reorder request body.
+export interface FeaturedGameItemEntry {
+  kind: FeaturedGameItemKind
+  id: string
+}
+
+// --- Sharing & user lookup --------------------------------------------------
+
+// A grantee in a share list — the granted user's id + username, resolved by the
+// server for the owner's manage-shares view (mirrors the server's
+// `GranteeSummary`). Structurally identical to `UserLookupEntry` but a distinct
+// concept: a user who HAS access, versus a people-picker search hit.
+export interface GranteeSummary {
+  id: string
+  username: string
+  avatar_updated_at?: string | null
+}
+
+// The grantee list returned by the definition share endpoints (mirrors the
+// server's `GameDefinitionSharesResponse`). Each grantee is resolved to
+// `{ id, username }` for the owner's manage-shares view.
+export interface GameDefinitionSharesResponse {
+  grantees: GranteeSummary[]
+}
+
+// The grantee list returned by the collection share endpoints (mirrors the
+// server's `GameCollectionSharesResponse`; structurally identical to
+// `GameDefinitionSharesResponse`).
+export interface GameCollectionSharesResponse {
+  grantees: GranteeSummary[]
+}
+
+// A single username-prefix lookup hit for the share people-picker. The server
+// returns only id + username here — never email, admin flag, or avatar.
+export interface UserLookupEntry {
+  id: string
+  username: string
+}
+
+// A page of username-prefix lookup hits. Mirrors the server's
+// `UserLookupResponse`, which — unlike the other paged lists — is NOT
+// camelCase-renamed, so the last-page flag is the snake_case `has_more` (as in
+// `ScoreboardResponse`).
+export interface UserLookupResponse {
+  users: UserLookupEntry[]
+  limit: number
+  offset: number
+  has_more: boolean
 }

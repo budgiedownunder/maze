@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
+import { getBoardDates, getCompletedChallenges, getLeaderboard, getScoreHistory, resetLeaderboard } from '../../src/api/client'
+import { gameChallengeKey, todayUtc } from '../../src/utils/gameDefinitions'
 import type { ScoreboardResponse } from '../../src/types/api'
 
 const TOKEN = 'test-token'
@@ -184,5 +185,72 @@ describe('getScoreHistory', () => {
     const url = cap.url()
     expect(url.searchParams.get('limit')).toBe('5')
     expect(url.searchParams.get('offset')).toBe('10')
+  })
+})
+
+describe('getCompletedChallenges', () => {
+  it('POSTs the challenges and returns the completed subset', async () => {
+    let body: unknown = null
+    let auth: string | null = null
+    server.use(
+      http.post('/api/v1/scores/me/completed', async ({ request }) => {
+        body = await request.json()
+        auth = request.headers.get('Authorization')
+        return HttpResponse.json({ completed: ['def:a'] })
+      }),
+    )
+    const res = await getCompletedChallenges(TOKEN, ['def:a', 'def:b'])
+    expect(res.completed).toEqual(['def:a'])
+    expect(body).toEqual({ challenges: ['def:a', 'def:b'] })
+    expect(auth).toContain(TOKEN)
+  })
+})
+
+describe('getBoardDates', () => {
+  it('hits /scores/board-dates with the encoded definition id + bearer token', async () => {
+    let captured: Request | null = null
+    server.use(
+      http.get('/api/v1/scores/board-dates', ({ request }) => {
+        captured = request
+        return HttpResponse.json({ dates: [] })
+      }),
+    )
+    await getBoardDates(TOKEN, 'def id/1')
+    const req = captured as unknown as Request
+    const url = new URL(req.url)
+    expect(url.pathname).toBe('/api/v1/scores/board-dates')
+    expect(url.searchParams.get('definition_id')).toBe('def id/1')
+    expect(req.headers.get('Authorization')).toBe(`Bearer ${TOKEN}`)
+  })
+
+  it('returns the dates, most recent first as the server sends them', async () => {
+    server.use(
+      http.get('/api/v1/scores/board-dates', () =>
+        HttpResponse.json({ dates: ['2026-07-10', '2026-07-05'] }),
+      ),
+    )
+    const res = await getBoardDates(TOKEN, 'abc')
+    expect(res.dates).toEqual(['2026-07-10', '2026-07-05'])
+  })
+})
+
+describe('gameChallengeKey', () => {
+  it('is def:<id> for a Static game (the default)', () => {
+    expect(gameChallengeKey('abc')).toBe('def:abc')
+    expect(gameChallengeKey('abc', 'static')).toBe('def:abc')
+    // The date is ignored for a Static game.
+    expect(gameChallengeKey('abc', 'static', '2026-07-14')).toBe('def:abc')
+  })
+
+  it('is def:<id>:<date> for a Daily game, defaulting to today (UTC)', () => {
+    expect(gameChallengeKey('abc', 'daily', '2026-07-14')).toBe('def:abc:2026-07-14')
+    expect(gameChallengeKey('abc', 'daily')).toBe(`def:abc:${todayUtc()}`)
+  })
+})
+
+describe('todayUtc', () => {
+  it('is a yyyy-mm-dd date matching the current UTC day', () => {
+    expect(todayUtc()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(todayUtc()).toBe(new Date().toISOString().slice(0, 10))
   })
 })

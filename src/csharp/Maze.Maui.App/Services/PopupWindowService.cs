@@ -7,6 +7,18 @@ namespace Maze.Maui.App.Services
     /// </summary>
     public class PopupWindowService : IDialogService
     {
+        private readonly IScoresService _scoresService;
+        private readonly IGameLibraryService _gameLibrary;
+
+        /// <summary>Constructor</summary>
+        /// <param name="scoresService">Injected scores service (campaign progress lookup)</param>
+        /// <param name="gameLibrary">Injected game-library service (leaderboard game picker)</param>
+        public PopupWindowService(IScoresService scoresService, IGameLibraryService gameLibrary)
+        {
+            _scoresService = scoresService;
+            _gameLibrary = gameLibrary;
+        }
+
         /// <summary>
         /// Displays a alert message to the user as a popup window with a single `cancel` button
         /// </summary>
@@ -73,13 +85,44 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
-        /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard) as a popup window
+        /// Displays the Arcade collection picker (radio list of member games) as a popup window.
         /// </summary>
-        /// <returns>A task that contains the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>
-        public async Task<Models.Difficulty?> ShowPlay3dDifficultyAsync()
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in order</param>
+        /// <returns>The chosen game, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.GameDefinition?> ShowArcadePickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions)
         {
-            var popup = new Views.Play3dDifficultyPopup();
-            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.Difficulty?>(popup);
+            var popup = new Views.ArcadePickerPopup(collectionName, definitions);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.GameDefinition?>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
+        /// Displays the Campaign collection picker as a popup window, resolving each
+        /// level's completed / current / locked state from the caller's scores first.
+        /// </summary>
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in campaign order</param>
+        /// <returns>The chosen game, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.GameDefinition?> ShowCampaignPickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions)
+        {
+            List<string> keys = definitions.Select(Models.CampaignLevel.ChallengeKey).ToList();
+            Models.CompletedChallengesResponse completed = await _scoresService.GetCompletedChallengesAsync(keys);
+            IReadOnlyList<Models.CampaignLevel> levels = Models.CampaignLevel.Build(definitions, completed.Completed);
+
+            var popup = new Views.CampaignPickerPopup(collectionName, levels);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.GameDefinition?>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
+        /// Displays the Leaderboards game picker as a popup window.
+        /// </summary>
+        /// <returns>The chosen game, or <c>null</c> if the user cancelled</returns>
+        public async Task<Models.GameDefinition?> ShowGamePickerAsync()
+        {
+            var popup = new Views.LeaderboardGamePickerPopup(_gameLibrary);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<Models.GameDefinition?>(popup);
             return result.Result;
         }
 

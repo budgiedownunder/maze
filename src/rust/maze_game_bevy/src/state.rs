@@ -15,7 +15,7 @@ pub(crate) struct PendingMazeJson(pub(crate) Option<String>);
 
 /// Optional override for the whole run's level set, bottom level first. When
 /// present (and non-empty) it supplies the multi-level run directly, taking
-/// precedence over the single [`PendingMazeJson`] and the native demos — the seam
+/// precedence over the single `PendingMazeJson` and the native demos — the seam
 /// a multi-level host launch (and the rendering tests) feed levels through. Public
 /// so the wasm host (`maze_game_bevy_wasm::start_with_config`) can inject a
 /// generated multi-level run, the same way it inserts the [`GameConfig`] resource.
@@ -458,7 +458,7 @@ pub struct GameConfig {
     /// Whether a multi-level run resets the player's bag at each level. `true`
     /// (the default) makes every level self-contained; `false` carries the whole
     /// bag forward. Inert for a single-level game. Drives
-    /// [`MultiLevelRun::reset_bag_between_levels`].
+    /// `MultiLevelRun::reset_bag_between_levels`.
     pub reset_bag_between_levels: bool,
     /// Whether a completed lower level's enemies are despawned once the player
     /// climbs past it. `false` (the default) leaves them idle-bobbing in place;
@@ -496,13 +496,13 @@ pub struct GameConfig {
     /// The global `score`-metric board top for this run's subject, fetched by the
     /// host before launch. `Some(top)` compares a won run's final score against
     /// it; `None` while [`Self::leaderboard_tracked`] means an **empty board**, so
-    /// the first run is itself a record (see [`is_high_score`]).
+    /// the first run is itself a record (see `is_high_score`).
     pub high_score_to_beat: Option<u64>,
     /// The global `time`-metric board best (fastest `elapsed_ms`) for this run's
     /// subject, fetched by the host before launch. `Some(best)` compares a won
     /// run's elapsed time against it; `None` while [`Self::leaderboard_tracked`]
     /// means an empty board, so the first run is itself a record (see
-    /// [`is_fastest_time`]).
+    /// `is_fastest_time`).
     pub fastest_time_to_beat: Option<u64>,
 }
 
@@ -910,7 +910,7 @@ impl LayeredAlignment {
     /// `Edge` / `Centre` are fixed; both random modes flip the same seeded
     /// per-`(seed, level)` coin to `Edge` or `Centre`. This is only the *choice* —
     /// where that choice is anchored (base vs the level below) is decided by the mode
-    /// in [`crate::world::level_offset_cells`]. Both the renderer and the generator
+    /// in `crate::world::level_offset_cells`. Both the renderer and the generator
     /// call this with the same seed + level index, so their layouts agree and a
     /// ladder finish lands on real floor.
     pub fn resolve(self, seed: u64, level: usize) -> Self {

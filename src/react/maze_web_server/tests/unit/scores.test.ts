@@ -1,12 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildChallenge, formatElapsedMs, SCORE_METRICS, SORT_DIRECTIONS } from '../../src/utils/scores'
-
-describe('buildChallenge', () => {
-  it('joins difficulty and seed as "<difficulty>:<seed>"', () => {
-    expect(buildChallenge('easy', 42)).toBe('easy:42')
-    expect(buildChallenge('hard', 0)).toBe('hard:0')
-  })
-})
+import { formatElapsedMs, SCORE_METRICS, SORT_DIRECTIONS } from '../../src/utils/scores'
 
 describe('score vocabularies', () => {
   it('exposes the metric and direction query values', () => {

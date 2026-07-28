@@ -210,7 +210,7 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
-        public async Task<OAuthSignInResult> SignInWithOAuthAsync(string providerName)
+        public async Task<OAuthSignInResult?> SignInWithOAuthAsync(string providerName)
         {
             if (string.IsNullOrWhiteSpace(providerName))
                 throw new ArgumentException("Provider name must be supplied", nameof(providerName));
@@ -221,9 +221,23 @@ namespace Maze.Maui.App.Services
 
             // .WaitAsync turns "stuck waiting forever" into a TimeoutException
             // the ViewModel can translate into a friendly cancellation message.
-            var result = await _webAuthenticator
-                .AuthenticateAsync(startUrl, callbackUrl)
-                .WaitAsync(OAUTH_FLOW_TIMEOUT);
+            OAuthCallbackResult result;
+            try
+            {
+                result = await _webAuthenticator
+                    .AuthenticateAsync(startUrl, callbackUrl)
+                    .WaitAsync(OAUTH_FLOW_TIMEOUT);
+            }
+            catch (OperationCanceledException)
+            {
+                // The user dismissed/closed the provider's sign-in UI (iOS sheet
+                // dismissed, Windows WebView2 popup closed) before completing.
+                // A clean cancellation, not an error — signalled to the caller as
+                // a null result so it shows a friendly message, not a failure.
+                // (A genuine flow *timeout* surfaces as TimeoutException from
+                // WaitAsync, which is left to propagate.)
+                return null;
+            }
 
             // Server-side recoverable errors (signup disabled, email not
             // verified, etc.) come back via `reason=<code>` on the same

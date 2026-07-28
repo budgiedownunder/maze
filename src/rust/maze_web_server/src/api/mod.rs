@@ -62,5 +62,38 @@ pub fn register_rapidoc() -> RapiDoc {
     RapiDoc::new("/api-docs/v1/openapi.json").path("/api-docs/v1/rapidoc")
 }
 
+#[cfg(test)]
+mod tests {
+    use super::get_openapi_v1;
+
+    // The lenient wire enums document their allowed lowercase values as an
+    // enumerated `string` schema (not an opaque `string`), and the model fields
+    // reference those named components rather than inlining a bare string.
+    #[test]
+    fn lenient_enums_expose_their_wire_values_in_openapi() {
+        let doc = serde_json::to_value(get_openapi_v1()).expect("serialize openapi");
+        let schemas = &doc["components"]["schemas"];
+
+        for (name, values) in [
+            ("Visibility", vec!["private", "shared", "public", "curated"]),
+            ("Rotation", vec!["static", "daily"]),
+            ("PlayMode", vec!["arcade", "campaign"]),
+        ] {
+            let schema = &schemas[name];
+            assert_eq!(schema["type"], "string", "{name} should be a string schema");
+            assert_eq!(schema["enum"], serde_json::json!(values), "{name} should enumerate its wire values");
+        }
+
+        // A model field points at the named component (possibly wrapped in an
+        // `allOf` to carry the field description) — never an inline string.
+        let visibility = schemas["GameDefinition"]["properties"]["visibility"].to_string();
+        assert!(visibility.contains("#/components/schemas/Visibility"), "visibility should ref the component, got {visibility}");
+        // `playMode` lives on the flattened `GameCollectionMeta` (shared by the
+        // stored collection and the collection-detail response).
+        let play_mode = schemas["GameCollectionMeta"]["properties"]["playMode"].to_string();
+        assert!(play_mode.contains("#/components/schemas/PlayMode"), "playMode should ref the component, got {play_mode}");
+    }
+}
+
 
 

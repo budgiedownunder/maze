@@ -1,25 +1,15 @@
 import { useState } from 'react'
+import { MAZE_GAME_SETTINGS_DEFAULTS, type MazeGameSettings } from '../utils/mazeGameSettings'
+import { ModalTabStrip } from './ModalTabs'
+import { modalTabPanelProps, type ModalTab } from '../utils/modalTabs'
 import {
-  DOOR_STYLES,
-  ENEMY_TYPES,
-  HEALTH_STYLES,
-  KEY_HOLDER_STYLES,
-  titleCaseWire,
-} from '../utils/cellEntityStyles'
-import type {
-  DoorStyle,
-  EnemyType,
-  HealthStyle,
-  KeyHolderStyle,
-} from '../types/cellEntities'
-import {
-  SKY_TYPES,
-  WALL_TYPES,
-  MAZE_GAME_SETTINGS_DEFAULTS,
-  type MazeGameSettings,
-  type SkyType,
-  type WallType,
-} from '../utils/mazeGameSettings'
+  SceneFields,
+  ObjectsFields,
+  DecorFields,
+  type SceneFieldsValue,
+  type ObjectsFieldsValue,
+  type DecorFieldsValue,
+} from './GameSettingsFields'
 
 interface Props {
   mazeName: string
@@ -40,51 +30,47 @@ interface Props {
 // the dialog reads as a few short panels rather than one long scrolling list.
 // The time limit, validation error and action buttons stay pinned below the
 // panels so a timer error is never hidden on an inactive tab.
-const TABS = ['scene', 'objects', 'decor'] as const
-type LaunchTab = (typeof TABS)[number]
-const TAB_LABELS: Record<LaunchTab, string> = {
-  scene: 'Scene',
-  objects: 'Objects',
-  decor: 'Decor',
-}
+const TABS = [
+  { id: 'scene', label: 'Scene' },
+  { id: 'objects', label: 'Objects' },
+  { id: 'decor', label: 'Decor' },
+] as const satisfies readonly ModalTab[]
+type LaunchTab = (typeof TABS)[number]['id']
 
 export function MazeGameSettingsModal({ mazeName, initialSettings, title, submitLabel, onSubmit, onCancel }: Props) {
   const initial = initialSettings ?? MAZE_GAME_SETTINGS_DEFAULTS
   const dialogTitle = title ?? `Play 3D — ${mazeName}`
   const [activeTab, setActiveTab] = useState<LaunchTab>('scene')
-  const [skyType, setSkyType] = useState<SkyType>(initial.skyType)
-  const [wallType, setWallType] = useState<WallType>(initial.wallType)
-  const [perimeterWalls, setPerimeterWalls] = useState(initial.perimeterWalls)
-  const [doorStyle, setDoorStyle] = useState<DoorStyle>(initial.doorStyle)
-  const [keyHolder, setKeyHolder] = useState<KeyHolderStyle>(initial.keyHolder)
-  const [enemyType, setEnemyType] = useState<EnemyType>(initial.enemyType)
-  const [healthStyle, setHealthStyle] = useState<HealthStyle>(initial.healthStyle)
-  const [wallTint, setWallTint] = useState(initial.wallTint)
-  const [wallMaterialVariation, setWallMaterialVariation] = useState(initial.wallMaterialVariation)
-  const [deadEndObjects, setDeadEndObjects] = useState(initial.deadEndObjects)
-  const [wallDecorations, setWallDecorations] = useState(initial.wallDecorations)
-  const [floorAccents, setFloorAccents] = useState(initial.floorAccents)
+  const [scene, setScene] = useState<SceneFieldsValue>({
+    skyType: initial.skyType,
+    wallType: initial.wallType,
+    perimeterWalls: initial.perimeterWalls,
+    wallTint: initial.wallTint,
+    wallMaterialVariation: initial.wallMaterialVariation,
+  })
+  const [objects, setObjects] = useState<ObjectsFieldsValue>({
+    doorStyle: initial.doorStyle,
+    keyHolder: initial.keyHolder,
+    enemyType: initial.enemyType,
+    healthStyle: initial.healthStyle,
+  })
+  const [decor, setDecor] = useState<DecorFieldsValue>({
+    deadEndObjects: initial.deadEndObjects,
+    wallDecorations: initial.wallDecorations,
+    floorAccents: initial.floorAccents,
+  })
   const [timerSeconds, setTimerSeconds] = useState<string>(String(initial.timerSeconds))
   const [validationError, setValidationError] = useState<string | null>(null)
-
-  // Enclosed skies always wall the maze perimeter, so the toggle is forced on
-  // (checked + disabled) for them; the stored preference is kept and re-applies
-  // when an open sky is chosen again.
-  const skyEnclosed = skyType === 'dungeon' || skyType === 'chamber'
 
   function clearError() {
     if (validationError !== null) setValidationError(null)
   }
 
-  // Arrow-key navigation across the tab strip, matching the WAI-ARIA tabs
-  // pattern (Left/Right move between tabs, wrapping at the ends).
-  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-    e.preventDefault()
-    const delta = e.key === 'ArrowRight' ? 1 : -1
-    const next = (index + delta + TABS.length) % TABS.length
-    setActiveTab(TABS[next])
-  }
+  // Each field-group patches its slice and clears any pending timer error, so a
+  // stale validation message doesn't linger while the user changes a setting.
+  const patchScene = (patch: Partial<SceneFieldsValue>) => { setScene(s => ({ ...s, ...patch })); clearError() }
+  const patchObjects = (patch: Partial<ObjectsFieldsValue>) => { setObjects(o => ({ ...o, ...patch })); clearError() }
+  const patchDecor = (patch: Partial<DecorFieldsValue>) => { setDecor(d => ({ ...d, ...patch })); clearError() }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -94,21 +80,7 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
       return
     }
     setValidationError(null)
-    onSubmit({
-      skyType,
-      wallType,
-      perimeterWalls,
-      doorStyle,
-      keyHolder,
-      enemyType,
-      healthStyle,
-      wallTint,
-      wallMaterialVariation,
-      deadEndObjects,
-      wallDecorations,
-      floorAccents,
-      timerSeconds: secs,
-    })
+    onSubmit({ ...scene, ...objects, ...decor, timerSeconds: secs })
   }
 
   return (
@@ -122,185 +94,28 @@ export function MazeGameSettingsModal({ mazeName, initialSettings, title, submit
       <div className="modal modal-sm modal-with-scroll-body">
         <h2 className="modal-title">{dialogTitle}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
-          <div className="modal-tabs" role="tablist" aria-label="Launch settings">
-            {TABS.map((tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                id={`launch-tab-${tab}`}
-                aria-selected={activeTab === tab}
-                aria-controls={`launch-panel-${tab}`}
-                tabIndex={activeTab === tab ? 0 : -1}
-                className="modal-tab"
-                onClick={() => setActiveTab(tab)}
-                onKeyDown={e => handleTabKeyDown(e, index)}
-              >
-                {TAB_LABELS[tab]}
-              </button>
-            ))}
-          </div>
+          <ModalTabStrip
+            tabs={TABS}
+            activeTab={activeTab}
+            onSelect={setActiveTab}
+            idPrefix="launch"
+            ariaLabel="Launch settings"
+          />
 
           {/* Scrollable middle region: only the active tab's controls scroll
               when the viewport is too short; the title, the pinned time-limit
               row and the action buttons stay outside this box. */}
           <div className="modal-scroll-body">
-            <div
-              role="tabpanel"
-              id="launch-panel-scene"
-              aria-labelledby="launch-tab-scene"
-              hidden={activeTab !== 'scene'}
-            >
-              <label className="modal-stacked-input">
-                Sky
-                <select
-                  className="input"
-                  value={skyType}
-                  onChange={e => { setSkyType(e.target.value as SkyType); clearError() }}
-                >
-                  {SKY_TYPES.map(s => (
-                    <option key={s} value={s}>{titleCaseWire(s)}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="modal-checkbox">
-                <input
-                  type="checkbox"
-                  checked={wallMaterialVariation}
-                  onChange={e => { setWallMaterialVariation(e.target.checked); clearError() }}
-                />
-                <span>Quadrant wall types</span>
-              </label>
-
-              <label className="modal-stacked-input">
-                Wall Texture (Default)
-                <select
-                  className="input"
-                  value={wallType}
-                  disabled={wallMaterialVariation}
-                  onChange={e => { setWallType(e.target.value as WallType); clearError() }}
-                >
-                  {WALL_TYPES.map(w => (
-                    <option key={w} value={w}>{titleCaseWire(w)}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="modal-checkbox">
-                <input
-                  type="checkbox"
-                  checked={wallTint}
-                  disabled={wallMaterialVariation}
-                  onChange={e => { setWallTint(e.target.checked); clearError() }}
-                />
-                <span>Varied wall tints</span>
-              </label>
-
-              <label className="modal-checkbox">
-                <input
-                  type="checkbox"
-                  // Enclosed skies always wall the perimeter — force the box on
-                  // and disabled for them.
-                  checked={skyEnclosed ? true : perimeterWalls}
-                  disabled={skyEnclosed}
-                  onChange={e => { setPerimeterWalls(e.target.checked); clearError() }}
-                />
-                <span>Perimeter walls</span>
-              </label>
+            <div {...modalTabPanelProps('launch', 'scene', activeTab)}>
+              <SceneFields value={scene} onChange={patchScene} />
             </div>
 
-            <div
-              role="tabpanel"
-              id="launch-panel-objects"
-              aria-labelledby="launch-tab-objects"
-              hidden={activeTab !== 'objects'}
-            >
-              <label className="modal-stacked-input">
-                Door Style (Default)
-                <select
-                  className="input"
-                  value={doorStyle}
-                  onChange={e => { setDoorStyle(e.target.value as DoorStyle); clearError() }}
-                >
-                  {DOOR_STYLES.map(d => (
-                    <option key={d} value={d}>{titleCaseWire(d)}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="modal-stacked-input">
-                Key Holder (Default)
-                <select
-                  className="input"
-                  value={keyHolder}
-                  onChange={e => { setKeyHolder(e.target.value as KeyHolderStyle); clearError() }}
-                >
-                  {KEY_HOLDER_STYLES.map(k => (
-                    <option key={k} value={k}>{titleCaseWire(k)}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="modal-stacked-input">
-                Enemy Type (Default)
-                <select
-                  className="input"
-                  value={enemyType}
-                  onChange={e => { setEnemyType(e.target.value as EnemyType); clearError() }}
-                >
-                  {ENEMY_TYPES.map(et => (
-                    <option key={et} value={et}>{titleCaseWire(et)}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="modal-stacked-input">
-                Health Style (Default)
-                <select
-                  className="input"
-                  value={healthStyle}
-                  onChange={e => { setHealthStyle(e.target.value as HealthStyle); clearError() }}
-                >
-                  {HEALTH_STYLES.map(hs => (
-                    <option key={hs} value={hs}>{titleCaseWire(hs)}</option>
-                  ))}
-                </select>
-              </label>
+            <div {...modalTabPanelProps('launch', 'objects', activeTab)}>
+              <ObjectsFields value={objects} onChange={patchObjects} />
             </div>
 
-            <div
-              role="tabpanel"
-              id="launch-panel-decor"
-              aria-labelledby="launch-tab-decor"
-              hidden={activeTab !== 'decor'}
-            >
-              <label className="modal-checkbox">
-                <input
-                  type="checkbox"
-                  checked={deadEndObjects}
-                  onChange={e => { setDeadEndObjects(e.target.checked); clearError() }}
-                />
-                <span>Dead-end objects</span>
-              </label>
-
-              <label className="modal-checkbox">
-                <input
-                  type="checkbox"
-                  checked={wallDecorations}
-                  onChange={e => { setWallDecorations(e.target.checked); clearError() }}
-                />
-                <span>Sparse wall decorations</span>
-              </label>
-
-              <label className="modal-checkbox">
-                <input
-                  type="checkbox"
-                  checked={floorAccents}
-                  onChange={e => { setFloorAccents(e.target.checked); clearError() }}
-                />
-                <span>Floor junction markers</span>
-              </label>
+            <div {...modalTabPanelProps('launch', 'decor', activeTab)}>
+              <DecorFields value={decor} onChange={patchDecor} />
             </div>
           </div>
 

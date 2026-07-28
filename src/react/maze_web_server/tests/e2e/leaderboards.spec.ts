@@ -20,14 +20,50 @@ test('Leaderboards opens from the menu and shows the default board', async ({ pa
   await expect(page.getByRole('button', { name: /play( again)?/i })).toBeVisible()
 })
 
-test('switching to Play 3D shows a global board with usernames', async ({ page }) => {
+test('switching to 3D Games prompts for a game until one is picked', async ({ page }) => {
   await login(page)
   await page.goto('/leaderboards')
   await expect(page.getByLabel('Game Type')).toBeVisible()
   await page.getByLabel('Game Type').selectOption('play3d')
-  // The curated board resolves its seed + lists every player by username,
-  // including the signed-in user (testuser). Scope to board cells — the
+  await expect(page.getByText('Choose a game to see its leaderboard.')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^▶ Play$/ })).toBeDisabled()
+})
+
+test('picking a game in the picker shows its board with usernames', async ({ page }) => {
+  await login(page)
+  await page.goto('/leaderboards')
+  await page.getByLabel('Game Type').selectOption('play3d')
+
+  // Browse to a game another user published (the dev:mock Community fixture) and
+  // pick it; the picker collapses to the selection.
+  await page.getByRole('button', { name: 'Choose a game' }).click()
+  await page.getByRole('tab', { name: 'Community' }).click()
+  await page.getByRole('button', { name: 'Show leaderboard for Community Classic' }).click()
+  await expect(page.getByRole('button', { name: 'Change' })).toBeVisible()
+
+  // The game's board lists every player by username. Scope to board cells — the
   // signed-in username also appears in the page header (the account link).
   await expect(page.getByRole('cell', { name: 'alice' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'testuser' })).toBeVisible()
+})
+
+test('a daily game shows a date picker and browses past days', async ({ page }) => {
+  await login(page)
+  await page.goto('/leaderboards')
+  await page.getByLabel('Game Type').selectOption('play3d')
+
+  // The seeded daily game is curated → it shows on the picker's Featured tab.
+  await page.getByRole('button', { name: 'Choose a game' }).click()
+  await page.getByRole('button', { name: 'Show leaderboard for Daily Maze' }).click()
+
+  // The date dropdown appears, defaulting to the most-recent day with runs
+  // (2026-07-10) rather than today, which has none.
+  const daySelect = page.getByRole('combobox', { name: 'Day' })
+  await expect(daySelect).toBeVisible()
+  await expect(daySelect).toHaveValue('2026-07-10')
+
+  // Picking an earlier day with runs re-keys the board.
+  await daySelect.selectOption('2026-07-05')
+  await expect(daySelect).toHaveValue('2026-07-05')
+  await expect(page.getByRole('table')).toBeVisible()
 })

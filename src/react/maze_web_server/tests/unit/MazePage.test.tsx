@@ -674,15 +674,15 @@ describe('MazePage generate', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled())
   })
 
-  it('reopening Generate dialog shows last used Min Solution Length', async () => {
+  it('reopening Generate dialog shows last used Min Start to Finish Distance', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
     const dialog = () => screen.getByRole('dialog', { name: 'Generate Maze' })
-    fireEvent.change(within(dialog()).getByLabelText('Min Solution Length'), { target: { value: '5' } })
+    fireEvent.change(within(dialog()).getByLabelText('Min Start to Finish Distance'), { target: { value: '5' } })
     await userEvent.click(within(dialog()).getByRole('button', { name: 'Generate' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate Maze' })).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
-    expect(within(dialog()).getByLabelText('Min Solution Length')).toHaveValue(5)
+    expect(within(dialog()).getByLabelText('Min Start to Finish Distance')).toHaveValue(5)
   })
 
   it('WASM error keeps dialog open and shows error message', async () => {
@@ -845,7 +845,9 @@ describe('MazePage walk solution', () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Walk Solution' })).toBeDisabled())
-    resolveSolve(solvePath)
+    // Resolve the solve inside act() so the trailing setIsSolving(false)/startWalk
+    // state updates settle within the test rather than after it.
+    await act(async () => { resolveSolve(solvePath) })
   })
 
   it('clicking Walk Solution calls solveMaze', async () => {

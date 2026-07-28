@@ -88,10 +88,12 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<IScoresService, ScoresHttpClientService>();
             builder.Services.AddSingleton<IAvatarService, AvatarHttpClientService>();
             builder.Services.AddSingleton<IImagePickerService, ImagePickerService>();
-            builder.Services.AddSingleton<IGameConfigService, GameConfigHttpClientService>();
+            builder.Services.AddSingleton<IGameLibraryService, GameLibraryHttpClientService>();
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
-            builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
+            builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService(
+                provider.GetRequiredService<IScoresService>(),
+                provider.GetRequiredService<IGameLibraryService>()));
             builder.Services.AddSingleton<INavigationService, ShellNavigationService>();
 
             builder.Services.AddTransient<LoginViewModel>();
@@ -105,6 +107,8 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<MazeGameViewModel>();
             builder.Services.AddSingleton<AccountViewModel>();
             builder.Services.AddTransient<EmailAddressesViewModel>();
+            builder.Services.AddTransient<Play3dHubViewModel>();
+            builder.Services.AddTransient<Play3dFeaturedViewModel>();
 
             builder.Services.AddTransient<LoginPage>();
             builder.Services.AddTransient<SignUpPage>();
@@ -117,6 +121,11 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<MazePage>();
             builder.Services.AddTransient<MazeGamePage>();
             builder.Services.AddTransient<Play3dGamePage>();
+            builder.Services.AddTransient<Play3dHubPage>();
+            builder.Services.AddTransient<Play3dFeaturedPage>();
+            builder.Services.AddTransient<Play3dMyGamesPage>();
+            builder.Services.AddTransient<Play3dSharedPage>();
+            builder.Services.AddTransient<Play3dCommunityPage>();
             builder.Services.AddTransient<AccountPage>();
 
 #if DEBUG

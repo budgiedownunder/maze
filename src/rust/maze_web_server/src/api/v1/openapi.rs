@@ -1,4 +1,4 @@
-use data_model::{Maze, MazeDefinition, UserEmail};
+use data_model::{CollectionItem, GameCollection, GameCollectionMeta, GameDefinition, GranteeSummary, Maze, MazeDefinition, PlayMode, Rotation, UserEmail, Visibility};
 use maze::{GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution};
 use storage::MazeItem;
 use utoipa::{
@@ -11,12 +11,25 @@ use crate::api::v1::endpoints::email_verification::{
     EmailVerificationConfirmRequest, EmailVerificationRequest,
 };
 use crate::api::v1::endpoints::handlers::{
-    AppFeaturesResponse, Play3dConfigResponse,
+    AppFeaturesResponse,
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
-    ChangePasswordRequest, UpdateProfileRequest};
+    ChangePasswordRequest, UpdateProfileRequest,
+    UserLookupEntry, UserLookupResponse, UsersListResponse};
 use crate::api::v1::endpoints::avatar::AvatarUpdatedResponse;
-use crate::api::v1::endpoints::scores::{RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
+use crate::api::v1::endpoints::game_collections::{
+    GameCollectionSharesResponse, GameCollectionDetailResponse,
+    GameCollectionListResponse, GameCollectionRequest, SetGameCollectionItemsRequest,
+};
+use crate::api::v1::endpoints::game_definitions::{
+    GameDefinitionSharesResponse, GameDefinitionListResponse, GameDefinitionRequest, GamePlayResponse,
+};
+use crate::api::v1::endpoints::featured_game_items::{
+    FeaturedGameItemEntry, FeaturedGameItemResponse, FeaturedGameItemsListResponse,
+    ReorderFeaturedGameItemsRequest,
+};
+use crate::api::v1::endpoints::game_shared::{ImageUpdatedResponse, SetGameSharesRequest};
+use crate::api::v1::endpoints::scores::{BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
 use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
 
@@ -69,8 +82,6 @@ impl utoipa::Modify for LoginTokenAuth {
         // Features
         crate::api::v1::endpoints::handlers::get_features,
         crate::api::v1::endpoints::handlers::update_admin_features,
-        // Game presets
-        crate::api::v1::endpoints::handlers::get_play3d_config,
         // Login, logout, renew, signup
         crate::api::v1::endpoints::handlers::login,
         crate::api::v1::endpoints::handlers::logout,
@@ -109,11 +120,42 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::get_maze_solution,
         crate::api::v1::endpoints::handlers::generate_maze,
         crate::api::v1::endpoints::handlers::solve_maze,
+        // Game definitions
+        crate::api::v1::endpoints::game_definitions::create_game_definition,
+        crate::api::v1::endpoints::game_definitions::list_game_definitions,
+        crate::api::v1::endpoints::game_definitions::get_game_definition,
+        crate::api::v1::endpoints::game_definitions::update_game_definition,
+        crate::api::v1::endpoints::game_definitions::reshuffle_game_definition,
+        crate::api::v1::endpoints::game_definitions::delete_game_definition,
+        crate::api::v1::endpoints::game_definitions::list_game_definition_shares,
+        crate::api::v1::endpoints::game_definitions::set_game_definition_shares,
+        crate::api::v1::endpoints::game_definitions::upload_game_definition_image,
+        crate::api::v1::endpoints::game_definitions::delete_game_definition_image,
+        crate::api::v1::endpoints::game_definitions::serve_game_definition_image,
+        // Game collections
+        crate::api::v1::endpoints::game_collections::create_game_collection,
+        crate::api::v1::endpoints::game_collections::list_game_collections,
+        crate::api::v1::endpoints::game_collections::get_game_collection,
+        crate::api::v1::endpoints::game_collections::update_game_collection,
+        crate::api::v1::endpoints::game_collections::delete_game_collection,
+        crate::api::v1::endpoints::game_collections::set_game_collection_items,
+        crate::api::v1::endpoints::game_collections::list_game_collection_shares,
+        crate::api::v1::endpoints::game_collections::set_game_collection_shares,
+        crate::api::v1::endpoints::game_collections::upload_game_collection_image,
+        crate::api::v1::endpoints::game_collections::delete_game_collection_image,
+        crate::api::v1::endpoints::game_collections::serve_game_collection_image,
+        // Featured catalogue
+        crate::api::v1::endpoints::featured_game_items::get_featured_game_items,
+        crate::api::v1::endpoints::featured_game_items::set_featured_game_items_order,
         // Scores
         crate::api::v1::endpoints::scores::record_score,
         crate::api::v1::endpoints::scores::get_leaderboard,
         crate::api::v1::endpoints::scores::get_my_history,
+        crate::api::v1::endpoints::scores::get_my_completed_challenges,
+        crate::api::v1::endpoints::scores::get_board_dates,
         crate::api::v1::endpoints::scores::reset_leaderboard,
+        // User lookup (share people-picker)
+        crate::api::v1::endpoints::handlers::lookup_users,
         // Users (admin)
         crate::api::v1::endpoints::handlers::get_users,
         crate::api::v1::endpoints::handlers::create_user,
@@ -124,16 +166,25 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
-            AppFeaturesResponse, OAuthProviderPublic, Play3dConfigResponse,
+            AppFeaturesResponse, OAuthProviderPublic,
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
+            UserLookupEntry, UserLookupResponse, UsersListResponse,
             ChangePasswordRequest, UpdateProfileRequest,
             PasswordResetRequest, PasswordResetConfirmRequest,
             EmailVerificationRequest, EmailVerificationConfirmRequest,
             UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm,
-            RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
+            BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreResponse, ScoreboardResponse,
+            Visibility, Rotation, PlayMode,
+            GameDefinition, GameDefinitionRequest, GameDefinitionListResponse, GamePlayResponse,
+            SetGameSharesRequest, GameDefinitionSharesResponse, GranteeSummary,
+            GameCollection, GameCollectionMeta, CollectionItem, GameCollectionRequest, GameCollectionListResponse,
+            GameCollectionDetailResponse, SetGameCollectionItemsRequest,
+            GameCollectionSharesResponse, ImageUpdatedResponse,
+            FeaturedGameItemResponse, FeaturedGameItemsListResponse,
+            FeaturedGameItemEntry, ReorderFeaturedGameItemsRequest,
             AvatarUpdatedResponse),
 
     ),

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Maze.Maui.App.Views
 {
     [QueryProperty(nameof(MazeItem), "MazeItem")]
-    [QueryProperty(nameof(DifficultyValue), "difficulty")]
+    [QueryProperty(nameof(DefinitionId), "def")]
     [QueryProperty(nameof(LaunchSettings), "LaunchSettings")]
     public partial class Play3dGamePage : ContentPage
     {
@@ -16,12 +16,12 @@ namespace Maze.Maui.App.Views
         public MazeItem? MazeItem { get; set; }
 
         /// <summary>
-        /// Difficulty token (e.g. "easy" / "tricky" / "hard") passed by the
-        /// Play 3D entry points. When set (and no <see cref="MazeItem"/> is
-        /// supplied), it is forwarded to the game as <c>/game/?difficulty=…</c>
-        /// so the server resolves the maze-size / timer / seed preset.
+        /// Stored game-definition id passed by the Play 3D browser. When set (and
+        /// no <see cref="MazeItem"/> is supplied), it is forwarded to the game as
+        /// <c>/game/?def=…</c> so the host page fetches the definition's config and
+        /// records scores under its <c>def:&lt;id&gt;</c> board.
         /// </summary>
-        public string? DifficultyValue { get; set; }
+        public string? DefinitionId { get; set; }
 
         /// <summary>
         /// Per-launch custom settings chosen by the user via the
@@ -51,36 +51,16 @@ namespace Maze.Maui.App.Views
         {
             base.OnNavigatedTo(args);
             var apiRootUri = _configurationService.ApiRootUri;
-            var apiIndex = apiRootUri.LastIndexOf("/api/", StringComparison.Ordinal);
-            var gameUrl = apiIndex >= 0
-                ? apiRootUri[..apiIndex] + "/game/"
-                : apiRootUri + "game/";
-
             var token = await _authService.GetBearerTokenAsync();
-            if (MazeItem is not null)
-            {
-                // Specific stored maze — id path, difficulty not consulted.
-                var id = Uri.EscapeDataString(MazeItem.ID);
-                gameUrl += $"?id={id}";
-                if (token is not null) gameUrl += $"&t={token}";
-                // Append the user's chosen per-launch settings as URL
-                // params. /game/index.html reads them with priority over
-                // localStorage so the MAUI flow (which uses Preferences,
-                // not the SPA's localStorage) overrides correctly.
-                if (LaunchSettings is not null)
-                {
-                    gameUrl += "&" + LaunchSettings.ToQueryString();
-                }
-            }
-            else if (!string.IsNullOrEmpty(DifficultyValue))
-            {
-                gameUrl += $"?difficulty={Uri.EscapeDataString(DifficultyValue)}";
-                if (token is not null) gameUrl += $"&t={token}";
-            }
-            else if (token is not null)
-            {
-                gameUrl += $"?t={token}";
-            }
+
+            // Per-launch settings (MazeItem path only) ride as URL params so
+            // /game/index.html reads them with priority over localStorage — the
+            // MAUI flow uses Preferences, not the SPA's localStorage.
+            string gameUrl = MazeItem is not null
+                ? Play3dGameHostUrl.BuildForMaze(apiRootUri, MazeItem.ID, token, LaunchSettings?.ToQueryString())
+                : !string.IsNullOrEmpty(DefinitionId)
+                    ? Play3dGameHostUrl.BuildForDefinition(apiRootUri, DefinitionId, token)
+                    : Play3dGameHostUrl.BuildForToken(apiRootUri, token);
 
             MazeGameWebView.Source = new UrlWebViewSource { Url = gameUrl };
         }
@@ -90,7 +70,7 @@ namespace Maze.Maui.App.Views
             base.OnDisappearing();
             GameWebViewHandler.GameResultReceived -= OnGameResultReceived;
             MazeItem = null;
-            DifficultyValue = null;
+            DefinitionId = null;
             LaunchSettings = null;
             MazeGameWebView.Source = new UrlWebViewSource { Url = "about:blank" };
         }

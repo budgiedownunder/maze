@@ -29,6 +29,14 @@ test('sign out returns to /login', async ({ page }) => {
   await expect(page).toHaveURL(/\/login/)
 })
 
+test('the Account page Sign Out button returns to /login', async ({ page }) => {
+  await login(page)
+  await page.goto('/account')
+  await expect(page.getByRole('heading', { name: /^my account$/i })).toBeVisible()
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await expect(page).toHaveURL(/\/login/)
+})
+
 test('navigating to /mazes after sign out redirects to /login', async ({ page }) => {
   await login(page)
   await page.getByRole('button', { name: /open menu/i }).click()

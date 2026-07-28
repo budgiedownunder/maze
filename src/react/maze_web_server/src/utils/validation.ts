@@ -31,6 +31,15 @@ export const MAX_TREASURE_COUNT = 12
 // same rule) never has to reject them.
 export const MAX_TOTAL_FEATURES = 16
 
+// Per-field caps for the two "spare" (decoy) feature counts. Spare doors are
+// clamped to the same door cap as real doors on the Rust side
+// (`place_spare_keys_and_doors` → `MAX_AUTO_DOORS`), so they share
+// `MAX_DOOR_COUNT`. Spare keys carry no door constraint — they are bounded only
+// by the combined `MAX_TOTAL_FEATURES` budget — so a spare key may in principle
+// use the whole budget.
+export const MAX_SPARE_DOOR_COUNT = MAX_DOOR_COUNT
+export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
+
 // Returns true when the rows × cols product would exceed the server-reported
 // store cap. A null cap means the configured store imposes no cap, in which
 // case this always returns false.
@@ -69,6 +78,96 @@ export function exceedsGenerateFeatureCap(
   spareKeys: number,
 ): boolean {
   return 2 * doorCount + spareDoors + spareKeys > MAX_TOTAL_FEATURES
+}
+
+// Validates the parametric generation fields shared by the maze Generate dialog
+// and the game-definition editor — rows/cols/minSolutionLength plus the
+// door/spare/enemy/health/treasure counts. Returns the first error message, or
+// null when all valid. Reuses the same caps + feature-budget rule so neither
+// path can ask for a maze the generator or solver would reject.
+//
+// `kind` selects whether the start/finish positions are checked: a maze is
+// authored on a concrete grid (`'maze'` → positions required + in-bounds +
+// distinct), whereas a game definition is generated from a seed with no grid
+// (`'game'` → positions ignored). The position checks run in the same order and
+// with the same messages the Generate dialog used inline. `kind` also sets the
+// `minSolutionLength` floor: a game accepts 0 (no minimum, as the server does),
+// while an authored maze needs a solution of at least one step.
+export function validateMazeGenerationFields(
+  v: {
+    rows: string
+    cols: string
+    minSolutionLength: string
+    doorCount: string
+    spareDoors: string
+    spareKeys: string
+    enemyCount: string
+    healthCount: string
+    treasureCount: string
+    startRow?: string
+    startCol?: string
+    finishRow?: string
+    finishCol?: string
+  },
+  maxMazeCells: number | null,
+  kind: 'maze' | 'game',
+): string | null {
+  const rows = parseInt(v.rows, 10)
+  const cols = parseInt(v.cols, 10)
+  const msl = parseInt(v.minSolutionLength, 10)
+  const doors = parseInt(v.doorCount, 10)
+  const sdoors = parseInt(v.spareDoors, 10)
+  const skeys = parseInt(v.spareKeys, 10)
+  const enemies = parseInt(v.enemyCount, 10)
+  const healths = parseInt(v.healthCount, 10)
+  const treasures = parseInt(v.treasureCount, 10)
+
+  if (!Number.isInteger(rows) || rows < 3) return 'Rows must be a whole number of 3 or more.'
+  if (!Number.isInteger(cols) || cols < 3) return 'Columns must be a whole number of 3 or more.'
+  if (exceedsMazeCellCap(rows, cols, maxMazeCells)) {
+    return `Total cells (rows × columns) cannot exceed ${maxMazeCells}.`
+  }
+  if (kind === 'maze') {
+    const sr = parseInt(v.startRow ?? '', 10)
+    const sc = parseInt(v.startCol ?? '', 10)
+    const fr = parseInt(v.finishRow ?? '', 10)
+    const fc = parseInt(v.finishCol ?? '', 10)
+    if (!Number.isInteger(sr) || sr < 1 || sr > rows) return `Start Row must be between 1 and ${rows}.`
+    if (!Number.isInteger(sc) || sc < 1 || sc > cols) return `Start Column must be between 1 and ${cols}.`
+    if (!Number.isInteger(fr) || fr < 1 || fr > rows) return `Finish Row must be between 1 and ${rows}.`
+    if (!Number.isInteger(fc) || fc < 1 || fc > cols) return `Finish Column must be between 1 and ${cols}.`
+    if (sr === fr && sc === fc) return 'Start and Finish cells must be different.'
+  }
+  const minMsl = kind === 'maze' ? 1 : 0
+  if (!Number.isInteger(msl) || msl < minMsl) {
+    return `Min Start to Finish Distance must be a whole number of ${minMsl} or more.`
+  }
+  if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
+    return `Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`
+  }
+  if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_SPARE_DOOR_COUNT) {
+    return `Spare Doors must be a whole number between 0 and ${MAX_SPARE_DOOR_COUNT}.`
+  }
+  if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_SPARE_KEY_COUNT) {
+    return `Spare Keys must be a whole number between 0 and ${MAX_SPARE_KEY_COUNT}.`
+  }
+  if (!Number.isInteger(enemies) || enemies < 0 || enemies > MAX_ENEMY_COUNT) {
+    return `Enemies must be a whole number between 0 and ${MAX_ENEMY_COUNT}.`
+  }
+  if (!Number.isInteger(healths) || healths < 0 || healths > MAX_HEALTH_COUNT) {
+    return `Health must be a whole number between 0 and ${MAX_HEALTH_COUNT}.`
+  }
+  if (!Number.isInteger(treasures) || treasures < 0 || treasures > MAX_TREASURE_COUNT) {
+    return `Treasure must be a whole number between 0 and ${MAX_TREASURE_COUNT}.`
+  }
+  if (exceedsGenerateFeatureCap(doors, sdoors, skeys)) {
+    const total = 2 * doors + sdoors + skeys
+    return (
+      `Total keys + doors (${total}) exceeds the limit of ${MAX_TOTAL_FEATURES}. ` +
+      `Each door brings a key, so the count is 2·Doors + Spare Doors + Spare Keys.`
+    )
+  }
+  return null
 }
 
 export function validateSignupForm(fields: {

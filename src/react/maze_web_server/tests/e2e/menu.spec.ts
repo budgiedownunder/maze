@@ -31,6 +31,9 @@ test('Home menu item navigates back to home from /account', async ({ page }) => 
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
   await expect(page).toHaveURL(/\/account/)
+  // Wait for the (lazily-loaded) Account page to finish rendering before
+  // re-opening the menu, so the interaction doesn't race the Suspense fallback.
+  await expect(page.getByRole('heading', { name: /^my account$/i })).toBeVisible()
 
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /^home$/i }).click()
@@ -43,15 +46,49 @@ test('Mazes menu item navigates to /mazes', async ({ page }) => {
   await expect(page).toHaveURL(/\/mazes$/)
 })
 
-test('hamburger menu Play 3D item opens the difficulty modal', async ({ page }) => {
+test("hamburger menu Today's Challenge launches the seeded daily game", async ({ page }) => {
+  // The launch hard-navigates to the static /game/ host, which the Vite dev
+  // server used by these tests does not serve for the bare directory URL — it
+  // returns the SPA shell, which then bounces to /login. Stub /game/ so the
+  // navigation settles at the launch URL (same approach as maze_game.spec.ts).
+  await page.route(/\/game\//, route => route.fulfill({
+    contentType: 'text/html',
+    body: '<html><body>stub</body></html>',
+  }))
   await page.getByRole('button', { name: /open menu/i }).click()
-  await expect(page.getByRole('menuitem', { name: /play 3d/i })).toBeVisible()
-  await page.getByRole('menuitem', { name: /play 3d/i }).click()
-  await expect(page.getByRole('dialog', { name: /choose difficulty/i })).toBeVisible()
-  await expect(page.getByRole('radio', { name: /easy/i })).toBeChecked()
-  await page.getByRole('button', { name: /cancel/i }).click()
-  await expect(page.getByRole('dialog')).not.toBeVisible()
-  await expect(page).toHaveURL(/\/$/)
+  await page.getByRole('menuitem', { name: /today's challenge/i }).click()
+  // Resolves the curated "Daily Challenges" collection (dev:mock seeds `def-daily`)
+  // and launches its daily member via the host page.
+  await page.waitForURL(/\/game\/\?def=def-daily/)
+})
+
+test('hamburger menu 3D Games item navigates to the Play-3D hub', async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /^3d games$/i }).click()
+  await expect(page).toHaveURL(/\/play-3d$/)
+  await expect(page.getByRole('heading', { name: /^featured$/i })).toBeVisible()
+})
+
+test('hamburger menu Featured sub-item navigates to the Featured page', async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /^featured$/i }).click()
+  await expect(page).toHaveURL(/\/play-3d\/featured$/)
+})
+
+test('hamburger menu 3D Games sub-items navigate to each scope page', async ({ page }) => {
+  for (const [name, url, heading] of [
+    [/^my games$/i, /\/play-3d\/my-games$/, 'My Games'],
+    [/^shared with me$/i, /\/play-3d\/shared$/, 'Shared with me'],
+    [/^community$/i, /\/play-3d\/community$/, 'Community'],
+  ] as const) {
+    await page.getByRole('button', { name: /open menu/i }).click()
+    await page.getByRole('menuitem', { name }).click()
+    await expect(page).toHaveURL(url)
+    // Wait for the lazily-loaded destination to render before the next iteration
+    // re-opens the menu, so it doesn't race the Suspense fallback (which briefly
+    // drops the header/menu).
+    await expect(page.getByRole('banner').getByText(heading)).toBeVisible()
+  }
 })
 
 test('My Account page opens and shows profile fields', async ({ page }) => {

@@ -1,0 +1,169 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+import { ThemeProvider } from '../../src/context/ThemeProvider'
+import { Play3dListPage, type Play3dCard, type Play3dListSearch } from '../../src/components/Play3dListPage'
+
+// Isolation tests for the reusable Play-3D browse shell: paging, the client-side
+// filter, the server-side search mode, empty/error states, and card action
+// wiring — driven by a stub loader, no routing or real endpoints.
+
+vi.mock('../../src/context/AuthContext', async () => {
+  const actual = await vi.importActual('../../src/context/AuthContext')
+  return {
+    ...actual,
+    useToken: () => 'test-token',
+    useAuth: () => ({ isLoading: false, isAuthenticated: true, profile: { id: 'u1', username: 'testuser', is_admin: false }, login: vi.fn(), logout: vi.fn() }),
+  }
+})
+
+interface Item { id: string; name: string; description?: string }
+
+function cardOf(actions: Play3dCard['actions'] = [{ key: 'play', label: 'Play', ariaLabel: 'Play', variant: 'primary', onClick: () => {} }]) {
+  return (i: Item): Play3dCard => ({ name: i.name, description: i.description, actions: actions.map(a => ({ ...a, ariaLabel: `${a.label} ${i.name}` })) })
+}
+
+interface ListOverrides {
+  title?: string
+  fetchPage?: (token: string, limit: number, offset: number, query: string) => Promise<{ items: Item[]; hasMore: boolean }>
+  getId?: (i: Item) => string
+  card?: (i: Item) => Play3dCard
+  search?: Play3dListSearch<Item>
+  emptyText?: string
+  errorText?: string
+}
+
+function renderList(overrides: ListOverrides) {
+  const props = {
+    title: 'Featured',
+    fetchPage: () => Promise.resolve({ items: [] as Item[], hasMore: false }),
+    getId: (i: Item) => i.id,
+    card: cardOf(),
+    emptyText: 'Nothing here yet.',
+    errorText: 'Failed to load',
+    ...overrides,
+  }
+  return render(
+    <MemoryRouter>
+      <ThemeProvider>
+        <Play3dListPage<Item> {...props} />
+      </ThemeProvider>
+    </MemoryRouter>,
+  )
+}
+
+describe('Play3dListPage', () => {
+  it('renders a gallery card per item with name, description and actions', async () => {
+    renderList({
+      fetchPage: () => Promise.resolve({ items: [
+        { id: 'g1', name: 'Night Climb', description: 'A 3-level ascent' },
+        { id: 'g2', name: 'Quick Picks' },
+      ], hasMore: false }),
+    })
+    await waitFor(() => expect(screen.getByText('Night Climb')).toBeInTheDocument())
+    expect(screen.getByText('A 3-level ascent')).toBeInTheDocument()
+    expect(screen.getByText('Quick Picks')).toBeInTheDocument()
+    // Each card has its Play action.
+    expect(screen.getByRole('button', { name: 'Play Night Climb' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Play Quick Picks' })).toBeInTheDocument()
+  })
+
+  it('renders a leading icon on a card action when provided', async () => {
+    renderList({
+      fetchPage: () => Promise.resolve({ items: [{ id: 'g1', name: 'Night Climb' }], hasMore: false }),
+      card: cardOf([{ key: 'play', label: 'Play', ariaLabel: 'Play', variant: 'primary', icon: '/images/icons/icon_play_3d.png', onClick: () => {} }]),
+    })
+    const play = await screen.findByRole('button', { name: 'Play Night Climb' })
+    expect(play.querySelector('img')).toHaveAttribute('src', '/images/icons/icon_play_3d.png')
+  })
+
+  it('fires a card action’s onClick', async () => {
+    const onPlay = vi.fn()
+    renderList({
+      fetchPage: () => Promise.resolve({ items: [{ id: 'g1', name: 'Night Climb' }], hasMore: false }),
+      card: cardOf([{ key: 'play', label: 'Play', ariaLabel: 'Play', variant: 'primary', onClick: onPlay }]),
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Play Night Climb' }))
+    expect(onPlay).toHaveBeenCalledTimes(1)
+  })
+
+  it('pages with a Load more button', async () => {
+    const all: Item[] = Array.from({ length: 25 }, (_, i) => ({ id: `g${i}`, name: `Game ${i}` }))
+    renderList({
+      fetchPage: (_t, limit, offset) => Promise.resolve({ items: all.slice(offset, offset + limit), hasMore: offset + limit < all.length }),
+    })
+    await waitFor(() => expect(screen.getByText('Game 0')).toBeInTheDocument())
+    // First page = 20 cards, Load more present.
+    expect(screen.getAllByRole('listitem')).toHaveLength(20)
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(25))
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
+  })
+
+  it('filters the loaded items client-side in client search mode', async () => {
+    renderList({
+      fetchPage: () => Promise.resolve({ items: [
+        { id: 'g1', name: 'Alpha' },
+        { id: 'g2', name: 'Beta' },
+      ], hasMore: false }),
+      search: { mode: 'client', text: (i: Item) => i.name },
+    })
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText('Filter…'), 'bet')
+    expect(screen.getByText('Beta')).toBeInTheDocument()
+    expect(screen.queryByText('Alpha')).toBeNull()
+    // A non-matching query shows the no-matches message, not the empty state.
+    await userEvent.clear(screen.getByLabelText('Filter…'))
+    await userEvent.type(screen.getByLabelText('Filter…'), 'zzz')
+    expect(screen.getByText('No matches.')).toBeInTheDocument()
+  })
+
+  it('sends the query to the loader (and reloads) in server search mode', async () => {
+    const queries: string[] = []
+    // The loader answers as a server would — only matches come back — so the list
+    // can't be passing a client filter off as a server search.
+    const all: Item[] = [{ id: 'g1', name: 'Alpha' }, { id: 'g2', name: 'Beta' }]
+    renderList({
+      fetchPage: (_t, _limit, _offset, query) => {
+        queries.push(query)
+        const items = query === '' ? all : all.filter(i => i.name.toLowerCase().includes(query.toLowerCase()))
+        return Promise.resolve({ items, hasMore: false })
+      },
+      search: { mode: 'server' },
+    })
+    await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument())
+    expect(queries).toEqual([''])
+
+    await userEvent.type(screen.getByLabelText('Filter…'), 'bet')
+    // Debounced, so settle on the refetched page rather than the loading flash.
+    await waitFor(() => {
+      expect(screen.queryByText('Alpha')).toBeNull()
+      expect(screen.getByText('Beta')).toBeInTheDocument()
+    })
+    expect(queries).toContain('bet')
+  })
+
+  it('shows the empty state when there are no items', async () => {
+    renderList({ fetchPage: () => Promise.resolve({ items: [], hasMore: false }) })
+    await waitFor(() => expect(screen.getByText('Nothing here yet.')).toBeInTheDocument())
+  })
+
+  it('surfaces a load error', async () => {
+    renderList({ fetchPage: () => Promise.reject(new Error('boom')) })
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('boom'))
+  })
+
+  it('renders a disabled action (the coming-soon state) that does not fire', async () => {
+    const onPlay = vi.fn()
+    renderList({
+      fetchPage: () => Promise.resolve({ items: [{ id: 'c1', name: 'Difficulty' }], hasMore: false }),
+      card: cardOf([{ key: 'play', label: 'Play', ariaLabel: 'Play', variant: 'primary', onClick: onPlay, disabled: true, title: 'Coming soon' }]),
+    })
+    const play = await screen.findByRole('button', { name: 'Play Difficulty' })
+    expect(play).toBeDisabled()
+    expect(play).toHaveAttribute('title', 'Coming soon')
+    await userEvent.click(play, { pointerEventsCheck: 0 })
+    expect(onPlay).not.toHaveBeenCalled()
+  })
+})

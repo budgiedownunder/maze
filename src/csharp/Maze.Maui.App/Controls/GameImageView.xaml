@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Maze.Maui.App.GameImageView">
+    <!-- Rounded-rectangle thumbnail: the Border clips its content to the
+         StrokeShape, masking the image to a rounded square. The fill is
+         transparent so a placeholder glyph sits on the host tile's own colour
+         (light or dark) rather than a fixed grey; the hardcoded stroke stays
+         (App-level resources aren't guaranteed merged when this control is
+         parsed — same reason as AvatarView). -->
+    <Border x:Name="ImageFrame"
+            Stroke="#D1D5DB"
+            StrokeThickness="1"
+            BackgroundColor="Transparent"
+            Padding="0"
+            HorizontalOptions="Start"
+            VerticalOptions="Center">
+        <Border.StrokeShape>
+            <RoundRectangle CornerRadius="8" />
+        </Border.StrokeShape>
+        <Image x:Name="GameImage" Aspect="AspectFill" />
+    </Border>
+</ContentView>

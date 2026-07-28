@@ -277,6 +277,9 @@ mod tests {
         async fn clear_user_avatar(&mut self, _id: Uuid) -> Result<(), StoreError> {
             Err(StoreError::Other("not used".into()))
         }
+        async fn search_users_by_username_prefix(&self, _prefix: &str, _limit: u32, _offset: u32) -> Result<Vec<User>, StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
         async fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             if user.id == Uuid::nil() { user.id = User::new_id(); }
             self.users.insert(user.id, user.clone());
@@ -342,7 +345,7 @@ mod tests {
                 .cloned()
                 .ok_or(StoreError::UserNotFound())
         }
-        async fn get_users(&self) -> Result<Vec<User>, StoreError> { Ok(self.users.values().cloned().collect()) }
+        async fn get_users(&self, _limit: u32, _offset: u32) -> Result<Vec<User>, StoreError> { Ok(self.users.values().cloned().collect()) }
         async fn get_admin_users(&self) -> Result<Vec<User>, StoreError> { Ok(vec![]) }
         async fn has_users(&self) -> Result<bool, StoreError> { Ok(!self.users.is_empty()) }
         async fn has_active_admin_user(&self) -> Result<bool, StoreError> {

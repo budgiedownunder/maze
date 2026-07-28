@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Shared with me">
+  <defs>
+    <linearGradient id="teal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="indigo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#818cf8"/><stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <!-- The universal "share" glyph: three nodes (each a different colour) linked
+       from one source; neutral connectors so the colour comes from the nodes. -->
+  <g stroke="#94a3b8" stroke-width="4" stroke-linecap="round">
+    <line x1="22" y1="30" x2="42" y2="20"/>
+    <line x1="22" y1="34" x2="42" y2="44"/>
+  </g>
+  <circle cx="20" cy="32" r="7" fill="url(#teal)"/>
+  <circle cx="44" cy="18" r="7" fill="url(#indigo)"/>
+  <circle cx="44" cy="46" r="7" fill="url(#amber)"/>
+</svg>

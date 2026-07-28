@@ -191,13 +191,8 @@ export function MazesPage() {
         />
       )}
       <AppHeader title="Mazes">
-        <button
-          className="btn-icon"
-          onClick={() => navigate('/mazes/new')}
-          aria-label="New maze"
-          title="New maze"
-        >
-          <img src="/images/icons/icon_new.png" alt="New maze" style={{ width: '1.1rem', height: '1.1rem' }} />
+        <button type="button" className="btn-primary" onClick={() => navigate('/mazes/new')}>
+          + New maze
         </button>
         <button
           className="btn-icon"

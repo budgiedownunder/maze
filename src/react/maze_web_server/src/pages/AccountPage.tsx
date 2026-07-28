@@ -131,12 +131,16 @@ export function AccountPage() {
     }
   }
 
+  async function handleSignOut() {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
   async function handleDeleteConfirm() {
     setIsDeleting(true)
     try {
       await api.deleteMe(token)
-      await logout()
-      navigate('/login', { replace: true })
+      await handleSignOut()
     } catch (ex: unknown) {
       setError((ex as { message?: string }).message ?? 'Failed to delete account')
       setShowDeleteConfirm(false)
@@ -240,6 +244,9 @@ export function AccountPage() {
         {!isLoading && <EmailAddressesPanel token={token} />}
 
         <div className="account-actions">
+          <button type="button" onClick={handleSignOut} className="btn-gray">
+            Sign Out
+          </button>
           <button type="button" onClick={() => setView('changePassword')} disabled={isLoading} className="btn-link">
             {saved?.has_password === false ? 'Set Password' : 'Change Password'}
           </button>

@@ -88,45 +88,6 @@ The following configuration settings exist:
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
 | Features | `allow_signup`     | Boolean | `true`            | `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`
-| Game (Play 3D) | `game.play3d.title`                         | Text    | `Maze 3D`  | (config-file only)
-|                | `game.play3d.<difficulty>.rows`             | Integer | `8`        | (config-file only)
-|                | `game.play3d.<difficulty>.cols`             | Integer | `8`        | (config-file only)
-|                | `game.play3d.<difficulty>.timer_seconds`    | Integer | `120`      | (config-file only)
-|                | `game.play3d.<difficulty>.seed`             | Integer | `0`        | (config-file only — fixed per difficulty for leaderboard fairness)
-|                | `game.play3d.<difficulty>.min_solution_length` | Integer | `0`     | (config-file only — `0` = no minimum; maps to the maze crate's `min_spine_length`)
-|                | `game.play3d.<difficulty>.minimap_cell_px`  | Integer | `10`    | (config-file only — on-screen pixel size of each minimap cell)
-|                | `game.play3d.<difficulty>.minimap_radius`   | Integer | `5`     | (config-file only — cells visible each direction from the player; minimap shows a 2r+1 square)
-|                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
-|                | `game.play3d.<difficulty>.mode`             | Text    | `Play`     | (config-file only — free-text label shown in the in-game status bar, e.g. `Easy` / `Tricky` / `Hard`)
-|                | `game.play3d.<difficulty>.landmarks.wall_tint` | Boolean | `true` | (config-file only — when `true`, add random wall tinting; bypassed when `wall_material_variation` is `true`)
-|                | `game.play3d.<difficulty>.landmarks.dead_end_objects` | Boolean | `true` | (config-file only — when `true`, place random objects in dead-end cells)
-|                | `game.play3d.<difficulty>.landmarks.wall_decorations` | Boolean | `true` | (config-file only — when `true`, add random wall decorations )
-|                | `game.play3d.<difficulty>.landmarks.floor_accents` | Boolean | `true` | (config-file only — when `true`, place flat accents on the floor of 3- and 4-way junction cells)
-|                | `game.play3d.<difficulty>.landmarks.wall_material_variation` | Boolean | `true` | (config-file only — when `true`, split the maze into a 2×2 NW/NE/SW/SE grid and render each quadrant with its own wall material (brick / dressed stone / wood / cobblestone); supersedes `wall_tint`)
-|                | `game.play3d.<difficulty>.sky_type` | Text (`night` / `sunrise` / `day` / `sunset` / `dungeon` / `chamber`) | `night` | (config-file only — atmospheric sky mode; `dungeon` caps the maze with a dark-rock ceiling and `chamber` with a ceiling in the wall material, instead of an open sky; unknown values fall back to `night`)
-|                | `game.play3d.<difficulty>.wall_type` | Text (`brick` / `dressed_stone` / `wood` / `cobblestone` / `water` / `lava` / `iron_fence` / `random`) | `brick` | (config-file only — per-maze wall type. The solid textures use the per-cell tinted path (bypassed when `wall_material_variation` is `true`); the non-occluding types `water` / `lava` / `iron_fence` turn every wall cell into a floor-level pool or see-through bars. `random` rolls one of the seven types **per level** (seeded off the maze), so each level reads as one coherent style. Unknown values fall back to `brick`)
-|                | `game.play3d.<difficulty>.perimeter_walls` | Boolean | `true` | (config-file + Play 3D launch modal — whether the maze perimeter is walled at the grid edge under an open sky. Enclosed skies (`dungeon` / `chamber`) always wall it regardless; `false` shows the skybox past an open-sky edge)
-|                | `game.play3d.<difficulty>.door_style` | Text (`swing` / `slide` / `portcullis` / `dissolve`) | `swing` | (config-file only — door open-animation style; applies to authored mazes containing door cells; unknown values fall back to `swing`)
-|                | `game.play3d.<difficulty>.key_holder` | Text (`pedestal` / `chest` / `floating_key` / `random`) | `pedestal` | (config-file only — key-holder style for key cells; `random` rolls a rig **per cell** (seeded off the maze); unknown values fall back to `pedestal`)
-|                | `game.play3d.<difficulty>.door_count` | Integer | `0` | (config-file only — number of real path doors (each paired with one key) the generator auto-places on the maze's spine; clamped to 8 and to what the maze can hold; `0` = a lock-free maze; combined with `spare_doors` and `spare_keys` so that `2*door_count + spare_doors + spare_keys ≤ 16`)
-|                | `game.play3d.<difficulty>.spare_doors` | Integer | `0` | (config-file only — number of decoy doors planted on off-spine branches; visually indistinguishable from real path doors so opening one burns a key the player may have needed for a real door, potentially stranding them; clamped to 8 and to feasibility; capped jointly with `door_count` and `spare_keys` at `2*door_count + spare_doors + spare_keys ≤ 16`)
-|                | `game.play3d.<difficulty>.spare_keys` | Integer | `0` | (config-file only — number of spare keys planted on off-spine branches, giving the player a budget to spend on decoys before they risk stranding; capped jointly with `door_count` and `spare_doors` at `2*door_count + spare_doors + spare_keys ≤ 16`)
-|                | `game.play3d.<difficulty>.enemy_count` | Integer | `0` | (config-file only — number of enemies (`'E'` cells) the generator auto-places on this difficulty's maze; clamped to 8 and to the available eligible cells; `0` = no enemies)
-|                | `game.play3d.<difficulty>.health_count` | Integer | `0` | (config-file only — number of health pickups (`'H'` cells) the generator auto-places; clamped to 8 and to the available eligible cells; `0` = none)
-|                | `game.play3d.<difficulty>.treasure_count` | Integer | `0` | (config-file only — number of treasure cells (`'T'`) the generator auto-places, dead-end-first and type-weighted; clamped to 12 and to the available eligible cells; `0` = none)
-|                | `game.play3d.<difficulty>.enemy_type` | Text (`goblin` / `ghost` / `random`) | `goblin` | (config-file only — enemy rig kind to spawn at every `'E'` cell; `random` rolls a rig **per cell** (seeded off the maze); unknown values fall back to `goblin`)
-|                | `game.play3d.<difficulty>.health_style` | Text (`heart` / `potion` / `random`) | `heart` | (config-file only — health-pickup rig kind to spawn at every `'H'` cell; `random` rolls a rig **per cell** (seeded off the maze); unknown values fall back to `heart`)
-|                | `game.play3d.<difficulty>.enemy_move_period_ms` | Integer | `1500` | (config-file only — how often each enemy advances one cell, in milliseconds of real-game time; lower = harder)
-|                | `game.play3d.<difficulty>.max_hp` | Integer | `3` | (config-file only — player's HP cap and starting HP for this difficulty)
-|                | `game.play3d.<difficulty>.levels.count` | Integer | `1` | (config-file only — number of stacked maze levels in a run; `1` = single-level (no transitions); clamped to the renderer's maximum of 20. Each interim level's finish becomes the entry to the next; only the final level completes the run. Score and HP carry across levels)
-|                | `game.play3d.<difficulty>.levels.finish_type` | Text (`ladder` / `portal` / `random`) | `ladder` | (config-file only — the rig drawn at each interim finish instead of the gold orb; `random` picks a rig per interim finish cell, seeded; unknown values fall back to `ladder`; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.difficulty_change` | Text (`same` / `easier` / `harder`) | `easier` | (config-file only — how difficulty changes as the player climbs; `easier` = hardest at the bottom, easing upward (enemy count is the lever, footprint uniform); `harder` = the reverse; `same` = every level equally hard; unknown values fall back to `easier`; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.reset_bag` | Boolean | `true` | (config-file only — whether the player's bag (keys etc.) resets at each level; `true` = every level self-contained; `false` carries the whole bag forward; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.taper` | Boolean | `false` | (config-file only — when `true`, upper levels get progressively smaller footprints (positioned per `alignment`) so the stack opens up and a climb eases as it rises; `false` keeps every level the full footprint. Operator choice, independent of `sky_type`; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.alignment` | Text (`edge` / `centre` / `random_base` / `random_level`) | `edge` | (config-file only — how a smaller upper (tapered) level sits over the level below; `edge` corner-aligns all layers, `centre` centres each; the random modes pick edge/centre per level from the seed — `random_base` measures each from the ground layer (a corner-stacked level may overhang a centred one below it), `random_level` measures each within the level below (every level nests); unknown values fall back to `edge`; inert when `count == 1` or `taper` is off)
-|                | `game.play3d.<difficulty>.levels.perimeter_random` | Boolean | `false` | (config-file only — when `true`, each level randomises its perimeter walls on/off independently; when `false`, every level uses the difficulty's `perimeter_walls`; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.hide_completed_enemies` | Boolean | `false` | (config-file only — when `true`, a completed lower level's enemies are despawned once the player climbs past it; when `false`, they idle in place; inert when `count == 1`)
-|                | `game.play3d.<difficulty>.levels.top.sky_type` / `.perimeter_walls` | Text / Boolean | inherit base | (config-file only — optional `[…levels.top]` scene override for the final (top) level; each field falls back to the base difficulty's value when unset; only meaningful when `count > 1`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -199,150 +160,6 @@ log_level = "info"
 
 [features]
 allow_signup = true
-
-# Play 3D presets are fetched by /game/index.html on every game session, so a
-# change here propagates to every client without a rebuild. `seed` is fixed per
-# difficulty so leaderboard records on the same difficulty share the same maze
-# layout from day 1. `min_solution_length` is plumbed through to the maze
-# crate's `min_spine_length` generator option. `title` is the in-game splash
-# text — set it at the parent level or per difficulty.
-[game.play3d]
-title = "Maze 3D"
-
-[game.play3d.easy]
-mode = "Easy"
-rows = 8
-cols = 8
-timer_seconds = 120
-seed = 8080808
-min_solution_length = 30
-minimap_cell_px = 10
-minimap_radius = 5
-
-sky_type = "night"
-wall_type = "brick"
-# Real path doors (each with one key) auto-placed on the spine. Easy mode
-# ships with a couple; spares stay off so easy mode carries no strand risk.
-door_count = 2
-spare_doors = 0
-spare_keys = 0
-# Auto-placed enemies (`'E'`) and health pickups (`'H'`). Easy mode ships
-# with one goblin and two hearts so the player learns the mechanic.
-enemy_count = 1
-health_count = 2
-treasure_count = 3
-enemy_type = "goblin"
-health_style = "heart"
-enemy_move_period_ms = 1800
-max_hp = 3
-
-[game.play3d.easy.landmarks]
-wall_tint = true
-dead_end_objects = true
-wall_decorations = true
-floor_accents = true
-wall_material_variation = true
-
-[game.play3d.easy.levels]
-# Multi-level run settings. count = 1 is a single-level game (the default).
-# finish_type: ladder | portal | random. difficulty_change: same | easier |
-# harder. alignment: edge | centre | random_base | random_level. perimeter_random randomises each
-# level's perimeter walls when true. hide_completed_enemies despawns a lower
-# level's enemies once you climb past it. The optional [levels.top] table
-# overrides the top level's sky_type / perimeter_walls when count > 1.
-count = 1
-finish_type = "ladder"
-difficulty_change = "easier"
-reset_bag = true
-alignment = "edge"
-perimeter_random = false
-hide_completed_enemies = false
-
-[game.play3d.tricky]
-mode = "Tricky"
-rows = 15
-cols = 15
-timer_seconds = 240
-seed = 15151515
-min_solution_length = 90
-minimap_cell_px = 10
-minimap_radius = 5
-
-sky_type = "night"
-wall_type = "brick"
-# Tricky raises real doors to 3 and introduces decoys + a spare. With one
-# spare key, the player can absorb a single decoy mistake; a second wrong
-# door strands them.
-door_count = 3
-spare_doors = 2
-spare_keys = 1
-enemy_count = 3
-health_count = 3
-treasure_count = 5
-enemy_type = "goblin"
-health_style = "heart"
-enemy_move_period_ms = 1500
-max_hp = 3
-
-[game.play3d.tricky.landmarks]
-wall_tint = true
-dead_end_objects = true
-wall_decorations = true
-floor_accents = true
-wall_material_variation = true
-
-[game.play3d.tricky.levels]
-count = 2
-finish_type = "ladder"
-difficulty_change = "easier"
-reset_bag = true
-alignment = "edge"
-perimeter_random = false
-
-[game.play3d.hard]
-mode = "Hard"
-rows = 25
-cols = 25
-timer_seconds = 420
-seed = 25252525
-min_solution_length = 220
-minimap_cell_px = 10
-minimap_radius = 5
-
-sky_type = "night"
-wall_type = "brick"
-# Hard adds a third decoy on top of one extra real path door, keeping the
-# same one-mistake margin as tricky but with more decoy choices to
-# navigate around.
-door_count = 4
-spare_doors = 3
-spare_keys = 1
-enemy_count = 5
-health_count = 4
-treasure_count = 8
-enemy_type = "goblin"
-health_style = "heart"
-enemy_move_period_ms = 1200
-max_hp = 3
-
-[game.play3d.hard.landmarks]
-wall_tint = true
-dead_end_objects = true
-wall_decorations = true
-floor_accents = true
-wall_material_variation = true
-
-[game.play3d.hard.levels]
-count = 3
-finish_type = "ladder"
-difficulty_change = "easier"
-reset_bag = true
-alignment = "edge"
-perimeter_random = false
-# Optional top-level scene override (only meaningful when count > 1):
-#[game.play3d.hard.levels.top]
-#sky_type = "day"
-#perimeter_walls = false
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
@@ -645,6 +462,7 @@ The following endpoints manage user identity:
 | `GET` | `/api/v1/auth/oauth/{provider}/start` | None | Begin an OAuth sign-in flow; 302-redirects to the provider's consent page (see **OAuth Sign-In** below) |
 | `GET` | `/api/v1/auth/oauth/{provider}/callback` | None | Provider redirects here after consent; mints a bearer token and redirects back to the SPA or mobile app |
 | `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile (includes `email`, `emails`, and `has_password` — see below) |
+| `GET` | `/api/v1/users/lookup?username=<prefix>` | Either | Look up users whose username **starts with** `<prefix>` (case-insensitive) for the share people-picker. Returns a page of `{ id, username }` — no email/admin/avatar. Paged via `limit` (default 20, capped at 100) / `offset` with a `has_more` flag; a blank prefix returns an empty page (never lists every user) |
 | `PUT` | `/api/v1/users/me/profile` | Either | Update the signed-in user's username and full name. **Email is no longer mutable here** — use `/api/v1/users/me/emails` instead. Sending an `email` field returns `400 Bad Request` |
 | `PUT` | `/api/v1/users/me/password` | Either | **Sets or changes** the signed-in user's password — the same endpoint handles both flows (see **Password set-or-change** below) |
 | `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
@@ -663,64 +481,74 @@ The full API reference (including maze and admin-user endpoints) is available in
 
 ## Leaderboards
 
-Completed 3D runs are recorded per player and surfaced as leaderboards (per maze and per curated difficulty) plus a personal history. Only **won** runs are recorded; the server takes the player from the session and stamps the record time, so neither can be spoofed by the client.
+Completed 3D runs are recorded per player and surfaced as leaderboards (per maze and per stored 3D game) plus a personal history. Only **won** runs are recorded; the server takes the player from the session and stamps the record time, so neither can be spoofed by the client.
 
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|
-| `POST` | `/api/v1/scores` | Either | Record a completed (won) run. The body carries the run's `score` and `elapsed_ms` plus its subject — exactly one of a stored `maze_id` or a curated `challenge` (`"<difficulty>:<seed>"`). The server sets `user_id` from the session and stamps `recorded_at`; neither is trusted from the client. |
+| `POST` | `/api/v1/scores` | Either | Record a completed (won) run. The body carries the run's `score` and `elapsed_ms` plus its subject — exactly one of a stored `maze_id` or a stored-game `challenge` (`"def:<id>"`, or `"def:<id>:<yyyy-mm-dd>"` for a daily game). The server sets `user_id` from the session and stamps `recorded_at`; neither is trusted from the client. |
 | `GET`  | `/api/v1/scores` | Either | A leaderboard page for one subject. Query: `maze_id` **or** `challenge` (exactly one); `metric` (`time` \| `score`, default `time`); `direction` (`asc` \| `desc`, default best-first for the metric); `limit` / `offset` (server-capped paging); `include_usernames` (default `true` — resolves each row's player username; pass `false` for personal boards). |
 | `GET`  | `/api/v1/scores/me` | Either | The caller's own run history, most recent first; paged via `limit` / `offset`. |
+| `POST` | `/api/v1/scores/me/completed` | Either | Given a set of challenge board keys (body `{ "challenges": ["def:<id>", …] }`, ≤ 200), returns `{ "completed": [...] }` — the subset the caller has scored on. Scoped to the caller's own scores; used to derive campaign progress in one request. |
+| `GET`  | `/api/v1/scores/board-dates` | Either | The UTC dates a **daily** game has a leaderboard for — query `definition_id`; returns `{ "dates": ["yyyy-mm-dd", …] }`, the days someone has scored (`def:<id>:<date>` boards), most recent first. **Access-checked** like the leaderboard read (owner ∨ curated ∨ public ∨ granted; otherwise `403`). A Static game (or an unplayed Daily one) returns an empty list. Lets a client offer past days with runs as quick-picks. |
 
-- A run's **subject** is dual-keyed: a stored user maze (`maze_id`) or a curated game (`challenge = "<difficulty>:<seed>"`). Exactly one is set, so a board aggregates everyone who played that subject — the row's `user_id` is the player, not the maze owner.
+- A run's **subject** is dual-keyed: a stored user maze (`maze_id`) or a stored 3D game (`challenge = "def:<id>"`, daily boards `"def:<id>:<yyyy-mm-dd>"`). Exactly one is set, so a board aggregates everyone who played that subject — the row's `user_id` is the player, not the maze owner.
 - The two canonical orderings are **fastest time** (`elapsed_ms` ascending) and **highest score** (`score` descending); `direction` flips the primary metric, with the secondary metric and record time held as fixed tie-breaks for stable paging.
 - `score` is the engine's running total at completion (currently the count of keys collected during the run); `elapsed_ms` is the run duration measured by the game, excluding paused time.
 
-## Game
+## Game definitions
 
-The 3D maze game (Bevy / WASM, served from `/game/`) fetches its session config at startup from the server, so a single edit to `config.toml` propagates to every client without a rebuild:
+A **game definition** is a stored, parametric 3D game: it holds no maze grid, only an opaque client-owned `config` blob plus a server-minted `seed` from which the client regenerates the whole game. Any user creates `Private` definitions; admins additionally publish `Curated` ones.
 
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|
-| `GET`  | `/api/v1/game/play3d-config?difficulty=easy\|tricky\|hard` | None | Returns the configured Play 3D preset for the difficulty: maze dimensions, time limit, fixed RNG seed, minimum solution-path length, and in-game splash title. Difficulty value is case-insensitive; unknown values return `400`. |
+| `POST`   | `/api/v1/game-definitions` | Either | Create a definition. The server mints the `seed` and sets id/owner/timestamps; the body carries `name`, `description`, `visibility`, `rotation`, `config`. Setting `visibility = "curated"` requires an admin. |
+| `GET`    | `/api/v1/game-definitions` | Either | List game definitions, ordered by name. `scope=visible` (default) is the caller's visible set — their own (all visibilities) + shared-with-them + public + curated, de-duplicated; `scope=mine` is only their own (any visibility), optionally filtered by a case-insensitive name substring `q`; `scope=shared` is only the definitions **shared with** them (a share grant they don't own; public/curated excluded); `scope=public` is the **cross-owner Community pool** (public definitions they don't own), also filterable by `q` and orderable by `sort` — `name` (default, case-insensitive A–Z) or `newest` (most recently created first); `sort` is honoured with `scope=public`, every other scope being name-ordered. `excludeDefinitions=true` blanks each game's opaque `config` blob (returning only the light metadata — id/name/visibility/…), for callers that only need to list games (e.g. the collection membership picker). Paged via `limit` (default 20, capped at 100) / `offset`; the response echoes the effective `limit`/`offset` and a `hasMore` flag. |
+| `GET`    | `/api/v1/game-definitions/{id}` | Either | **Play-fetch** for one accessible definition (owner ∨ curated ∨ public ∨ granted; otherwise `404`). Returns the definition with the *effective* seed spliced into `config`, plus the computed `challengeKey` and `leaderboardTracked`. |
+| `PUT`    | `/api/v1/game-definitions/{id}` | Either | Update a definition the caller owns — or, for an **admin**, a **Featured** (curated) definition they don't own, or one they are featuring (setting curated); ownership preserved, not transferred. (An admin cannot edit an unrelated non-featured definition they don't own.) `seed` and image are server-owned and preserved. Setting `visibility = "curated"` requires an admin; a curated↔non-curated change appends to / removes from the featured catalogue. |
+| `POST`   | `/api/v1/game-definitions/{id}/reshuffle` | Either | Re-mint the definition's `seed` to change its generated layout (the seed is otherwise preserved across updates, so this is its own endpoint). If the definition is published its leaderboard is reset (the layout — and thus fair comparison — has changed); a private draft has no board to clear. Owner-only. Returns the definition with its new seed. |
+| `DELETE` | `/api/v1/game-definitions/{id}` | Either | Delete a definition the caller owns, removing its shares and resetting its leaderboard(s). |
+| `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view) — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
+| `PUT`    | `/api/v1/game-definitions/{id}/shares` | Either | **Set** the definition's share list to the supplied set (body `{ "userIds": [ … ] }`) — anyone not listed is revoked, any new id granted, in one operation. Owner-only; the owner's own id is ignored. Returns the updated grantee list. |
+| `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `DELETE` | `/api/v1/game-definitions/{id}/image` | Either | Remove the game's image (idempotent). Owner-only. |
+| `GET`    | `/api/v1/game-definitions/{id}/image` | Either | Serve the game's image as `image/png`, or `404`. **Access-checked** like the play-fetch (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 
-Response shape (camelCase):
+- **Leaderboard subject** is per-definition: a `static` game uses its fixed seed and the key `def:<id>`; a `daily` game folds today's UTC date into both the seed and the key (`def:<id>:<yyyy-mm-dd>`), so each day gets a fresh, comparable board. Every game is `leaderboardTracked` — a private game's board is simply **owner-only** (`GET /scores?challenge=def:<id>` and recording a score are both access-checked, owner ∨ curated ∨ public ∨ granted). The board resets only on a gameplay change (structure/scene/content/mechanics or rotation) or a reshuffle/delete; publishing keeps it.
 
-```json
-{
-  "difficulty": "easy",
-  "rows": 8,
-  "cols": 8,
-  "timerSeconds": 120,
-  "seed": 8080808,
-  "minSolutionLength": 30,
-  "minimapCellPx": 10,
-  "minimapRadius": 5,
-  "title": "Maze 3D",
-  "mode": "Easy",
-  "landmarks": {
-    "wallTint": true,
-    "deadEndObjects": true,
-    "wallDecorations": true,
-    "floorAccents": true,
-    "wallMaterialVariation": true
-  },
-  "skyType": "night",
-  "wallType": "brick",
-  "doorStyle": "swing",
-  "keyHolder": "pedestal",
-  "doorCount": 2,
-  "spareDoors": 0,
-  "spareKeys": 0
-}
-```
+## Game collections
 
-- `seed` is **fixed per difficulty** (not minted per request) so leaderboard records on the same difficulty share the same maze layout from day 1. Override per-session via `/game/?difficulty=easy&seed=<n>` if variety is wanted.
-- `minSolutionLength` is plumbed through to the maze crate's `min_spine_length` generator option (with the crate's default `max_retries`). Set it too high and generation will error rather than produce a degenerate maze.
-- `minimapCellPx` / `minimapRadius` size the in-game minimap: `minimapCellPx` scales its on-screen footprint, `minimapRadius` controls how many cells around the player are visible (a `2r+1` square window). Both default to the shipped values (10 / 5).
-- `title` is the in-game splash text shown for ~2 s on game start. Override per difficulty via `[game.play3d.<difficulty>].title`.
-- `doorStyle` (`swing` / `slide` / `portcullis` / `dissolve`) and `keyHolder` (`pedestal` / `chest` / `floating_key`) choose the 3D look of doors and key holders. Unknown values fall back to `swing` / `pedestal`.
-- `doorCount` is the number of real path doors (each paired with one key) the generator auto-places on the maze's spine, clamped to 8 and to what the maze can hold (`0` = lock-free).
-- `spareDoors` / `spareKeys` scatter **decoys** + a **safety budget** onto off-spine branches after the solvability check. Decoys are visually indistinguishable from real path doors — opening one burns a key the player may have needed for a real door, potentially stranding them; spare keys give the player room to absorb that mistake. The shipped tricky and hard presets ramp the strand risk (`tricky: 2/1`, `hard: 3/1`); easy mode ships with both at `0` for no strand risk.
+A **game collection** is an ordered, presentation-only grouping of game definitions — it does not affect generation or scoring (leaderboards stay per-definition). Membership is order-only: an item is just a `definitionId` + position, and each game's name/description/image is intrinsic to its definition and shared across every collection it appears in.
+
+On first launch the server seeds two curated collections owned by the default admin: a **"Difficulty"** collection — the `Easy` / `Tricky` / `Hard` games (built from the shipped presets in `service/game_bootstrap.rs`) — and a **"Daily Challenges"** collection holding a single `Daily`-rotation game whose layout and board rotate by UTC date (the server derives the per-day seed at play-fetch; nothing is scheduled). Seeding runs **only on a genuinely fresh store** (`Store::was_freshly_created`), so an admin who deletes the shipped content keeps it deleted across restarts — it is not re-seeded on the next launch.
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `POST`   | `/api/v1/game-collections` | Either | Create a collection (metadata only — `name`, `description`, `visibility`, `playMode`; starts empty). `playMode` is `arcade` (free-choice, default) or `campaign` (ordered progression). Setting `visibility = "curated"` requires an admin. |
+| `GET`    | `/api/v1/game-collections` | Either | List game collections, ordered by name. `scope=visible` (default) is the caller's visible set — own + shared-with-me + public + curated, de-duplicated; `scope=mine` is only their own (any visibility), optionally filtered by a case-insensitive name substring `q`; `scope=shared` is only the collections **shared with** them (a share grant they don't own; public/curated excluded); `scope=public` is the **cross-owner Community pool** (public collections they don't own), also filterable by `q` and orderable by `sort` — `name` (default, case-insensitive A–Z) or `newest` (most recently created first); `sort` is honoured with `scope=public`, every other scope being name-ordered. Paged via `limit` (default 20, capped at 100) / `offset`; echoes the effective `limit`/`offset` + a `hasMore` flag. |
+| `GET`    | `/api/v1/game-collections/{id}` | Either | Fetch one accessible collection (owner ∨ curated ∨ public ∨ granted; otherwise `404`) with its member definitions **hydrated, in order, and filtered to what the viewer may access** — a public collection never exposes a private member, and refs to since-deleted definitions are dropped. |
+| `PUT`    | `/api/v1/game-collections/{id}` | Either | Update a collection's metadata (`name`, `description`, `visibility`, `playMode`) the caller owns — or, for an **admin**, a **Featured** (curated) collection they don't own, or one they are featuring (setting curated); ownership preserved. (An admin cannot edit an unrelated non-featured collection they don't own.) Membership + image unchanged. Setting `visibility = "curated"` requires an admin; a curated↔non-curated change appends to / removes from the featured catalogue. |
+| `DELETE` | `/api/v1/game-collections/{id}` | Either | Delete a collection the caller owns (its member definitions are untouched). |
+| `PUT`    | `/api/v1/game-collections/{id}/items` | Either | **Set** the collection's whole membership to the supplied ordered list (body `{ "definitionIds": [definitionId, …] }`) — reconciles in one operation (drop absent, add new, reorder; duplicates collapse). The owner may edit it, or an **admin** may edit a **Featured** (curated) collection they don't own (admin-override, ownership preserved); any other non-owner gets `404`. Returns the updated collection. |
+| `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
+| `PUT`    | `/api/v1/game-collections/{id}/shares` | Either | **Set** the collection's share list to the supplied set (body `{ "userIds": [ … ] }`) — reconciles in one operation. Owner-only; the owner's own id is ignored. Returns the updated grantee list. |
+| `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `DELETE` | `/api/v1/game-collections/{id}/image` | Either | Remove the collection's image (idempotent). Owner-only. |
+| `GET`    | `/api/v1/game-collections/{id}/image` | Either | Serve the collection's image as `image/png`, or `404`. Access-checked (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
+
+- A collection's `visibility` gates the **grouping**; each member still enforces its own access, so the detail endpoint filters the member list per viewer. Membership stores only references — a ref to an inaccessible or since-deleted definition is simply skipped at detail time (dangling refs are tolerated).
+
+## Featured catalogue
+
+The **featured catalogue** is the admin-ordered list that drives the Play-3D *Featured* section — one ordered sequence mixing curated game definitions and collections. It is a faithful projection of the `curated` visibility tier maintained by the storage layer: an entity becoming `curated` (via the definition / collection `PUT`) is appended, and un-curating or deleting it removes the row and recompacts the order. **Featuring is therefore not a separate action** — an admin features an item by setting its access tier to `curated` on the item itself; these endpoints only *read* and *reorder* the catalogue. The path is deliberately distinct from the app-flags `GET /api/v1/features`.
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `GET`  | `/api/v1/featured-game-items` | Either | A page of the ordered catalogue — the curated definitions + collections, hydrated and in sort order. Any signed-in user. Each item is `{ kind: "definition" \| "collection", ownerUsername, definition? , collection? }` (the field matching `kind` is present; `ownerUsername` is the item owner's username, resolved server-side for the admin view, or `"unknown"` if the owner can't be resolved). Paged via `limit` (default 20, capped at 100) / `offset`; echoes the effective `limit`/`offset` + a `hasMore` flag. |
+| `PUT`  | `/api/v1/featured-game-items/order` | Either | **Admin-only.** Rewrite the catalogue order in one operation to match the body `{ "entries": [ { "kind", "id" }, … ] }` (order-only — membership stays owned by the `curated` tier). An entry whose entity is not `curated`, or is unknown, is rejected with `400`. Returns the full catalogue in its new order. |
+
+## Game
+
+The 3D maze game (Bevy / WASM, served from `/game/`) is launched with a subject in the query string — a stored user maze (`?id=<mazeId>`) or a stored game definition (`?def=<id>`). It builds its session config from that subject: a maze uses its saved 3D settings, a definition its stored `config` (returned by the definition play-fetch). There is no separate game-config endpoint.
 
 ### `GET /api/v1/users/me` shape
 

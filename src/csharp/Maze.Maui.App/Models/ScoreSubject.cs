@@ -24,26 +24,14 @@ namespace Maze.Maui.App.Models
         /// <returns>The subject</returns>
         public static ScoreSubject ForMaze(string mazeId) => new(mazeId, null);
 
-        /// <summary>A board scoped to a curated challenge string.</summary>
-        /// <param name="challenge">The <c>"&lt;difficulty&gt;:&lt;seed&gt;"</c> string</param>
+        /// <summary>A board scoped to a challenge string (e.g. a stored game's <c>def:&lt;id&gt;</c>).</summary>
+        /// <param name="challenge">The challenge board key</param>
         /// <returns>The subject</returns>
         public static ScoreSubject ForChallenge(string challenge) => new(null, challenge);
 
-        /// <summary>A board scoped to a curated game, built from its difficulty and seed.</summary>
-        /// <param name="difficulty">Difficulty label (<c>easy</c> / <c>tricky</c> / <c>hard</c>)</param>
-        /// <param name="seed">The difficulty's fixed seed</param>
+        /// <summary>A board scoped to a stored 3D game definition — its <c>def:&lt;id&gt;</c> board.</summary>
+        /// <param name="definitionId">The game definition id</param>
         /// <returns>The subject</returns>
-        public static ScoreSubject ForCuratedGame(string difficulty, ulong seed) =>
-            ForChallenge(BuildChallenge(difficulty, seed));
-
-        /// <summary>
-        /// Canonical form of a curated-challenge subject: <c>"&lt;difficulty&gt;:&lt;seed&gt;"</c>.
-        /// The single source for the convention on the C# side, matching the game
-        /// host and the server's challenge keying.
-        /// </summary>
-        /// <param name="difficulty">Difficulty label</param>
-        /// <param name="seed">The difficulty's fixed seed</param>
-        /// <returns>The challenge string</returns>
-        public static string BuildChallenge(string difficulty, ulong seed) => $"{difficulty}:{seed}";
+        public static ScoreSubject ForDefinition(string definitionId) => ForChallenge($"def:{definitionId}");
     }
 }

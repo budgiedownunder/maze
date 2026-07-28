@@ -1,0 +1,239 @@
+import { test, expect, type Page } from '@playwright/test'
+
+async function login(page: Page) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('test@example.com')
+  await page.getByLabel('Password', { exact: true }).fill('Password1!')
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).toHaveURL(/\/$/)
+}
+
+// The dev:mock backend grants admin to this email, so a game can be featured.
+async function loginAsAdmin(page: Page) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill('admin@example.com')
+  await page.getByLabel('Password', { exact: true }).fill('Password1!')
+  await page.getByRole('button', { name: /sign in/i }).click()
+  await expect(page).toHaveURL(/\/$/)
+}
+
+test('the 3D Games hub shows the four browse tiles and Featured lists the seeded daily content', async ({ page }) => {
+  await login(page)
+  await page.goto('/play-3d')
+  await expect(page.getByRole('heading', { name: /^featured$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^my games$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^shared with me$/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^community$/i })).toBeVisible()
+
+  await page.getByRole('button', { name: /featured/i }).click()
+  await expect(page).toHaveURL(/\/play-3d\/featured$/)
+  // The dev:mock backend seeds the curated "Daily Challenges" collection + its
+  // daily game, so Featured is populated out of the box.
+  await expect(page.locator('.play3d-card-name', { hasText: 'Daily Challenges' })).toBeVisible()
+})
+
+test('Community lists other users’ published games, searchable and sortable', async ({ page }) => {
+  await login(page)
+  // The dev:mock backend seeds two public games owned by another user, named so
+  // that A-Z and Newest disagree.
+  await page.goto('/play-3d/community')
+  await expect(page.getByRole('banner').getByText('Community')).toBeVisible()
+  const names = page.locator('.play3d-card-name')
+  await expect(names).toHaveText(['Community Classic', 'Zephyr Heights'])
+
+  // Sort reorders the catalogue (server-side).
+  await page.getByLabel('Sort').selectOption('newest')
+  await expect(names).toHaveText(['Zephyr Heights', 'Community Classic'])
+
+  // Search narrows it (server-side `q`, debounced).
+  await page.getByLabel('Search games…').fill('Zephyr')
+  await expect(names).toHaveText(['Zephyr Heights'])
+
+  // The Collections tab shows the published collection.
+  await page.getByRole('tab', { name: 'Collections' }).click()
+  await expect(page.locator('.play3d-card', { hasText: 'Community Picks' })).toBeVisible()
+})
+
+test('My Games lists the caller’s own games + collections across the two tabs', async ({ page }) => {
+  await login(page)
+  const stamp = Date.now()
+  const gameName = `Mine ${stamp}`
+  const colName = `MySet ${stamp}`
+
+  await page.goto('/workshop/games')
+  await page.getByRole('button', { name: 'New Game' }).click()
+  const wiz = page.getByRole('dialog', { name: 'New Game' })
+  await wiz.getByLabel('Name').fill(gameName)
+  await wiz.getByRole('button', { name: 'Finish' }).click()
+  await expect(wiz).toBeHidden()
+
+  await page.goto('/workshop/game-collections')
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  // The Games tab (default) shows the game with Play + Leaderboard.
+  await page.goto('/play-3d/my-games')
+  const gameCard = page.locator('.play3d-card', { hasText: gameName })
+  await expect(gameCard).toBeVisible()
+  await expect(gameCard.getByRole('button', { name: `Play ${gameName}` })).toBeVisible()
+  await gameCard.getByRole('button', { name: `Leaderboard for ${gameName}` }).click()
+  await expect(page.getByRole('dialog', { name: `Leaderboard: ${gameName}` })).toBeVisible()
+  await page.getByRole('dialog', { name: `Leaderboard: ${gameName}` }).getByRole('button', { name: 'Close' }).click()
+
+  // The Collections tab shows the collection (and not the game).
+  await page.getByRole('tab', { name: 'Collections' }).click()
+  await expect(page.locator('.play3d-card', { hasText: colName })).toBeVisible()
+  await expect(page.locator('.play3d-card', { hasText: gameName })).toHaveCount(0)
+})
+
+test('Shared with me lists games + collections another user shared with the caller', async ({ page }) => {
+  await login(page)
+  // The dev:mock backend seeds a game + collection owned by another user and
+  // shared with the signed-in user.
+  await page.goto('/play-3d/shared')
+  const gameCard = page.locator('.play3d-card', { hasText: 'Shared Adventure' })
+  await expect(gameCard).toBeVisible()
+  await expect(gameCard.getByRole('button', { name: 'Play Shared Adventure' })).toBeVisible()
+
+  await page.getByRole('tab', { name: 'Collections' }).click()
+  await expect(page.locator('.play3d-card', { hasText: 'Shared Journey' })).toBeVisible()
+})
+
+test('a featured game appears as a card on Featured with Play and a Leaderboard modal', async ({ page }) => {
+  await loginAsAdmin(page)
+
+  // Create a game and feature it via the Access modal (admin-only Featured tier).
+  await page.goto('/workshop/games')
+  await page.getByRole('button', { name: 'New Game' }).click()
+  const wizard = page.getByRole('dialog', { name: 'New Game' })
+  const name = `Feat ${Date.now()}`
+  await wizard.getByLabel('Name').fill(name)
+  await wizard.getByRole('button', { name: 'Finish' }).click()
+  await expect(wizard).toBeHidden()
+
+  await page.getByRole('button', { name: `Access for ${name}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // It now shows as a gallery card on the Featured browse page.
+  await page.goto('/play-3d/featured')
+  const card = page.locator('.play3d-card', { hasText: name })
+  await expect(card).toBeVisible()
+  await expect(card.getByRole('button', { name: `Play ${name}` })).toBeVisible()
+
+  // Leaderboard opens the board modal for that game.
+  await card.getByRole('button', { name: `Leaderboard for ${name}` }).click()
+  await expect(page.getByRole('dialog', { name: `Leaderboard: ${name}` })).toBeVisible()
+})
+
+test('a featured multi-game Arcade collection opens the picker on Featured', async ({ page }) => {
+  await loginAsAdmin(page)
+  const stamp = Date.now()
+  const g1 = `GA ${stamp}`
+  const g2 = `GB ${stamp}`
+  const colName = `Set ${stamp}`
+
+  // Two games.
+  for (const gameName of [g1, g2]) {
+    await page.goto('/workshop/games')
+    await page.getByRole('button', { name: 'New Game' }).click()
+    const wiz = page.getByRole('dialog', { name: 'New Game' })
+    await wiz.getByLabel('Name').fill(gameName)
+    await wiz.getByRole('button', { name: 'Finish' }).click()
+    await expect(wiz).toBeHidden()
+  }
+
+  // A collection containing both (Arcade is the default play mode).
+  await page.goto('/workshop/game-collections')
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  await page.getByRole('button', { name: `Edit ${colName}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  await edit.getByLabel('Add game').fill(g1)
+  await edit.getByRole('button', { name: `Add ${g1}` }).click()
+  await edit.getByLabel('Add game').fill(g2)
+  await edit.getByRole('button', { name: `Add ${g2}` }).click()
+  await edit.getByRole('button', { name: 'Save' }).click()
+  await expect(edit).toBeHidden()
+
+  // Feature it (admin-only Featured tier).
+  await page.getByRole('button', { name: `Access for ${colName}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // On Featured, the collection card's Play opens the Arcade picker of its games.
+  await page.goto('/play-3d/featured')
+  const card = page.locator('.play3d-card', { hasText: colName })
+  await card.getByRole('button', { name: `Play ${colName}` }).click()
+  const picker = page.getByRole('dialog', { name: `Play: ${colName}` })
+  await expect(picker).toBeVisible()
+  await expect(picker.getByText(g1)).toBeVisible()
+  await expect(picker.getByText(g2)).toBeVisible()
+  await picker.getByRole('button', { name: 'Cancel' }).click()
+  await expect(picker).toBeHidden()
+})
+
+test('a featured Campaign collection opens the ordered progression on Featured', async ({ page }) => {
+  await loginAsAdmin(page)
+  const stamp = Date.now()
+  const g1 = `CA ${stamp}`
+  const g2 = `CB ${stamp}`
+  const colName = `Camp ${stamp}`
+
+  for (const gameName of [g1, g2]) {
+    await page.goto('/workshop/games')
+    await page.getByRole('button', { name: 'New Game' }).click()
+    const wiz = page.getByRole('dialog', { name: 'New Game' })
+    await wiz.getByLabel('Name').fill(gameName)
+    await wiz.getByRole('button', { name: 'Finish' }).click()
+    await expect(wiz).toBeHidden()
+  }
+
+  // A Campaign collection (set the play mode at create) containing both games.
+  await page.goto('/workshop/game-collections')
+  await page.getByRole('button', { name: '+ New Game Collection' }).click()
+  const create = page.getByRole('dialog', { name: 'New Game Collection' })
+  await create.getByLabel('Name').fill(colName)
+  await create.getByLabel('Play mode').selectOption('campaign')
+  await create.getByRole('button', { name: 'Create' }).click()
+  await expect(create).toBeHidden()
+
+  await page.getByRole('button', { name: `Edit ${colName}` }).click()
+  const edit = page.getByRole('dialog', { name: 'Edit Collection' })
+  await edit.getByLabel('Add game').fill(g1)
+  await edit.getByRole('button', { name: `Add ${g1}` }).click()
+  await edit.getByLabel('Add game').fill(g2)
+  await edit.getByRole('button', { name: `Add ${g2}` }).click()
+  await edit.getByRole('button', { name: 'Save' }).click()
+  await expect(edit).toBeHidden()
+
+  await page.getByRole('button', { name: `Access for ${colName}` }).click()
+  const access = page.getByRole('dialog', { name: /^Access:/ })
+  await access.getByRole('radio', { name: /Featured/ }).click()
+  await access.getByRole('button', { name: 'Save' }).click()
+  await expect(access).toBeHidden()
+
+  // On Featured, Play opens the ordered campaign modal: nothing played yet, so the
+  // first level is current (Play) and the second is locked.
+  await page.goto('/play-3d/featured')
+  const card = page.locator('.play3d-card', { hasText: colName })
+  await card.getByRole('button', { name: `Play ${colName}` }).click()
+  const modal = page.getByRole('dialog', { name: `Play: ${colName}` })
+  await expect(modal).toBeVisible()
+  await expect(modal.getByRole('button', { name: `Play ${g1}` })).toBeVisible()
+  await expect(modal.getByRole('button', { name: `Locked: ${g2}` })).toBeVisible()
+  await expect(modal.getByRole('button', { name: 'Continue' })).toBeVisible()
+  await modal.getByRole('button', { name: 'Cancel' }).click()
+  await expect(modal).toBeHidden()
+})

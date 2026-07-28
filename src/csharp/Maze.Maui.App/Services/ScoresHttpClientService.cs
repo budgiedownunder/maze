@@ -59,5 +59,23 @@ namespace Maze.Maui.App.Services
             ResetScoresResponse? result = await response.Content.ReadFromJsonAsync<ResetScoresResponse>();
             return result?.Deleted ?? 0;
         }
+
+        /// <inheritdoc/>
+        public async Task<BoardDatesResponse> GetBoardDatesAsync(string definitionId)
+        {
+            string path = ScoreRequestPaths.BuildBoardDatesPath(definitionId);
+            var response = await _httpClient.GetAsync(path);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<BoardDatesResponse>() ?? new BoardDatesResponse();
+        }
+
+        /// <inheritdoc/>
+        public async Task<CompletedChallengesResponse> GetCompletedChallengesAsync(IReadOnlyList<string> challenges)
+        {
+            var body = new CompletedChallengesRequest { Challenges = challenges.ToList() };
+            var response = await _httpClient.PostAsJsonAsync(ScoreRequestPaths.BuildCompletedPath(), body);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<CompletedChallengesResponse>() ?? new CompletedChallengesResponse();
+        }
     }
 }

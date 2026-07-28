@@ -88,10 +88,30 @@
         /// <returns>A task resolving to the chosen <see cref="PauseMenuResult"/> (<see cref="PauseMenuResult.Resume"/> if dismissed)</returns>
         public Task<PauseMenuResult> ShowPauseMenu();
         /// <summary>
-        /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard).
+        /// Displays the Arcade collection picker — a radio list of the collection's
+        /// accessible member games, defaulting to the first — so the user chooses
+        /// one to play.
         /// </summary>
-        /// <returns>A task containing the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>
-        public Task<Models.Difficulty?> ShowPlay3dDifficultyAsync();
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in order</param>
+        /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.GameDefinition?> ShowArcadePickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions);
+        /// <summary>
+        /// Displays the Campaign collection picker — the ordered member games with
+        /// per-level completed / current / locked state (resolved from the caller's
+        /// scores) — so the user chooses a playable level to launch.
+        /// </summary>
+        /// <param name="collectionName">Collection name shown in the popup title</param>
+        /// <param name="definitions">The accessible member games, in campaign order</param>
+        /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.GameDefinition?> ShowCampaignPickerAsync(string collectionName, IReadOnlyList<Models.GameDefinition> definitions);
+        /// <summary>
+        /// Displays the Leaderboards game picker — a scope-tabbed (Featured / My Games
+        /// / Shared / Community), searchable, paged browser of stored games and
+        /// collections — so the user chooses a game whose leaderboard to view.
+        /// </summary>
+        /// <returns>A task containing the chosen game, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.GameDefinition?> ShowGamePickerAsync();
 
         /// <summary>
         /// Displays the Play 3D launch chooser (Run / Custom Run… / Cancel) for a

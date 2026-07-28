@@ -200,6 +200,14 @@ describe('AccountPage', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }))
   })
 
+  it('signs out and navigates to /login when Sign Out is clicked', async () => {
+    renderPage()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    await userEvent.click(screen.getByRole('button', { name: /sign out/i }))
+    expect(mockLogout).toHaveBeenCalled()
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }))
+  })
+
   // --- Avatar upload / change / remove -------------------------------------
 
   function accountFileInput(container: HTMLElement): HTMLInputElement {

@@ -35,10 +35,13 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   pause button (bottom-right corner) toggles a "PAUSED" overlay that freezes
   the timer and movement.
 - **Leaderboards** — a "Leaderboards" page (with a Home tile and nav entry) showing
-  per-maze and per-curated-difficulty boards over completed 3D runs, with fastest-time /
+  per-maze and per-3D-game boards over completed 3D runs, with fastest-time /
   highest-score tabs, your own runs highlighted, your personal score history, and a green
-  Play / Play Again button that launches the selected maze or difficulty in 3D. Mazes
-  with no scores yet still appear and are launchable
+  Play / Play Again button that launches the selected maze or game in 3D. A Daily game's
+  board adds a UTC date picker (with quick-pick chips for days that already have runs) to
+  browse each day's frozen board. Mazes with no scores yet still appear and are launchable
+- **Today's Challenge** — a Home tile that jumps straight into the current day's daily 3D
+  game
 - **In-browser WASM** — maze generation, solving, and game logic run locally via the
   `maze_wasm` WebAssembly module with no server round-trip
 

@@ -78,7 +78,7 @@ fn map_store_err(err: StoreError) -> Error {
 /// is the real validation step — only the PNG and JPEG decoders are compiled
 /// in, so any other (or corrupt) input fails here with a `400`, regardless of
 /// the client-supplied content-type.
-fn canonicalise_to_png(input: &[u8]) -> Result<Vec<u8>, Error> {
+pub(crate) fn canonicalise_to_png(input: &[u8]) -> Result<Vec<u8>, Error> {
     let img = image::load_from_memory(input)
         .map_err(|e| ErrorBadRequest(format!("unsupported or invalid image: {e}")))?;
     // Centre-crop to the largest centred square, then resize to the canonical

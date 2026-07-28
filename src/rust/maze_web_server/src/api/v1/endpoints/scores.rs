@@ -27,6 +27,9 @@ use storage::{Error as StoreError, ScoreEntry, ScoreMetric, ScoreOrdering, Score
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::api::v1::endpoints::game_definitions::can_read_challenge_board;
+use crate::api::v1::endpoints::listing::effective_limit;
+
 // ---------------------------------------------------------------------------
 // Request / response shapes
 // ---------------------------------------------------------------------------
@@ -168,6 +171,11 @@ pub async fn record_score(
     };
 
     let mut store_lock = store.write().await;
+    if let Some(challenge) = entry.challenge.as_deref() {
+        if !can_read_challenge_board(&**store_lock, &user, challenge).await {
+            return Err(ErrorForbidden("Not authorized to record a score for this game"));
+        }
+    }
     match store_lock.record_score(&entry).await {
         Ok(_) => Ok(HttpResponse::Created().json(ScoreResponse::from(entry))),
         Err(StoreError::Other(msg)) => Err(ErrorBadRequest(msg)),
@@ -181,19 +189,6 @@ pub async fn record_score(
 // ---------------------------------------------------------------------------
 // Paging + ordering
 // ---------------------------------------------------------------------------
-
-/// Page size used when the caller omits `limit`.
-const DEFAULT_PAGE_SIZE: u32 = 20;
-/// Hard server cap on `limit` — a caller asking for more is silently capped to
-/// this, and the effective value is echoed back in the response so the client
-/// can page correctly.
-const MAX_PAGE_SIZE: u32 = 100;
-
-/// Resolves the effective page size: the caller's `limit` (or the default when
-/// omitted), capped at [`MAX_PAGE_SIZE`].
-fn effective_limit(requested: Option<u32>) -> u32 {
-    requested.unwrap_or(DEFAULT_PAGE_SIZE).min(MAX_PAGE_SIZE)
-}
 
 /// Parses the `metric` query value into a [`ScoreMetric`], defaulting to
 /// `Time` when omitted.
@@ -320,7 +315,7 @@ pub async fn get_leaderboard(
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
-    let _user = get_authorized_user(&req)?;
+    let user = get_authorized_user(&req)?;
     let q = query.into_inner();
 
     let metric = parse_metric(q.metric.as_deref())?;
@@ -340,6 +335,9 @@ pub async fn get_leaderboard(
             store_lock.maze_leaderboard(maze_id, ordering, fetch, offset, include_usernames).await
         }
         (None, Some(challenge)) => {
+            if !can_read_challenge_board(&**store_lock, &user, challenge).await {
+                return Err(ErrorForbidden("Not authorized to read this leaderboard"));
+            }
             store_lock
                 .challenge_leaderboard(challenge, ordering, fetch, offset, include_usernames)
                 .await
@@ -414,6 +412,157 @@ pub async fn get_my_history(
         Err(err) => {
             log::warn!("user_history store error: {err}");
             Err(ErrorInternalServerError("Failed to read run history"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/scores/me/completed  (which of these challenges has the caller scored on)
+// ---------------------------------------------------------------------------
+
+/// The most challenge keys one `/scores/me/completed` request may ask about. A
+/// campaign is a handful of games; this bounds the `IN (…)` list well above any
+/// real collection while rejecting abusive payloads.
+const MAX_COMPLETED_CHALLENGES: usize = 200;
+
+/// Request body for `POST /api/v1/scores/me/completed`: the challenge board keys
+/// to check (e.g. `def:<id>` for a stored game, or a daily `def:<id>:<date>`).
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedChallengesRequest {
+    /// The challenge keys to check, at most `MAX_COMPLETED_CHALLENGES`.
+    pub challenges: Vec<String>,
+}
+
+/// The subset of the requested challenges the caller has completed (has ≥1 score
+/// on). Order is unspecified; treat it as a set.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletedChallengesResponse {
+    /// The requested challenges the caller has scored on.
+    pub completed: Vec<String>,
+}
+
+#[utoipa::path(
+    summary = "Which of these challenges the caller has completed",
+    description = "Given a set of challenge board keys (e.g. a campaign's games as `def:<id>`), \
+                   returns the subset the authenticated caller has recorded at least one score \
+                   against — used to derive campaign progress in one request instead of paging the \
+                   caller's whole history. Scoped to the caller's own scores.",
+    post,
+    path = "/api/v1/scores/me/completed",
+    request_body = CompletedChallengesRequest,
+    responses(
+        (status = 200, description = "The completed subset", body = CompletedChallengesResponse),
+        (status = 400, description = "Too many challenges requested"),
+        (status = 401, description = "Unauthorized request")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[post("/scores/me/completed")]
+pub async fn get_my_completed_challenges(
+    body: web::Json<CompletedChallengesRequest>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req)?;
+    let challenges = body.into_inner().challenges;
+    if challenges.len() > MAX_COMPLETED_CHALLENGES {
+        return Err(ErrorBadRequest(format!(
+            "At most {MAX_COMPLETED_CHALLENGES} challenges may be queried at once"
+        )));
+    }
+
+    let store_lock = store.read().await;
+    match store_lock.completed_challenges(user.id, &challenges).await {
+        Ok(completed) => Ok(HttpResponse::Ok().json(CompletedChallengesResponse { completed })),
+        Err(err) => {
+            log::warn!("completed_challenges store error: {err}");
+            Err(ErrorInternalServerError("Failed to read completed challenges"))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/scores/board-dates  (a daily game's dated boards)
+// ---------------------------------------------------------------------------
+
+/// Query parameters for `GET /api/v1/scores/board-dates`.
+#[derive(Deserialize, Debug)]
+pub struct BoardDatesQuery {
+    /// The daily game definition whose dated boards to enumerate.
+    pub definition_id: String,
+}
+
+/// The UTC dates a daily game has a leaderboard for — the days someone has
+/// recorded a score, most recent first.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+pub struct BoardDatesResponse {
+    /// `yyyy-mm-dd` dates with at least one score, most recent first.
+    pub dates: Vec<String>,
+}
+
+#[utoipa::path(
+    summary = "List the dates a daily game has a leaderboard for",
+    description = "Returns the UTC dates on which anyone has recorded a score for a daily \
+                   game — i.e. the days whose `def:<id>:<date>` board is non-empty, most recent \
+                   first — so a client can offer them as quick-picks when browsing past boards. \
+                   Access-checked like the leaderboard read (owner, curated, public, or granted); \
+                   an inaccessible or unknown definition returns 403. A Static game (or a Daily \
+                   one no one has played) returns an empty list.",
+    get,
+    path = "/api/v1/scores/board-dates",
+    params(
+        ("definition_id" = String, Query, description = "The daily game definition id")
+    ),
+    responses(
+        (status = 200, description = "The dates with a board, most recent first", body = BoardDatesResponse),
+        (status = 400, description = "Missing or malformed definition_id"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 403, description = "Not authorized to read this leaderboard")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[get("/scores/board-dates")]
+pub async fn get_board_dates(
+    query: web::Query<BoardDatesQuery>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req)?;
+    let id = Uuid::parse_str(query.into_inner().definition_id.trim())
+        .map_err(|_| ErrorBadRequest("definition_id must be a valid UUID"))?;
+
+    let store_lock = store.read().await;
+    // A daily board is readable exactly when its game is (owner ∨ curated ∨
+    // public ∨ granted) — the same rule as reading a `def:<id>` board.
+    if !can_read_challenge_board(&**store_lock, &user, &format!("def:{id}")).await {
+        return Err(ErrorForbidden("Not authorized to read this leaderboard"));
+    }
+
+    let prefix = format!("def:{id}:");
+    match store_lock.challenges_with_prefix(&prefix).await {
+        Ok(challenges) => {
+            // Each `def:<id>:<date>` → its `<date>` suffix, most recent first.
+            let mut dates: Vec<String> = challenges
+                .into_iter()
+                .filter_map(|c| c.strip_prefix(&prefix).map(|d| d.to_string()))
+                .collect();
+            dates.sort();
+            dates.reverse();
+            Ok(HttpResponse::Ok().json(BoardDatesResponse { dates }))
+        }
+        Err(err) => {
+            log::warn!("challenges_with_prefix store error: {err}");
+            Err(ErrorInternalServerError("Failed to read board dates"))
         }
     }
 }

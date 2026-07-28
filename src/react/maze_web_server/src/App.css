@@ -70,6 +70,31 @@
   padding: 0.75rem 1rem;
 }
 
+/* Wash the accent out when disabled, rather than replacing it with grey: the
+   definition wizard's Finish sits beside the grey Cancel/Back, so a grey
+   disabled state would be indistinguishable from an enabled one. Keeping the
+   hue and dropping the contrast reads as "the primary action, not yet
+   available" — which is exactly the early-Finish affordance. */
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-gray:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Green "play" recolour layered on .btn-primary — matches the in-game "Play
+   Again" and the Leaderboards Play button (#2f9e44). Used for the editor's
+   Preview action; inherits .btn-primary:disabled (faded) so it reads clearly
+   disabled, like Finish. */
+.btn-play {
+  background: #2f9e44;
+  border-color: #2f9e44;
+  color: #fff;
+}
+
 .btn-secondary {
   background: none;
   border: 1px solid var(--border-input);
@@ -169,7 +194,9 @@
 :root[data-theme="dark"] .maze-item-action img,
 :root:not([data-theme="light"]) .maze-item-action img,
 :root[data-theme="dark"] .leaderboard-reset img,
-:root:not([data-theme="light"]) .leaderboard-reset img {
+:root:not([data-theme="light"]) .leaderboard-reset img,
+:root[data-theme="dark"] .play3d-card-actions .btn-secondary .play3d-card-action-icon,
+:root:not([data-theme="light"]) .play3d-card-actions .btn-secondary .play3d-card-action-icon {
   filter: invert(1);
 }
 
@@ -367,6 +394,316 @@
   gap: 0.75rem;
 }
 
+/* Share modal — the username people-picker results and the current grantee list.
+   Each grantee row is a name plus an inline Remove action. */
+.share-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  /* The scrolling body: the tier radios, picker and grantee list scroll here
+     when the (viewport-capped) modal is too short, so the title and Cancel/Save
+     footer stay pinned to the window edges. See .modal-capped. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Arcade collection picker: the member-game radio list scrolls in the capped
+   modal while the title + Cancel/Play footer stay pinned. */
+.arcade-modal .modal-form {
+  flex: 1;
+  min-height: 0;
+}
+/* A picker row: radio + game thumbnail + name/description, the whole row
+   selectable and boxed (highlighted when chosen). */
+.arcade-pick {
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+}
+.arcade-pick.selected {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+.arcade-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.arcade-pick-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arcade-pick-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Campaign collection modal: an ordered progression of levels, each a clickable
+   row (play/replay) except locked ones, with a complete/current/locked status. */
+.campaign-done {
+  margin: 0;
+  font-weight: 600;
+  color: #2f9e44;
+}
+.campaign-levels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.campaign-level-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.campaign-level-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.campaign-level.current .campaign-level-btn {
+  border-color: var(--accent);
+}
+.campaign-level-num {
+  flex: 0 0 auto;
+  width: 1.4rem;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.campaign-level-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.campaign-level-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.campaign-level-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.campaign-level-status {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.campaign-level-status.complete { color: #2f9e44; }
+.campaign-level-status.current { color: var(--accent); }
+.campaign-level-status.locked { color: var(--text-muted); }
+
+/* Access-tier radio group (Just me / Specific people / Everyone / Featured). */
+.access-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.access-tier {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+.access-tier:hover {
+  background: var(--surface-hover);
+}
+.access-tier input {
+  /* Undo the global full-width text-input sizing for this native radio. */
+  width: auto;
+  padding: 0;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+.access-tier-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.access-tier-label {
+  font-weight: 500;
+}
+.access-tier-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.share-picker-results,
+.share-grantees {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.share-picker-results button {
+  width: 100%;
+  text-align: left;
+}
+/* Cap the picker results so a broad match scrolls rather than growing the modal;
+   the "keep typing" hint tells the user more matches exist beyond the page. */
+.share-picker-results {
+  max-height: 30vh;
+  overflow-y: auto;
+}
+.share-picker-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+.share-grantees li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+/* The grantee's avatar + username, grouped on the left of the row. */
+.share-grantee-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+/* Cap the grantee list so it scrolls within the group box rather than growing
+   the modal as users are added; the Done button stays visible below it. */
+.share-grantees {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+/* A modal capped to the viewport with a pinned footer: a flex column with a
+   max-height whose designated body region (flex: 1, overflow-y: auto) shrinks
+   and scrolls as the window shortens, so the title and Cancel/Save footer stay
+   on-screen at all times. Shared by the Edit Collection and Access modals. */
+.modal-capped {
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  box-sizing: border-box;
+}
+/* The Leaderboard modal: twice the small-modal width so the board has room, but
+   never wider than the viewport (a small margin each side on narrow screens). */
+.leaderboard-modal {
+  max-width: min(720px, calc(100vw - 2rem));
+  min-width: 280px;
+}
+/* The Leaderboard modal's body: a flex column that gives the board's flex:1
+   chain a definite height, so the table scrolls internally (its own
+   overflow) while the metric tabs, the Load more button and the modal's Close
+   stay put — the same behaviour as the Leaderboards page. */
+.leaderboard-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Collection membership editor (Edit Collection modal): twice the medium-modal
+   width to fit the member + add-game lists side of things comfortably, capped
+   just under the viewport width on small screens. */
+.collection-form-modal {
+  max-width: min(840px, calc(100vw - 2rem));
+  min-width: 300px;
+}
+/* The ordered member games with reorder/remove, and a filter-to-add picker
+   below. The two lists shrink + scroll independently as the window shortens
+   (see .modal-capped). */
+.collection-form-modal .modal-form {
+  flex: 1;
+  min-height: 0;
+}
+/* The scrolling body: everything above the footer scrolls when the modal is too
+   short for it; the error + Cancel/Save below it stay pinned to the bottom edge
+   of the window at all times. */
+.collection-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.collection-members,
+.collection-member-picker {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* Cap each list so a long one scrolls internally; never below one full row so
+     a single item stays fully visible. The body scrolls for the rest. */
+  min-height: 4rem;
+  max-height: 30dvh;
+  overflow-y: auto;
+}
+.collection-member,
+.collection-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+/* Both lists highlight the clicked row; a source row still only adds via its +. */
+.collection-member.selected,
+.collection-picker-item.selected {
+  background: var(--surface-hover);
+}
+.collection-member-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collection-member-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+.collection-add-btn {
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 600;
+}
+
 /* Tabbed modal body: a tab strip above a set of panels, only the active
    one shown. Lets a form with many controls read as a few short panels
    instead of one long scrolling list. The tab strip sits above the
@@ -378,6 +715,11 @@
   border-bottom: 1px solid #d1d5db;
   margin-bottom: 0.75rem;
   flex: 0 0 auto;
+  /* Scroll the strip horizontally rather than truncating or wrapping labels
+     when the tabs don't fit */
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-tab {
@@ -391,6 +733,9 @@
   color: inherit;
   cursor: pointer;
   opacity: 0.6;
+  /* Never shrink or wrap a label */
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .modal-tab:hover {
@@ -422,6 +767,124 @@
   gap: 1rem;
 }
 
+/* A labelled group of related fields within a tab panel — the editor's Objects
+   tab (Doors / Keys / Enemies / Health / Treasure) and Layout tab (Grid /
+   Levels). Each group is a bordered card with an accent, uppercase caption above
+   a divider rule, so the sections read as clearly distinct blocks in both light
+   and dark themes. */
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  padding: 0.85rem 0.9rem 0.95rem;
+}
+
+.field-group-title {
+  margin: 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-input);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* The step-editor modal (StepModalShell), both tabs and wizard modes: wider
+   than a plain dialog to hold the multi-step content and its tab strip / rail.
+   The wizard adds a vertical step rail beside the active panel (.wizard-body);
+   all colours come from theme vars so it adapts to light/dark. */
+.modal-steps {
+  max-width: 560px;
+  min-width: 300px;
+}
+
+.wizard-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.wizard-rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-right: 1rem;
+  border-right: 1px solid #d1d5db;
+  overflow-y: auto;
+}
+
+.wizard-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wizard-step {
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 0.375rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+  opacity: 0.6;
+}
+
+.wizard-step:hover { opacity: 0.85; }
+.wizard-step[data-state='current'] {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.wizard-step[data-state='done'] { opacity: 0.9; }
+
+/* Circular marker holding the step number, a done-check, or a step icon. */
+.wizard-step-marker {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.wizard-step[data-state='current'] .wizard-step-marker {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-step-marker img,
+.wizard-step-marker svg { width: 1rem; height: 1rem; }
+
+.wizard-step-label { font-weight: 600; }
+
+/* Narrow viewports (phone portrait / MAUI WebView): the rail collapses from a
+   left column to a horizontal, scrollable stepper above the content. */
+@media (max-width: 480px) {
+  .wizard-body { flex-direction: column; }
+  .wizard-rail {
+    flex-direction: row;
+    padding-right: 0;
+    padding-bottom: 0.5rem;
+    border-right: none;
+    border-bottom: 1px solid #d1d5db;
+    overflow-x: auto;
+  }
+}
+
 /* Stacked label: text on top, input/select below, with a clear gap
    between them. Used by the Play 3D custom-launch modal's dropdowns
    and the time-limit number input — the default browser layout puts
@@ -434,12 +897,15 @@
 
 /* The global `input { font-size: 1rem; padding: … }` rule in
    index.css applies only to `<input>`. Without a matching rule,
-   `<select>` falls back to the browser's UA font (typically a
-   different font family + smaller size than the surrounding form
-   text), which reads as mismatched against the input fields beside
-   it. Apply the same family/size/padding so the dropdowns look like
-   the inputs do in e.g. the Generate Maze modal. */
-.modal-form select.input {
+   `<select>` and `<textarea>` fall back to the browser's UA font
+   (typically a different font family + smaller size than the
+   surrounding form text), which reads as mismatched against the input
+   fields beside them. Apply the same family/size/padding so every
+   field in a dialog matches, whether or not the dialog wraps its
+   fields in a `.modal-form` (the definition editor's step shell
+   doesn't). */
+select.input,
+textarea.input {
   font-family: inherit;
   font-size: 1rem;
   padding: 0.5rem 0.75rem;
@@ -825,10 +1291,18 @@
   padding: 0.5rem 1rem;
   font-size: 0.95rem;
   color: var(--text-h);
+  white-space: nowrap;
 }
 
 .menu-item:hover {
   background: var(--surface-hover);
+}
+
+/* Workshop sub-items nested under "3D Game Workshop": indented + smaller. */
+.menu-subitem {
+  padding-left: 2rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
 }
 
 .menu-separator {
@@ -980,7 +1454,8 @@
    Maze list (MazesPage)
 ────────────────────────────────────────────────────────── */
 
-.mazes-page {
+.mazes-page,
+.games-page {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1087,6 +1562,367 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Workshop games list (WorkshopGamesPage)
+   Mirrors the maze list, but rows are not click-to-open (every action is an
+   explicit button) and the action cluster wraps, since a game row carries more
+   actions than a maze row.
+────────────────────────────────────────────────────────── */
+
+.game-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* The Manage-pages "Load more" button spans the full list width. */
+.workshop-load-more {
+  width: 100%;
+  margin-top: 0.75rem;
+}
+
+/* Play-3D browse pages: a responsive grid of vertical gallery cards (image on
+   top, name + description, Play/Leaderboard footer). The consumer-side analogue
+   of the workshop's `.game-list` rows. */
+.play3d-search {
+  display: block;
+  max-width: 320px;
+  margin-bottom: 1rem;
+}
+/* Games / Collections tab strip on the My Games + Shared-with-me scope pages —
+   a pill row mirroring the leaderboard metric tabs, sitting below the header. */
+.play3d-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 1rem;
+  margin-bottom: 1rem;
+}
+.play3d-tab {
+  padding: 6px 14px;
+  border: 1px solid var(--border-input);
+  border-radius: 999px;
+  background: var(--button-bg);
+  color: var(--text, inherit);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.play3d-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+/* Sort control on the Community tab strip — pushed to the trailing edge, away
+   from the Games/Collections tabs it sits beside. */
+.play3d-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Leaderboards 3D-game picker: a compact "selected game + Change" summary that
+   expands into a scoped, searchable, paged browser (collections above games). */
+.lb-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+/* In the Leaderboards selector row the picker's parts join the row directly, so
+   the summary sits inline with the Game Type select + Play button while the
+   expanded panel takes a full-width line of its own. `order` keeps the panel
+   after the Play button, so the panel (not Play) is what wraps. */
+.subject-selector .lb-picker {
+  display: contents;
+}
+.subject-selector .lb-picker-panel {
+  order: 1;
+  flex: 1 1 100%;
+}
+.lb-picker-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.lb-picker-selected {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-picker-panel {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  padding: 0.75rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.lb-picker-panel .play3d-tabs {
+  padding: 0;
+}
+.lb-picker-section + .lb-picker-section {
+  margin-top: 0.75rem;
+}
+.lb-picker-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+.lb-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.lb-picker-members {
+  margin-left: 1.1rem;
+}
+.lb-picker-empty {
+  margin: 0.25rem 0;
+  opacity: 0.7;
+}
+.lb-picker-game,
+.lb-picker-collection-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: 0.25rem;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.lb-picker-game:hover,
+.lb-picker-collection-toggle:hover {
+  background: var(--button-bg);
+}
+.lb-picker-game--selected {
+  background: var(--accent);
+  color: #fff;
+}
+.lb-picker-game--selected:hover {
+  background: var(--accent);
+}
+.play3d-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+.play3d-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+.play3d-card-thumb {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.75rem 0 0.25rem;
+}
+.play3d-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.play3d-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.play3d-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.play3d-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.play3d-card-actions > button {
+  /* Grow to share the row, but shrink + wrap to a new line rather than spill past
+     the card edge as it narrows. `min-width: 0` lets a button shrink below its
+     content width so it stays inside the card even before it wraps. */
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.play3d-card-action-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+}
+/* The Play (primary/accent) button has white text, so force its icon white too.
+   The monochrome icons are black by default (they invert in dark mode on
+   transparent buttons — see the invert rule below). */
+.play3d-card-actions .btn-primary .play3d-card-action-icon {
+  filter: invert(1);
+}
+
+/* Manage Features: the up/down reorder controls stacked at the row's left edge,
+   each a thick-arrow icon button. */
+.featured-reorder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.featured-reorder .btn-icon {
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+}
+.featured-reorder .btn-icon img {
+  display: block;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.game-list-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--surface);
+  /* The whole row opens the editor (its action buttons stop propagation). */
+  cursor: pointer;
+  /* Query container for the action cluster's label-collapse (below). */
+  container: game-row / inline-size;
+}
+
+.game-list-item:hover {
+  background: var(--surface-hover);
+}
+
+.game-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* When the row is too narrow to fit every labelled action, drop the labels and
+   show icon-only buttons (each keeps its aria-label) rather than wrapping the
+   cluster onto a second line. Icon-only still wraps as a last resort on very
+   narrow screens. */
+@container game-row (max-width: 820px) {
+  .game-item-actions .maze-item-action-label {
+    display: none;
+  }
+}
+
+/* Game-row thumbnail: the base game art on a dark inset, with the visibility
+   marker overhanging the bottom-right corner. */
+.game-thumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+}
+
+.game-thumb-base {
+  width: 52px;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 5px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+}
+
+.game-thumb-marker {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* Play-mode badge — the bottom-left counterpart to the bottom-right visibility
+   marker; both are 24px circular badges that fit side by side on the thumbnail. */
+.game-thumb-mode {
+  position: absolute;
+  left: -6px;
+  bottom: -6px;
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+/* Inline image control in the game / collection editors: an enlarged preview
+   (the same row thumbnail) beside Change/Remove, mirroring the account avatar. */
+.game-image-editor {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.game-image-editor .game-thumb,
+.game-image-editor .game-thumb-base {
+  width: 88px;
+  height: 88px;
+}
+/* The preview doubles as the picker trigger (like the account avatar). */
+.game-image-editor-preview {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+.game-image-editor-preview:disabled {
+  cursor: default;
+}
+.game-image-editor-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.game-image-editor-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.game-image-editor-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
 }
 
 @media (max-width: 540px) {
@@ -1694,6 +2530,25 @@
   display: flex;
   flex-direction: column;
 }
+/* Groupbox around the board's filter controls (game selector + optional daily
+   date picker), inset with a subtle surface + border so it reads as a distinct
+   control panel above the results table rather than blending into it. */
+.leaderboard-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+/* Child spacing is owned by the groupbox's column gap. */
+.leaderboard-filters > .subject-label,
+.leaderboard-filters > .subject-selector,
+.leaderboard-filters > .daily-board-date {
+  margin-bottom: 0;
+}
 .subject-selector {
   display: flex;
   align-items: center;
@@ -1737,6 +2592,19 @@
 .leaderboard-play:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+/* Daily leaderboard date control: a dropdown of the days known to have a board
+   (Today pinned first, then past days most-recent first), shown between the game
+   selector and the board when a Daily game is picked. */
+.daily-board-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.daily-board-label {
+  font-weight: 600;
+  color: var(--text-muted);
 }
 .leaderboard-tab {
   padding: 6px 14px;

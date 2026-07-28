@@ -249,6 +249,12 @@ fn get_maze_definition_too_large_error(bytes: usize, max: usize) -> Error {
     ))
 }
 
+fn get_maze_count_limit_error(count: usize, max: usize) -> Error {
+    ErrorConflict(format!(
+        "Maze limit reached: you already own {count} mazes (max {max})"
+    ))
+}
+
 fn get_maze_too_many_objects_error(kind: &str, count: usize, max: usize) -> Error {
     ErrorUnprocessableEntity(format!(
         "Maze has too many {kind}: {count} exceeds the limit of {max}"
@@ -420,245 +426,6 @@ pub async fn get_features(
         max_maze_cells,
         connector.as_ref().as_ref(),
     )))
-}
-
-// **************************************************************************************************
-// Endpoint: GET /api/v1/game/play3d-config?difficulty=…
-// Handler:  get_play3d_config()
-// **************************************************************************************************
-/// Query parameters for `GET /api/v1/game/play3d-config`.
-#[derive(Deserialize, Debug)]
-pub struct Play3dConfigQuery {
-    /// Difficulty label: `easy`, `tricky`, or `hard` (case-insensitive).
-    pub difficulty: String,
-}
-
-/// Response body for `GET /api/v1/game/play3d-config?difficulty=…`.
-///
-/// Every fixed value the Bevy 3D game needs for a session is sourced from this
-/// response: the maze dimensions, the time limit, the RNG seed (fixed per
-/// difficulty for leaderboard fairness), the minimum solution-path length
-/// (plumbed to the maze crate's `min_spine_length`), and the in-game splash
-/// title (with optional per-difficulty override).
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Play3dConfigResponse {
-    /// Echo of the requested difficulty, normalised to lowercase.
-    pub difficulty: String,
-    /// Number of maze rows.
-    pub rows: u32,
-    /// Number of maze columns.
-    pub cols: u32,
-    /// Time limit, in seconds, before the player loses.
-    pub timer_seconds: u32,
-    /// Fixed RNG seed for the maze generator.
-    pub seed: u64,
-    /// Minimum start-to-finish path length the generator must hit.
-    pub min_solution_length: u32,
-    /// On-screen pixel size of each minimap cell.
-    pub minimap_cell_px: u32,
-    /// Number of minimap cells visible in each direction from the player.
-    pub minimap_radius: u32,
-    /// In-game splash title to show on the title screen.
-    pub title: String,
-    /// Free-text label shown in the in-game status bar.
-    pub mode: String,
-    /// Landmark settings.
-    pub landmarks: LandmarksResponse,
-    /// Sky type. Safely degrades to `night` if unrecognised.
-    pub sky_type: String,
-    /// Per-maze wall type. The solid textures (`brick`, `dressed_stone`, `wood`,
-    /// `cobblestone`) use the per-cell tinted path (when
-    /// `landmarks.wallMaterialVariation` is off); the non-occluding types
-    /// (`water`, `lava`, `iron_fence`) turn every wall cell into a pool / bars.
-    /// Safely degrades to `brick` if unrecognised.
-    pub wall_type: String,
-    /// Whether the maze perimeter is walled at the grid edge under an open sky
-    /// (enclosed skies always wall it). Default `true`.
-    pub perimeter_walls: bool,
-    /// Door open-animation style. One of `swing`, `slide`, `portcullis`,
-    /// `dissolve`. Safely degrades to `swing` if unrecognised.
-    pub door_style: String,
-    /// Key-holder style for `'K'` cells. One of `pedestal`, `chest`,
-    /// `floating_key`. Safely degrades to `pedestal` if unrecognised.
-    pub key_holder: String,
-    /// Number of doors (each with one key) the generator auto-places into the
-    /// maze for this difficulty. `0` = a lock-free maze.
-    pub door_count: u32,
-    /// Number of decoy doors planted on off-spine branches. Opening one burns
-    /// a key the player may have needed for a real door, potentially
-    /// stranding them. `0` = no decoys.
-    pub spare_doors: u32,
-    /// Number of spare keys planted on off-spine branches — a budget the
-    /// player can spend on decoys before they risk stranding. `0` = none.
-    pub spare_keys: u32,
-    /// Number of enemies (`'E'` cells) the generator auto-places. Clamped
-    /// to `maze::MAX_ENEMY_COUNT` (= 8). `0` = no enemies.
-    pub enemy_count: u32,
-    /// Number of health pickups (`'H'` cells) the generator auto-places.
-    /// Clamped to `maze::MAX_HEALTH_COUNT` (= 8). `0` = no pickups.
-    pub health_count: u32,
-    /// Number of treasure cells (`'T'`) the generator auto-places, dead-end-first
-    /// and type-weighted. Clamped to `maze::MAX_TREASURE_COUNT` (= 12). `0` = none.
-    pub treasure_count: u32,
-    /// Enemy rig kind to spawn at every `'E'` cell. One of `goblin`,
-    /// `ghost`. Safely degrades to `goblin` if unrecognised.
-    pub enemy_type: String,
-    /// Health-pickup rig kind to spawn at every `'H'` cell. One of
-    /// `heart`, `potion`. Safely degrades to `heart` if unrecognised.
-    pub health_style: String,
-    /// How often each enemy advances one cell, in milliseconds of
-    /// real-game time. Lower = harder.
-    pub enemy_move_period_ms: u32,
-    /// Player's HP cap for this difficulty. Starting HP is set to this
-    /// value.
-    pub max_hp: u32,
-    /// Multi-level run settings. `levels.count == 1` (the default) is a
-    /// single-level game and the rest of this group is inert.
-    pub levels: LevelsResponse,
-}
-
-/// JSON shape of the multi-level run settings in [`Play3dConfigResponse`].
-/// Mirrors `crate::config::game::LevelsConfig`, renamed to `camelCase`.
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct LevelsResponse {
-    /// Number of stacked maze levels in a run (clamped to the renderer's
-    /// `MAX_LEVEL_COUNT`). `1` = a single-level game.
-    pub count: u32,
-    /// Interim-finish transition rig: `ladder`, `portal`, or `random`. Safely
-    /// degrades to `ladder` if unrecognised.
-    pub finish_type: String,
-    /// How difficulty changes as the player ascends: `same`, `easier`, or
-    /// `harder`. Safely degrades to `easier` if unrecognised.
-    pub difficulty_change: String,
-    /// Whether the player's bag resets at each level (`false` carries it
-    /// forward).
-    pub reset_bag: bool,
-    /// How a reduced upper level is positioned over the level below: `edge`,
-    /// `centre`, or `random`. Safely degrades to `edge` if unrecognised.
-    pub alignment: String,
-    /// When `true`, upper levels get progressively smaller footprints so the
-    /// stack opens up (centred/edged per `alignment`); `false` keeps every level
-    /// full-size. Operator-chosen, independent of `skyType`.
-    pub taper: bool,
-    /// When `true`, each level's perimeter walls are randomised independently;
-    /// when `false`, every level uses the difficulty's `perimeterWalls`.
-    pub perimeter_random: bool,
-    /// When `true`, a completed lower level's enemies are despawned once the
-    /// player climbs past it; when `false` they idle in place.
-    pub hide_completed_enemies: bool,
-    /// Optional scene override for the final (top) level. `null` when unset.
-    pub top: Option<TopLevelResponse>,
-}
-
-/// JSON shape of the optional top-level scene override in [`LevelsResponse`].
-/// Each field is `null` when the operator left it to inherit the base.
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct TopLevelResponse {
-    /// Sky type for the top level, or `null` to inherit the base.
-    pub sky_type: Option<String>,
-    /// Perimeter-walls flag for the top level, or `null` to inherit the base.
-    pub perimeter_walls: Option<bool>,
-}
-
-/// JSON shape of the per-difficulty landmark toggles in
-/// [`Play3dConfigResponse`]. Mirrors `crate::config::game::LandmarksConfig`
-/// but renames fields to `camelCase` so they sit naturally alongside the
-/// rest of the response (e.g. `wallTint`).
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct LandmarksResponse {
-    /// Per-cell wall tint variation enabled for this difficulty.
-    pub wall_tint: bool,
-    /// Dead-end landmark objects enabled for this difficulty.
-    pub dead_end_objects: bool,
-    /// Sparse wall decorations enabled for this difficulty.
-    pub wall_decorations: bool,
-    /// Floor accents at junction cells enabled for this difficulty.
-    pub floor_accents: bool,
-    /// Per-quadrant wall material variation enabled for this difficulty.
-    /// When on, supersedes the per-cell tint variation.
-    pub wall_material_variation: bool,
-}
-
-#[utoipa::path(
-    summary = "Returns the configured Play 3D preset for a difficulty",
-    description = "Returns the maze dimensions, time limit, fixed RNG seed, minimum solution length, and splash title for the requested Play 3D difficulty. Difficulty values are case-insensitive: `easy`, `tricky`, `hard`. No authentication required.",
-    get,
-    path = "/api/v1/game/play3d-config",
-    params(
-        ("difficulty" = String, Query, description = "Difficulty label (easy | tricky | hard)")
-    ),
-    responses(
-        (status = 200, description = "Play 3D preset returned successfully", body = Play3dConfigResponse),
-        (status = 400, description = "Unknown difficulty label")
-    ),
-    tags = ["v1"]
-)]
-#[get("/game/play3d-config")]
-pub async fn get_play3d_config(
-    query: Query<Play3dConfigQuery>,
-    config: web::Data<AppConfig>,
-) -> Result<HttpResponse, Error> {
-    let raw = query.difficulty.trim();
-    let normalised = raw.to_ascii_lowercase();
-    let Some(preset) = config.game.play3d.lookup(&normalised) else {
-        return Err(actix_web::error::ErrorBadRequest(format!(
-            "Unknown difficulty: \"{raw}\". Expected one of: easy, tricky, hard."
-        )));
-    };
-    Ok(HttpResponse::Ok().json(Play3dConfigResponse {
-        difficulty: normalised.clone(),
-        rows: preset.rows,
-        cols: preset.cols,
-        timer_seconds: preset.timer_seconds,
-        seed: preset.seed,
-        min_solution_length: preset.min_solution_length,
-        minimap_cell_px: preset.minimap_cell_px,
-        minimap_radius: preset.minimap_radius,
-        title: config.game.play3d.resolved_title(&normalised),
-        mode: preset.mode.clone(),
-        landmarks: LandmarksResponse {
-            wall_tint: preset.landmarks.wall_tint,
-            dead_end_objects: preset.landmarks.dead_end_objects,
-            wall_decorations: preset.landmarks.wall_decorations,
-            floor_accents: preset.landmarks.floor_accents,
-            wall_material_variation: preset.landmarks.wall_material_variation,
-        },
-        sky_type: preset.sky_type.as_wire_str().to_string(),
-        wall_type: preset.wall_type.as_wire_str().to_string(),
-        perimeter_walls: preset.perimeter_walls,
-        door_style: preset.door_style.as_wire_str().to_string(),
-        key_holder: preset.key_holder.as_wire_str().to_string(),
-        door_count: preset.door_count,
-        spare_doors: preset.spare_doors,
-        spare_keys: preset.spare_keys,
-        enemy_count: preset.enemy_count,
-        health_count: preset.health_count,
-        treasure_count: preset.treasure_count,
-        enemy_type: preset.enemy_type.as_wire_str().to_string(),
-        health_style: preset.health_style.as_wire_str().to_string(),
-        enemy_move_period_ms: preset.enemy_move_period_ms,
-        max_hp: preset.max_hp,
-        levels: LevelsResponse {
-            // Clamp to what the Bevy game can render so a misconfigured
-            // `count` never asks the client for more levels than it supports.
-            count: preset.levels.count.min(crate::config::game::MAX_LEVEL_COUNT),
-            finish_type: preset.levels.finish_type.as_wire_str().to_string(),
-            difficulty_change: preset.levels.difficulty_change.as_wire_str().to_string(),
-            reset_bag: preset.levels.reset_bag,
-            alignment: preset.levels.alignment.as_wire_str().to_string(),
-            taper: preset.levels.taper,
-            perimeter_random: preset.levels.perimeter_random,
-            hide_completed_enemies: preset.levels.hide_completed_enemies,
-            top: preset.levels.top.as_ref().map(|t| TopLevelResponse {
-                sky_type: t.sky_type.map(|s| s.as_wire_str().to_string()),
-                perimeter_walls: t.perimeter_walls,
-            }),
-        },
-    }))
 }
 
 // **************************************************************************************************
@@ -1792,14 +1559,47 @@ pub async fn renew(
 // Endpoint: GET /api/v1/users
 // Handler:  get_users()
 // **************************************************************************************************
+/// Page size used when the caller omits `limit` on the paged user reads
+/// (the admin user list + the username lookup).
+const USER_LIST_DEFAULT_PAGE_SIZE: u32 = 20;
+/// Hard cap on the paged user-read page size.
+const USER_LIST_MAX_PAGE_SIZE: u32 = 100;
+
+/// Query parameters for the paged admin user list.
+#[derive(Deserialize, Debug)]
+pub struct UsersListQuery {
+    /// Page size (default 20, capped at 100).
+    pub limit: Option<u32>,
+    /// Zero-based page offset (default 0).
+    pub offset: Option<u32>,
+}
+
+/// A page of the admin user list.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+pub struct UsersListResponse {
+    /// The page of users, ordered by username.
+    pub users: Vec<UserItem>,
+    /// The effective page size applied (the request's `limit` capped at the max).
+    pub limit: u32,
+    /// The zero-based offset this page started at.
+    pub offset: u32,
+    /// Whether at least one further user exists beyond this page.
+    pub has_more: bool,
+}
+
 #[utoipa::path(
-    summary = "Returns the list of registered users",
-    description = "This endpoint returns the list of register users",
+    summary = "Returns a page of registered users",
+    description = "Admin-only. Returns a page of the registered users, ordered by username, paged \
+                   via limit (server-capped) and offset with a has_more flag — the userbase is \
+                   never loaded in one shot.",
     get,
     path = "/api/v1/users",
+    params(
+        ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+    ),
     responses(
-        (status = 200, description = "User list loaded sucessfully", body=[UserItem]),
-        (status = 400, description = "Invalid request"),
+        (status = 200, description = "A page of users", body = UsersListResponse),
         (status = 401, description = "Unauthorized request")
     ),
     security(
@@ -1810,21 +1610,128 @@ pub async fn renew(
 )]
 #[get("/users")]
 pub async fn get_users(
+    query: Query<UsersListQuery>,
     req: HttpRequest,
     store: web::Data<SharedStore>
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
-    let store_users = store_lock.get_users().await.map_err(|err| {
-        get_users_fetch_internal_error(&err)
-    })?;
+    let q = query.into_inner();
+    let limit = q.limit.unwrap_or(USER_LIST_DEFAULT_PAGE_SIZE).min(USER_LIST_MAX_PAGE_SIZE);
+    let offset = q.offset.unwrap_or(0);
 
-    let user_items: Vec<UserItem> = store_users
-        .iter()
-        .map(UserItem::from_store_user)
+    // Storage pages the read; over-fetch one row for `has_more`.
+    let mut store_users = store_lock
+        .get_users(limit + 1, offset)
+        .await
+        .map_err(|err| get_users_fetch_internal_error(&err))?;
+    let has_more = store_users.len() as u32 > limit;
+    store_users.truncate(limit as usize);
+    let users: Vec<UserItem> = store_users.iter().map(UserItem::from_store_user).collect();
+
+    Ok(HttpResponse::Ok().json(UsersListResponse { users, limit, offset, has_more }))
+}
+// **************************************************************************************************
+// Endpoint: GET /api/v1/users/lookup
+// Handler:  lookup_users()
+// **************************************************************************************************
+
+/// Query parameters for the username-prefix user lookup.
+#[derive(Deserialize, Debug)]
+pub struct UserLookupQuery {
+    /// The username prefix to match (case-insensitive). A blank/absent value
+    /// matches nothing — the endpoint never lists every user.
+    pub username: Option<String>,
+    /// Page size (default 20, capped at 100).
+    pub limit: Option<u32>,
+    /// Zero-based page offset (default 0).
+    pub offset: Option<u32>,
+}
+
+/// A single lookup hit — deliberately just the id + username, never email,
+/// admin flag, or avatar, so the picker cannot be used to harvest profiles.
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
+pub struct UserLookupEntry {
+    /// The matched user's id (the value a share grant is keyed on).
+    #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
+    pub id: Uuid,
+    /// The matched user's username.
+    pub username: String,
+}
+
+/// A page of username-prefix lookup hits.
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Clone)]
+pub struct UserLookupResponse {
+    /// The matched users, ordered by username.
+    pub users: Vec<UserLookupEntry>,
+    /// The effective page size applied (the request's `limit` capped at the max).
+    pub limit: u32,
+    /// The zero-based offset this page started at.
+    pub offset: u32,
+    /// Whether at least one further match exists beyond this page.
+    pub has_more: bool,
+}
+
+#[utoipa::path(
+    summary = "Look up users by username prefix",
+    description = "Returns a page of users whose username starts with the given prefix \
+                   (case-insensitive), for the share people-picker. Only id + username are \
+                   returned. A blank or absent prefix returns an empty page — the endpoint never \
+                   lists every user. Any signed-in user may call it.",
+    get,
+    path = "/api/v1/users/lookup",
+    params(
+        ("username" = Option<String>, Query, description = "Username prefix to match (case-insensitive); blank matches nothing"),
+        ("limit" = Option<u32>, Query, description = "Page size (default 20, capped at 100)"),
+        ("offset" = Option<u32>, Query, description = "Zero-based page offset (default 0)")
+    ),
+    responses(
+        (status = 200, description = "A page of matching users", body = UserLookupResponse),
+        (status = 401, description = "Unauthorized request")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[get("/users/lookup")]
+pub async fn lookup_users(
+    query: Query<UserLookupQuery>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let _ = get_authorized_user(&req, false)?;
+    let q = query.into_inner();
+    let limit = q.limit.unwrap_or(USER_LIST_DEFAULT_PAGE_SIZE).min(USER_LIST_MAX_PAGE_SIZE);
+    let offset = q.offset.unwrap_or(0);
+
+    // A blank prefix returns nothing rather than enumerating every user.
+    let prefix = q.username.unwrap_or_default().trim().to_lowercase();
+    if prefix.is_empty() {
+        return Ok(HttpResponse::Ok().json(UserLookupResponse {
+            users: Vec::new(),
+            limit,
+            offset,
+            has_more: false,
+        }));
+    }
+
+    // Storage does the prefix filter + order + page; over-fetch one row for
+    // `has_more`.
+    let store_lock = get_store_read_lock(&store).await;
+    let mut matched = store_lock
+        .search_users_by_username_prefix(&prefix, limit + 1, offset)
+        .await
+        .map_err(|err| get_users_fetch_internal_error(&err))?;
+    let has_more = matched.len() as u32 > limit;
+    matched.truncate(limit as usize);
+    let users: Vec<UserLookupEntry> = matched
+        .into_iter()
+        .map(|u| UserLookupEntry { id: u.id, username: u.username })
         .collect();
 
-    Ok(HttpResponse::Ok().json(user_items))
+    Ok(HttpResponse::Ok().json(UserLookupResponse { users, limit, offset, has_more }))
 }
 // **************************************************************************************************
 // Endpoint: POST /api/v1/users/
@@ -2183,6 +2090,8 @@ pub async fn create_maze(
                     Err(get_maze_too_many_objects_error(kind, count, max)),
                 StoreError::MazeDefinitionTooLarge { bytes, max } =>
                     Err(get_maze_definition_too_large_error(bytes, max)),
+                StoreError::MazeCountLimitReached { count, max } =>
+                    Err(get_maze_count_limit_error(count, max)),
                 _ => Err(get_maze_create_internal_error(&err))
             }
         }

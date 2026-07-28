@@ -1,6 +1,9 @@
 // Re-export modules
 mod email_audit;
 mod error;
+mod featured_game_item;
+mod game_collection;
+mod game_definition;
 mod maze;
 mod maze_cell_state;
 mod maze_definition;
@@ -18,6 +21,9 @@ pub use email_audit::{
     EmailAuditEntry, truncate_email_audit_error_message,
 };
 pub use error::{Error, UserValidationError};
+pub use featured_game_item::{FeaturedGameItem, FeaturedGameItemKind};
+pub use game_collection::{CollectionItem, GameCollection, GameCollectionMeta, PlayMode};
+pub use game_definition::{GameDefinition, Rotation, Visibility};
 pub use maze_definition::{
     CellEntity, DoorOverride, DoorStyle, EnemyOverride, EnemyType, HealthOverride, HealthStyle,
     KeyHolderStyle, KeyOverride, MazeDefinition, TreasureOverride, TreasureStyle,
@@ -28,6 +34,6 @@ pub use maze_cell_state::MazeCellState;
 pub use maze_point::MazePoint;
 pub use oauth_identity::OAuthIdentity;
 pub use one_time_token::{OneTimeToken, TokenPurpose};
-pub use user::{is_valid_email_format, User};
+pub use user::{is_valid_email_format, GranteeSummary, User};
 pub use user_email::UserEmail;
 pub use user_login::UserLogin;

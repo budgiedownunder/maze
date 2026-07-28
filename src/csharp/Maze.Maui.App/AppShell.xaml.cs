@@ -1,7 +1,6 @@
 using CommunityToolkit.Maui.Extensions;
 using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Messages;
-using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
@@ -17,6 +16,8 @@ namespace Maze.Maui.App
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
         private readonly AccountViewModel _accountViewModel;
+        private readonly IGameLibraryService _gameLibrary;
+        private readonly INavigationService _navigationService;
 
         /// <summary>
         /// Constructor
@@ -24,11 +25,20 @@ namespace Maze.Maui.App
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="accountViewModel">Injected account view model</param>
-        public AppShell(IAuthService authService, IDialogService dialogService, AccountViewModel accountViewModel)
+        /// <param name="gameLibrary">Injected game-library read service (daily-challenge lookup)</param>
+        /// <param name="navigationService">Injected navigation service (Play 3D launch)</param>
+        public AppShell(
+            IAuthService authService,
+            IDialogService dialogService,
+            AccountViewModel accountViewModel,
+            IGameLibraryService gameLibrary,
+            INavigationService navigationService)
         {
             _authService = authService;
             _dialogService = dialogService;
             _accountViewModel = accountViewModel;
+            _gameLibrary = gameLibrary;
+            _navigationService = navigationService;
             InitializeComponent();
             // The flyout header binds to the account view model's Username.
             FlyoutHeaderRoot.BindingContext = _accountViewModel;
@@ -45,6 +55,11 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(AccountPage), typeof(AccountPage));
             Routing.RegisterRoute(nameof(MazesPage), typeof(MazesPage));
             Routing.RegisterRoute(nameof(LeaderboardsPage), typeof(LeaderboardsPage));
+            Routing.RegisterRoute(nameof(Play3dHubPage), typeof(Play3dHubPage));
+            Routing.RegisterRoute(nameof(Play3dFeaturedPage), typeof(Play3dFeaturedPage));
+            Routing.RegisterRoute(nameof(Play3dMyGamesPage), typeof(Play3dMyGamesPage));
+            Routing.RegisterRoute(nameof(Play3dSharedPage), typeof(Play3dSharedPage));
+            Routing.RegisterRoute(nameof(Play3dCommunityPage), typeof(Play3dCommunityPage));
         }
 
         /// <summary>
@@ -109,22 +124,24 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
-        /// Launches a 3D game (Bevy via WebView) — same entry point as the
-        /// Play 3D tile on the Home page. Prompts the user for a difficulty,
-        /// then navigates to Play3dGamePage with it. Cancelling the picker
-        /// leaves the user where they were.
+        /// Resolves and plays today's daily challenge — the same entry point as the
+        /// Today's Challenge tile on the Home page.
         /// </summary>
-        private async void OnPlay3dMenuItemClicked(object sender, EventArgs e)
+        private async void OnTodaysChallengeMenuItemClicked(object sender, EventArgs e)
         {
             FlyoutIsPresented = false;
+            await DailyChallengeLauncher.LaunchAsync(_gameLibrary, _navigationService, _dialogService);
+        }
 
-            var difficulty = await _dialogService.ShowPlay3dDifficultyAsync();
-            if (difficulty is null) return;
-
-            await GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
-            {
-                { "difficulty", difficulty.Value.ToQueryValue() },
-            });
+        /// <summary>
+        /// Opens the 3D Games browser hub — the same entry point as the 3D Games
+        /// tile on the Home page. The hub's own tiles reach the individual scopes
+        /// (Featured, …); the flyout has no sub-menus, so it lists only the hub.
+        /// </summary>
+        private async void OnGames3dMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync(nameof(Play3dHubPage));
         }
 
         /// <summary>

@@ -56,7 +56,7 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Start Column')).toBeInTheDocument()
     expect(screen.getByLabelText('Finish Row')).toBeInTheDocument()
     expect(screen.getByLabelText('Finish Column')).toBeInTheDocument()
-    expect(screen.getByLabelText('Min Solution Length')).toBeInTheDocument()
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toBeInTheDocument()
     expect(screen.getByLabelText('Doors')).toBeInTheDocument()
     expect(screen.getByLabelText('Spare Doors')).toBeInTheDocument()
     expect(screen.getByLabelText('Spare Keys')).toBeInTheDocument()
@@ -93,7 +93,7 @@ describe('GenerateMazeModal rendering and defaults', () => {
       'Start Column',
       'Finish Row',
       'Finish Column',
-      'Min Solution Length',
+      'Min Start to Finish Distance',
       'Doors',
       'Spare Doors',
       'Spare Keys',
@@ -188,6 +188,35 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Doors')).toHaveValue(2)
   })
 
+  it('caps the Spare Doors spinner at the door cap and Spare Keys at the feature budget', () => {
+    renderModal()
+    expect(screen.getByLabelText('Spare Doors')).toHaveAttribute('max', '8')
+    expect(screen.getByLabelText('Spare Keys')).toHaveAttribute('max', '16')
+  })
+
+  it('seeds Spare Keys from the keys beyond the door count', () => {
+    // 1 door + 3 keys → 2 of the keys are spare (keys − doors).
+    const gridWithSpareKeys: string[][] = [
+      ['S', 'D', 'K'],
+      ['K', 'W', 'K'],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridWithSpareKeys })
+    expect(screen.getByLabelText('Doors')).toHaveValue(1)
+    expect(screen.getByLabelText('Spare Keys')).toHaveValue(2)
+  })
+
+  it('seeds Spare Keys to 0 when keys do not exceed doors', () => {
+    // 2 doors + 1 key → max(0, 1 − 2) = 0 spare keys.
+    const gridFewerKeys: string[][] = [
+      ['S', 'D', 'D'],
+      ['K', 'W', ' '],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridFewerKeys })
+    expect(screen.getByLabelText('Spare Keys')).toHaveValue(0)
+  })
+
   it('defaults Rows and Columns to the grid dimensions', () => {
     renderModal()
     expect(screen.getByLabelText('Rows')).toHaveValue(3)
@@ -206,14 +235,14 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Finish Column')).toHaveValue(3)
   })
 
-  it('defaults Min Solution Length to 1', () => {
+  it('defaults Min Start to Finish Distance to 1', () => {
     renderModal()
-    expect(screen.getByLabelText('Min Solution Length')).toHaveValue(1)
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toHaveValue(1)
   })
 
-  it('uses initialMinSpineLength prop as the default Min Solution Length', () => {
+  it('uses initialMinSpineLength prop as the default Min Start to Finish Distance', () => {
     renderModal({ initialMinSpineLength: 7 })
-    expect(screen.getByLabelText('Min Solution Length')).toHaveValue(7)
+    expect(screen.getByLabelText('Min Start to Finish Distance')).toHaveValue(7)
   })
 
   it('defaults Start to row 1 col 1 when grid has no S', () => {
@@ -287,9 +316,9 @@ describe('GenerateMazeModal validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Start and Finish cells must be different.')
   })
 
-  it('shows error when Min Solution Length is less than 1', async () => {
-    await submitWith({ 'Min Solution Length': '0' })
-    expect(screen.getByRole('alert')).toHaveTextContent('Min Solution Length must be a whole number of 1 or more.')
+  it('shows error when Min Start to Finish Distance is less than 1', async () => {
+    await submitWith({ 'Min Start to Finish Distance': '0' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Min Start to Finish Distance must be a whole number of 1 or more.')
   })
 
   it('shows error when Doors exceeds the maximum', async () => {
@@ -313,13 +342,21 @@ describe('GenerateMazeModal validation', () => {
   })
 
   it('shows error when Spare Keys exceeds the maximum', async () => {
-    await submitWith({ 'Spare Keys': '9' })
-    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
+    // Spare keys are bounded by the whole 16-feature budget, not the door cap.
+    await submitWith({ 'Spare Keys': '17' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 16.')
   })
 
   it('shows error when Spare Keys is negative', async () => {
     await submitWith({ 'Spare Keys': '-1' })
-    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 16.')
+  })
+
+  it('accepts Spare Keys up to the 16-feature budget', async () => {
+    // 16 spare keys with no doors uses the whole budget exactly — now valid
+    // (previously capped at 8).
+    await submitWith({ 'Spare Keys': '16' })
+    expect(mockOnGenerate).toHaveBeenCalledWith(expect.objectContaining({ spareKeys: 16 }))
   })
 
   it('shows error when Enemies exceeds the maximum', async () => {

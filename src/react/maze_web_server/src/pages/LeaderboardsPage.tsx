@@ -1,22 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AppHeader } from '../components/AppHeader'
 import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
+import { DailyBoardDatePicker } from '../components/DailyBoardDatePicker'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { AlertModal } from '../components/AlertModal'
 import { useBusyCursor } from '../hooks/useBusyCursor'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { useToken, useAuth } from '../context/AuthContext'
-import { getScoreHistory, getMazes, getPlay3dConfig, resetLeaderboard } from '../api/client'
-import { buildChallenge } from '../utils/scores'
-import { launchPlay3dWithSettings, launchPlay3dCurated } from '../utils/play3dLaunch'
+import { getScoreHistory, getMazes, getGameDefinition, resetLeaderboard, getBoardDates } from '../api/client'
+import { gameChallengeKey, gameIdFromChallenge, todayUtc, boardDateOptions, defaultBoardDate, type BoardDateOption } from '../utils/gameDefinitions'
+import { launchPlay3dWithSettings, launchDefinition } from '../utils/play3dLaunch'
 import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
 import type { Maze, ScoreEntry } from '../types/api'
 import leaderboardsIcon from '../assets/leaderboards.svg'
-
-function parseDifficulty(challenge: string): string {
-  return challenge.split(':')[0]
-}
 
 function basename(id: string): string {
   return id.split(/[\\/]/).pop() ?? id
@@ -32,17 +29,30 @@ function resolveMazeId(historyId: string, mazes: MazeOption[]): string | undefin
   return mazes.find(m => basename(m.mazeId) === bn)?.mazeId
 }
 
-// The board to show first: the subject of the player's most recent run (when it
-// maps to a current maze / difficulty), else the first maze, else the Easy
-// global board — so the page is never inert.
-function defaultSelection(mostRecent: ScoreEntry | undefined, mazes: MazeOption[]): SubjectSelection {
+// The board to show first: the subject of the player's most recent run — their
+// maze, or the stored 3D game behind a `def:<id>` challenge (resolved through
+// the access-checked play-fetch, so a since-deleted or no-longer-visible game
+// falls through) — else their first maze, else nothing selected.
+async function defaultSelection(
+  token: string,
+  mostRecent: ScoreEntry | undefined,
+  mazes: MazeOption[],
+): Promise<SubjectSelection> {
   if (mostRecent?.maze_id) {
     const id = resolveMazeId(mostRecent.maze_id, mazes)
     if (id) return { gameType: 'my-mazes', mazeId: id }
   }
-  if (mostRecent?.challenge) return { gameType: 'play3d', difficulty: parseDifficulty(mostRecent.challenge) }
+  const gameId = mostRecent?.challenge ? gameIdFromChallenge(mostRecent.challenge) : null
+  if (gameId) {
+    try {
+      const def = await getGameDefinition(token, gameId)
+      return { gameType: 'play3d', game: { id: def.id, name: def.name, ownerId: def.ownerId, rotation: def.rotation } }
+    } catch {
+      // Gone or no longer accessible — fall through to a maze.
+    }
+  }
   if (mazes.length > 0) return { gameType: 'my-mazes', mazeId: mazes[0].mazeId }
-  return { gameType: 'play3d', difficulty: 'easy' }
+  return { gameType: 'play3d', game: null }
 }
 
 export function LeaderboardsPage() {
@@ -54,12 +64,15 @@ export function LeaderboardsPage() {
   // personal maze in 3D with its saved settings.
   const [allMazes, setAllMazes] = useState<Maze[]>([])
   const [selection, setSelection] = useState<SubjectSelection | null>(null)
+  // Which day's board to show for a Daily game (`yyyy-mm-dd`, UTC) — ignored for
+  // Static games. Set to the default day once the picked game's board-days load.
+  const [selectedDate, setSelectedDate] = useState<string>(todayUtc())
+  // The picked Daily game's board-day options (Today + days with runs), tagged
+  // with the game they belong to so a stale list never shows for a new game.
+  const [dailyBoard, setDailyBoard] = useState<{ gameId: string; options: BoardDateOption[] } | null>(null)
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(true)
   const [subjectsError, setSubjectsError] = useState<string | null>(null)
 
-  const [boardSubject, setBoardSubject] = useState<BoardSubject | null>(null)
-  const [isResolving, setIsResolving] = useState(false)
-  const [resolveError, setResolveError] = useState<string | null>(null)
   const [isBoardLoading, setIsBoardLoading] = useState(false)
   // Whether the caller has a run on the current board → Play vs "Play Again".
   const [hasPlayed, setHasPlayed] = useState(false)
@@ -78,9 +91,7 @@ export function LeaderboardsPage() {
     })
   // Busy cursor while any of the page's loads are in flight; cleared on
   // completion or failure.
-  useBusyCursor(isLoadingSubjects || isResolving || isBoardLoading || isCheckingPlay)
-  // difficulty → fixed seed; the seeds don't change, so resolve each once.
-  const seedCache = useRef<Map<string, number>>(new Map())
+  useBusyCursor(isLoadingSubjects || isBoardLoading || isCheckingPlay)
 
   // List all the player's mazes (the Mazes dropdown shows every maze, scored or
   // not) + pick the initial subject from their most-recent run.
@@ -94,13 +105,14 @@ export function LeaderboardsPage() {
         // `true` → mazes carry game_settings, needed by the Play button.
         const loaded = await getMazes(token, true)
         const history = await getScoreHistory(token, { limit: 1 })
-        if (cancelled) return
         const options: MazeOption[] = loaded
           .map(m => ({ mazeId: m.id, name: m.name }))
           .sort((a, b) => a.name.localeCompare(b.name))
+        const initial = await defaultSelection(token, history.scores[0], options)
+        if (cancelled) return
         setAllMazes(loaded)
         setMazes(options)
-        setSelection(defaultSelection(history.scores[0], options))
+        setSelection(initial)
       } catch (err) {
         if (!cancelled) setSubjectsError((err as Error).message || 'Failed to load your scores')
       } finally {
@@ -110,44 +122,57 @@ export function LeaderboardsPage() {
     return () => { cancelled = true }
   }, [token])
 
-  // Resolve the selection into a board subject. My-Mazes is direct; Play-3D
-  // resolves the difficulty's fixed seed (cached) into a challenge key.
+  // The picked 3D game (null for a maze subject or before a game is chosen).
+  const pickedGame = selection?.gameType === 'play3d' ? selection.game : null
+  const pickedGameId = pickedGame?.id
+  const isDailyGame = pickedGame?.rotation === 'daily'
+
+  // For a Daily game, load the days that have a board and offer them (Today
+  // pinned first, then past days most-recent first), defaulting to the most-
+  // recent day with runs. A failure leaves just Today. The board itself waits
+  // for this (see boardSubject) so it loads once, on the right day.
   useEffect(() => {
-    if (selection == null) { setBoardSubject(null); return }
-    setResolveError(null)
-    if (selection.gameType === 'my-mazes') {
-      setBoardSubject(selection.mazeId ? { mazeId: selection.mazeId } : null)
-      return
-    }
-    const difficulty = selection.difficulty
-    const cachedSeed = seedCache.current.get(difficulty)
-    if (cachedSeed != null) {
-      setBoardSubject({ challenge: buildChallenge(difficulty, cachedSeed) })
+    if (!token || !pickedGameId || !isDailyGame) {
+      setDailyBoard(null)
       return
     }
     let cancelled = false
-    setIsResolving(true)
-    getPlay3dConfig(difficulty)
-      .then(config => {
-        if (cancelled) return
-        seedCache.current.set(difficulty, config.seed)
-        setBoardSubject({ challenge: buildChallenge(difficulty, config.seed) })
-      })
-      .catch(err => {
-        if (cancelled) return
-        setResolveError((err as Error).message || 'Failed to load difficulty')
-        setBoardSubject(null)
-      })
-      .finally(() => { if (!cancelled) setIsResolving(false) })
+    const today = todayUtc()
+    const settle = (dates: string[]) => {
+      if (cancelled) return
+      setDailyBoard({ gameId: pickedGameId, options: boardDateOptions(dates, today) })
+      setSelectedDate(defaultBoardDate(dates, today))
+    }
+    getBoardDates(token, pickedGameId).then(res => settle(res.dates)).catch(() => settle([]))
     return () => { cancelled = true }
-  }, [selection])
+  }, [token, pickedGameId, isDailyGame])
+
+  // Whether a Daily game's board-days are still loading (so neither the board nor
+  // the empty-state should show yet).
+  const awaitingDailyDates = isDailyGame && dailyBoard?.gameId !== pickedGameId
+
+  // The board subject follows the selection directly — a maze board keys on the
+  // maze id, a 3D game board on the game's challenge (the picker already resolved
+  // the game, so nothing needs fetching): `def:<id>` for a Static game,
+  // `def:<id>:<date>` for the selected day of a Daily one. A Daily board waits for
+  // its board-days to load so it isn't briefly loaded on the wrong day. Memoised
+  // so the board isn't handed a fresh subject object every render.
+  const boardSubject = useMemo<BoardSubject | null>(() => {
+    if (selection == null) return null
+    if (selection.gameType === 'my-mazes') {
+      return selection.mazeId ? { mazeId: selection.mazeId } : null
+    }
+    if (!selection.game) return null
+    if (selection.game.rotation === 'daily' && dailyBoard?.gameId !== selection.game.id) return null
+    return { challenge: gameChallengeKey(selection.game.id, selection.game.rotation, selectedDate) }
+  }, [selection, selectedDate, dailyBoard])
 
   // Launch the selected subject in 3D: a personal maze with its saved settings,
-  // or a curated difficulty (server resolves the preset). No prompt.
+  // or the stored game (the host page fetches its config by id). No prompt.
   function handlePlay() {
     if (selection == null) return
     if (selection.gameType === 'play3d') {
-      launchPlay3dCurated(selection.difficulty)
+      if (selection.game) launchDefinition(selection.game.id)
       return
     }
     const maze = allMazes.find(m => m.id === selection.mazeId)
@@ -158,13 +183,16 @@ export function LeaderboardsPage() {
   }
 
   // The Reset button shows only when the board has rows AND the caller may clear
-  // it: a Play-3D (challenge) board is global → admins only; a personal maze board
-  // → its owner (the page lists only the caller's own mazes). The server enforces
-  // this regardless; the gate just hides a button the caller can't use.
+  // it: a 3D game's board belongs to that game, so its owner may reset it — as
+  // may an admin, who curates the featured set; a personal maze board → its owner
+  // (the page lists only the caller's own mazes). The server enforces this
+  // regardless; the gate just hides a button the caller can't use.
   const canReset =
     boardSubject != null &&
     boardRowCount > 0 &&
-    ('challenge' in boardSubject ? !!profile?.is_admin : true)
+    (selection?.gameType === 'play3d'
+      ? !!profile?.is_admin || selection.game?.ownerId === profile?.id
+      : true)
 
   async function handleConfirmReset() {
     if (boardSubject == null || token == null) return
@@ -183,8 +211,10 @@ export function LeaderboardsPage() {
 
   const showPlayer = selection?.gameType === 'play3d'
   // Nothing to launch when the Mazes type is selected but the player has none
-  // (the maze id is empty); a Play-3D difficulty is always playable.
-  const canPlay = selection != null && (selection.gameType === 'play3d' || selection.mazeId !== '')
+  // (the maze id is empty), or when no 3D game has been picked yet.
+  const canPlay =
+    selection != null &&
+    (selection.gameType === 'play3d' ? selection.game != null : selection.mazeId !== '')
 
   return (
     <div className="leaderboards-page">
@@ -216,19 +246,26 @@ export function LeaderboardsPage() {
         )}
         {!isLoadingSubjects && !subjectsError && (
           <>
-            <span className="subject-label" aria-hidden="true">Game</span>
-            <SubjectSelector
-              mazes={mazes}
-              value={selection}
-              onChange={setSelection}
-            >
-              <button type="button" className="btn-primary leaderboard-play" onClick={handlePlay} disabled={!canPlay}>
-                {hasPlayed ? '↻ Play Again' : '▶ Play'}
-              </button>
-            </SubjectSelector>
-            {resolveError && <p className="error-msg" role="alert">{resolveError}</p>}
-            {!resolveError && isResolving && <p aria-label="Loading">Loading…</p>}
-            {!resolveError && !isResolving && boardSubject && token && (
+            <div className="leaderboard-filters" role="group" aria-label="Leaderboard filters">
+              <span className="subject-label" aria-hidden="true">Game</span>
+              <SubjectSelector
+                mazes={mazes}
+                value={selection}
+                onChange={setSelection}
+              >
+                <button type="button" className="btn-primary leaderboard-play" onClick={handlePlay} disabled={!canPlay}>
+                  {hasPlayed ? '↻ Play Again' : '▶ Play'}
+                </button>
+              </SubjectSelector>
+              {isDailyGame && pickedGame && dailyBoard?.gameId === pickedGame.id && (
+                <DailyBoardDatePicker
+                  options={dailyBoard.options}
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                />
+              )}
+            </div>
+            {boardSubject && token && (
               <Leaderboard
                 token={token}
                 subject={boardSubject}
@@ -240,8 +277,12 @@ export function LeaderboardsPage() {
                 onRowCountChange={setBoardRowCount}
               />
             )}
-            {!resolveError && !isResolving && !boardSubject && (
-              <p className="leaderboard-empty">No winning scores yet</p>
+            {!boardSubject && !awaitingDailyDates && (
+              <p className="leaderboard-empty">
+                {selection?.gameType === 'play3d'
+                  ? 'Choose a game to see its leaderboard.'
+                  : 'No winning scores yet'}
+              </p>
             )}
           </>
         )}

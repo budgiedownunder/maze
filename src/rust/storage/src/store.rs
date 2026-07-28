@@ -1,12 +1,27 @@
 use crate::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
+use data_model::{
+    AuditOutcome, CollectionItem, EmailAuditEntry, FeaturedGameItem, FeaturedGameItemKind, GameCollection,
+    GameDefinition, GranteeSummary, Maze, OneTimeToken, User, UserEmail,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+/// Dedups `grantees` and drops `owner_id` (an owner can't grant access to
+/// themselves). Used by the `set_*_grantees` replace primitives so the stored
+/// grant list is always clean regardless of what the caller supplied.
+pub(crate) fn normalize_grantees(grantees: &[Uuid], owner_id: Uuid) -> Vec<Uuid> {
+    let mut seen = std::collections::HashSet::new();
+    grantees
+        .iter()
+        .copied()
+        .filter(|g| *g != owner_id && seen.insert(*g))
+        .collect()
+}
 
 /// Represents a store for holding users
 #[async_trait]
@@ -63,9 +78,22 @@ pub trait UserStore {
     /// `provider` is matched case-insensitively); `provider_user_id` is matched
     /// exactly (it is an opaque stable id from the identity provider).
     async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error>;
-    /// Returns the list of users within the store, sorted
-    /// alphabetically by username in ascending order
-    async fn get_users(&self) -> Result<Vec<User>, Error>;
+    /// A page of active users, ordered by username then id and sliced to
+    /// `limit`/`offset`. The admin user list — paged (like [`GameStore::get_visible_game_definitions`])
+    /// so it never loads the whole userbase at once; pass a large `limit` for
+    /// "all". Soft-deleted users are excluded.
+    async fn get_users(&self, limit: u32, offset: u32) -> Result<Vec<User>, Error>;
+    /// A page of active users whose username **starts with** `prefix`
+    /// (case-insensitive), ordered by username then id and sliced to
+    /// `limit`/`offset`. Soft-deleted users are excluded. A blank `prefix`
+    /// returns no rows — the lookup never enumerates every user. Backs the
+    /// share people-picker.
+    async fn search_users_by_username_prefix(
+        &self,
+        prefix: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<User>, Error>;
     /// Returns the list of admin users within the store
     async fn get_admin_users(&self) -> Result<Vec<User>, Error>;
     /// Returns whether at least one user exists in the store
@@ -165,6 +193,14 @@ pub trait MazeStore {
     /// enforce on writes. Callers use this to surface the limit to clients
     /// and to validate ahead of an actual write.
     fn max_maze_cells(&self) -> Option<usize> {
+        None
+    }
+    /// The maximum number of mazes one user may own, or `None` for no cap. Unlike
+    /// [`Self::max_maze_cells`] (bounded by a backend's per-row/runtime cost),
+    /// this is a **product** limit — the same value across backends — that keeps
+    /// a user's `get_maze_items` list bounded. `create_maze` rejects a save that
+    /// would exceed it with [`Error::MazeCountLimitReached`].
+    fn max_mazes_per_user(&self) -> Option<usize> {
         None
     }
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
@@ -335,6 +371,18 @@ pub struct ScoreOrdering {
     pub direction: SortDirection,
 }
 
+/// The ordering of a **game list** page (the Community catalogue's sort). Each
+/// variant ends in `id` so the order is total and paging stays deterministic.
+/// Built from fixed column names — never user input.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GameListSort {
+    /// Alphabetical, case-insensitive (`LOWER(name)`, then `id`) — the default.
+    #[default]
+    Name,
+    /// Most recently created first (`created_at DESC`, then `id`).
+    Newest,
+}
+
 /// Per-completed-run score history: records a won run and serves the
 /// leaderboards (per-maze, per-curated-challenge) and personal history over
 /// them. One row per completed run — "best" is a query, not a stored flag.
@@ -398,6 +446,26 @@ pub trait ScoreStore {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ScoreEntry>, Error>;
+    /// The subset of `challenges` the given user has recorded at least one score
+    /// against — i.e. the game boards (`def:<id>`) they have completed. Lets a
+    /// caller derive campaign progress in one query instead of paging the user's
+    /// whole history. The result is treated as a set (order/duplication
+    /// unspecified); an empty `challenges` returns an empty vec without touching
+    /// the store. Authorization is the caller's responsibility (the scores are the
+    /// user's own).
+    async fn completed_challenges(
+        &self,
+        user_id: Uuid,
+        challenges: &[String],
+    ) -> Result<Vec<String>, Error>;
+    /// The **distinct** `challenge` values (across all users) that start with
+    /// `prefix` — the boards that exist under it. For a daily game the server
+    /// passes `"def:<id>:"` to enumerate its per-day `"def:<id>:<date>"` boards
+    /// (a board exists once anyone has scored on that day). Sorted ascending for
+    /// a deterministic order; an empty result means no such board has any score.
+    /// Storage stays subject-agnostic — the caller owns the prefix convention and
+    /// any date parsing. Authorization is the caller's responsibility.
+    async fn challenges_with_prefix(&self, prefix: &str) -> Result<Vec<String>, Error>;
     /// Deletes every score recorded against a user maze, resetting its
     /// leaderboard to empty. Returns the number of rows removed (0 if the board
     /// was already empty). Authorization (maze ownership) is the caller's
@@ -408,6 +476,11 @@ pub trait ScoreStore {
     /// (admin) is the caller's responsibility — this clears unconditionally by
     /// subject.
     async fn clear_challenge_scores(&mut self, challenge: &str) -> Result<u64, Error>;
+    /// Deletes every score whose `challenge` equals `prefix` **or** starts with
+    /// `prefix` + `":"` — i.e. all board(s) of one game definition: its static
+    /// `"def:<id>"` board plus every daily `"def:<id>:<date>"` board. Returns the
+    /// number of rows removed. Authorization is the caller's responsibility.
+    async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, Error>;
 }
 
 /// Enforces the dual-keyed subject invariant for a [`ScoreEntry`]: exactly one
@@ -423,15 +496,373 @@ pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
     Ok(())
 }
 
+/// Byte cap on a stored game-definition `config`, enforced by every
+/// [`GameStore`] backend on create/update and matching the
+/// `game_definitions.config VARCHAR` column width. A game definition stores no
+/// per-cell grid (the maze is regenerated from `seed`), so its config is a
+/// small fixed set of scalar knobs (~1–2 KB); 4,000 bytes is generous headroom
+/// while keeping the table's row comfortably under MySQL's 65,535-byte per-row
+/// limit — a `VARCHAR(N)` counts its full `N × 4` (utf8mb4) width toward that
+/// sum, and `game_definitions` has many columns (unlike the lean `mazes` table,
+/// whose 16,000-byte `definition` only just fits).
+pub const MAX_GAME_DEFINITION_CONFIG_BYTES: usize = 4_000;
+
+/// The maximum number of mazes one user may own. A **product** limit (the same
+/// across every backend, unlike the backend-specific cell-count caps) that keeps
+/// a user's `get_maze_items` list bounded; both stores report it from
+/// [`MazeStore::max_mazes_per_user`] and enforce it on `create_maze`.
+pub const MAX_MAZES_PER_USER: usize = 500;
+
+/// The maximum number of game definitions one user may own — a product limit
+/// (like [`MAX_MAZES_PER_USER`]) reported by [`GameStore::max_definitions_per_user`]
+/// and enforced on `create_game_definition`.
+pub const MAX_DEFINITIONS_PER_USER: usize = 500;
+
+/// The maximum number of game collections one user may own — a product limit
+/// reported by [`GameStore::max_collections_per_user`] and enforced on
+/// `create_game_collection`.
+pub const MAX_COLLECTIONS_PER_USER: usize = 100;
+
+/// Represents a store for holding parametric 3D game definitions (and, later,
+/// game collections — one trait keeps all game facts together). Mutations are
+/// owner-scoped exactly like [`MazeStore`]; reads come in owner / curated /
+/// public / shared-with flavours plus two unconditional primitives
+/// (`get_game_definition`, `get_game_definition_grantees`). The store enforces **no
+/// view-access policy** — it is a set of owner-scoped mutations and by-subject
+/// reads, and the `owner ∨ curated ∨ public ∨ granted` decision is composed by
+/// the server layer (mirroring how [`ScoreStore`] leaves authorization to the
+/// caller).
+#[async_trait]
+pub trait GameStore {
+    /// The maximum number of game definitions one user may own, or `None` for no
+    /// cap. Enforced on `create_game_definition`. A product limit, the same across
+    /// backends (see [`MAX_DEFINITIONS_PER_USER`]).
+    fn max_definitions_per_user(&self) -> Option<usize> {
+        None
+    }
+    /// The maximum number of game collections one user may own, or `None` for no
+    /// cap. Enforced on `create_game_collection` (see [`MAX_COLLECTIONS_PER_USER`]).
+    fn max_collections_per_user(&self) -> Option<usize> {
+        None
+    }
+    /// Adds a new game definition, assigning `id` (if unset), `owner_id`, and
+    /// the create/update timestamps within the object. Rejects an empty name,
+    /// a per-owner name collision, an over-cap `config`, or exceeding
+    /// [`Self::max_definitions_per_user`].
+    async fn create_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error>;
+    /// Loads a game definition by id, regardless of owner or visibility — an
+    /// unconditional primitive the server composes access decisions from.
+    /// Rejects with [`Error::GameDefinitionIdNotFound`] when absent.
+    async fn get_game_definition(&self, id: Uuid) -> Result<GameDefinition, Error>;
+    /// Updates an existing game definition owned by `owner`, refreshing
+    /// `updated_at` (and preserving `id`/`owner_id`/`created_at`). Rejects if no
+    /// such definition is owned by `owner`, on a name collision with another of
+    /// the owner's definitions, or an over-cap config.
+    async fn update_game_definition(
+        &mut self,
+        owner: &User,
+        definition: &mut GameDefinition,
+    ) -> Result<(), Error>;
+    /// Deletes a game definition owned by `owner`, removing it and its share
+    /// grants. Resetting the definition's leaderboard is the caller's
+    /// responsibility (see [`ScoreStore`]).
+    async fn delete_game_definition(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+    /// Grants `grantee` access to a definition owned by `owner`. Idempotent —
+    /// re-granting an existing grantee is a no-op.
+    async fn grant_game_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Revokes `grantee`'s access to a definition owned by `owner`. Idempotent.
+    async fn revoke_game_definition_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Replaces a definition's entire grantee list with `grantees` in one
+    /// operation (atomic in the SQL backend) — anyone not listed is removed, any
+    /// new id is added. Owner-scoped: a definition not owned by `owner` is
+    /// [`Error::GameDefinitionIdNotFound`]. `owner`'s own id is ignored if
+    /// present. Duplicate ids collapse to one grant.
+    async fn set_game_definition_grantees(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error>;
+    /// All of `owner`'s own definitions (every visibility, drafts included),
+    /// sorted alphabetically by name.
+    async fn get_game_definitions_for_owner(&self, owner: &User) -> Result<Vec<GameDefinition>, Error>;
+    /// A page of the definitions `viewer` may see — their own (any visibility,
+    /// drafts included), every `Public`/`Curated` one, and any `Shared` one
+    /// granted to them — ordered by name (case-insensitive) then id, sliced to
+    /// `limit`/`offset`. This composes the same "visible to me" set the server's
+    /// list endpoint returns, but pages it in the store rather than merging every
+    /// scoped read in memory. The predicate is a filter, not an access decision:
+    /// the server still owns *what* "visible" means and access-checks single
+    /// fetches. De-duplicated (each definition appears once however many predicate
+    /// branches it satisfies).
+    async fn get_visible_game_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error>;
+    /// A page of the definitions **shared with** `viewer` — every `Shared`
+    /// definition they've been granted that they do **not** own. A `Public` or
+    /// `Curated` definition is excluded: it is open to everyone, not a targeted
+    /// share. Ordered by name (case-insensitive) then id, sliced to
+    /// `limit`/`offset`. The narrowed counterpart of
+    /// [`GameStore::get_visible_game_definitions`] that backs the play-side
+    /// "Shared with me" list; same predicate-is-a-filter, server-owns-access
+    /// rationale (the server still access-checks single fetches).
+    async fn get_shared_game_definitions(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error>;
+    /// A page of the **public** definitions (`visibility = Public`) owned by
+    /// someone **other than** `viewer` — the cross-owner Community pool. Filtered
+    /// by an optional case-insensitive name substring `name_query` (applied
+    /// server-side, since this pool is unbounded), ordered by `sort`, sliced to
+    /// `limit`/`offset`. The viewer's own public games are excluded — they
+    /// surface under the owner read. Same predicate-is-a-filter,
+    /// server-owns-access rationale as the other scoped reads.
+    async fn get_public_game_definitions(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        sort: GameListSort,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameDefinition>, Error>;
+    /// The user ids granted access to a definition — an unconditional primitive
+    /// the server uses for composing the access decision (owner ∨ granted).
+    /// Returns an empty list for an unknown/ungranted id.
+    async fn get_game_definition_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    /// The grantees of a definition **resolved to `{id, username}`** for the
+    /// owner's manage-shares view — the id-only [`GameStore::get_game_definition_grantees`]
+    /// left the caller with no non-admin way to name a grantee. Ordered by
+    /// username; a grantee whose user record is absent or soft-deleted is
+    /// dropped. Returns an empty list for an unknown/ungranted id.
+    async fn get_game_definition_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error>;
+    /// Stores (or replaces) the image for a definition owned by `owner`,
+    /// stamping its `image_updated_at` marker. `png_bytes` is the canonical
+    /// image the caller has produced; the store keeps it verbatim. Owner-scoped:
+    /// a definition not owned by `owner` is [`Error::GameDefinitionIdNotFound`].
+    async fn set_game_definition_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error>;
+    /// Loads a definition's image bytes, or `None` when it has none (never set,
+    /// since cleared, or no such definition) — an unconditional primitive; the
+    /// server composes the view-access decision.
+    async fn get_game_definition_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    /// Removes a definition's image if present and clears its `image_updated_at`,
+    /// for a definition owned by `owner`. Idempotent — clearing an image-less
+    /// (or not-owned/unknown) definition is a successful no-op.
+    async fn clear_game_definition_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+
+    // ── Collections (an ordered, presentation-only grouping of definitions) ──
+
+    /// Adds a new collection, assigning `id`/`owner_id`/timestamps and persisting
+    /// its initial `items`. Rejects an empty name or a per-owner name collision.
+    async fn create_game_collection(
+        &mut self,
+        owner: &User,
+        collection: &mut GameCollection,
+    ) -> Result<(), Error>;
+    /// Loads a collection (with its `items` ordered by `sort_order`) by id — an
+    /// unconditional primitive the server composes access from. Rejects with
+    /// [`Error::GameCollectionIdNotFound`] when absent.
+    async fn get_game_collection(&self, id: Uuid) -> Result<GameCollection, Error>;
+    /// Updates a collection's **own metadata** (name / description /
+    /// image_updated_at / visibility) owned by `owner`, refreshing `updated_at`.
+    /// Its `items` are left unchanged — membership is managed by the item
+    /// methods below.
+    async fn update_game_collection(
+        &mut self,
+        owner: &User,
+        collection: &mut GameCollection,
+    ) -> Result<(), Error>;
+    /// Deletes a collection owned by `owner`, removing it, its items, and its
+    /// share grants.
+    async fn delete_game_collection(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+    /// Replaces the owner's collection membership with `ordered` in one operation
+    /// (atomic in the SQL backend): the members become exactly `ordered`
+    /// (de-duplicated, first occurrence wins) with `sort_order` its index — any
+    /// prior member absent from `ordered` is dropped, any new id added, and the
+    /// sequence reordered to match. Owner-scoped: a collection not owned by
+    /// `owner` is [`Error::GameCollectionIdNotFound`]. Only references are stored;
+    /// a ref to an inaccessible/since-deleted definition is filtered at display.
+    async fn set_game_collection_items(
+        &mut self,
+        owner: &User,
+        collection_id: Uuid,
+        ordered: &[Uuid],
+    ) -> Result<(), Error>;
+    /// Grants `grantee` access to the owner's collection. Idempotent.
+    async fn grant_game_collection_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Revokes `grantee`'s access to the owner's collection. Idempotent.
+    async fn revoke_game_collection_access(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantee: Uuid,
+    ) -> Result<(), Error>;
+    /// Replaces a collection's entire grantee list with `grantees` in one
+    /// operation (atomic in the SQL backend). Owner-scoped: a collection not
+    /// owned by `owner` is [`Error::GameCollectionIdNotFound`]. `owner`'s own id
+    /// is ignored if present. Duplicate ids collapse to one grant.
+    async fn set_game_collection_grantees(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        grantees: &[Uuid],
+    ) -> Result<(), Error>;
+    /// All of `owner`'s own collections, sorted alphabetically by name.
+    async fn get_game_collections_for_owner(&self, owner: &User) -> Result<Vec<GameCollection>, Error>;
+    /// A page of the collections `viewer` may see — their own (any visibility),
+    /// every `Public`/`Curated` one, and any `Shared` one granted to them —
+    /// ordered by name (case-insensitive) then id, sliced to `limit`/`offset`.
+    /// The collection-side counterpart of [`GameStore::get_visible_game_definitions`];
+    /// same predicate-is-a-filter, server-owns-access rationale.
+    async fn get_visible_game_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error>;
+    /// A page of the collections **shared with** `viewer` — every `Shared`
+    /// collection they've been granted that they do **not** own (`Public` /
+    /// `Curated` excluded, exactly as for definitions). The collection
+    /// counterpart of [`GameStore::get_shared_game_definitions`].
+    async fn get_shared_game_collections(
+        &self,
+        viewer: &User,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error>;
+    /// A page of the **public** collections (`visibility = Public`) owned by
+    /// someone **other than** `viewer` — the cross-owner Community pool, filtered
+    /// by an optional case-insensitive name substring `name_query` and ordered by
+    /// `sort`. The collection counterpart of
+    /// [`GameStore::get_public_game_definitions`].
+    async fn get_public_game_collections(
+        &self,
+        viewer: &User,
+        name_query: Option<&str>,
+        sort: GameListSort,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<GameCollection>, Error>;
+    /// The user ids granted access to a collection — an unconditional primitive.
+    /// Returns an empty list for an unknown/ungranted id.
+    async fn get_game_collection_grantees(&self, id: Uuid) -> Result<Vec<Uuid>, Error>;
+    /// The grantees of a collection **resolved to `{id, username}`** for the
+    /// owner's manage-shares view (see
+    /// [`GameStore::get_game_definition_grantee_summaries`] for the rationale).
+    /// Ordered by username; a grantee whose user record is absent or
+    /// soft-deleted is dropped. Returns an empty list for an unknown/ungranted id.
+    async fn get_game_collection_grantee_summaries(
+        &self,
+        id: Uuid,
+    ) -> Result<Vec<GranteeSummary>, Error>;
+    /// Stores (or replaces) the image for a collection owned by `owner`, stamping
+    /// its `image_updated_at` marker. Owner-scoped: a collection not owned by
+    /// `owner` is [`Error::GameCollectionIdNotFound`].
+    async fn set_game_collection_image(
+        &mut self,
+        owner: &User,
+        id: Uuid,
+        png_bytes: Vec<u8>,
+    ) -> Result<(), Error>;
+    /// Loads a collection's image bytes, or `None` when it has none — an
+    /// unconditional primitive; the server composes the view-access decision.
+    async fn get_game_collection_image(&self, id: Uuid) -> Result<Option<Vec<u8>>, Error>;
+    /// Removes a collection's image if present and clears its `image_updated_at`,
+    /// for a collection owned by `owner`. Idempotent.
+    async fn clear_game_collection_image(&mut self, owner: &User, id: Uuid) -> Result<(), Error>;
+
+    // ── Featured catalogue (the admin-ordered `Curated` projection) ──────────
+    //
+    // `featured_game_items` is a faithful projection of the `Curated` tier: a
+    // single ordered list mixing definitions and collections. It is maintained
+    // automatically by `create`/`update`/`delete` on both entities — a
+    // transition into `Curated` appends a row (`sort_order` = max + 1), a
+    // transition out (or a delete) removes the row and recompacts `sort_order`
+    // to a dense `0..n`. Every mutation derives `sort_order` in-SQL inside a
+    // single transaction that also carries the entity's visibility change, so
+    // the `Curated` flag and its featured row can never disagree.
+
+    /// Rewrites the featured list's order to match `ordered` in one transaction,
+    /// assigning `sort_order` = index. Membership stays owned by the `Curated`
+    /// tier: this reorders the featured set, it does not add or remove members —
+    /// any `ordered` entry whose entity is not `Curated` is rejected with
+    /// [`Error::FeaturedGameItemNotCurated`]. Duplicate `(kind, id)` pairs collapse
+    /// to their first occurrence.
+    async fn reorder_featured_game_items(
+        &mut self,
+        ordered: &[(FeaturedGameItemKind, Uuid)],
+    ) -> Result<(), Error>;
+    /// The featured catalogue — every `Curated` definition and collection,
+    /// hydrated and returned in `sort_order`. A row whose entity has since
+    /// vanished is skipped (mirroring how collection items filter dangling refs
+    /// at display), so the read never fails on a stale projection.
+    async fn list_featured_game_items(&self) -> Result<Vec<FeaturedGameItem>, Error>;
+    /// Repairs the featured projection: **appends** any `Curated` definition or
+    /// collection that isn't already in `featured_game_items` (ordered by name,
+    /// definitions before collections), each after the current max `sort_order`.
+    /// Idempotent — a faithful projection is left untouched. The reconcile hook
+    /// keeps the table in sync going forward, but content that was already
+    /// `Curated` before the table existed (or that a bulk reorder dropped while
+    /// still curated) needs this catch-up, run once on startup.
+    async fn reconcile_featured_game_items(&mut self) -> Result<(), Error>;
+}
+
+/// Normalises a collection's item ordering: rewrites `sort_order = index` in the
+/// current `Vec` order, so it stays a dense `0..n` sequence matching the display
+/// order after any membership mutation. Shared by every [`GameStore`] backend.
+pub(crate) fn normalize_item_order(items: &mut [CollectionItem]) {
+    for (index, item) in items.iter_mut().enumerate() {
+        item.sort_order = index as u32;
+    }
+}
+
 // Store management
 #[async_trait]
 pub trait Manage {
     /// Resets the store to empty
     async fn empty(&mut self) -> Result<(), Error>;
+
+    /// Whether this store was created empty during this process's construction —
+    /// a brand-new data directory (FileStore) or an unmigrated database
+    /// (SqlStore) — as opposed to reopening an existing store. Lets one-time
+    /// bootstrap seeding run only on a genuinely fresh store, so an admin's later
+    /// deletion of the seeded content is not resurrected on the next restart.
+    fn was_freshly_created(&self) -> bool;
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + ScoreStore + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + ScoreStore + GameStore + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

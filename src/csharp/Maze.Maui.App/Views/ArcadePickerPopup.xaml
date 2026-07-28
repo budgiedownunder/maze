@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               xmlns:model="clr-namespace:Maze.Maui.App.Models"
+               x:Class="Maze.Maui.App.Views.ArcadePickerPopup"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <Border Padding="20"
+            HorizontalOptions="Center"
+            VerticalOptions="Center"
+            MinimumWidthRequest="320"
+            MaximumWidthRequest="460"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12"
+              MaximumHeightRequest="460">
+
+            <Label Grid.Row="0"
+                   x:Name="TitleLabel"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center" />
+
+            <Label Grid.Row="1"
+                   Text="Choose a game"
+                   FontSize="13"
+                   HorizontalOptions="Center" />
+
+            <!-- Each member game is a bordered "card" holding a radio (dot) beside
+                 the name/description. The whole card is tappable (the radio is
+                 input-transparent, so any tap routes through the card's gesture and
+                 selects it); the selected card is highlighted. RadioButtonGroup makes
+                 the radios mutually exclusive and tracks the selected game's Value. -->
+            <ScrollView Grid.Row="2">
+                <VerticalStackLayout x:Name="GamesList" Spacing="8" RadioButtonGroup.GroupName="arcadeGame">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="model:GameDefinition">
+                            <Border StrokeShape="RoundRectangle 8"
+                                    StrokeThickness="1"
+                                    Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                    Padding="10,8">
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnCardTapped" />
+                                </Border.GestureRecognizers>
+                                <Border.Triggers>
+                                    <DataTrigger TargetType="Border" Binding="{Binding IsChecked, Source={x:Reference Radio}}" Value="True">
+                                        <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                                        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray800}}" />
+                                    </DataTrigger>
+                                </Border.Triggers>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <RadioButton x:Name="Radio"
+                                                 Grid.Column="0"
+                                                 Value="{Binding .}"
+                                                 InputTransparent="True"
+                                                 VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                                        <Label Text="{Binding Name}" FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light=Black, Dark=White}" />
+                                        <Label Text="{Binding Description}" FontSize="12"
+                                               MaxLines="4" LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light={StaticResource Gray600}, Dark={StaticResource Gray400}}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+            </ScrollView>
+
+            <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0"
+                        Text="Cancel"
+                        Clicked="OnCancelClicked"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
+                <Button Grid.Column="1"
+                        Text="Play"
+                        Clicked="OnPlayClicked"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="{StaticResource PlayButton}"
+                        TextColor="White" />
+            </Grid>
+        </Grid>
+    </Border>
+</toolkit:Popup>

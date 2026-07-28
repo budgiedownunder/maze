@@ -30,30 +30,44 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto" Padding="10" RowSpacing="8">
 
         <!-- Subject selector: a "Game" label (styled like the board column
-             headers) above the cascading Game Type → Game pickers (left, each
-             sized to its content), with the Play button right-aligned in the
-             same row. -->
+             headers) above the Game Type → maze picker / 3D-game name selection,
+             then the Change + Play actions. The action buttons share the metric
+             toggle's two-column 326-wide layout and sit directly above it, at the
+             same width on every screen size. -->
         <VerticalStackLayout Grid.Row="0" Spacing="6">
             <Label Text="Game" FontAttributes="Bold" />
-            <Grid ColumnDefinitions="Auto,*" VerticalOptions="Center">
-                <HorizontalStackLayout Grid.Column="0" Spacing="10" VerticalOptions="Center">
-                    <Picker MinimumWidthRequest="110"
-                            ItemsSource="{Binding GameTypes}"
-                            ItemDisplayBinding="{Binding Label}"
-                            SelectedItem="{Binding SelectedGameType}" />
-                    <Label Text="→" FontSize="18" VerticalOptions="Center" />
-                    <Picker x:Name="GamePicker"
-                            MinimumWidthRequest="110"
-                            ItemsSource="{Binding Games}"
-                            ItemDisplayBinding="{Binding Label}"
-                            SelectedItem="{Binding SelectedGame}"
-                            SelectedIndexChanged="OnGameSelectionChanged" />
-                </HorizontalStackLayout>
+            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10" VerticalOptions="Center">
+                <Picker Grid.Column="0"
+                        MinimumWidthRequest="110"
+                        ItemsSource="{Binding GameTypes}"
+                        ItemDisplayBinding="{Binding Label}"
+                        SelectedItem="{Binding SelectedGameType}" />
+                <Label Grid.Column="1" Text="→" FontSize="18" VerticalOptions="Center" />
+                <!-- Mazes: cascading maze picker. -->
+                <Picker Grid.Column="2" x:Name="GamePicker"
+                        IsVisible="{Binding IsMazeType}"
+                        HorizontalOptions="Start"
+                        MinimumWidthRequest="110"
+                        ItemsSource="{Binding Games}"
+                        ItemDisplayBinding="{Binding Label}"
+                        SelectedItem="{Binding SelectedGame}"
+                        SelectedIndexChanged="OnGameSelectionChanged" />
+                <!-- 3D Games: picked-game summary (truncates in the remaining width). -->
+                <Label Grid.Column="2"
+                       IsVisible="{Binding Is3dType}"
+                       Text="{Binding PickedGameLabel}"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation" />
+            </Grid>
+            <!-- Change (3D only) + Play, matching the metric toggle's width below. -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="6" HorizontalOptions="Start" WidthRequest="326">
+                <Button Grid.Column="0"
+                        IsVisible="{Binding Is3dType}"
+                        Text="Change…"
+                        Command="{Binding PickGameCommand}" />
                 <Button Grid.Column="1"
                         Text="{Binding PlayLabel}"
                         Command="{Binding PlayCommand}"
-                        HorizontalOptions="End"
-                        VerticalOptions="Center"
                         BackgroundColor="{StaticResource PlayButton}"
                         TextColor="White">
                     <!-- Dim while disabled (no winnable subject selected). A property Trigger
@@ -68,6 +82,17 @@
                     </Button.Triggers>
                 </Button>
             </Grid>
+            <!-- Daily games only: which day's frozen board to show. A dropdown of
+                 days known to have a board (Today pinned first, then past days
+                 most-recent first) — native calendars can't disable the sparse
+                 non-scored days, so this is a list, not a calendar. -->
+            <HorizontalStackLayout IsVisible="{Binding IsDailyGame}" Spacing="8" VerticalOptions="Center">
+                <Label Text="Date" VerticalOptions="Center" />
+                <Picker ItemsSource="{Binding BoardDates}"
+                        ItemDisplayBinding="{Binding Label}"
+                        SelectedItem="{Binding SelectedBoardDate}"
+                        MinimumWidthRequest="160" />
+            </HorizontalStackLayout>
         </VerticalStackLayout>
 
         <!-- Ranking-metric toggle. Borders (not Buttons) so the active/inactive

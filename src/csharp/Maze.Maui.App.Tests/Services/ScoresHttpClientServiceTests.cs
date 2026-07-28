@@ -115,18 +115,12 @@ namespace Maze.Maui.App.Tests.Services
         }
 
         [Fact]
-        public void BuildChallenge_FormatsDifficultyAndSeed()
+        public void ForDefinition_SetsDefChallengeNotMazeId()
         {
-            Assert.Equal("tricky:8080808", ScoreSubject.BuildChallenge("tricky", 8080808ul));
-        }
-
-        [Fact]
-        public void ForCuratedGame_SetsChallengeNotMazeId()
-        {
-            var subject = ScoreSubject.ForCuratedGame("easy", 42ul);
+            var subject = ScoreSubject.ForDefinition("g1");
 
             Assert.Null(subject.MazeId);
-            Assert.Equal("easy:42", subject.Challenge);
+            Assert.Equal("def:g1", subject.Challenge);
         }
 
         [Fact]
@@ -176,15 +170,47 @@ namespace Maze.Maui.App.Tests.Services
         }
 
         [Fact]
-        public void Play3dConfig_DeserializesSeed()
+        public void BuildBoardDatesPath_PassesDefinitionIdAsSnakeCaseParam()
         {
-            const string json = """{"difficulty":"hard","seed":12345678,"rows":25,"cols":25}""";
+            // The board-dates endpoint uses the snake_case `definition_id` param.
+            Assert.Equal("scores/board-dates?definition_id=g1", ScoreRequestPaths.BuildBoardDatesPath("g1"));
+        }
 
-            var config = JsonSerializer.Deserialize<Play3dConfig>(json);
+        [Fact]
+        public void BuildBoardDatesPath_EncodesDefinitionId()
+        {
+            Assert.Equal("scores/board-dates?definition_id=a%2Fb", ScoreRequestPaths.BuildBoardDatesPath("a/b"));
+        }
 
-            Assert.NotNull(config);
-            Assert.Equal("hard", config!.Difficulty);
-            Assert.Equal(12345678ul, config.Seed);
+        [Fact]
+        public void BuildCompletedPath_IsBarePostPath()
+        {
+            Assert.Equal("scores/me/completed", ScoreRequestPaths.BuildCompletedPath());
+        }
+
+        [Fact]
+        public void BoardDatesResponse_DeserializesDates()
+        {
+            const string json = """{ "dates": ["2026-07-10", "2026-07-05"] }""";
+
+            var result = JsonSerializer.Deserialize<BoardDatesResponse>(json)!;
+
+            Assert.Equal(2, result.Dates.Count);
+            Assert.Equal("2026-07-10", result.Dates[0]);
+        }
+
+        [Fact]
+        public void CompletedChallenges_RoundTripsRequestAndResponse()
+        {
+            // Request serialises the caller's challenge keys under `challenges`.
+            var request = new CompletedChallengesRequest { Challenges = new() { "def:a", "def:b" } };
+            string requestJson = JsonSerializer.Serialize(request);
+            Assert.Contains("\"challenges\":[\"def:a\",\"def:b\"]", requestJson);
+
+            // Response reports the completed subset under `completed`.
+            var response = JsonSerializer.Deserialize<CompletedChallengesResponse>("""{ "completed": ["def:a"] }""")!;
+            Assert.Single(response.Completed);
+            Assert.Equal("def:a", response.Completed[0]);
         }
     }
 }
