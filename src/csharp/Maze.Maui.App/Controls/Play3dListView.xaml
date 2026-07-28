@@ -18,23 +18,24 @@
                     Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                     StrokeShape="RoundRectangle 8"
                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                    <controls:GameImageView Grid.Column="0"
+                <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" RowSpacing="4">
+                    <controls:GameImageView Grid.Row="0" Grid.RowSpan="2" Grid.Column="0"
                                             Bytes="{Binding ImageBytes}"
                                             PlaceholderFile="{Binding PlaceholderImage}"
                                             Size="64"
                                             VerticalOptions="Center" />
-                    <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
-                        <Label Text="{Binding Name}"
-                               FontSize="18"
-                               FontAttributes="Bold"
-                               LineBreakMode="TailTruncation" />
-                        <Label Text="{Binding Description}"
-                               FontSize="13"
-                               MaxLines="4"
-                               LineBreakMode="TailTruncation" />
-                    </VerticalStackLayout>
-                    <VerticalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                    <Label Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="{Binding Name}"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           LineBreakMode="TailTruncation" />
+                    <Label Grid.Row="1" Grid.Column="1"
+                           Text="{Binding Description}"
+                           FontSize="13"
+                           MaxLines="4"
+                           VerticalOptions="Center"
+                           LineBreakMode="TailTruncation" />
+                    <VerticalStackLayout Grid.Row="1" Grid.Column="2" Spacing="6" VerticalOptions="Center">
                         <Border StrokeThickness="0"
                                 StrokeShape="RoundRectangle 6"
                                 BackgroundColor="{StaticResource PlayButton}"
