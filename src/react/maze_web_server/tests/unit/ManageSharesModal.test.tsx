@@ -45,18 +45,22 @@ function renderModal(over: { subject?: ShareSubject; visibility?: Visibility; is
 }
 
 describe('ManageSharesModal', () => {
-  it('shows the access tiers (current one checked); Featured only for admins', () => {
+  it('shows the access tiers (current one checked); Featured only for admins', async () => {
     renderModal({ visibility: 'private' })
     expect(screen.getByRole('heading', { name: /^Access:/ })).toHaveTextContent('Tower')
     expect(screen.getByRole('radio', { name: /Just me/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: /Specific people/ })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: /Everyone/ })).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: /Featured/ })).toBeNull()
+    // Let the mount's share-load effect settle so its state update lands inside act().
+    await waitFor(() => expect(document.body).not.toHaveClass('is-busy'))
   })
 
-  it('offers the Featured tier to an admin', () => {
+  it('offers the Featured tier to an admin', async () => {
     renderModal({ isAdmin: true })
     expect(screen.getByRole('radio', { name: /Featured/ })).toBeInTheDocument()
+    // Let the mount's share-load effect settle so its state update lands inside act().
+    await waitFor(() => expect(document.body).not.toHaveClass('is-busy'))
   })
 
   it('stages an added user and drops them from the picker; removing un-stages', async () => {

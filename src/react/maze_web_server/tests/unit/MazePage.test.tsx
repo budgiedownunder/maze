@@ -845,7 +845,9 @@ describe('MazePage walk solution', () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Walk Solution' })).toBeDisabled())
-    resolveSolve(solvePath)
+    // Resolve the solve inside act() so the trailing setIsSolving(false)/startWalk
+    // state updates settle within the test rather than after it.
+    await act(async () => { resolveSolve(solvePath) })
   })
 
   it('clicking Walk Solution calls solveMaze', async () => {
