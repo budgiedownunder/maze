@@ -92,7 +92,8 @@ The following components are present:
 |--------------------------------|-------------------------------------------------------------------------------|---------------
 | `.github/workflows`            | `*.yml`                                                                       | GitHub Action workflow files
 | `docs`                         | [`README.md`](./docs/README.md)                                               | Project overview documentation
-| `research/algorithms/excel`     | `maze-algorithms.xls`                                                         | Excel workbook containing maze algorithms
+| `game_images`                  | `*.png, *.svg`                                                                | Sample image files and templates for game and game collection avatars
+| `research/algorithms/excel`    | `maze-algorithms.xls`                                                         | Excel workbook containing maze algorithms
 | `src`                          | [`docfx`](./src/docfx/README.md)                                              | HTML help generation
 | `src/csharp`                   | [`Maze.Api`](./src/csharp/Maze.Api/README.md)                                 | .NET API that sits above  [`Maze.Interop`](./src/csharp/Maze.Interop/README.md)
 |                                | [`Maze.Api.Tests`](./src/csharp/Maze.Api.Tests/README.md)                     | Unit tests for [`Maze.Api`](./src/csharp/Maze.Api/README.md)
@@ -195,6 +196,12 @@ Games can be grouped into **collections**, played either as a free-choice **arca
 **3D Maze Game**
 
 Playing a maze in first-person 3D — chasing enemies, collectible keys & doors, and a heart-based HP HUD with health pickups — the Bevy engine runs entirely in-browser via WebAssembly.
+
+A single level game at night, with solid brick walls, health, treasure and a goblin enemy:
+
+<img src="./src/react/maze_web_server/screenshots/web-3d-single-level.png" width="600">
+
+Running to the finish orb, while opening doors and encountering a goblin on the way:
 
 <img src="./src/react/maze_web_server/screenshots/web-3d-game.gif" width="600">
 
