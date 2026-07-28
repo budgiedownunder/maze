@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!--
+    BASE CALENDAR TILE — starting point for the "daily" game-image avatars.
+    Render to a 128x128 transparent PNG (e.g. via a headless-browser screenshot of the <svg>).
+
+    Shared vocabulary (matches the home-page daily-challenge icon):
+      • Outline / rings stroke : #2f4a68
+      • Header band            : url(#header)  (#5b82ad -> #37567a)
+      • Body fill              : url(#tile)    (light)
+      • Trophy gold            : url(#trophyGold), stroke #e0a700, star #fff7df
+      • Goal orb + glow (gold) : #fffdf4 / #ffe9a8 / #f7c948 / #e0a700, stroke #c98a00
+
+    As shipped this renders an EMPTY calendar. Drop content into the white region
+    (below the header, y ~44..114, centred at y ~79) by uncommenting a block:
+      • daily_challenge -> the TROPHY block
+      • daily_game      -> the MAZE + ORB block
+  -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6f9fd"/>
+      <stop offset="1" stop-color="#e4ecf5"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5b82ad"/>
+      <stop offset="1" stop-color="#37567a"/>
+    </linearGradient>
+    <linearGradient id="trophyGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.45" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#d99a00"/>
+    </linearGradient>
+    <radialGradient id="orb" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#fffdf4"/>
+      <stop offset="0.35" stop-color="#ffe9a8"/>
+      <stop offset="0.7" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#e0a700"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff0c0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffd678" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Calendar: binding rings, body, then the header band on top -->
+  <rect x="44" y="10" width="8" height="24" rx="4" fill="#8aa1bd" stroke="#2f4a68" stroke-width="3"/>
+  <rect x="76" y="10" width="8" height="24" rx="4" fill="#8aa1bd" stroke="#2f4a68" stroke-width="3"/>
+  <rect x="14" y="22" width="100" height="92" rx="12" fill="url(#tile)" stroke="#2f4a68" stroke-width="4"/>
+  <path d="M14 44 V34 A12 12 0 0 1 26 22 H102 A12 12 0 0 1 114 34 V44 Z"
+        fill="url(#header)" stroke="#2f4a68" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- TROPHY (daily_challenge): scaled 0.414 and centred in the white region.
+  <g transform="translate(64 79) scale(0.414) translate(-100 -100)">
+    <g fill="none" stroke="#e0a700" stroke-width="9" stroke-linecap="round">
+      <path d="M62 52 C32 52 32 92 64 86"/>
+      <path d="M138 52 C168 52 168 92 136 86"/>
+    </g>
+    <path d="M58 42 H142 V58 C142 94 123 110 100 110 C77 110 58 94 58 58 Z" fill="url(#trophyGold)" stroke="#e0a700" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="92" y="109" width="16" height="20" fill="url(#trophyGold)" stroke="#e0a700" stroke-width="3"/>
+    <path d="M84 129 H116 L122 143 H78 Z" fill="url(#trophyGold)" stroke="#e0a700" stroke-width="3" stroke-linejoin="round"/>
+    <rect x="64" y="143" width="72" height="14" rx="4" fill="url(#trophyGold)" stroke="#e0a700" stroke-width="3"/>
+    <path d="M100 56 L106 70 L121 71 L109 81 L113 96 L100 88 L87 96 L91 81 L79 71 L94 70 Z" fill="#fff7df" stroke="#e0a700" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+  -->
+
+  <!-- MAZE + ORB (daily_game): spiral placed via translate(34 50) scale(0.6); orb at (58, 79.2).
+  <g transform="translate(34 50) scale(0.6)">
+    <path d="M10 10 H90 V90 H10 V25 H75 V75 H25 V40 H60 V60 H40 V52" fill="none" stroke="#5b82ad" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="58" cy="79.2" r="14" fill="url(#glow)"/>
+  <circle cx="58" cy="79.2" r="7" fill="url(#orb)" stroke="#c98a00" stroke-width="1.3"/>
+  -->
+</svg>

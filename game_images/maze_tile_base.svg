@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!--
+    BASE MAZE TILE — starting point for game-image avatars that use the maze piece.
+    Render to a 128x128 transparent PNG (e.g. via a headless-browser screenshot of the <svg>).
+
+    Shared vocabulary (matches the home-page icons):
+      • Frame stroke / calendar outline : #2f4a68
+      • Maze walls (blue-grey)          : #5b82ad   (swap for url(#wall) gradient in element variants)
+      • Goal orb + glow (gold)          : #fffdf4 / #ffe9a8 / #f7c948 / #e0a700, stroke #c98a00
+
+    To extend, uncomment a block below:
+      • Difficulty rating  -> the STAR ROW (recolour each star per level)
+      • Lava / water theme -> the GLOW POOL (+ your own rocks / waves), and give the
+                              maze <path> a stroke="url(#wall)" gradient instead of the solid colour.
+  -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6f9fd"/>
+      <stop offset="1" stop-color="#e4ecf5"/>
+    </linearGradient>
+    <radialGradient id="orb" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#fffdf4"/>
+      <stop offset="0.35" stop-color="#ffe9a8"/>
+      <stop offset="0.7" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#e0a700"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff0c0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffd678" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Element-theme wall gradient (used instead of the solid blue-grey). Example = lava.
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd24d"/>
+      <stop offset="0.5" stop-color="#ff7a1a"/>
+      <stop offset="1" stop-color="#c22f0a"/>
+    </linearGradient>
+    -->
+  </defs>
+
+  <!-- Framed tile -->
+  <rect x="6" y="6" width="116" height="116" rx="24" fill="url(#tile)" stroke="#2f4a68" stroke-width="4"/>
+
+  <!-- Elemental glow pool (uncomment for lava/water variants; add rocks or waves over it).
+  <ellipse cx="64" cy="103" rx="42" ry="13" fill="#6fc4f5" fill-opacity="0.4"/>
+  -->
+
+  <!-- Maze piece: inward square spiral, placed via translate(30 22) scale(0.68).
+       Path coords are 0..100; the inner terminus (40,52) is where the goal orb sits. -->
+  <g transform="translate(30 22) scale(0.68)">
+    <path d="M10 10 H90 V90 H10 V25 H75 V75 H25 V40 H60 V60 H40 V52"
+          fill="none" stroke="#5b82ad" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Glowing gold goal orb at the maze centre -->
+  <circle cx="57" cy="57.4" r="16" fill="url(#glow)"/>
+  <circle cx="57" cy="57.4" r="8" fill="url(#orb)" stroke="#c98a00" stroke-width="1.3"/>
+
+  <!-- Difficulty STAR ROW (uncomment; recolour fill/stroke per star).
+       Positions: first star at x=38, then +26 each (38, 64, 90) on the y=106 baseline.
+       Colours used elsewhere: gold #f7c948/#e0a700, empty #d3dde9/#b7c4d4,
+       green #6ecb6e/#3aa65a, amber #f6b13f/#d78c1c, red #ff7a6b/#d63d2c.
+  <g stroke-linejoin="round" stroke-width="4">
+    <g transform="translate(38 106) scale(0.5) translate(-100 -76)"><path d="M100 56 L106 70 L121 71 L109 81 L113 96 L100 88 L87 96 L91 81 L79 71 L94 70 Z" fill="#6ecb6e" stroke="#3aa65a"/></g>
+    <g transform="translate(64 106) scale(0.5) translate(-100 -76)"><path d="M100 56 L106 70 L121 71 L109 81 L113 96 L100 88 L87 96 L91 81 L79 71 L94 70 Z" fill="#d3dde9" stroke="#b7c4d4"/></g>
+    <g transform="translate(90 106) scale(0.5) translate(-100 -76)"><path d="M100 56 L106 70 L121 71 L109 81 L113 96 L100 88 L87 96 L91 81 L79 71 L94 70 Z" fill="#d3dde9" stroke="#b7c4d4"/></g>
+  </g>
+  -->
+</svg>
