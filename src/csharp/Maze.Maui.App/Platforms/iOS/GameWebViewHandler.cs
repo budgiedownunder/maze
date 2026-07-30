@@ -25,7 +25,7 @@ namespace Maze.Maui.App
         /// <summary>
         /// JS-facing bridge exposed as
         /// <c>window.webkit.messageHandlers.MazeMauiHost</c>. Forwards the raw
-        /// JSON payload to <see cref="RaiseGameResult"/>.
+        /// JSON payload to <see cref="RaiseHostMessage"/>.
         /// </summary>
         private sealed class MazeMauiHostBridge : NSObject, IWKScriptMessageHandler
         {
@@ -33,7 +33,7 @@ namespace Maze.Maui.App
                 WKUserContentController userContentController, WKScriptMessage message)
             {
                 if (message.Body is NSString json)
-                    RaiseGameResult(json.ToString());
+                    RaiseHostMessage(json.ToString());
             }
         }
     }

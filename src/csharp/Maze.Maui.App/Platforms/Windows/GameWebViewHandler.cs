@@ -64,7 +64,7 @@ namespace Maze.Maui.App
             {
                 var json = e.TryGetWebMessageAsString();
                 if (!string.IsNullOrEmpty(json))
-                    RaiseGameResult(json);
+                    RaiseHostMessage(json);
             }
             catch (Exception)
             {
