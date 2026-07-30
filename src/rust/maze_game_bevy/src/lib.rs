@@ -10,8 +10,9 @@ mod transition;
 mod world;
 
 pub use state::{
-    DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult, HealthStyle,
-    KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle, WallType,
+    install_panic_hook, DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult,
+    HealthStyle, KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle,
+    WallType,
 };
 pub use world::gallery::validate_demo_env;
 pub use world::{

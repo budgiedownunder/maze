@@ -1106,25 +1106,35 @@ pub struct GameResult {
     pub extras: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
+/// Dispatches `name` on the browser `window` with `detail` attached. Every
+/// game→host event shares this tail, so each caller only has to build its own
+/// detail value. A missing `window` (not a browser context) is a silent no-op.
+#[cfg(target_arch = "wasm32")]
+fn dispatch_host_event(name: &str, detail: &wasm_bindgen::JsValue) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let init = web_sys::CustomEventInit::new();
+    init.set_detail(detail);
+    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict(name, &init) {
+        let _ = window.dispatch_event(&event);
+    }
+}
+
 /// Dispatches a `maze-game-result` CustomEvent on the browser `window` so the
 /// hosting page (React `/game/` wrapper, or the MAUI WebView) can react to the
 /// outcome. Wrapped behind `#[cfg(target_arch = "wasm32")]` so native builds
 /// (cargo run -p maze_game_bevy) compile without any browser dependencies.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn dispatch_game_result(result: &GameResult) {
-    use wasm_bindgen::JsValue;
     let Ok(json) = serde_json::to_string(result) else {
         return;
     };
-    let Some(window) = web_sys::window() else {
+    let Ok(detail) = js_sys::JSON::parse(&json) else {
+        // Parse failed. Nothing useful can be sent, so send nothing.
         return;
     };
-    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
-    let init = web_sys::CustomEventInit::new();
-    init.set_detail(&detail);
-    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-result", &init) {
-        let _ = window.dispatch_event(&event);
-    }
+    dispatch_host_event("maze-game-result", &detail);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1135,24 +1145,114 @@ pub(crate) fn dispatch_game_result(_result: &GameResult) {
 
 /// Dispatches a `maze-game-paused` CustomEvent on the browser `window` so the
 /// container page/application can swap its pause/play state in sync with the Bevy
-/// game state. Detail is `{ "paused": bool }`.
+/// game state. Detail is `{ "paused": bool }`, built directly rather than
+/// formatted into JSON text and parsed back.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn dispatch_pause_state(paused: bool) {
     use wasm_bindgen::JsValue;
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let json = format!("{{\"paused\":{}}}", paused);
-    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
-    let init = web_sys::CustomEventInit::new();
-    init.set_detail(&detail);
-    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-paused", &init) {
-        let _ = window.dispatch_event(&event);
-    }
+    let detail = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &JsValue::from_str("paused"),
+        &JsValue::from_bool(paused),
+    );
+    dispatch_host_event("maze-game-paused", &detail);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn dispatch_pause_state(_paused: bool) {}
+
+/// Renders a panic's source location as `file:line:column`. `None` — the runtime
+/// recorded no location — reads as `"unknown"`, so the host always receives a
+/// non-empty field rather than having to handle a missing one.
+pub(crate) fn format_panic_location(location: Option<(&str, u32, u32)>) -> String {
+    match location {
+        Some((file, line, column)) => format!("{file}:{line}:{column}"),
+        None => "unknown".to_string(),
+    }
+}
+
+/// Extracts a panic payload's message. `panic!` payloads are `&str` or `String`;
+/// a payload of any other type carries no readable text, so it reports its shape
+/// instead of an empty string.
+pub(crate) fn format_panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_string()
+    }
+}
+
+/// Dispatches a `maze-game-panic` CustomEvent on the browser `window` so the
+/// hosting page can report why the game died. Detail is
+/// `{ "message": string, "location": string }`. Without it a Rust panic reaches
+/// the browser as a bare `RuntimeError: unreachable` carrying no reason at all.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn dispatch_panic(message: &str, location: &str) {
+    use wasm_bindgen::JsValue;
+    // Built directly as a JS object. This runs on the panic path — which may
+    // itself be an allocation failure — so it does the least work it can.
+    let detail = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &JsValue::from_str("message"),
+        &JsValue::from_str(message),
+    );
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &JsValue::from_str("location"),
+        &JsValue::from_str(location),
+    );
+    dispatch_host_event("maze-game-panic", &detail);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn dispatch_panic(_message: &str, _location: &str) {}
+
+/// Installs the panic hook that forwards a Rust panic to the hosting page as a
+/// `maze-game-panic` event before delegating to whichever hook was already in
+/// place. Call it before building the app, so a panic raised during maze
+/// generation or world spawn is still reported.
+///
+/// Only the **first** panic is forwarded: on wasm the `requestAnimationFrame`
+/// loop can keep driving an already-poisoned app and panic again every frame, and
+/// a flood of follow-on events would bury the original cause.
+///
+/// Installing more than once is safe — the hook goes in place on the first call
+/// and later calls do nothing, so entry points can each call it unconditionally.
+///
+/// # Examples
+///
+/// ```
+/// use maze_game_bevy::install_panic_hook;
+///
+/// install_panic_hook();
+/// // Idempotent — a second call leaves the single installed hook alone.
+/// install_panic_hook();
+/// ```
+pub fn install_panic_hook() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Once;
+
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            static REPORTED: AtomicBool = AtomicBool::new(false);
+            if !REPORTED.swap(true, Ordering::Relaxed) {
+                let message = format_panic_message(info.payload());
+                let location = format_panic_location(
+                    info.location()
+                        .map(|loc| (loc.file(), loc.line(), loc.column())),
+                );
+                dispatch_panic(&message, &location);
+            }
+            previous(info);
+        }));
+    });
+}
 
 #[cfg(test)]
 mod tests {
@@ -1383,5 +1483,43 @@ mod tests {
         let a = anim(5.0, 1.0);
         assert_eq!(a.current_pos(), Vec3::splat(4.0));
         assert_eq!(a.current_yaw(), 8.0);
+    }
+
+    #[test]
+    fn panic_location_renders_file_line_and_column() {
+        assert_eq!(
+            format_panic_location(Some(("src/world/mod.rs", 1243, 5))),
+            "src/world/mod.rs:1243:5",
+        );
+    }
+
+    #[test]
+    fn panic_location_without_a_recorded_site_is_reported_as_unknown() {
+        // The host always gets a non-empty location rather than a missing field.
+        assert_eq!(format_panic_location(None), "unknown");
+    }
+
+    #[test]
+    fn panic_message_reads_both_str_and_string_payloads() {
+        // `panic!("literal")` carries a &str; a formatted `panic!("{x}")` carries
+        // a String. Both are the readable cases and must come through verbatim.
+        let borrowed: Box<dyn std::any::Any + Send> = Box::new("maze JSON did not parse");
+        assert_eq!(
+            format_panic_message(borrowed.as_ref()),
+            "maze JSON did not parse"
+        );
+        let owned: Box<dyn std::any::Any + Send> = Box::new("level 3 of 20 failed".to_string());
+        assert_eq!(format_panic_message(owned.as_ref()), "level 3 of 20 failed");
+    }
+
+    #[test]
+    fn panic_message_falls_back_for_a_payload_carrying_no_text() {
+        // `panic_any` can carry an arbitrary type — report its shape rather than
+        // handing the host an empty reason.
+        let payload: Box<dyn std::any::Any + Send> = Box::new(42u32);
+        assert_eq!(
+            format_panic_message(payload.as_ref()),
+            "non-string panic payload"
+        );
     }
 }

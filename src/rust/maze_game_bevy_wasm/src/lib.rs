@@ -22,6 +22,7 @@ fn make_app() -> App {
 
 #[wasm_bindgen]
 pub fn start() {
+    maze_game_bevy::install_panic_hook();
     let mut app = make_app();
     maze_game_bevy::build_app(&mut app, None);
     app.run();
@@ -317,6 +318,9 @@ fn default_title() -> String {
 /// that was never inserted, and panic.
 #[wasm_bindgen]
 pub fn start_with_config(json: &str) -> Result<(), JsValue> {
+    // Before anything that can panic — generation and world spawn both run under
+    // this call, and a panic there is otherwise a bare `RuntimeError: unreachable`.
+    maze_game_bevy::install_panic_hook();
     let cfg: StartConfig = serde_json::from_str(json)
         .map_err(|err| JsValue::from_str(&format!("Invalid start_with_config payload: {err}")))?;
 

@@ -6,6 +6,8 @@ The `maze_game_bevy_wasm` crate is a thin `cdylib` wrapper around [`maze_game_be
 
 The `start_with_config` entry point accepts the JSON the host page (`public/game/index.html`) builds from the launch subject (a stored maze's saved 3D settings, or a game definition's stored `config`). Its nested `levels` object — `count`, `finishType`, `difficultyChange`, `resetBag`, `alignment` — drives a multi-level run: when `count > 1` the wrapper generates the whole stack up front (via `maze_game_bevy::generate_level_maze_jsons`) and hands it to the game as a `PendingLevels` resource. A `count` of 1 (the default, and the saved-maze `mazeJson` path) is an ordinary single-level game.
 
+Both entry points install a panic hook first, so a Rust panic — during generation, world spawn, or gameplay — reaches the host page as a `maze-game-panic` `CustomEvent` carrying `{ message, location }` instead of a bare `RuntimeError: unreachable`. Only the first panic is reported.
+
 ## Getting Started
 
 ### Setup

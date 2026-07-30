@@ -278,7 +278,9 @@ camera is lifted + centred onto the live level the same way. Only the top level
 keeps the finish orb. It finishes with
 the HUD (clock, score, status bar, minimap, HP, bag) + paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, `generate_level_maze_jsons` (multi-level:
-N chained level grids, bottom first), `MAX_LEVEL_COUNT`, and the public types
+N chained level grids, bottom first), `MAX_LEVEL_COUNT`, `install_panic_hook`
+(forwards a Rust panic to the browser host as a `maze-game-panic` event), and the
+public types
 `GameConfig`, `Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
 `TreasureStyle`, `LevelDifficultyChange`, `GameOutcome`, `GameResult`.
 Everything else is `pub(crate)` or fully private.
