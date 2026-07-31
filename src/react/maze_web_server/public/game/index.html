@@ -187,6 +187,28 @@
       }
     }
 
+    /* Fatal-error banner. The loading panel is removed once the game
+       starts, so a crash mid-play has nothing to write into — this is
+       the standalone overlay used from that point on. Centred over the
+       canvas and above every other overlay, since the run is over. */
+    #fatal-error {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      max-width: min(90vw, 420px);
+      padding: 16px 20px;
+      font-family: sans-serif;
+      font-size: 1rem;
+      line-height: 1.4;
+      text-align: center;
+      color: #ff7070;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #ff7070;
+      border-radius: 12px;
+    }
+
     /* In-game pause menu — a host-side HTML overlay shown when Bevy
        reports paused=true via the maze-game-paused CustomEvent. Lives
        outside the canvas so taps don't fall through to the Bevy
@@ -298,22 +320,132 @@
     })();
   </script>
   <script>
-    window.addEventListener('maze-game-result', function (e) {
-      // Forward the result to the MAUI platform bridge so the native host can
-      // capture it. Each platform exposes a different channel; a plain browser
-      // tab (React) has none — the CustomEvent itself remains observable.
+    /* Host bridge + failure capture. Deliberately a plain script placed
+       before the module below: the module uses top-level await and may
+       never run at all if the WASM fetch or instantiation fails, and
+       these handlers have to be listening before that can happen. */
+
+    // Forwards one payload to the native host. Each platform exposes a
+    // different channel; a plain browser tab (React) has none, so this is
+    // a no-op there and the page's own UI carries the information.
+    //
+    // The Android channel is still named `onGameResult` — it is the
+    // channel, not the message type, and renaming it means changing the
+    // JavascriptInterface export on the C# side too.
+    function postToHost(payload) {
       try {
-        var payload = JSON.stringify(e.detail);
+        var json = JSON.stringify(payload);
         if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
-          window.chrome.webview.postMessage(payload);                       // Windows WebView2
+          window.chrome.webview.postMessage(json);                       // Windows WebView2
         } else if (window.MazeMauiHost && window.MazeMauiHost.onGameResult) {
-          window.MazeMauiHost.onGameResult(payload);                        // Android JavascriptInterface
+          window.MazeMauiHost.onGameResult(json);                        // Android JavascriptInterface
         } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.MazeMauiHost) {
-          window.webkit.messageHandlers.MazeMauiHost.postMessage(payload);  // iOS / MacCatalyst WKWebView
+          window.webkit.messageHandlers.MazeMauiHost.postMessage(json);  // iOS / MacCatalyst WKWebView
         }
       } catch (err) {
-        console.error('[game-result] bridge forward failed', err);
+        console.error('[host-bridge] forward failed', err);
       }
+    }
+
+    // Shows a fatal message to the player. Writes into the loading panel
+    // while it still exists (a failure to start), and otherwise builds a
+    // standalone overlay — the loading panel is removed once the game
+    // starts, so a crash mid-play would otherwise leave a frozen canvas
+    // and no explanation.
+    function showFatalError(message) {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        var spinner = loading.querySelector('.spinner');
+        if (spinner) spinner.remove();
+        var p = loading.querySelector('p') || loading.appendChild(document.createElement('p'));
+        p.textContent = message;
+        p.style.color = '#ff7070';
+        return;
+      }
+      if (document.getElementById('fatal-error')) return;
+      var el = document.createElement('div');
+      el.id = 'fatal-error';
+      el.setAttribute('role', 'alert');
+      el.textContent = message;
+      document.body.appendChild(el);
+    }
+
+    (function () {
+      // Substrings that mark a failure as an exhausted-memory one rather
+      // than an ordinary bug. Matched case-insensitively against the whole
+      // error text. `RangeError` earns its place here because that is what
+      // a failed WebAssembly.Memory growth surfaces as in practice.
+      var OUT_OF_MEMORY_SIGNATURES = [
+        'out of memory',
+        'oom',
+        'memory.grow',
+        'allocation failed',
+        'allocation size overflow',
+        'rangeerror',
+        'array buffer allocation failed',
+      ];
+
+      var OUT_OF_MEMORY_REASON =
+        'The game ran out of memory. Try a game with fewer levels or a smaller maze.';
+      var GENERIC_REASON = 'The game stopped unexpectedly.';
+
+      // Whether this run has already reported. A Rust panic leaves Bevy's
+      // requestAnimationFrame loop running over a poisoned app, which can
+      // throw again every frame; without this the bridge is flooded and the
+      // first — real — cause is buried.
+      var reported = false;
+
+      function classifyFailure(text) {
+        var haystack = String(text || '').toLowerCase();
+        for (var i = 0; i < OUT_OF_MEMORY_SIGNATURES.length; i++) {
+          if (haystack.indexOf(OUT_OF_MEMORY_SIGNATURES[i]) !== -1) {
+            return OUT_OF_MEMORY_REASON;
+          }
+        }
+        return GENERIC_REASON;
+      }
+
+      function reportFailure(detail) {
+        if (reported) return;
+        reported = true;
+        // Read the phase before touching the DOM: the loading panel is
+        // present only until the game starts, so its presence is what
+        // distinguishes a failure to start from a crash during play.
+        var phase = document.getElementById('loading') ? 'load' : 'play';
+        var reason = classifyFailure(detail);
+        showFatalError(reason);
+        postToHost({ kind: 'failure', reason: reason, detail: String(detail || ''), phase: phase });
+      }
+
+      // A Rust panic, forwarded by the WASM module's panic hook. Carries a
+      // real message and source location, so it is the most useful of the
+      // three sources — the other two see only what the browser reports.
+      window.addEventListener('maze-game-panic', function (e) {
+        var d = (e && e.detail) || {};
+        reportFailure(d.message ? d.message + ' (' + d.location + ')' : 'panic');
+      });
+
+      // Uncaught errors, including anything thrown out of Bevy's animation
+      // frame callback once the game is running.
+      window.addEventListener('error', function (e) {
+        reportFailure((e && (e.message || (e.error && e.error.message))) || 'error');
+      });
+
+      // The module script's top-level await chain rejects here — a failed
+      // WASM fetch, a failed instantiation, or a failed maze/definition load.
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e && e.reason;
+        reportFailure((r && (r.message || r)) || 'unhandled rejection');
+      });
+    })();
+  </script>
+  <script>
+    window.addEventListener('maze-game-result', function (e) {
+      // Forward the result to the MAUI platform bridge so the native host can
+      // capture it. Tagged `kind: "result"` so the host can tell it from the
+      // failure payloads that share this channel; a host predating the envelope
+      // ignores the extra field and still reads it as a result.
+      postToHost(Object.assign({ kind: 'result' }, e.detail));
 
       // Record the run on the server when the player won. Fire-and-forget so a
       // failed submit never blocks the Play Again affordance below.
@@ -505,22 +637,20 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=136';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=137';
 
     let secs = 0;
     const timer = setInterval(() => {
       document.getElementById('elapsed').textContent = `${++secs}s`;
     }, 1000);
 
+    // Load-time errors the page detects itself (a missing subject, a failed
+    // fetch) — as opposed to the crashes the failure handlers catch. Both
+    // render through the same overlay so a stopped game looks the same however
+    // it stopped.
     function showLoadingError(message) {
       clearInterval(timer);
-      const loading = document.getElementById('loading');
-      if (!loading) return;
-      const spinner = loading.querySelector('.spinner');
-      if (spinner) spinner.remove();
-      const p = loading.querySelector('p') ?? loading.appendChild(document.createElement('p'));
-      p.textContent = message;
-      p.style.color = '#ff7070';
+      showFatalError(message);
     }
 
     // Top row of a subject's leaderboard for one metric. `score` sorts

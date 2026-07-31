@@ -592,3 +592,156 @@ test.describe('Game host stored game-definition score submission (?def=)', () =>
     expect(posted).toHaveLength(0)
   })
 })
+
+test.describe('Game host failure reporting', () => {
+  // Drives the failure-capture <script> in index.html — the handlers that turn a
+  // Rust panic, an uncaught error, or a rejected module load into a message on
+  // the host bridge plus an on-screen reason.
+  //
+  // Most tests abort the module's own .js so the module script never executes:
+  // its top-level await would otherwise reject, and that rejection is itself a
+  // failure which would consume the one-shot report before the test could
+  // trigger its own. The one test that wants the real rejection path lets the
+  // .js load and aborts only the .wasm.
+
+  type BridgeWindow = Window & {
+    __hostMessages?: string[]
+    chrome?: { webview?: { postMessage: (json: string) => void } }
+  }
+
+  type FailurePayload = {
+    kind: string
+    reason: string
+    detail: string
+    phase: string
+  }
+
+  // Stands in for the native host: the page posts to whichever platform channel
+  // it finds, and WebView2's is the easiest to fake in Chromium.
+  async function installHostBridge(page: Page) {
+    await page.addInitScript(() => {
+      const w = window as BridgeWindow
+      w.__hostMessages = []
+      w.chrome = { ...(w.chrome ?? {}), webview: { postMessage: (json: string) => { w.__hostMessages?.push(json) } } }
+    })
+  }
+
+  async function hostMessages(page: Page): Promise<string[]> {
+    return page.evaluate(() => (window as BridgeWindow).__hostMessages ?? [])
+  }
+
+  async function loadWithModuleStubbed(page: Page, url = '/game/index.html?t=fake&id=test-id') {
+    await installHostBridge(page)
+    await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
+    await page.goto(url)
+    await expect(page.locator('#pause-menu')).toBeAttached()
+  }
+
+  async function firePanic(page: Page, message: string, location: string) {
+    await page.evaluate(
+      (d) => { window.dispatchEvent(new CustomEvent('maze-game-panic', { detail: d })) },
+      { message, location }
+    )
+  }
+
+  async function fireError(page: Page, message: string) {
+    await page.evaluate((m) => { window.dispatchEvent(new ErrorEvent('error', { message: m })) }, message)
+  }
+
+  test('reports a failed WASM load as a load-phase failure', async ({ page }) => {
+    // The real rejection path: the module runs and its top-level await on the
+    // WASM fetch rejects.
+    await installHostBridge(page)
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
+    await page.goto('/game/index.html?t=fake&id=test-id')
+
+    await expect.poll(async () => (await hostMessages(page)).length).toBe(1)
+    const failure = JSON.parse((await hostMessages(page))[0]) as FailurePayload
+    expect(failure.kind).toBe('failure')
+    expect(failure.phase).toBe('load')
+  })
+
+  test('reports a Rust panic with its message and location', async ({ page }) => {
+    await loadWithModuleStubbed(page)
+    await firePanic(page, 'maze JSON did not parse', 'src/world/mod.rs:1243:5')
+
+    await expect.poll(async () => (await hostMessages(page)).length).toBe(1)
+    const failure = JSON.parse((await hostMessages(page))[0]) as FailurePayload
+    expect(failure.kind).toBe('failure')
+    expect(failure.detail).toContain('maze JSON did not parse')
+    expect(failure.detail).toContain('src/world/mod.rs:1243:5')
+    expect(failure.reason).toBe('The game stopped unexpectedly.')
+  })
+
+  test('classifies an out-of-memory error distinctly from an ordinary one', async ({ page }) => {
+    await loadWithModuleStubbed(page)
+    await fireError(page, 'RuntimeError: Out of memory')
+
+    await expect.poll(async () => (await hostMessages(page)).length).toBe(1)
+    const failure = JSON.parse((await hostMessages(page))[0]) as FailurePayload
+    expect(failure.reason).toContain('ran out of memory')
+    // The player is told what to do about it, not just that it happened.
+    expect(failure.reason).toContain('fewer levels')
+  })
+
+  test('classifies a failed memory growth as out of memory', async ({ page }) => {
+    // What a WebAssembly.Memory growth failure actually surfaces as.
+    await loadWithModuleStubbed(page)
+    await fireError(page, 'RangeError: WebAssembly.Memory.grow(): Unable to grow instance memory')
+
+    await expect.poll(async () => (await hostMessages(page)).length).toBe(1)
+    const failure = JSON.parse((await hostMessages(page))[0]) as FailurePayload
+    expect(failure.reason).toContain('ran out of memory')
+  })
+
+  test('reports only the first failure', async ({ page }) => {
+    // A panic leaves Bevy's animation-frame loop running over a poisoned app,
+    // which can throw again every frame — the first cause must not be buried.
+    await loadWithModuleStubbed(page)
+    await firePanic(page, 'first cause', 'src/lib.rs:1:1')
+    await fireError(page, 'follow-on error')
+    await fireError(page, 'another follow-on error')
+    await page.waitForTimeout(200)
+
+    const messages = await hostMessages(page)
+    expect(messages).toHaveLength(1)
+    expect((JSON.parse(messages[0]) as FailurePayload).detail).toContain('first cause')
+  })
+
+  test('shows the reason in the loading panel when the game never started', async ({ page }) => {
+    await loadWithModuleStubbed(page)
+    await fireError(page, 'RuntimeError: Out of memory')
+
+    await expect(page.locator('#loading p')).toContainText('ran out of memory')
+    // No standalone overlay is needed while the loading panel is still there.
+    await expect(page.locator('#fatal-error')).toHaveCount(0)
+  })
+
+  test('shows a standalone overlay and reports the play phase after the game started', async ({ page }) => {
+    await loadWithModuleStubbed(page)
+    // Starting the game removes the loading panel, so a crash from then on has
+    // nothing to write into — the case the standalone overlay exists for.
+    await page.evaluate(() => { document.getElementById('loading')?.remove() })
+    await fireError(page, 'RuntimeError: Out of memory')
+
+    await expect(page.locator('#fatal-error')).toBeVisible()
+    await expect(page.locator('#fatal-error')).toContainText('ran out of memory')
+    const failure = JSON.parse((await hostMessages(page))[0]) as FailurePayload
+    expect(failure.phase).toBe('play')
+  })
+
+  test('tags a forwarded result with its envelope kind', async ({ page }) => {
+    await loadWithModuleStubbed(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', {
+        detail: { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 },
+      }))
+    })
+
+    await expect.poll(async () => (await hostMessages(page)).length).toBe(1)
+    const result = JSON.parse((await hostMessages(page))[0]) as { kind: string; outcome: string; score: number }
+    expect(result.kind).toBe('result')
+    expect(result.outcome).toBe('win')
+    expect(result.score).toBe(7)
+  })
+})
