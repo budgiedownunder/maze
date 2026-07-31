@@ -111,6 +111,8 @@
              Link="LinkedSource\Services\IGameLibraryService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\Play3dGameHostUrl.cs"
              Link="LinkedSource\Services\Play3dGameHostUrl.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\Play3dFailureReport.cs"
+             Link="LinkedSource\Services\Play3dFailureReport.cs" />
     <Compile Include="..\Maze.Maui.App\Services\Play3dCollectionLaunch.cs"
              Link="LinkedSource\Services\Play3dCollectionLaunch.cs" />
     <Compile Include="..\Maze.Maui.App\Services\DailyChallenge.cs"
