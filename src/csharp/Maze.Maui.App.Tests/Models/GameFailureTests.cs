@@ -55,5 +55,18 @@ namespace Maze.Maui.App.Tests.Models
             // rather than throwing out of an event handler.
             Assert.Null(GameFailure.FromJson("{not json"));
         }
+
+        [Fact]
+        public void Unreadable_KeepsTheRawPayloadAsDetail()
+        {
+            // The bridge falls back to this when a failure payload won't parse:
+            // a crash that can't be read is still a crash and must not vanish,
+            // so the player gets the generic reason and the log gets the raw text.
+            var failure = GameFailure.Unreadable("{not json");
+
+            Assert.Equal(GameFailure.GenericReason, failure.Reason);
+            Assert.Equal("{not json", failure.Detail);
+            Assert.Equal("unknown", failure.Phase);
+        }
     }
 }

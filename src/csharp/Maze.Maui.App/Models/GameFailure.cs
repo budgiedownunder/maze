@@ -39,6 +39,27 @@ namespace Maze.Maui.App.Models
         [JsonPropertyName("phase")]
         public string? Phase { get; set; }
 
+        /// <summary>
+        /// Generic player-facing reason, used when nothing more specific is
+        /// known. Mirrors the wording the hosted page shows for an unclassified
+        /// failure, so the two sources read the same to a player.
+        /// </summary>
+        public const string GenericReason = "The game stopped unexpectedly.";
+
+        /// <summary>
+        /// A failure whose payload could not be parsed. The raw text is kept as
+        /// the detail so the log still carries whatever arrived — a crash that
+        /// cannot be read is still a crash, and must not be dropped.
+        /// </summary>
+        /// <param name="json">The unparseable payload</param>
+        /// <returns>A failure carrying the generic reason and the raw payload</returns>
+        public static GameFailure Unreadable(string json) => new()
+        {
+            Reason = GenericReason,
+            Detail = json,
+            Phase = "unknown",
+        };
+
         private static readonly JsonSerializerOptions s_jsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,

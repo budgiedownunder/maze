@@ -17,14 +17,16 @@ namespace Maze.Maui.App
         internal static event Action<string>? GameResultReceived;
 
         /// <summary>
-        /// Raised when the hosted <c>/game/</c> page reports that a run died
-        /// rather than finished — a Rust panic, an uncaught script error, or a
-        /// renderer that ran out of memory. The argument is the raw JSON string;
-        /// parse it with <see cref="Models.GameFailure.FromJson"/>. Fires on the
-        /// same threads as <see cref="GameResultReceived"/>, so the subscriber is
-        /// likewise responsible for marshalling.
+        /// Raised when a run dies rather than finishes. Two sources feed it: the
+        /// hosted <c>/game/</c> page reporting a Rust panic or script error over
+        /// the bridge, and the platform handlers reporting that the WebView's own
+        /// renderer process died. Carries a parsed <see cref="Models.GameFailure"/>
+        /// rather than raw JSON precisely because of that second source — a
+        /// renderer death originates natively, with no JSON to hand.
+        /// Fires on the same threads as <see cref="GameResultReceived"/>, so the
+        /// subscriber is likewise responsible for marshalling.
         /// </summary>
-        internal static event Action<string>? GameFailureReceived;
+        internal static event Action<Models.GameFailure>? GameFailureReceived;
 
         /// <summary>
         /// Invoked by the per-platform handler code when a bridge message
@@ -37,10 +39,22 @@ namespace Maze.Maui.App
         {
             if (Models.HostMessage.KindOf(json) == Models.HostMessageKind.Failure)
             {
-                GameFailureReceived?.Invoke(json);
+                // An unreadable failure payload still has to surface: dropping it
+                // would turn a reported crash back into a silent one.
+                GameFailureReceived?.Invoke(
+                    Models.GameFailure.FromJson(json) ?? Models.GameFailure.Unreadable(json));
                 return;
             }
             GameResultReceived?.Invoke(json);
         }
+
+        /// <summary>
+        /// Invoked by the per-platform handler code when the WebView itself
+        /// fails — its renderer process was killed, so the page is gone and
+        /// cannot report anything over the bridge.
+        /// </summary>
+        /// <param name="failure">The synthesised failure describing what died</param>
+        internal static void RaiseHostFailure(Models.GameFailure failure) =>
+            GameFailureReceived?.Invoke(failure);
     }
 }
