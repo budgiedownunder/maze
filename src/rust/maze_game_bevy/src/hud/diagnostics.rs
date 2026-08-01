@@ -137,17 +137,30 @@ fn linear_memory_bytes() -> Option<usize> {
     None
 }
 
-/// Spawns the readout, but only when the host asked for it. Without the flag
-/// nothing is spawned and no system below does any work, so an ordinary run
-/// renders exactly as it did before this existed.
-pub(crate) fn spawn_diagnostics(
-    commands: &mut Commands,
-    window: &Query<&Window>,
-    config: &GameConfig,
+/// Spawns the readout on entering the title screen, so the countdown shows the
+/// **pre-spawn** figures: the world is not built until `AppState::Playing`, and
+/// the difference between the title reading and the first frame of play is
+/// exactly what the world costs — which separates fixed module overhead from
+/// scene cost. The readout is not tagged `TitleEntity`, so `teardown_title`
+/// leaves it alone and the same entities carry through into play; there is one
+/// spawn site, not one per state.
+///
+/// Also the point where `MAZE_DEBUG_MEM` is folded in, because it has to be
+/// applied before anything reads the flag. `spawn_world` re-inserts `GameConfig`
+/// later, but by then it is reading the value settled here.
+///
+/// Without the flag nothing is spawned and no system below does any work, so an
+/// ordinary run renders exactly as it did before this existed.
+pub(crate) fn setup_diagnostics(
+    mut commands: Commands,
+    mut config: ResMut<GameConfig>,
+    window: Query<&Window>,
 ) {
+    config.debug_memory |= debug_memory_env();
     if !config.debug_memory {
         return;
     }
+    let config = &*config;
     commands.insert_resource(DiagnosticsState::default());
 
     let cell_px = config.minimap_cell_px as f32;

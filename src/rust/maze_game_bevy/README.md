@@ -155,6 +155,12 @@ Rows are left-aligned to the minimap's left edge, one metric each, so nothing
 runs off the screen edge. The readout recomputes four times a second rather than
 every frame, so it does not meaningfully change the figures it reports.
 
+The readout appears from the **title-screen countdown**, before the world is
+built, and carries through into play. The title reading is therefore the
+pre-world baseline — the difference between it and the first frame of play is
+what the world itself costs, which separates fixed module overhead from scene
+cost.
+
 Off unless asked for: the browser host sets it from `/game/?mem=1` and the MAUI
 app appends that parameter in Debug builds. Nothing is spawned otherwise.
 

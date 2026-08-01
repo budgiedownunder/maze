@@ -81,10 +81,15 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_update_system.run_if(in_state(AppState::Playing)))
-        // Both bail immediately unless the readout was spawned, so a normal run
-        // pays a single resource lookup per frame.
-        .add_systems(Update, diagnostics::diagnostics_update_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, diagnostics::diagnostics_resize_system.run_if(in_state(AppState::Playing)))
+        // Spawned at the title screen so the countdown shows the pre-world
+        // figures; the readout then carries through into play (it is not a
+        // TitleEntity, so teardown_title leaves it). The two systems are
+        // deliberately unconditional on state for the same reason — and both
+        // bail immediately unless the readout was spawned, so a normal run pays
+        // a single resource lookup per frame.
+        .add_systems(OnEnter(AppState::TitleScreen), diagnostics::setup_diagnostics)
+        .add_systems(Update, diagnostics::diagnostics_update_system)
+        .add_systems(Update, diagnostics::diagnostics_resize_system)
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::portal::portal_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
@@ -2449,5 +2454,50 @@ mod tests {
         let mut app = make_playing_app_with(json);
         let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
         assert_eq!(rims, 8, "a water↔lava border is walled on both sides");
+    }
+
+    /// Counts the diagnostics readout's entities (background strip + text).
+    fn diagnostics_entities(app: &mut App) -> usize {
+        use crate::hud::diagnostics::DiagnosticsReadout;
+        app.world_mut()
+            .query::<&DiagnosticsReadout>()
+            .iter(app.world())
+            .count()
+    }
+
+    #[test]
+    fn the_diagnostics_readout_is_absent_unless_asked_for() {
+        // The default config leaves debug_memory off, so an ordinary run spawns
+        // nothing — neither at the title screen nor in play.
+        let mut app = make_title_app();
+        assert_eq!(diagnostics_entities(&mut app), 0);
+        let mut app = make_playing_app();
+        assert_eq!(diagnostics_entities(&mut app), 0);
+    }
+
+    #[test]
+    fn the_diagnostics_readout_appears_at_the_title_screen_and_survives_into_play() {
+        // It is spawned on entering the title screen so the countdown shows the
+        // pre-world figures, and it must carry through the transition rather than
+        // being torn down with the title — teardown_title despawns only
+        // TitleEntity, which the readout deliberately is not.
+        let config = GameConfig { debug_memory: true, ..GameConfig::default() };
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
+        build_app(&mut app, None);
+        app.update(); // OnEnter(TitleScreen)
+        let at_title = diagnostics_entities(&mut app);
+        assert!(at_title > 0, "readout must show during the countdown");
+
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update(); // OnExit(TitleScreen) + OnEnter(Playing)
+        assert_eq!(
+            diagnostics_entities(&mut app),
+            at_title,
+            "the same readout carries into play — not torn down, not spawned twice",
+        );
     }
 }
