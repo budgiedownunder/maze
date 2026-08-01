@@ -123,6 +123,57 @@ cd src/rust
 $env:MAZE_DEMO = 'gallery'; cargo run -p maze_game_bevy
 ```
 
+### Diagnostic overlay
+
+`GameConfig::debug_memory` adds a readout below the minimap's dimensions footer,
+for investigating what grows as more of a maze comes into view:
+
+```
+vis 1234/5678
+fps 58
+mem 214 MB
+mes 42
+mat 31
+img 18
+```
+
+| Row | Meaning |
+|:--|:--|
+| `vis` | Visible `Mesh3d` entities against the total spawned. Visibility is frustum-based, so this shows whether cost is driven by what is *in view* rather than by what exists. |
+| `fps` | Frame rate, smoothed. |
+| `mem` | WebAssembly linear-memory size — the allocated heap, which is what runs out. Reads `n/a` on native builds. |
+| `mes` | Distinct `Mesh` **assets** in `Assets<Mesh>`. |
+| `mat` | Distinct `StandardMaterial` **assets**. |
+| `img` | Distinct `Image` (texture) **assets**. |
+
+The last three count **assets, not instances**: one wall mesh shared by a
+thousand cells counts once. That is the point of showing them next to `vis` —
+`vis` grows with what is drawn, `mes` / `mat` / `img` grow with what is
+*resident*, and the two answer different questions.
+
+Rows are left-aligned to the minimap's left edge, one metric each, so nothing
+runs off the screen edge. The readout recomputes four times a second rather than
+every frame, so it does not meaningfully change the figures it reports.
+
+Off unless asked for: the browser host sets it from `/game/?mem=1` and the MAUI
+app appends that parameter in Debug builds. Nothing is spawned otherwise.
+
+A native run has no host to set it, so use `MAZE_DEBUG_MEM=1` (accepts `1` or
+`true`). It combines with `MAZE_DEMO`:
+
+```bash
+cd src/rust
+MAZE_DEBUG_MEM=1 MAZE_DEMO=multilevel_edge cargo run -p maze_game_bevy
+```
+
+```powershell
+cd src/rust
+$env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_edge'; cargo run -p maze_game_bevy
+```
+
+As with `MAZE_DEMO`, it is ignored under `cargo test` so a variable left set in a
+shell cannot change what the headless tests spawn.
+
 ### Testing
 
 To test the `maze_game_bevy` crate:

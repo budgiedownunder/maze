@@ -1333,7 +1333,7 @@ pub(crate) fn spawn_world(
     // in the grid); the roofed demo forces an enclosed (dungeon) sky so every level
     // is roofed (eyeballing the roof-aware hatch over the bottom ladder finish).
     // Demo-only; every other launch keeps its configured values.
-    let config: GameConfig = if let Some(demo) = multilevel_demo {
+    let mut config: GameConfig = if let Some(demo) = multilevel_demo {
         GameConfig {
             perimeter_walls: demo.perimeter_walls(),
             layered_alignment: demo.alignment(),
@@ -1346,6 +1346,10 @@ pub(crate) fn spawn_world(
     } else {
         (*config).clone()
     };
+    // A native run has no browser host to set `debug_memory` from `?mem=1`, so
+    // `MAZE_DEBUG_MEM=1` turns the diagnostics readout on here instead. Only ever
+    // switches it on: a host that already asked for it stays on.
+    config.debug_memory |= hud::diagnostics::debug_memory_env();
     // Replace the resource with this (possibly demo-overridden) config so the rest
     // of the game agrees with the render — `advance_to_next_level` reads the
     // `GameConfig` resource to compute each level's camera placement, so it must
@@ -1789,6 +1793,7 @@ pub(crate) fn spawn_world(
         &mut color_materials,
         &mut images,
     );
+    hud::diagnostics::spawn_diagnostics(&mut commands, &window, &config);
     hud::clock::spawn_clock_hud(&mut commands, &window);
     hud::score::spawn_score_hud(&mut commands, &window);
     hud::time_bonus::spawn_time_bonus_hud(&mut commands, &window);

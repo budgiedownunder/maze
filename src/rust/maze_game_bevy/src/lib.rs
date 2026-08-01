@@ -22,7 +22,7 @@ pub use world::{
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{bag, clock, hp, level, minimap, score, statusbar, time_bonus};
+    use crate::hud::{bag, clock, diagnostics, hp, level, minimap, score, statusbar, time_bonus};
     use crate::movement::{movement_system, quit_system};
     use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
@@ -81,6 +81,10 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_update_system.run_if(in_state(AppState::Playing)))
+        // Both bail immediately unless the readout was spawned, so a normal run
+        // pays a single resource lookup per frame.
+        .add_systems(Update, diagnostics::diagnostics_update_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, diagnostics::diagnostics_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::portal::portal_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
