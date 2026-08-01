@@ -8,9 +8,11 @@ namespace Maze.Maui.App
             {
                 if (handler is not GameWebViewHandler gameHandler) return;
 
-                if (IgnoreSslErrors)
-                    gameHandler.PlatformView.SetWebViewClient(
-                        new Platforms.Android.IgnoreSslWebViewClient(gameHandler));
+                // Always installed — the client carries the renderer-death
+                // handling that keeps Android from killing the whole app
+                // process, and applies the TLS bypass only when configured.
+                gameHandler.PlatformView.SetWebViewClient(
+                    new Platforms.Android.GameWebViewClient(gameHandler, IgnoreSslErrors));
 
                 // Bridge: the /game/ page posts GameResult JSON via
                 // window.MazeMauiHost.onGameResult(...). Re-adding with the same
