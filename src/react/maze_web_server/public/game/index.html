@@ -705,6 +705,10 @@
     const mazeId = params.get('id');
     const defId = params.get('def');
     const isPreview = params.get('preview');
+    // `?mem=1` turns on the in-game developer diagnostics readout (memory,
+    // entity counts, frame rate). Applies to every launch branch below, so a
+    // run can be measured however it was started.
+    const debugMemory = params.get('mem') === '1';
     // localStorage handoff key for an editor preview — mirrors
     // `PREVIEW_STORAGE_KEY` in src/utils/definitionPreview.ts.
     const PREVIEW_STORAGE_KEY = 'gameDefinitionPreview';
@@ -819,6 +823,7 @@
           floorAccents: settings.floorAccents,
         },
         mazeJson: JSON.stringify(maze.definition),
+        debugMemory: debugMemory,
       };
       // Win-banner record thresholds for this maze's board (un-tracked → none).
       await applyRecordThresholds(startConfig, `maze_id=${encodeURIComponent(mazeId)}`, token);
@@ -846,6 +851,7 @@
       if (res.ok) {
         const play = await res.json();
         const startConfig = play.config;
+        startConfig.debugMemory = debugMemory;
         if (play.leaderboardTracked) {
           window.__mazeDefChallenge = play.challengeKey;
           await applyRecordThresholds(
@@ -882,6 +888,7 @@
       } else {
         const startConfig = payload.config;
         startConfig.leaderboardTracked = false;
+        startConfig.debugMemory = debugMemory;
         try {
           start_with_config(JSON.stringify(startConfig));
           document.getElementById('loading').remove();

@@ -504,6 +504,11 @@ pub struct GameConfig {
     /// means an empty board, so the first run is itself a record (see
     /// `is_fastest_time`).
     pub fastest_time_to_beat: Option<u64>,
+    /// Whether to show the developer diagnostics readout (memory, entity counts,
+    /// frame rate) below the minimap. Off by default: it is a development tool,
+    /// switched on per-launch by the host, and a normal run renders exactly as it
+    /// did before the readout existed.
+    pub debug_memory: bool,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -1072,6 +1077,7 @@ impl Default for GameConfig {
             leaderboard_tracked: false,
             high_score_to_beat: None,
             fastest_time_to_beat: None,
+            debug_memory: false,
         }
     }
 }

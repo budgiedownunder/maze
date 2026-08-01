@@ -294,6 +294,20 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     )
   }
 
+  test('leaves the diagnostics readout off unless ?mem=1 is present', async ({ page }) => {
+    await stubGameHost(page, 'My Maze')
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    const payload = await capturedPayload(page)
+    expect(payload.debugMemory).toBe(false)
+  })
+
+  test('turns the diagnostics readout on for ?mem=1', async ({ page }) => {
+    await stubGameHost(page, 'My Maze')
+    await page.goto('/game/index.html?t=fake&id=test-id&mem=1')
+    const payload = await capturedPayload(page)
+    expect(payload.debugMemory).toBe(true)
+  })
+
   test('falls back to clean defaults when localStorage is empty', async ({ page }) => {
     await stubGameHost(page, 'My Maze')
     await page.goto('/game/index.html?t=fake&id=test-id')

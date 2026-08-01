@@ -119,6 +119,11 @@ struct StartConfig {
     /// subject. Drives the "Fastest Time" banner. Absent → an empty board.
     #[serde(default)]
     fastest_time_to_beat: Option<u64>,
+    /// Whether to show the developer diagnostics readout below the minimap. Set
+    /// by the host page from `?mem=1`; absent (the default) leaves a normal run
+    /// rendering exactly as it did before the readout existed.
+    #[serde(default)]
+    debug_memory: bool,
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -420,6 +425,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         leaderboard_tracked: cfg.leaderboard_tracked,
         high_score_to_beat: cfg.high_score_to_beat,
         fastest_time_to_beat: cfg.fastest_time_to_beat,
+        debug_memory: cfg.debug_memory,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -479,6 +485,8 @@ mod tests {
         assert!(!cfg.leaderboard_tracked);
         assert!(cfg.high_score_to_beat.is_none());
         assert!(cfg.fastest_time_to_beat.is_none());
+        // The diagnostics readout is off unless the host asks for it.
+        assert!(!cfg.debug_memory);
         // The single landmark override must take effect; the rest fall
         // back to true.
         assert!(cfg.landmarks.wall_tint);
@@ -522,6 +530,16 @@ mod tests {
         assert!(empty.leaderboard_tracked);
         assert!(empty.high_score_to_beat.is_none());
         assert!(empty.fastest_time_to_beat.is_none());
+    }
+
+    #[test]
+    fn start_config_turns_the_diagnostics_readout_on_when_the_host_asks() {
+        // `/game/?mem=1` — a developer launch. The flag is the only thing that
+        // changes; everything else still takes its default.
+        let cfg: StartConfig =
+            serde_json::from_str(r#"{ "debugMemory": true }"#).expect("payload must parse");
+        assert!(cfg.debug_memory);
+        assert_eq!(cfg.timer_seconds, 60.0);
     }
 
     #[test]

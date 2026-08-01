@@ -91,6 +91,14 @@ namespace Maze.Maui.App.Views
                     ? Play3dGameHostUrl.BuildForDefinition(apiRootUri, DefinitionId, token)
                     : Play3dGameHostUrl.BuildForToken(apiRootUri, token);
 
+#if DEBUG
+            // Developer diagnostics readout (memory, entity counts, frame rate).
+            // Debug-only rather than a setting: appsettings.json ships as a
+            // bundled asset, so switching it there would need a rebuild and
+            // redeploy anyway — the same cost as this, with more machinery.
+            gameUrl += gameUrl.Contains('?') ? "&mem=1" : "?mem=1";
+#endif
+
             MazeGameWebView.Source = new UrlWebViewSource { Url = gameUrl };
         }
 
