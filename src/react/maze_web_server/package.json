@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "dev:mock": "cross-env VITE_MSW=true vite",
+    "dev:debug": "cross-env VITE_DEBUG_MEM=true vite",
     "build": "tsc -b && vite build",
+    "build:debug": "cross-env VITE_DEBUG_MEM=true npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

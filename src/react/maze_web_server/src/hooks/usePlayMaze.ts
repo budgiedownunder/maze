@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { solveMaze } from '../wasm/mazeWasm'
+import { withDebugMem } from '../utils/debugMem'
 import type { Maze } from '../types/api'
 
 export const GameType = {
@@ -34,7 +35,7 @@ export function usePlayMaze(opts: UsePlayMazeOptions = {}) {
       } else if (opts.onLaunch3d) {
         opts.onLaunch3d(maze)
       } else {
-        window.location.href = '/game/?id=' + encodeURIComponent(maze.id)
+        window.location.href = withDebugMem('/game/?id=' + encodeURIComponent(maze.id))
       }
     } catch (ex: unknown) {
       const msg = (ex as { message?: string }).message ?? 'Unknown error.'
