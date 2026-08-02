@@ -69,7 +69,16 @@ namespace Maze.Maui.App.Views
         protected override void OnAppearing()
         {
             base.OnAppearing();
+            // -= then += keeps this idempotent. These are *static* events, so a
+            // duplicate subscription outlives the page: OnDisappearing removes
+            // one delegate, the other keeps a strong reference to this page, and
+            // the page keeps its WebView — and its web-content process — alive.
+            // Platforms do not agree on whether OnAppearing can fire twice
+            // without an intervening OnDisappearing (returning from background is
+            // the usual culprit), so this does not rely on them.
+            GameWebViewHandler.GameResultReceived -= OnGameResultReceived;
             GameWebViewHandler.GameResultReceived += OnGameResultReceived;
+            GameWebViewHandler.GameFailureReceived -= OnGameFailureReceived;
             GameWebViewHandler.GameFailureReceived += OnGameFailureReceived;
         }
 
@@ -110,7 +119,19 @@ namespace Maze.Maui.App.Views
             MazeItem = null;
             DefinitionId = null;
             LaunchSettings = null;
+            // Two steps, and both are needed. Navigating to about:blank destroys
+            // the *document*, which is what releases the game's WebAssembly heap.
+            // It does not release the WebView itself — on iOS the WKWebView and
+            // its web-content process survive, so a second launch adds a second
+            // live process rather than reusing the budget of the first. Measured
+            // on device: the heap resets between runs while the app still dies on
+            // the second launch, before its world is even built.
+            //
+            // DisconnectHandler tears the platform view down on a known schedule
+            // rather than leaving it to a garbage collection that may not happen
+            // before the next game starts.
             MazeGameWebView.Source = new UrlWebViewSource { Url = "about:blank" };
+            MazeGameWebView.Handler?.DisconnectHandler();
         }
 
         /// <summary>
