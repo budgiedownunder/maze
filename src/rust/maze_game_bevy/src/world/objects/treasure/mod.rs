@@ -48,6 +48,7 @@ pub(crate) mod gold;
 pub(crate) mod jewels;
 pub(crate) mod silver;
 
+use super::common::bake::{baked_handle, outline_scaled};
 use super::common::{self, CommonObjectAssets};
 use crate::state::TreasureStyle;
 use crate::world::{LevelPlacement, CELL_SIZE};
@@ -160,45 +161,6 @@ fn gem_transforms(pos: Vec3) -> [Transform; 2] {
             .with_rotation(Quat::from_rotation_x(PI))
             .with_scale(Vec3::new(GEM_SIZE, pavilion_h, GEM_SIZE)),
     ]
-}
-
-/// The inverted-hull outline transforms for a set of body transforms: each piece
-/// scaled up about its own centre by [`common::OUTLINE_SCALE`].
-fn outline_scaled(transforms: &[Transform]) -> Vec<Transform> {
-    transforms
-        .iter()
-        .map(|t| {
-            let mut o = *t;
-            o.scale *= common::OUTLINE_SCALE;
-            o
-        })
-        .collect()
-}
-
-/// Bakes one combined mesh from `base` stamped at every transform in
-/// `transforms` (assumed non-empty). Lets a whole loot pile become a single
-/// drawable mesh shared by every chest of that style.
-fn bake(base: &Mesh, transforms: &[Transform]) -> Mesh {
-    let mut iter = transforms.iter();
-    let first = iter.next().expect("a loot pile has at least one piece");
-    let mut acc = base.clone().transformed_by(*first);
-    for t in iter {
-        let _ = acc.merge(&base.clone().transformed_by(*t));
-    }
-    acc
-}
-
-/// Adds a baked mesh built from `base` at `transforms` to the asset store,
-/// returning its handle (or `None` headless / when there are no pieces).
-fn baked_handle(
-    meshes: &mut Option<ResMut<Assets<Mesh>>>,
-    base: &Mesh,
-    transforms: &[Transform],
-) -> Option<Handle<Mesh>> {
-    if transforms.is_empty() {
-        return None;
-    }
-    meshes.as_mut().map(|m| m.add(bake(base, transforms)))
 }
 
 /// Per-cell anchor for the collectible loot. One is spawned at each `'T'` cell,

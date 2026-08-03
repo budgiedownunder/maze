@@ -34,10 +34,13 @@ pub(crate) fn build_object_assets(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     images: &mut Option<ResMut<Assets<Image>>>,
 ) -> ObjectAssets {
+    // The prop rigs come first: the finish ladder and the floating key bake
+    // their own geometry against the shared outline material they carry.
+    let common = common::build_common_object_assets(meshes, materials);
     ObjectAssets {
-        finish: finish::build_finish_assets(meshes, materials),
-        common: common::build_common_object_assets(meshes, materials),
-        key_holder: key_holder::build_key_holder_assets(meshes, materials),
+        finish: finish::build_finish_assets(meshes, materials, &common),
+        key_holder: key_holder::build_key_holder_assets(meshes, materials, &common),
+        common,
         door: door::build_door_assets(meshes, materials),
         enemy: enemy::build_enemy_assets(meshes, materials, images),
         health: health::build_health_assets(meshes, materials),
@@ -82,7 +85,6 @@ pub(crate) fn spawn_objects_for_cell(
     finish::spawn_finish_for_cell(
         commands,
         &assets.finish,
-        &assets.common,
         grid,
         cell,
         r,

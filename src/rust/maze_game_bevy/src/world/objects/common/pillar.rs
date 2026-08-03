@@ -1,4 +1,5 @@
-use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
+use super::bake::{BakedRig, RigBuilder, UnitMeshes};
+use super::{build_emissive_material, CommonObjectAssets};
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -55,29 +56,67 @@ const GROOVE_RADIUS: f32 = 0.275;
 const BASE_JOIN_RING_Y: f32 = 0.15;
 const BASE_JOIN_RING_SCALE: Vec3 = Vec3::new(0.40, 0.025, 0.40);
 
-pub(crate) fn build_pillar_material(
+// Rig slots — one combined mesh per material. The pillar's outline is the grey
+// `pillar_outline_mat` (matching the groove colour) rather than the default
+// black, so the rim around each disc / shaft reads as continuous with the
+// perimeter flutes rather than as a hard cartoon edge.
+const BODY: usize = 0;
+const GROOVE: usize = 1;
+const OUTLINE: usize = 2;
+
+/// Bakes the pillar rig in its local frame, at **full** height: base + shaft +
+/// capital, the perimeter grooves around the two discs, and the join ring.
+pub(crate) fn build_pillar_rig(
+    prims: &UnitMeshes,
+    meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    build_emissive_material(materials, PILLAR_EMISSIVE)
+    outline_mat: &Option<Handle<StandardMaterial>>,
+) -> BakedRig {
+    let mut rig = RigBuilder::new(&[
+        build_emissive_material(materials, PILLAR_EMISSIVE),
+        build_emissive_material(materials, GROOVE_EMISSIVE),
+        outline_mat.clone(),
+    ]);
+    let pose = |x: f32, y: f32, z: f32, scale: Vec3| {
+        Transform::from_xyz(x, y, z).with_scale(scale)
+    };
+
+    // Base + shaft + capital — the columnar silhouette.
+    rig.add_with_outline(BODY, OUTLINE, &prims.cylinder, pose(0.0, BASE_Y, 0.0, BASE_SCALE));
+    rig.add_with_outline(BODY, OUTLINE, &prims.cylinder, pose(0.0, SHAFT_Y, 0.0, SHAFT_SCALE));
+    rig.add_with_outline(BODY, OUTLINE, &prims.cylinder, pose(0.0, CAPITAL_Y, 0.0, CAPITAL_SCALE));
+
+    // Perimeter grooves around the base + capital. Spaced evenly via
+    // `(cos(angle), sin(angle)) * GROOVE_RADIUS`, with one cuboid per angle.
+    for (y, count) in [(BASE_Y, BASE_GROOVE_COUNT), (CAPITAL_Y, CAPITAL_GROOVE_COUNT)] {
+        for i in 0..count {
+            let angle = (i as f32 / count as f32) * TAU;
+            let (gx, gz) = (angle.cos() * GROOVE_RADIUS, angle.sin() * GROOVE_RADIUS);
+            rig.add_with_outline(GROOVE, OUTLINE, &prims.cuboid, pose(gx, y, gz, GROOVE_SCALE));
+        }
+    }
+
+    // Join ring on top of the base around the shaft's foot. Width is wider than
+    // the shaft (0.175 radius) but narrower than the base (0.275 radius), so it
+    // sits as a darker flange exactly at the join.
+    rig.add_with_outline(
+        GROOVE,
+        OUTLINE,
+        &prims.cylinder,
+        pose(0.0, BASE_JOIN_RING_Y, 0.0, BASE_JOIN_RING_SCALE),
+    );
+
+    rig.finish(meshes)
 }
 
-pub(crate) fn build_groove_material(
-    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    build_emissive_material(materials, GROOVE_EMISSIVE)
-}
-
-/// A pillar sub-mesh transform: positioned at `(x, y, z)` with `scale`, but with
-/// only the vertical extent (the Y of both the position and the scale)
-/// multiplied by `h`. So `h = 1.0` is the full dead-end landmark and `h = 0.5`
-/// is a half-height pedestal of the same footprint. The whole rig is then lifted
-/// to its run `level` (level 0 is the identity); the offset is applied after the
-/// height scale because it is a world-space displacement, not part of the rig.
-fn col_xform(x: f32, y: f32, z: f32, scale: Vec3, h: f32, base_y: f32) -> Transform {
-    Transform::from_translation(Vec3::new(x, base_y + y * h, z))
-        .with_scale(Vec3::new(scale.x, scale.y * h, scale.z))
-}
-
+/// Spawns the pillar at `(x, z)` on its level's floor, scaled to `height_scale`
+/// of the full landmark — `1.0` for a dead-end landmark, [`KEYHOLDER_HEIGHT_SCALE`]
+/// for the key holder's pedestal.
+///
+/// The height is a **vertical scale on the whole rig**, not a rebuild: scaling
+/// the baked rig by `(1, h, 1)` moves each part's centre and squashes its extent
+/// by exactly `h` while leaving the footprint alone, which is what the rig
+/// wanted from a height variant — so one baked pillar serves both callers.
 pub(crate) fn spawn_pillar(
     commands: &mut Commands,
     assets: &CommonObjectAssets,
@@ -86,107 +125,25 @@ pub(crate) fn spawn_pillar(
     height_scale: f32,
     base_y: f32,
 ) {
-    let body = assets.pillar_mat.clone();
-    let groove = assets.groove_mat.clone();
-    // Pillar uses the grey `pillar_outline_mat` (matches the groove
-    // colour) instead of the default black outline, so the rim around
-    // each disc/shaft reads as continuous with the perimeter flutes
-    // rather than as a hard cartoon edge.
-    let outline = || assets.pillar_outline_mat.clone();
-
-    // Base + shaft + capital — the columnar silhouette.
-    spawn_with_outline(
+    assets.pillar.spawn(
         commands,
+        Transform::from_xyz(x, base_y, z).with_scale(Vec3::new(1.0, height_scale, 1.0)),
         None,
-        assets.cylinder.clone(),
-        body.clone(),
-        outline(),
-        col_xform(x, BASE_Y, z, BASE_SCALE, height_scale, base_y),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        body.clone(),
-        outline(),
-        col_xform(x, SHAFT_Y, z, SHAFT_SCALE, height_scale, base_y),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        body,
-        outline(),
-        col_xform(x, CAPITAL_Y, z, CAPITAL_SCALE, height_scale, base_y),
-        (),
-    );
-
-    // Perimeter grooves around the base + capital. Spaced evenly via
-    // `(cos(angle), sin(angle)) * GROOVE_RADIUS`, with one cuboid per
-    // angle.
-    spawn_grooves(
-        commands,
-        assets,
-        groove.clone(),
-        x,
-        z,
-        BASE_Y,
-        BASE_GROOVE_COUNT,
-        height_scale,
-        base_y,
-    );
-    spawn_grooves(
-        commands,
-        assets,
-        groove.clone(),
-        x,
-        z,
-        CAPITAL_Y,
-        CAPITAL_GROOVE_COUNT,
-        height_scale,
-        base_y,
-    );
-
-    // Join ring on top of the base around the shaft's foot. Width is
-    // wider than the shaft (0.175 radius) but narrower than the base
-    // (0.275 radius), so it sits as a darker flange exactly at the join.
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        groove,
-        assets.pillar_outline_mat.clone(),
-        col_xform(x, BASE_JOIN_RING_Y, z, BASE_JOIN_RING_SCALE, height_scale, base_y),
-        (),
     );
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_grooves(
-    commands: &mut Commands,
-    assets: &CommonObjectAssets,
-    groove_mat: Option<Handle<StandardMaterial>>,
-    x: f32,
-    z: f32,
-    y: f32,
-    count: u32,
-    height_scale: f32,
-    base_y: f32,
-) {
-    for i in 0..count {
-        let angle = (i as f32 / count as f32) * TAU;
-        let gx = x + angle.cos() * GROOVE_RADIUS;
-        let gz = z + angle.sin() * GROOVE_RADIUS;
-        spawn_with_outline(
-            commands,
-            None,
-            assets.cuboid.clone(),
-            groove_mat.clone(),
-            assets.pillar_outline_mat.clone(),
-            col_xform(gx, y, gz, GROOVE_SCALE, height_scale, base_y),
-            (),
-        );
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::entities_spawned;
+    use super::super::build_common_object_assets;
+    use super::*;
+
+    #[test]
+    fn a_pillar_costs_one_entity_per_material() {
+        let assets = build_common_object_assets(&mut None, &mut None);
+        let count = entities_spawned(|commands| {
+            spawn_pillar(commands, &assets, 0.0, 0.0, 1.0, 0.0);
+        });
+        assert_eq!(count, 3, "marble body, darker grooves, one outline shell");
     }
 }

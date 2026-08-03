@@ -1769,7 +1769,6 @@ pub(crate) fn spawn_world(
                 ),
                 _ => objects::finish::ladder::spawn_ladder(
                     &mut commands,
-                    &object_assets.common,
                     &object_assets.finish.ladder,
                     &grid,
                     r,

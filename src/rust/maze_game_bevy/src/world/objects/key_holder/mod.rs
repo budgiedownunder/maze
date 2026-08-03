@@ -19,6 +19,7 @@
 //! shaft, and two teeth — each paired with a black inverted-hull outline so the
 //! parts read distinctly.
 
+use super::common::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::common::{self, CommonObjectAssets};
 use crate::state::KeyHolderStyle;
 use crate::world::{LevelPlacement, CELL_SIZE};
@@ -107,31 +108,65 @@ pub(crate) struct Spark {
     phase: f32,
 }
 
-/// Key-specific assets. The shaft / teeth / outline reuse
-/// [`CommonObjectAssets`]; only the round bow and the spark sphere (plus the
-/// two gold materials) are unique to the key.
+// Rig slots for the key itself — one combined mesh per material.
+const KEY_BODY: usize = 0;
+const KEY_OUTLINE: usize = 1;
+
+/// Key-specific assets. The base props are the shared
+/// [`CommonObjectAssets`] rigs; this is the floating key's own geometry.
 pub(crate) struct KeyHolderAssets {
-    /// Torus forming the key's round bow — a ring with a hole, matching the bag
-    /// icon. Pre-sized, so it's spawned with only a rotation (no scale).
-    bow_mesh: Option<Handle<Mesh>>,
-    /// Tiny sphere for the radiating sparks.
+    /// The key's static sub-meshes — bow, shaft, and two teeth — baked into one
+    /// mesh per material. The key group they hang under is what bobs and spins;
+    /// they never move within it.
+    key: BakedRig,
+    /// Tiny sphere for the radiating sparks, which each fly out on their own
+    /// phase and so stay separate entities.
     spark_mesh: Option<Handle<Mesh>>,
-    key_mat: Option<Handle<StandardMaterial>>,
     spark_mat: Option<Handle<StandardMaterial>>,
 }
 
 pub(crate) fn build_key_holder_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    common_assets: &CommonObjectAssets,
 ) -> KeyHolderAssets {
+    let prims = UnitMeshes::new();
     // Torus::new(inner_hole_radius, outer_radius) — a ring with a hole through
     // it, like the bag icon's bow.
-    let bow_mesh = meshes.as_mut().map(|m| m.add(Torus::new(0.085, 0.18)));
-    let spark_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(SPARK_MESH_RADIUS)));
+    let bow = Mesh::from(Torus::new(0.085, 0.18));
+    let mut rig = RigBuilder::new(&[
+        common::build_emissive_material(materials, KEY_EMISSIVE),
+        common_assets.outline_mat.clone(),
+    ]);
+    // Bow (round head) at the top — standing upright in the key's own plane
+    // (rotated 90° about X from the torus's default flat pose) so the hole faces
+    // the player as the key spins.
+    rig.add_with_outline(
+        KEY_BODY,
+        KEY_OUTLINE,
+        &bow,
+        Transform::from_xyz(0.0, 0.27, 0.0).with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
+    );
+    // Shaft running down from the bow — the shared unit cylinder, scaled thin so
+    // its round cross-section matches the circular lock / keyhole.
+    rig.add_with_outline(
+        KEY_BODY,
+        KEY_OUTLINE,
+        &prims.cylinder,
+        Transform::from_xyz(0.0, -0.05, 0.0).with_scale(Vec3::new(0.08, 0.45, 0.08)),
+    );
+    // Two teeth jutting from the shaft's lower end.
+    for (y, width) in [(-0.22, 0.16), (-0.30, 0.12)] {
+        rig.add_with_outline(
+            KEY_BODY,
+            KEY_OUTLINE,
+            &prims.cuboid,
+            Transform::from_xyz(width / 2.0, y, 0.0).with_scale(Vec3::new(width, 0.06, 0.06)),
+        );
+    }
     KeyHolderAssets {
-        bow_mesh,
-        spark_mesh,
-        key_mat: common::build_emissive_material(materials, KEY_EMISSIVE),
+        key: rig.finish(meshes),
+        spark_mesh: meshes.as_mut().map(|m| m.add(Sphere::new(SPARK_MESH_RADIUS))),
         spark_mat: common::build_emissive_material(materials, SPARK_EMISSIVE),
     }
 }
@@ -184,13 +219,12 @@ pub(crate) fn spawn_key_holder_for_cell(
     };
     let rest_y = KEY_REST_Y.max(base_top + KEY_CLEARANCE);
 
-    spawn_floating_key(commands, key_assets, common_assets, holder, rest_y);
+    spawn_floating_key(commands, key_assets, holder, rest_y);
 }
 
 fn spawn_floating_key(
     commands: &mut Commands,
     key_assets: &KeyHolderAssets,
-    common_assets: &CommonObjectAssets,
     holder: Entity,
     rest_y: f32,
 ) {
@@ -244,50 +278,9 @@ fn spawn_floating_key(
         }
     }
 
-    let mat = key_assets.key_mat.clone();
-    let outline = common_assets.outline_mat.clone();
-    // Bow (round head) at the top — a ring with a hole, standing upright in the
-    // key's own plane (rotated 90° about X from the torus's default flat pose)
-    // so the hole faces the player as the key spins.
-    common::spawn_with_outline(
-        commands,
-        Some(key_group),
-        key_assets.bow_mesh.clone(),
-        mat.clone(),
-        outline.clone(),
-        Transform::from_xyz(0.0, 0.27, 0.0).with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
-        (),
-    );
-    // Shaft running down from the bow — the shared unit cylinder, scaled thin so
-    // its round cross-section matches the circular lock / keyhole.
-    common::spawn_with_outline(
-        commands,
-        Some(key_group),
-        common_assets.cylinder.clone(),
-        mat.clone(),
-        outline.clone(),
-        Transform::from_xyz(0.0, -0.05, 0.0).with_scale(Vec3::new(0.08, 0.45, 0.08)),
-        (),
-    );
-    // Two teeth jutting from the shaft's lower end — the shared unit cuboid.
-    common::spawn_with_outline(
-        commands,
-        Some(key_group),
-        common_assets.cuboid.clone(),
-        mat.clone(),
-        outline.clone(),
-        Transform::from_xyz(0.08, -0.22, 0.0).with_scale(Vec3::new(0.16, 0.06, 0.06)),
-        (),
-    );
-    common::spawn_with_outline(
-        commands,
-        Some(key_group),
-        common_assets.cuboid.clone(),
-        mat,
-        outline,
-        Transform::from_xyz(0.06, -0.30, 0.0).with_scale(Vec3::new(0.12, 0.06, 0.06)),
-        (),
-    );
+    // The key's own geometry, baked into one mesh per material and parented to
+    // the group so it rides the bob and spin.
+    key_assets.key.spawn(commands, Transform::default(), Some(key_group));
 }
 
 /// `Update`: bobs and spins every floating key. Mirrors the finish orb's

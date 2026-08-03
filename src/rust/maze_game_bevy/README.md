@@ -252,7 +252,8 @@ src/
 │   │   ├── mod.rs          ObjectAssets bundle (incl. shared CommonObjectAssets) + spawn_objects_for_cell (finish, dead-end, key holders, doors, enemies, health, treasure)
 │   │   ├── overrides.rs    per-cell rig resolvers (cell override → default) for every per-cell entity rig
 │   │   ├── common/         shared decorative-prop rigs + helpers (used by dead_end AND key_holder)
-│   │   │   ├── mod.rs      CommonObjectAssets + spawn_with_outline (optional parent) + emissive/outline material helpers + OUTLINE_SCALE + yaw_toward_open_neighbour
+│   │   │   ├── mod.rs      CommonObjectAssets (the baked rigs) + emissive/outline material helpers + yaw_toward_open_neighbour
+│   │   │   ├── bake.rs     RigBuilder / BakedRig: a prop's sub-meshes merged into one mesh per material (bodies + one outline shell), baked once and spawned as one entity per material + OUTLINE_SCALE
 │   │   │   ├── brazier.rs  brazier rig + BrazierBowl marker + brazier_flicker_system
 │   │   │   ├── urn.rs      urn rig + materials
 │   │   │   ├── pillar.rs   broken-pillar rig + materials + TOP_Y apex
