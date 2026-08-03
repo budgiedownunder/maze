@@ -160,13 +160,18 @@ pub(crate) fn spawn_with_outline<B: Bundle>(
     if let Some(p) = parent {
         commands.entity(p).add_child(body);
     }
-    if let (Some(m), Some(mt)) = (mesh, outline_mat) {
-        let edge = commands
+    let edge = match (mesh, outline_mat) {
+        (Some(m), Some(mt)) => commands
             .spawn((Mesh3d(m), MeshMaterial3d(mt), outline_xform))
-            .id();
-        if let Some(p) = parent {
-            commands.entity(p).add_child(edge);
-        }
+            .id(),
+        // Mirrors the body above. Previously the outline was skipped entirely
+        // without render assets, which made a headless entity count differ from
+        // what a rendering build spawns — and outlines are half of a prop's
+        // entities, so any measurement of prop cost was blind to them.
+        _ => commands.spawn((outline_xform,)).id(),
+    };
+    if let Some(p) = parent {
+        commands.entity(p).add_child(edge);
     }
 }
 

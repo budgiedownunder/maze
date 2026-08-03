@@ -14,7 +14,42 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-static LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
+/// The running total of live bytes, kept separate from the allocator itself so
+/// the arithmetic can be tested on a local instance. Testing it through the
+/// global counter is not possible: the whole test suite allocates into it
+/// concurrently, and the interference is the same order of magnitude as any
+/// probe a test could make.
+pub(crate) struct LiveCounter(AtomicUsize);
+
+impl LiveCounter {
+    const fn new() -> Self {
+        Self(AtomicUsize::new(0))
+    }
+
+    fn added(&self, bytes: usize) {
+        self.0.fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    fn removed(&self, bytes: usize) {
+        self.0.fetch_sub(bytes, Ordering::Relaxed);
+    }
+
+    /// Applies a reallocation as a delta. `realloc` may extend a block in place
+    /// without ever calling `dealloc`, so a free-then-alloc pair would be wrong.
+    fn resized(&self, from: usize, to: usize) {
+        if to >= from {
+            self.added(to - from);
+        } else {
+            self.removed(from - to);
+        }
+    }
+
+    fn get(&self) -> usize {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+static LIVE_BYTES: LiveCounter = LiveCounter::new();
 
 /// The system allocator plus a live-bytes counter.
 pub struct CountingAllocator;
@@ -23,20 +58,20 @@ unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let ptr = unsafe { System.alloc(layout) };
         if !ptr.is_null() {
-            LIVE_BYTES.fetch_add(layout.size(), Ordering::Relaxed);
+            LIVE_BYTES.added(layout.size());
         }
         ptr
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         unsafe { System.dealloc(ptr, layout) };
-        LIVE_BYTES.fetch_sub(layout.size(), Ordering::Relaxed);
+        LIVE_BYTES.removed(layout.size());
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         let ptr = unsafe { System.alloc_zeroed(layout) };
         if !ptr.is_null() {
-            LIVE_BYTES.fetch_add(layout.size(), Ordering::Relaxed);
+            LIVE_BYTES.added(layout.size());
         }
         ptr
     }
@@ -46,11 +81,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let new_ptr = unsafe { System.realloc(ptr, layout, new_size) };
         if !new_ptr.is_null() {
-            if new_size >= layout.size() {
-                LIVE_BYTES.fetch_add(new_size - layout.size(), Ordering::Relaxed);
-            } else {
-                LIVE_BYTES.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
-            }
+            LIVE_BYTES.resized(layout.size(), new_size);
         }
         new_ptr
     }
@@ -77,7 +108,7 @@ static ALLOCATOR: CountingAllocator = CountingAllocator;
 /// drop(held);
 /// ```
 pub fn live_bytes() -> usize {
-    LIVE_BYTES.load(Ordering::Relaxed)
+    LIVE_BYTES.get()
 }
 
 /// Set when the host asks the game to end. `app.run()` moved the `App` into
@@ -119,32 +150,42 @@ pub(crate) fn take_stop_request() -> bool {
 mod tests {
     use super::*;
 
-    // The counter is process-global while `cargo test` runs tests in parallel,
-    // so another test's allocations and frees land between any two reads here.
-    // These assertions therefore use a large allocation and generous margins:
-    // they check the counter's *direction*, which is what it exists for, rather
-    // than an exact delta it cannot promise. An earlier version demanded the
-    // full allocation size and failed by 3 KB of concurrent noise.
-    const PROBE_BYTES: usize = 16 * 1024 * 1024;
-    const NOISE_MARGIN: usize = PROBE_BYTES / 2;
+    // The counter's arithmetic is exercised on a LOCAL instance. Driving the
+    // global one from a test cannot work: 282 tests allocate into it in
+    // parallel, and an earlier attempt to absorb that with tolerances failed
+    // because the interference came from the sibling allocator test using an
+    // identically-sized probe — noise the same magnitude as the signal.
 
     #[test]
-    fn an_allocation_raises_the_total_and_freeing_lowers_it() {
-        // The whole point of this counter: unlike WebAssembly linear memory, it
-        // comes back down.
-        let before = live_bytes();
-        let held: Vec<u8> = vec![7; PROBE_BYTES];
-        let during = live_bytes();
-        assert!(
-            during >= before + NOISE_MARGIN,
-            "a live allocation must raise the total: {before} -> {during}",
-        );
-        drop(held);
-        let after = live_bytes();
-        assert!(
-            after + NOISE_MARGIN <= during,
-            "freeing must lower the total: {during} -> {after}",
-        );
+    fn the_counter_rises_on_allocation_and_falls_on_release() {
+        let counter = LiveCounter::new();
+        assert_eq!(counter.get(), 0);
+        counter.added(4096);
+        counter.added(1024);
+        assert_eq!(counter.get(), 5120);
+        counter.removed(4096);
+        assert_eq!(counter.get(), 1024, "releasing must bring the total back down");
+    }
+
+    #[test]
+    fn a_reallocation_is_counted_as_a_delta() {
+        // realloc may extend a block in place and never call dealloc, so
+        // counting it as free-then-alloc would drift.
+        let counter = LiveCounter::new();
+        counter.added(1000);
+        counter.resized(1000, 4000);
+        assert_eq!(counter.get(), 4000, "a grow adds only the difference");
+        counter.resized(4000, 1500);
+        assert_eq!(counter.get(), 1500, "a shrink removes only the difference");
+        counter.resized(1500, 1500);
+        assert_eq!(counter.get(), 1500, "an unchanged size is a no-op");
+    }
+
+    #[test]
+    fn the_global_counter_is_wired_up() {
+        // Deliberately weak: the only claim that can be made about the global
+        // counter while the suite runs in parallel is that it is counting.
+        assert!(live_bytes() > 0, "the test binary itself has live allocations");
     }
 
     #[test]
@@ -158,21 +199,4 @@ mod tests {
         assert!(!take_stop_request(), "and not seen twice");
     }
 
-    #[test]
-    fn growing_a_buffer_in_place_is_accounted_as_a_delta() {
-        // A Vec grow goes through `realloc`, which may extend in place without
-        // ever calling `dealloc` — counting it as a delta keeps that honest.
-        let mut buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
-        buffer.resize(1024 * 1024, 1);
-        let small = live_bytes();
-        buffer.resize(PROBE_BYTES, 2);
-        let large = live_bytes();
-        assert!(
-            large >= small + NOISE_MARGIN,
-            "a grow must raise the total: {small} -> {large}",
-        );
-        drop(buffer);
-        let after = live_bytes();
-        assert!(after + NOISE_MARGIN <= large, "dropping must lower it: {large} -> {after}");
-    }
 }

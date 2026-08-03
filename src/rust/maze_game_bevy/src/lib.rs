@@ -2463,6 +2463,68 @@ mod tests {
         assert_eq!(rims, 8, "a water↔lava border is walled on both sides");
     }
 
+    /// Counts entities carrying a given marker component.
+    fn count_with<T: Component>(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, With<T>>()
+            .iter(app.world())
+            .count()
+    }
+
+    /// Reports where a scene's renderable entities actually are.
+    ///
+    /// The device measurements pinned the crash to how much is *drawn* — 2643
+    /// visible meshes of 3186 on a three-level game, against 1369 of 2056 on a
+    /// single-level one that does not crash. This breaks that total down so the
+    /// merging work is aimed at whatever dominates rather than at a guess.
+    ///
+    /// The residual matters most: prop sub-meshes and their inverted-hull
+    /// outline siblings carry no marker of their own (`DeadEndObject` tags the
+    /// landmark *cell*, not its parts), so anything untagged is overwhelmingly
+    /// prop geometry.
+    ///
+    /// Run with `cargo test -p maze_game_bevy entity_breakdown -- --nocapture`.
+    #[test]
+    fn entity_breakdown_by_category() {
+        use crate::world::decorations::floor::FloorAccent;
+        use crate::world::decorations::wall::WallDecoration;
+        use crate::world::floor::FloorCell;
+        use crate::world::objects::dead_end::DeadEndObject;
+        use crate::world::roof::RoofCell;
+        use crate::world::sky::stars::Star;
+        use crate::world::walls::WallCell;
+
+        let mut app = make_playing_app();
+
+        // Counted via Transform, not Mesh3d: the headless harness has no
+        // `Assets<Mesh>`, so entities spawn without a mesh handle. Entity count
+        // is the figure that matters anyway — it is what drives draw calls.
+        let meshes = count_with::<Transform>(&mut app);
+        let floors = count_with::<FloorCell>(&mut app);
+        let walls = count_with::<WallCell>(&mut app);
+        let roofs = count_with::<RoofCell>(&mut app);
+        let wall_decorations = count_with::<WallDecoration>(&mut app);
+        let floor_accents = count_with::<FloorAccent>(&mut app);
+        let dead_end_cells = count_with::<DeadEndObject>(&mut app);
+        let stars = count_with::<Star>(&mut app);
+        let tagged = floors + walls + roofs + wall_decorations + floor_accents + stars;
+
+        println!("--- entity breakdown (demo grid, single level) ---");
+        println!("world entities        {meshes}");
+        println!("  floor cells         {floors}");
+        println!("  wall cells          {walls}");
+        println!("  roof cells          {roofs}");
+        println!("  wall decorations    {wall_decorations}");
+        println!("  floor accents       {floor_accents}");
+        println!("  stars               {stars}");
+        println!("  ---");
+        println!("  dead-end CELLS      {dead_end_cells} (landmarks, not sub-meshes)");
+        println!("  tagged subtotal     {tagged}");
+        println!("  UNTAGGED residual   {} (prop sub-meshes + outlines)", meshes.saturating_sub(tagged));
+
+        assert!(meshes > tagged, "the residual is the figure of interest");
+    }
+
     /// Counts the diagnostics readout's entities (background strip + text).
     fn diagnostics_entities(app: &mut App) -> usize {
         use crate::hud::diagnostics::DiagnosticsReadout;
