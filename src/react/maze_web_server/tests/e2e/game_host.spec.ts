@@ -264,6 +264,10 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
         body: `
           export default async function init() {}
           export function start() {}
+          // The host page imports these too; a missing export is an ES module
+          // link error, which fails the whole module rather than one call.
+          export function stop() {}
+          export function live_bytes() { return 0 }
           export function start_with_config(json) {
             window.__lastStartConfigPayload = json;
           }
@@ -453,6 +457,10 @@ test.describe('Game host stored game-definition launch (?def=...)', () => {
         body: `
           export default async function init() {}
           export function start() {}
+          // The host page imports these too; a missing export is an ES module
+          // link error, which fails the whole module rather than one call.
+          export function stop() {}
+          export function live_bytes() { return 0 }
           export function start_with_config(json) {
             window.__lastStartConfigPayload = json;
           }
@@ -524,6 +532,10 @@ test.describe('Game host stored game-definition score submission (?def=)', () =>
         body: `
           export default async function init() {}
           export function start() {}
+          // The host page imports these too; a missing export is an ES module
+          // link error, which fails the whole module rather than one call.
+          export function stop() {}
+          export function live_bytes() { return 0 }
           export function start_with_config(json) {
             window.__lastStartConfigPayload = json;
           }
@@ -651,6 +663,36 @@ test.describe('Game host failure reporting', () => {
     await expect(page.locator('#pause-menu')).toBeAttached()
   }
 
+  // Lets the module script really run: its listeners and window handles are
+  // registered there, so a test that aborts the module registers none of them.
+  async function loadWithModuleRunning(page: Page, url = '/game/index.html?t=fake&id=test-id') {
+    await page.route('**/maze_game_bevy_wasm.js**', (route) => {
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          export default async function init() {}
+          export function start() {}
+          export function start_with_config() {}
+          export function stop() {}
+          export function live_bytes() { return 0 }
+        `,
+      })
+    })
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
+    })
+    await page.route('**/api/v1/mazes/test-id*', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'test-id', name: 'M', definition: { grid: [['S', ' ', 'F']] } }),
+      })
+    })
+    await page.goto(url)
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __mazeStop?: unknown }).__mazeStop === 'function'
+    )
+  }
+
   async function firePanic(page: Page, message: string, location: string) {
     await page.evaluate(
       (d) => { window.dispatchEvent(new CustomEvent('maze-game-panic', { detail: d })) },
@@ -742,6 +784,94 @@ test.describe('Game host failure reporting', () => {
     await expect(page.locator('#fatal-error')).toContainText('ran out of memory')
     const failure = JSON.parse((await hostMessages(page))[0]) as FailurePayload
     expect(failure.phase).toBe('play')
+  })
+
+  test('exposes the teardown handle even without the diagnostics flag', async ({ page }) => {
+    // __mazeStop is a production teardown API, not a debug aid — a native host
+    // calls it before destroying the document, on launches that never ask for
+    // diagnostics. __mazeLiveBytes stays debug-only. Needs the module to really
+    // run, so both wasm routes are fulfilled rather than aborted.
+    await page.route('**/maze_game_bevy_wasm.js**', (route) => {
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          export default async function init() {}
+          export function start() {}
+          export function start_with_config() {}
+          export function stop() {}
+          export function live_bytes() { return 0 }
+        `,
+      })
+    })
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
+    })
+    await page.route('**/api/v1/mazes/test-id*', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'test-id', name: 'M', definition: { grid: [['S', ' ', 'F']] } }),
+      })
+    })
+
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    await page.waitForFunction(() => typeof (window as unknown as { __mazeStop?: unknown }).__mazeStop === 'function')
+    expect(
+      await page.evaluate(() => typeof (window as unknown as { __mazeLiveBytes?: unknown }).__mazeLiveBytes)
+    ).toBe('undefined')
+  })
+
+  test('forwards the game teardown confirmation to the host', async ({ page }) => {
+    // The handshake that lets a host wait for the release rather than guess at
+    // a delay — a guess that came up short would silently defeat the release.
+    await loadWithModuleStubbed(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-stopped'))
+    })
+
+    await expect.poll(async () => (await hostMessages(page)).length).toBe(1)
+    const stopped = JSON.parse((await hostMessages(page))[0]) as { kind: string }
+    expect(stopped.kind).toBe('stopped')
+  })
+
+  test('replaces the game with an end panel when the page is hidden', async ({ page }) => {
+    // Navigating away tears the game down, so the canvas is left on a stale
+    // frame. The panel goes up synchronously with the teardown so a document
+    // frozen into the back-forward cache carries it, and a restored page shows
+    // an ended game rather than a hung one.
+    await loadWithModuleRunning(page)
+    await expect(page.locator('#game-ended')).toHaveCount(0)
+
+    await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide')) })
+
+    await expect(page.locator('#game-ended')).toBeVisible()
+    await expect(page.locator('#game-ended h1')).toHaveText('GAME ENDED')
+    await expect(page.locator('body.game-ended')).toHaveCount(1)
+    // The stale canvas and the controls for a game that no longer exists go.
+    await expect(page.locator('canvas')).toBeHidden()
+  })
+
+  test('the end panel hides a pause menu left open behind it', async ({ page }) => {
+    // Pausing and then navigating away left Resume and Restart visible behind
+    // the panel on return — both driving a game that no longer exists.
+    await loadWithModuleRunning(page)
+    await firePaused(page, true)
+    await expect(page.locator('#pause-menu')).toBeVisible()
+
+    await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide')) })
+
+    await expect(page.locator('#game-ended')).toBeVisible()
+    await expect(page.locator('#pause-menu')).toBeHidden()
+  })
+
+  test('the end panel offers a working replay', async ({ page }) => {
+    await loadWithModuleRunning(page)
+    await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pagehide')) })
+
+    const reloaded = page.waitForEvent('load')
+    await page.locator('#game-ended button').click()
+    await reloaded
+    // A fresh document — the panel is gone until this game ends in its turn.
+    await expect(page.locator('#game-ended')).toHaveCount(0)
   })
 
   test('tags a forwarded result with its envelope kind', async ({ page }) => {

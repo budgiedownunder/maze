@@ -132,6 +132,7 @@ for investigating what grows as more of a maze comes into view:
 vis 1234/5678
 fps 58
 mem 214 MB
+live 96 MB
 mes 42
 mat 31
 img 18
@@ -141,7 +142,8 @@ img 18
 |:--|:--|
 | `vis` | Visible `Mesh3d` entities against the total spawned. Visibility is frustum-based, so this shows whether cost is driven by what is *in view* rather than by what exists. |
 | `fps` | Frame rate, smoothed. |
-| `mem` | WebAssembly linear-memory size — the allocated heap, which is what runs out. Reads `n/a` on native builds. |
+| `mem` | WebAssembly linear-memory size — the **ceiling** the heap has grown to. It can only ever grow, so it never falls, even when memory is freed. Reads `n/a` on native builds. |
+| `live` | Bytes currently allocated and not yet freed, from the counting global allocator. Unlike `mem`, this **falls** when memory is genuinely returned, so it is the figure that shows whether ending a game released anything. |
 | `mes` | Distinct `Mesh` **assets** in `Assets<Mesh>`. |
 | `mat` | Distinct `StandardMaterial` **assets**. |
 | `img` | Distinct `Image` (texture) **assets**. |

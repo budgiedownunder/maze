@@ -20,6 +20,28 @@ fn make_app() -> App {
     app
 }
 
+/// Bytes currently allocated by the game and not yet freed.
+///
+/// Deliberately callable from JS rather than only shown in the in-game readout:
+/// if [`stop`] drops the app, the readout goes with it and cannot report its own
+/// funeral, whereas this survives to be read before and after.
+///
+/// Read it alongside the WebAssembly linear-memory size, which only ever grows —
+/// this is the figure that comes back down when memory is genuinely released.
+/// Returned as `f64` because that is what a JS number is.
+#[wasm_bindgen]
+pub fn live_bytes() -> f64 {
+    maze_game_bevy::live_bytes() as f64
+}
+
+/// Asks the running game to shut down and release its world, taking effect on
+/// the next frame. Until this existed the browser only reclaimed a game when the
+/// document itself was destroyed — asynchronous, and invisible to the app.
+#[wasm_bindgen]
+pub fn stop() {
+    maze_game_bevy::request_stop();
+}
+
 #[wasm_bindgen]
 pub fn start() {
     maze_game_bevy::install_panic_hook();

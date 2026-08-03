@@ -35,6 +35,15 @@ namespace Maze.Maui.App.Tests.Models
         }
 
         [Fact]
+        public void KindOf_TagsStoppedPayloadAsStopped()
+        {
+            // The teardown handshake: the game confirming it has released, so a
+            // host can wait for that instead of guessing at a delay.
+            Assert.Equal(HostMessageKind.Stopped, HostMessage.KindOf("""{"kind":"stopped"}"""));
+            Assert.Equal(HostMessageKind.Stopped, HostMessage.KindOf("""{"kind":"Stopped"}"""));
+        }
+
+        [Fact]
         public void KindOf_TreatsAnUntaggedPayloadAsResult()
         {
             // The envelope is newer than the result contract, so a payload from a

@@ -35,9 +35,22 @@ namespace Maze.Maui.App
         /// <see cref="Models.HostMessage.KindOf"/>.
         /// </summary>
         /// <param name="json">Raw JSON payload from the platform bridge</param>
+        /// <summary>
+        /// Raised when the game reports that it has finished tearing down and
+        /// released its memory. Lets the page wait for the release before
+        /// destroying the document, rather than guessing at a delay.
+        /// </summary>
+        internal static event Action? GameStoppedReceived;
+
         internal static void RaiseHostMessage(string json)
         {
-            if (Models.HostMessage.KindOf(json) == Models.HostMessageKind.Failure)
+            var kind = Models.HostMessage.KindOf(json);
+            if (kind == Models.HostMessageKind.Stopped)
+            {
+                GameStoppedReceived?.Invoke();
+                return;
+            }
+            if (kind == Models.HostMessageKind.Failure)
             {
                 // An unreadable failure payload still has to surface: dropping it
                 // would turn a reported crash back into a silent one.

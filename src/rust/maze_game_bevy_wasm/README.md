@@ -8,6 +8,8 @@ The `start_with_config` entry point accepts the JSON the host page (`public/game
 
 Both entry points install a panic hook first, so a Rust panic — during generation, world spawn, or gameplay — reaches the host page as a `maze-game-panic` `CustomEvent` carrying `{ message, location }` instead of a bare `RuntimeError: unreachable`. Only the first panic is reported.
 
+`stop()` asks a running game to shut down and release its world, taking effect on the next frame. Until it existed the browser only reclaimed a game when the document itself was destroyed, which is asynchronous and invisible to the app. `live_bytes()` returns the bytes currently allocated and not yet freed — read it either side of a `stop()` to see whether the world was actually released. It is a callable rather than an in-game readout on purpose: `stop()` drops the app, taking the readout with it. The host page exposes both as `window.__mazeStop` / `window.__mazeLiveBytes` when launched with `?mem=1`.
+
 `debugMemory` turns on the in-game developer diagnostics readout (memory, entity counts, frame rate). It defaults to off; the host page sets it from `/game/?mem=1`, and the MAUI app appends that parameter in Debug builds.
 
 ## Getting Started

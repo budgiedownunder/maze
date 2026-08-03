@@ -209,6 +209,56 @@
       border-radius: 12px;
     }
 
+    /* Shown once the game has been torn down and its memory released —
+       navigating away does that, and the page may later be restored from
+       the back-forward cache. Without it the restored page shows the
+       canvas frozen on its last frame, which reads as a hung game. Not
+       styled as an error: ending a run is ordinary, not a fault. */
+    #game-ended {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      padding: 24px 32px;
+      font-family: sans-serif;
+      color: #fff;
+      background: #000;
+      border: 2px solid #ffff00;
+      border-radius: 12px;
+    }
+    #game-ended h1 {
+      font-size: 1.4rem;
+      letter-spacing: 0.12em;
+      font-weight: 700;
+      color: #ffff00;
+    }
+    #game-ended button {
+      min-width: 200px;
+      min-height: 56px;
+      padding: 14px 20px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #fff;
+      background: #2f9e44;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    /* The canvas holds a stale frame and everything else here drives a game
+       that no longer exists — hide the lot so only the panel remains. The
+       pause menu matters: leaving a game paused and returning to it showed
+       Resume and Restart sitting behind the panel, both now inert. */
+    body.game-ended canvas,
+    body.game-ended #controls,
+    body.game-ended #touch-pause-btn,
+    body.game-ended #play-again,
+    body.game-ended #pause-menu { display: none; }
+
     /* In-game pause menu — a host-side HTML overlay shown when Bevy
        reports paused=true via the maze-game-paused CustomEvent. Lives
        outside the canvas so taps don't fall through to the Bevy
@@ -370,6 +420,30 @@
       document.body.appendChild(el);
     }
 
+    // Replaces the game with an end-of-session panel. Called alongside the
+    // teardown rather than after it: the DOM change has to be made *before* the
+    // document is frozen into the back-forward cache, so a page restored later
+    // shows this instead of a canvas stuck on its final frame. Waiting for the
+    // game's own teardown confirmation would be too late — a frozen document
+    // does not process events until it is restored.
+    function showGameEnded() {
+      if (document.getElementById('game-ended')) return;
+      document.body.classList.add('game-ended');
+      var panel = document.createElement('div');
+      panel.id = 'game-ended';
+      panel.setAttribute('role', 'status');
+      var heading = document.createElement('h1');
+      heading.textContent = 'GAME ENDED';
+      var again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = '↻ Play Again';
+      // Same query string, so the same maze or definition is replayed.
+      again.addEventListener('click', function () { location.reload(); });
+      panel.appendChild(heading);
+      panel.appendChild(again);
+      document.body.appendChild(panel);
+    }
+
     (function () {
       // Substrings that mark a failure as an exhausted-memory one rather
       // than an ordinary bug. Matched case-insensitively against the whole
@@ -455,6 +529,29 @@
       // string (?id / ?def preserved). Works in both the React browser tab and
       // the MAUI WebView.
       showPlayAgain();
+    });
+
+    // The game has finished tearing down and released its memory. Forwarded so a
+    // native host can *wait* for the release before destroying the document,
+    // rather than guessing at a delay — a guess that came up short would defeat
+    // the release while looking identical to the release not helping.
+    window.addEventListener('maze-game-stopped', function () {
+      postToHost({ kind: 'stopped' });
+      // Logged unconditionally, like the load timings above: this fires once a
+      // session and it is the only visible confirmation that the teardown ran
+      // at all — which on a device is the whole question. Read on the next task
+      // rather than inline, because the event is dispatched from *within* the
+      // drop, so a figure taken now would be mid-release and misleading.
+      setTimeout(function () {
+        // Via the window handle rather than the module's `live_bytes` import:
+        // this listener lives in a plain script, which has no access to module
+        // scope. The figure is therefore only available on a diagnostics launch,
+        // which is the only time anyone is reading it.
+        var live = window.__mazeLiveBytes
+          ? (window.__mazeLiveBytes() / (1024 * 1024)).toFixed(1) + ' MB'
+          : 'n/a (launch with ?mem=1 for the figure)';
+        console.log('[game] stopped — live ' + live);
+      }, 0);
     });
 
     // Records a won 3D run against the server leaderboard. Only wins are
@@ -635,9 +732,9 @@
     })();
   </script>
   <script type="module">
-    import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
+    import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=139';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=140';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -709,6 +806,37 @@
     // entity counts, frame rate). Applies to every launch branch below, so a
     // run can be measured however it was started.
     const debugMemory = params.get('mem') === '1';
+
+    // Teardown API, exposed unconditionally: this is how a native host releases
+    // the game before navigating away, not a debug aid. Measured at ~55 MB
+    // returned on a 3-level game. The stop is honoured on the game's next frame,
+    // so a caller that needs it to have happened must give it one.
+    window.__mazeStop = stop;
+
+    // Best effort on the way out. The document is about to be destroyed and the
+    // app may get no frame to act on, so this is a cheap backstop rather than
+    // the mechanism — the deliberate wait lives on the native side.
+    //
+    // Unconditional, including when the page is only being frozen into the
+    // back-forward cache: a game we might come back to is still a game holding
+    // ~55 MB, and leaving it alive to be reclaimed later is the lazy platform
+    // behaviour this whole exercise found cannot be relied on. The panel goes up
+    // first and synchronously, so a document frozen a moment later carries it —
+    // a restored page then shows an ended game rather than a stuck one.
+    window.addEventListener('pagehide', () => {
+      showGameEnded();
+      try { stop(); } catch { /* module may already be gone */ }
+    });
+
+    if (debugMemory) {
+      // Diagnostic only. A function rather than a value on purpose: if
+      // `__mazeStop` drops the Bevy app, the in-game readout goes with it and
+      // cannot report its own funeral, whereas this keeps answering. Read it
+      // either side of a stop to see whether the world was actually released —
+      // the in-game `mem` row cannot show that, because WebAssembly linear
+      // memory only ever grows.
+      window.__mazeLiveBytes = live_bytes;
+    }
     // localStorage handoff key for an editor preview — mirrors
     // `PREVIEW_STORAGE_KEY` in src/utils/definitionPreview.ts.
     const PREVIEW_STORAGE_KEY = 'gameDefinitionPreview';

@@ -19,11 +19,10 @@ use bevy::sprite::Anchor;
 
 const DIAG_FONT: f32 = 14.0;
 const DIAG_GAP: f32 = 2.0;
-/// One metric per row, each `<3-char label> <value>`. Uniform label widths line
-/// the values up into a column, and one metric per row keeps every row short
-/// enough to fit the minimap's width — a single wide row ran off the screen
-/// edge, truncating whatever sat at its tail.
-const DIAG_ROWS: f32 = 6.0;
+/// One metric per row, each `<label> <value>`. One metric per row keeps every
+/// row short enough to fit the minimap's width — a single wide row ran off the
+/// screen edge, truncating whatever sat at its tail.
+const DIAG_ROWS: f32 = 7.0;
 const DIAG_LINE_H: f32 = 16.0;
 const DIAG_PAD_Y: f32 = 8.0;
 const DIAG_STRIP_H: f32 = DIAG_ROWS * DIAG_LINE_H + DIAG_PAD_Y;
@@ -106,18 +105,21 @@ pub(crate) fn format_memory(bytes: Option<usize>) -> String {
 /// characters. `vis` (visible meshes against total) leads because it is the
 /// figure the culling work is judged on; `mes` / `mat` / `img` are the resident
 /// mesh, material and image **asset** counts (shared assets, not instances).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn diagnostics_label(
     visible: usize,
     total: usize,
     fps: f32,
     memory_bytes: Option<usize>,
+    live_bytes: usize,
     meshes: usize,
     materials: usize,
     images: usize,
 ) -> String {
     format!(
-        "vis {visible}/{total}\nfps {fps:.0}\nmem {}\nmes {meshes}\nmat {materials}\nimg {images}",
+        "vis {visible}/{total}\nfps {fps:.0}\nmem {}\nlive {}\nmes {meshes}\nmat {materials}\nimg {images}",
         format_memory(memory_bytes),
+        format_memory(Some(live_bytes)),
     )
 }
 
@@ -246,6 +248,7 @@ pub(crate) fn diagnostics_update_system(
         total,
         state.fps,
         linear_memory_bytes(),
+        crate::live_bytes(),
         meshes.map_or(0, |m| m.len()),
         materials.map_or(0, |m| m.len()),
         images.map_or(0, |i| i.len()),
@@ -302,23 +305,27 @@ mod tests {
     fn label_leads_with_the_visible_against_total_pair() {
         // The pair that tests the culling hypothesis has to be first and whole:
         // "visible" alone says nothing without the total to read it against.
-        let label = diagnostics_label(1234, 5678, 58.4, Some(214 * 1024 * 1024), 42, 31, 18);
+        let label =
+            diagnostics_label(1234, 5678, 58.4, Some(214 * 1024 * 1024), 96 * 1024 * 1024, 42, 31, 18);
         let rows: Vec<&str> = label.lines().collect();
         assert_eq!(rows[0], "vis 1234/5678", "got {label}");
         assert_eq!(rows[1], "fps 58", "got {label}");
         assert_eq!(rows[2], "mem 214 MB", "got {label}");
-        assert_eq!(rows[3], "mes 42", "got {label}");
-        assert_eq!(rows[4], "mat 31", "got {label}");
-        assert_eq!(rows[5], "img 18", "got {label}");
+        // `live` sits beside `mem` deliberately: the pair reads as "holding this
+        // much of a ceiling that big", and only `live` can fall.
+        assert_eq!(rows[3], "live 96 MB", "got {label}");
+        assert_eq!(rows[4], "mes 42", "got {label}");
+        assert_eq!(rows[5], "mat 31", "got {label}");
+        assert_eq!(rows[6], "img 18", "got {label}");
     }
 
     #[test]
     fn every_metric_gets_its_own_row() {
         // One metric per row is what keeps each row inside the minimap's width.
         // A combined row ran off the screen edge and truncated its tail.
-        let label = diagnostics_label(1, 2, 60.0, None, 1, 1, 1);
+        let label = diagnostics_label(1, 2, 60.0, None, 1024, 1, 1, 1);
         assert_eq!(label.lines().count(), DIAG_ROWS as usize, "got {label}");
-        assert_eq!(label.lines().count(), 6, "got {label}");
+        assert_eq!(label.lines().count(), 7, "got {label}");
     }
 
     #[test]

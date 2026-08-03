@@ -1217,6 +1217,37 @@ pub(crate) fn dispatch_panic(message: &str, location: &str) {
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn dispatch_panic(_message: &str, _location: &str) {}
 
+/// Dispatches a `maze-game-stopped` CustomEvent, telling the host the game has
+/// been torn down. Detail-free: the fact of it is the whole message.
+#[cfg(target_arch = "wasm32")]
+fn dispatch_stopped() {
+    dispatch_host_event("maze-game-stopped", &wasm_bindgen::JsValue::NULL);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dispatch_stopped() {}
+
+/// Announces the game's teardown from inside the teardown itself.
+///
+/// Bevy offers no "app exited" hook — once the `App` is dropped no Bevy code can
+/// run, and the web runner never returns to provide a completion point. Dropping
+/// a resource is the one thing that happens *at* that moment, so this exists
+/// purely for its [`Drop`]. Its correctness rests on a measured fact: stopping a
+/// running game returns its memory, which means the `World` and its resources
+/// really are dropped rather than merely abandoned.
+///
+/// Lets a host wait for the release instead of guessing at a delay — and a
+/// too-short guess would silently defeat the release while looking exactly like
+/// the release not helping.
+#[derive(Resource)]
+pub(crate) struct StopSignal;
+
+impl Drop for StopSignal {
+    fn drop(&mut self) {
+        dispatch_stopped();
+    }
+}
+
 /// Installs the panic hook that forwards a Rust panic to the hosting page as a
 /// `maze-game-panic` event before delegating to whichever hook was already in
 /// place. Call it before building the app, so a panic raised during maze

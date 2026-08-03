@@ -9,6 +9,9 @@ namespace Maze.Maui.App.Models
         Result,
         /// <summary>A run that died — parse with <see cref="GameFailure.FromJson"/>.</summary>
         Failure,
+        /// <summary>The game finished tearing down and released its memory.
+        /// Carries no payload — the fact of it is the whole message.</summary>
+        Stopped,
     }
 
     /// <summary>
@@ -39,9 +42,16 @@ namespace Maze.Maui.App.Models
                 if (document.RootElement.ValueKind == JsonValueKind.Object
                     && document.RootElement.TryGetProperty("kind", out var kind)
                     && kind.ValueKind == JsonValueKind.String
-                    && string.Equals(kind.GetString(), "failure", StringComparison.OrdinalIgnoreCase))
+                    && kind.GetString() is string tag)
                 {
-                    return HostMessageKind.Failure;
+                    if (string.Equals(tag, "failure", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return HostMessageKind.Failure;
+                    }
+                    if (string.Equals(tag, "stopped", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return HostMessageKind.Stopped;
+                    }
                 }
             }
             catch (JsonException)

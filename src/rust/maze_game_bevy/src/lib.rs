@@ -1,3 +1,4 @@
+mod alloc;
 mod hud;
 mod images;
 mod movement;
@@ -9,6 +10,7 @@ mod tick;
 mod transition;
 mod world;
 
+pub use alloc::{live_bytes, request_stop};
 pub use state::{
     install_panic_hook, DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult,
     HealthStyle, KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle,
@@ -23,7 +25,7 @@ use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::hud::{bag, clock, diagnostics, hp, level, minimap, score, statusbar, time_bonus};
-    use crate::movement::{movement_system, quit_system};
+    use crate::movement::{movement_system, quit_system, stop_request_system};
     use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
@@ -55,6 +57,8 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .init_state::<AppState>()
         .insert_resource(TitleTimer(Timer::from_seconds(3.0, TimerMode::Once)))
         .insert_resource(ClearColor(Color::BLACK))
+        // Exists only to announce its own drop — see StopSignal.
+        .insert_resource(crate::state::StopSignal)
         .add_systems(OnEnter(AppState::TitleScreen), title::setup_title)
         .add_systems(Update, title::tick_title.run_if(in_state(AppState::TitleScreen)))
         .add_systems(Update, title::update_title_countdown.run_if(in_state(AppState::TitleScreen)))
@@ -122,7 +126,10 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::camera_fov_resize_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, quit_system);
+        .add_systems(Update, quit_system)
+        // Unconditional on state: a host tearing a session down must be obeyed
+        // whether the player is on the title screen, playing, or on a win screen.
+        .add_systems(Update, stop_request_system);
 }
 
 #[cfg(test)]

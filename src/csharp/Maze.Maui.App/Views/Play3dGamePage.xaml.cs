@@ -31,6 +31,14 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private bool _failureHandled;
 
+        /// <summary>
+        /// Longest to wait for the game to confirm it has torn down before
+        /// giving up and destroying the document anyway. Only a fallback: the
+        /// game reports completion, so this exists so an unresponsive page
+        /// cannot wedge the back navigation, not as the expected path.
+        /// </summary>
+        private const int StopTimeoutMs = 2000;
+
         public MazeItem? MazeItem { get; set; }
 
         /// <summary>
@@ -119,17 +127,61 @@ namespace Maze.Maui.App.Views
             MazeItem = null;
             DefinitionId = null;
             LaunchSettings = null;
-            // Two steps, and both are needed. Navigating to about:blank destroys
-            // the *document*, which is what releases the game's WebAssembly heap.
-            // It does not release the WebView itself — on iOS the WKWebView and
-            // its web-content process survive, so a second launch adds a second
-            // live process rather than reusing the budget of the first. Measured
-            // on device: the heap resets between runs while the app still dies on
-            // the second launch, before its world is even built.
-            //
-            // DisconnectHandler tears the platform view down on a known schedule
-            // rather than leaving it to a garbage collection that may not happen
-            // before the next game starts.
+            // Released asynchronously — see ReleaseGameAsync for why the order
+            // matters. Deliberately not awaited: OnDisappearing must not block
+            // navigation, and the release is best-effort by nature.
+            _ = ReleaseGameAsync();
+        }
+
+        /// <summary>
+        /// Releases the running game, in the order that actually frees things.
+        ///
+        /// First ask the game itself to shut down: that drops the Bevy app and
+        /// returns its memory (measured at ~55 MB on a three-level game). The
+        /// request is *polled* — a system turns it into an app exit on a later
+        /// frame — so the game needs a moment to act on it, and navigating away
+        /// immediately would defeat it. Rather than guess at how long, wait for
+        /// the game to say it is done: a guess that came up short would silently
+        /// defeat the release while looking exactly like the release not helping.
+        ///
+        /// Only then destroy the document (<c>about:blank</c>) and the platform
+        /// WebView (<c>DisconnectHandler</c>). Doing those first leaves the
+        /// game's release entirely to the browser engine reclaiming the document,
+        /// which on iOS was measurably not enough: the heap resets between runs
+        /// while the app still dies on the second launch.
+        /// </summary>
+        private async Task ReleaseGameAsync()
+        {
+            var stopped = new TaskCompletionSource();
+            // A local function so the subscription captures only the completion
+            // source, never the page — this is a static event, and a stray
+            // reference here would pin the very WebView being released.
+            void OnStopped() => stopped.TrySetResult();
+
+            GameWebViewHandler.GameStoppedReceived += OnStopped;
+            try
+            {
+                await MazeGameWebView.EvaluateJavaScriptAsync(
+                    "window.__mazeStop && window.__mazeStop()");
+                if (await Task.WhenAny(stopped.Task, Task.Delay(StopTimeoutMs)) != stopped.Task)
+                {
+                    _logger.LogWarning(
+                        "Play3dGamePage: the game did not confirm teardown within {Timeout}ms; tearing down anyway",
+                        StopTimeoutMs);
+                }
+            }
+            catch (Exception ex)
+            {
+                // The page may already be gone, or the bridge unavailable — the
+                // teardown below still has to happen, so this is logged and
+                // stepped over rather than surfaced.
+                _logger.LogDebug(ex, "Play3dGamePage: could not ask the game to stop before teardown");
+            }
+            finally
+            {
+                GameWebViewHandler.GameStoppedReceived -= OnStopped;
+            }
+
             MazeGameWebView.Source = new UrlWebViewSource { Url = "about:blank" };
             MazeGameWebView.Handler?.DisconnectHandler();
         }
