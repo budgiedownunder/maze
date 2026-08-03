@@ -2463,6 +2463,36 @@ mod tests {
         assert_eq!(rims, 8, "a water↔lava border is walled on both sides");
     }
 
+    /// Every sky that has stars bakes them into exactly one entity, and the
+    /// skies without stars spawn none.
+    ///
+    /// Locks in the starfield bake across all three star counts — night 1000,
+    /// sunrise 500, sunset 200 — since they share one spawn path and a
+    /// regression would silently restore per-star entities on all of them.
+    #[test]
+    fn every_starred_sky_bakes_its_field_into_one_entity() {
+        use crate::world::sky::stars::StarField;
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+
+        for sky in [SkyType::Night, SkyType::Sunrise, SkyType::Sunset] {
+            let config = GameConfig { sky_type: sky, ..GameConfig::default() };
+            let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+            assert_eq!(
+                count_with::<StarField>(&mut app),
+                1,
+                "{sky:?} must bake its whole field into one entity",
+            );
+        }
+
+        // Day is starless; the enclosed skies cap the maze with a ceiling and
+        // never show one at all.
+        for sky in [SkyType::Day, SkyType::Dungeon, SkyType::Chamber] {
+            let config = GameConfig { sky_type: sky, ..GameConfig::default() };
+            let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+            assert_eq!(count_with::<StarField>(&mut app), 0, "{sky:?} has no stars");
+        }
+    }
+
     /// Counts entities carrying a given marker component.
     fn count_with<T: Component>(app: &mut App) -> usize {
         app.world_mut()
@@ -2491,7 +2521,7 @@ mod tests {
         use crate::world::floor::FloorCell;
         use crate::world::objects::dead_end::DeadEndObject;
         use crate::world::roof::RoofCell;
-        use crate::world::sky::stars::Star;
+        use crate::world::sky::stars::StarField;
         use crate::world::walls::WallCell;
 
         let mut app = make_playing_app();
@@ -2506,8 +2536,8 @@ mod tests {
         let wall_decorations = count_with::<WallDecoration>(&mut app);
         let floor_accents = count_with::<FloorAccent>(&mut app);
         let dead_end_cells = count_with::<DeadEndObject>(&mut app);
-        let stars = count_with::<Star>(&mut app);
-        let tagged = floors + walls + roofs + wall_decorations + floor_accents + stars;
+        let star_fields = count_with::<StarField>(&mut app);
+        let tagged = floors + walls + roofs + wall_decorations + floor_accents + star_fields;
 
         println!("--- entity breakdown (demo grid, single level) ---");
         println!("world entities        {meshes}");
@@ -2516,7 +2546,7 @@ mod tests {
         println!("  roof cells          {roofs}");
         println!("  wall decorations    {wall_decorations}");
         println!("  floor accents       {floor_accents}");
-        println!("  stars               {stars}");
+        println!("  star fields         {star_fields} (whole field baked into one mesh)");
         println!("  ---");
         println!("  dead-end CELLS      {dead_end_cells} (landmarks, not sub-meshes)");
         println!("  tagged subtotal     {tagged}");
