@@ -1232,13 +1232,9 @@ fn dispatch_stopped() {}
 /// Bevy offers no "app exited" hook — once the `App` is dropped no Bevy code can
 /// run, and the web runner never returns to provide a completion point. Dropping
 /// a resource is the one thing that happens *at* that moment, so this exists
-/// purely for its [`Drop`]. Its correctness rests on a measured fact: stopping a
-/// running game returns its memory, which means the `World` and its resources
-/// really are dropped rather than merely abandoned.
+/// purely for its [`Drop`].
 ///
-/// Lets a host wait for the release instead of guessing at a delay — and a
-/// too-short guess would silently defeat the release while looking exactly like
-/// the release not helping.
+/// Lets a host wait for the release rather than guess at a delay.
 #[derive(Resource)]
 pub(crate) struct StopSignal;
 

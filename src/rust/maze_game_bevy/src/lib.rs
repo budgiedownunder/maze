@@ -2466,9 +2466,8 @@ mod tests {
     /// Every sky that has stars bakes them into exactly one entity, and the
     /// skies without stars spawn none.
     ///
-    /// Locks in the starfield bake across all three star counts — night 1000,
-    /// sunrise 500, sunset 200 — since they share one spawn path and a
-    /// regression would silently restore per-star entities on all of them.
+    /// The three counts (night 1000, sunrise 500, sunset 200) share one spawn
+    /// path, so a regression would restore per-star entities on all of them.
     #[test]
     fn every_starred_sky_bakes_its_field_into_one_entity() {
         use crate::world::sky::stars::StarField;
@@ -2501,17 +2500,11 @@ mod tests {
             .count()
     }
 
-    /// Reports where a scene's renderable entities actually are.
+    /// Reports where a scene's renderable entities are, by category.
     ///
-    /// The device measurements pinned the crash to how much is *drawn* — 2643
-    /// visible meshes of 3186 on a three-level game, against 1369 of 2056 on a
-    /// single-level one that does not crash. This breaks that total down so the
-    /// merging work is aimed at whatever dominates rather than at a guess.
-    ///
-    /// The residual matters most: prop sub-meshes and their inverted-hull
-    /// outline siblings carry no marker of their own (`DeadEndObject` tags the
-    /// landmark *cell*, not its parts), so anything untagged is overwhelmingly
-    /// prop geometry.
+    /// Prop sub-meshes and their outline siblings carry no marker of their own
+    /// (`DeadEndObject` tags the landmark *cell*, not its parts), so the
+    /// untagged residual is overwhelmingly prop geometry.
     ///
     /// Run with `cargo test -p maze_game_bevy entity_breakdown -- --nocapture`.
     #[test]

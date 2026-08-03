@@ -250,9 +250,8 @@
       cursor: pointer;
     }
     /* The canvas holds a stale frame and everything else here drives a game
-       that no longer exists — hide the lot so only the panel remains. The
-       pause menu matters: leaving a game paused and returning to it showed
-       Resume and Restart sitting behind the panel, both now inert. */
+       that no longer exists — hide the lot so only the panel remains, including
+       a pause menu left open when the player navigated away. */
     body.game-ended canvas,
     body.game-ended #controls,
     body.game-ended #touch-pause-btn,
@@ -532,16 +531,14 @@
     });
 
     // The game has finished tearing down and released its memory. Forwarded so a
-    // native host can *wait* for the release before destroying the document,
-    // rather than guessing at a delay — a guess that came up short would defeat
-    // the release while looking identical to the release not helping.
+    // native host can wait for the release before destroying the document,
+    // rather than guessing at a delay.
     window.addEventListener('maze-game-stopped', function () {
       postToHost({ kind: 'stopped' });
-      // Logged unconditionally, like the load timings above: this fires once a
-      // session and it is the only visible confirmation that the teardown ran
-      // at all — which on a device is the whole question. Read on the next task
-      // rather than inline, because the event is dispatched from *within* the
-      // drop, so a figure taken now would be mid-release and misleading.
+      // Logged unconditionally, like the load timings above — the only visible
+      // confirmation that the teardown ran. Read on the next task rather than
+      // inline: the event is dispatched from *within* the drop, so a figure
+      // taken now would be mid-release.
       setTimeout(function () {
         // Via the window handle rather than the module's `live_bytes` import:
         // this listener lives in a plain script, which has no access to module
@@ -808,9 +805,9 @@
     const debugMemory = params.get('mem') === '1';
 
     // Teardown API, exposed unconditionally: this is how a native host releases
-    // the game before navigating away, not a debug aid. Measured at ~55 MB
-    // returned on a 3-level game. The stop is honoured on the game's next frame,
-    // so a caller that needs it to have happened must give it one.
+    // the game before navigating away, not a debug aid. The stop is honoured on
+    // the game's next frame, so a caller that needs it to have happened must
+    // give it one.
     window.__mazeStop = stop;
 
     // Best effort on the way out. The document is about to be destroyed and the
@@ -818,11 +815,10 @@
     // the mechanism — the deliberate wait lives on the native side.
     //
     // Unconditional, including when the page is only being frozen into the
-    // back-forward cache: a game we might come back to is still a game holding
-    // ~55 MB, and leaving it alive to be reclaimed later is the lazy platform
-    // behaviour this whole exercise found cannot be relied on. The panel goes up
-    // first and synchronously, so a document frozen a moment later carries it —
-    // a restored page then shows an ended game rather than a stuck one.
+    // back-forward cache: a game we might return to still holds its memory, and
+    // the browser reclaims it no sooner than it chooses. The panel goes up first
+    // and synchronously, so a document frozen a moment later carries it — a
+    // restored page then shows an ended game rather than a stuck one.
     window.addEventListener('pagehide', () => {
       showGameEnded();
       try { stop(); } catch { /* module may already be gone */ }

@@ -136,19 +136,15 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Releases the running game, in the order that actually frees things.
         ///
-        /// First ask the game itself to shut down: that drops the Bevy app and
-        /// returns its memory (measured at ~55 MB on a three-level game). The
-        /// request is *polled* — a system turns it into an app exit on a later
-        /// frame — so the game needs a moment to act on it, and navigating away
-        /// immediately would defeat it. Rather than guess at how long, wait for
-        /// the game to say it is done: a guess that came up short would silently
-        /// defeat the release while looking exactly like the release not helping.
+        /// First ask the game itself to shut down, which drops the Bevy app and
+        /// returns its memory. The request is *polled* — a system turns it into
+        /// an app exit on a later frame — so navigating away immediately would
+        /// defeat it; wait for the game to confirm instead of guessing at a delay.
         ///
         /// Only then destroy the document (<c>about:blank</c>) and the platform
         /// WebView (<c>DisconnectHandler</c>). Doing those first leaves the
-        /// game's release entirely to the browser engine reclaiming the document,
-        /// which on iOS was measurably not enough: the heap resets between runs
-        /// while the app still dies on the second launch.
+        /// game's release to the browser engine reclaiming the document, which on
+        /// iOS is not prompt enough to stop a second launch competing with it.
         /// </summary>
         private async Task ReleaseGameAsync()
         {

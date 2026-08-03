@@ -1,13 +1,8 @@
 //! Developer diagnostics readout, shown below the minimap's dimensions strip
 //! when `GameConfig::debug_memory` is set (the host page's `/game/?mem=1`).
 //!
-//! It exists to answer one question: as the player walks and more of the maze
-//! comes into view, what actually grows? The headline is therefore **visible
-//! meshes against total** — on mobile the renderer is killed outright with no
-//! post-mortem, so the numbers have to be readable *while approaching* the
-//! failure rather than recovered afterwards. Linear memory sits beside it to
-//! separate "the heap grew" from "the view opened up"; the asset counts
-//! separate resident assets from instance counts.
+//! Reports visible meshes against total, memory, and the resident asset counts,
+//! so render load can be told apart from heap growth while playing.
 
 use crate::hud::minimap::{
     minimap_dimensions_y, MINIMAP_DIM_STRIP_H, MINIMAP_EDGE_MARGIN, MINIMAP_PANEL_BG,
@@ -19,9 +14,8 @@ use bevy::sprite::Anchor;
 
 const DIAG_FONT: f32 = 14.0;
 const DIAG_GAP: f32 = 2.0;
-/// One metric per row, each `<label> <value>`. One metric per row keeps every
-/// row short enough to fit the minimap's width — a single wide row ran off the
-/// screen edge, truncating whatever sat at its tail.
+/// One metric per row, each `<label> <value>` — short enough to fit the
+/// minimap's width without overflowing the screen edge.
 const DIAG_ROWS: f32 = 7.0;
 const DIAG_LINE_H: f32 = 16.0;
 const DIAG_PAD_Y: f32 = 8.0;
@@ -33,10 +27,9 @@ const _: () = assert!(DIAG_STRIP_H >= DIAG_ROWS * DIAG_LINE_H);
 /// left of the minimap column rather than centring under it.
 const DIAG_TEXT_PAD_X: f32 = 6.0;
 
-/// How often the readout recomputes and rewrites its text. Deliberately not
-/// every frame: re-laying out a text node each frame costs enough to move the
-/// very numbers being measured, and an overlay that distorts its own reading is
-/// worse than none. Four updates a second is comfortably readable while walking.
+/// How often the readout recomputes and rewrites its text. Not every frame:
+/// re-laying out a text node that often costs enough to move the numbers being
+/// measured.
 const DIAG_UPDATE_SECS: f32 = 0.25;
 
 /// Smoothing factor for the frame-rate estimate — a plain exponential moving
@@ -91,9 +84,7 @@ pub(crate) fn diagnostics_y(center_y: f32, map_size: f32) -> f32 {
 
 /// Renders a byte count as whole megabytes, or `n/a` where the platform cannot
 /// report one. Native builds have no cheap equivalent of the WASM linear-memory
-/// figure, and adding Bevy's `sysinfo_plugin` for it would grow a binary this
-/// work is trying to shrink — the native run is for checking layout, the real
-/// measurement happens on the device.
+/// figure, and Bevy's `sysinfo_plugin` would add binary weight for it.
 pub(crate) fn format_memory(bytes: Option<usize>) -> String {
     match bytes {
         Some(b) => format!("{} MB", b / (1024 * 1024)),
@@ -101,10 +92,9 @@ pub(crate) fn format_memory(bytes: Option<usize>) -> String {
     }
 }
 
-/// The readout body — one metric per row, `<label> <value>`, every label three
-/// characters. `vis` (visible meshes against total) leads because it is the
-/// figure the culling work is judged on; `mes` / `mat` / `img` are the resident
-/// mesh, material and image **asset** counts (shared assets, not instances).
+/// The readout body — one metric per row, `<label> <value>`. `mes` / `mat` /
+/// `img` are the resident mesh, material and image **asset** counts (shared
+/// assets, not instances).
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn diagnostics_label(
     visible: usize,
@@ -140,19 +130,14 @@ fn linear_memory_bytes() -> Option<usize> {
 }
 
 /// Spawns the readout on entering the title screen, so the countdown shows the
-/// **pre-spawn** figures: the world is not built until `AppState::Playing`, and
-/// the difference between the title reading and the first frame of play is
-/// exactly what the world costs — which separates fixed module overhead from
-/// scene cost. The readout is not tagged `TitleEntity`, so `teardown_title`
-/// leaves it alone and the same entities carry through into play; there is one
-/// spawn site, not one per state.
+/// pre-world figures — the world is not built until `AppState::Playing`. Not
+/// tagged `TitleEntity`, so `teardown_title` leaves it and the same entities
+/// carry into play from a single spawn site.
 ///
-/// Also the point where `MAZE_DEBUG_MEM` is folded in, because it has to be
-/// applied before anything reads the flag. `spawn_world` re-inserts `GameConfig`
-/// later, but by then it is reading the value settled here.
+/// Also where `MAZE_DEBUG_MEM` is folded in, since it must be applied before
+/// anything reads the flag.
 ///
-/// Without the flag nothing is spawned and no system below does any work, so an
-/// ordinary run renders exactly as it did before this existed.
+/// Without the flag nothing is spawned and no system below does any work.
 pub(crate) fn setup_diagnostics(
     mut commands: Commands,
     mut config: ResMut<GameConfig>,
@@ -183,8 +168,7 @@ pub(crate) fn setup_diagnostics(
         Transform::from_xyz(center_x, y, 8.8),
     ));
     // Left-anchored at the panel's left edge so every row starts on the same
-    // column. Centring a multi-row block under the minimap pushed the longest
-    // row past the screen edge, truncating its tail.
+    // column, rather than centring and overflowing the screen edge.
     commands.spawn((
         DiagnosticsReadout,
         DiagnosticsText,

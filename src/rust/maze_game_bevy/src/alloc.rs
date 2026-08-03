@@ -1,10 +1,8 @@
 //! Live-allocation accounting.
 //!
-//! The diagnostics readout's `mem` figure is WebAssembly **linear memory**,
-//! which can only ever grow — freeing every byte leaves it unchanged. That
-//! makes it useless for the one question that matters when a game ends: was
-//! anything actually released? This allocator answers it, by tracking the
-//! running total of live bytes, which falls when memory is genuinely returned.
+//! WebAssembly linear memory can only ever grow, so it cannot show whether
+//! memory was released. This tracks the running total of live bytes, which
+//! falls when memory is genuinely returned.
 //!
 //! Wrapping the system allocator costs two relaxed atomic operations per
 //! allocation and deallocation. `Relaxed` is sufficient: the counter is a
@@ -14,11 +12,9 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// The running total of live bytes, kept separate from the allocator itself so
-/// the arithmetic can be tested on a local instance. Testing it through the
-/// global counter is not possible: the whole test suite allocates into it
-/// concurrently, and the interference is the same order of magnitude as any
-/// probe a test could make.
+/// The running total of live bytes, kept separate from the allocator so the
+/// arithmetic can be tested on a local instance — the global counter cannot be
+/// driven from a test, since the whole suite allocates into it concurrently.
 pub(crate) struct LiveCounter(AtomicUsize);
 
 impl LiveCounter {
@@ -150,11 +146,8 @@ pub(crate) fn take_stop_request() -> bool {
 mod tests {
     use super::*;
 
-    // The counter's arithmetic is exercised on a LOCAL instance. Driving the
-    // global one from a test cannot work: 282 tests allocate into it in
-    // parallel, and an earlier attempt to absorb that with tolerances failed
-    // because the interference came from the sibling allocator test using an
-    // identically-sized probe — noise the same magnitude as the signal.
+    // Exercised on a LOCAL instance: the global counter has the whole suite
+    // allocating into it in parallel, so no assertion about its value holds.
 
     #[test]
     fn the_counter_rises_on_allocation_and_falls_on_release() {

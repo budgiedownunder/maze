@@ -12,12 +12,10 @@
 //! ~10-pixel blocks once magnified onto the dome, which is why this
 //! module exists as a separate path.
 //!
-//! The whole field is **one entity**. Stars never move relative to each other
-//! or to the dome, so the sphere is stamped at every star position and merged
-//! into a single mesh. Spawning them individually cost 1000 entities under a
-//! night sky — more than half of everything in a scene — and every one of them
-//! was carried through extraction, culling and batching on every frame. Baking
-//! is visually identical: same positions, same material, same parent.
+//! The whole field is **one entity**. Stars never move relative to each other or
+//! to the dome, so the sphere is stamped at every star position and merged into
+//! a single mesh — one entity through extraction, culling and batching instead
+//! of one per star.
 
 use super::dome::SKY_RADIUS;
 use super::next_unit;
@@ -50,8 +48,7 @@ pub(crate) fn spawn_stars(
     count: u32,
     seed: u64,
 ) {
-    // Positions first, then one merged mesh: the sphere is cheap to stamp and
-    // the result draws as a single object.
+    // Positions first, then one merged mesh.
     let mut state = seed;
     let positions: Vec<Vec3> = (0..count)
         .map(|_| {
@@ -99,8 +96,8 @@ pub(crate) fn spawn_stars(
         })
     });
 
-    // Spawned even without render assets so headless counting still sees the
-    // field, matching every other spawn helper here.
+    // Spawned even without render assets, matching the other spawn helpers, so
+    // marker-counting works headlessly.
     let field = {
         let mut entity = commands.spawn((StarField, Transform::default()));
         if let (Some(mesh), Some(material)) = (baked, material) {
