@@ -69,11 +69,66 @@ pub(crate) struct DiagnosticsReadout;
 #[derive(Component)]
 pub(crate) struct DiagnosticsText;
 
-/// Frame-rate estimate and update accumulator for the readout.
+/// Frame-time estimate and update accumulator for the readout.
 #[derive(Resource, Default)]
 pub(crate) struct DiagnosticsState {
-    fps: f32,
+    /// Smoothed **frame time**, in seconds. Averaged as a duration rather than
+    /// as a rate: smoothing `1 / dt` weights quick frames far more heavily than
+    /// slow ones, so a run alternating 10 ms and 200 ms frames reports about
+    /// 52 fps when it is delivering 9.5.
+    frame_secs: f32,
+    /// Frames sampled since the estimate was last reset. The first is discarded:
+    /// the frame that enters play carries the whole world spawn, and seeding
+    /// from it would take the estimate as long to climb back as a stale one
+    /// takes to fall.
+    samples: u32,
     since_update: f32,
+}
+
+impl DiagnosticsState {
+    /// Folds one frame's duration into the estimate.
+    fn sample(&mut self, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        self.samples += 1;
+        if self.samples < 2 {
+            return;
+        }
+        self.frame_secs = if self.frame_secs == 0.0 {
+            dt
+        } else {
+            self.frame_secs + (dt - self.frame_secs) * FPS_SMOOTHING
+        };
+    }
+
+    /// Frames per second implied by the estimate, or `0` before any frame has
+    /// been folded in.
+    fn fps(&self) -> f32 {
+        if self.frame_secs > 0.0 {
+            1.0 / self.frame_secs
+        } else {
+            0.0
+        }
+    }
+
+    fn reset(&mut self) {
+        self.frame_secs = 0.0;
+        self.samples = 0;
+        self.since_update = 0.0;
+    }
+}
+
+/// `OnEnter(Playing)`: discards the title screen's frame-time estimate.
+///
+/// The readout is spawned on the title screen and carries into play, so without
+/// this the estimate walks into the game still holding the near-empty title's
+/// frame time and takes several seconds of smoothing to reach the truth — long
+/// enough to read the title screen's frame rate and take it for the game's.
+pub(crate) fn reset_frame_estimate(state: Option<ResMut<DiagnosticsState>>) {
+    if let Some(mut state) = state {
+        state.reset();
+    }
 }
 
 /// Y of the diagnostics strip — directly under the minimap's dimensions footer.
@@ -210,14 +265,7 @@ pub(crate) fn diagnostics_update_system(
     let Some(mut state) = state else { return };
 
     let dt = time.delta_secs();
-    if dt > 0.0 {
-        let instant = 1.0 / dt;
-        state.fps = if state.fps == 0.0 {
-            instant
-        } else {
-            state.fps + (instant - state.fps) * FPS_SMOOTHING
-        };
-    }
+    state.sample(dt);
 
     state.since_update += dt;
     if state.since_update < DIAG_UPDATE_SECS {
@@ -230,7 +278,7 @@ pub(crate) fn diagnostics_update_system(
     let label = diagnostics_label(
         visible,
         total,
-        state.fps,
+        state.fps(),
         linear_memory_bytes(),
         crate::live_bytes(),
         meshes.map_or(0, |m| m.len()),
@@ -277,6 +325,67 @@ mod tests {
         assert_eq!(format_memory(Some(214 * 1024 * 1024)), "214 MB");
         // Sub-megabyte rounds down rather than showing noise.
         assert_eq!(format_memory(Some(1024)), "0 MB");
+    }
+
+    /// Folds `n` frames of `dt` into a fresh estimate and reports the result.
+    fn fps_after(dt: f32, n: u32) -> f32 {
+        let mut state = DiagnosticsState::default();
+        for _ in 0..n {
+            state.sample(dt);
+        }
+        state.fps()
+    }
+
+    #[test]
+    fn a_steady_frame_rate_is_reported_as_itself() {
+        assert!((fps_after(1.0 / 8.0, 200) - 8.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn nothing_is_reported_before_a_frame_has_been_measured() {
+        assert_eq!(DiagnosticsState::default().fps(), 0.0);
+    }
+
+    /// The frame that enters play carries the whole world spawn. Seeding from it
+    /// would leave the readout climbing out of a hole for as many seconds as the
+    /// stale title-screen estimate used to take falling into one.
+    #[test]
+    fn the_first_frame_of_a_run_is_discarded() {
+        let mut state = DiagnosticsState::default();
+        state.sample(2.0); // the spawn frame
+        assert_eq!(state.fps(), 0.0, "the spawn frame must not seed the estimate");
+        state.sample(1.0 / 30.0);
+        assert!((state.fps() - 30.0).abs() < 0.1, "the next frame seeds it");
+    }
+
+    /// Averaging frame *time* rather than frames per second. Smoothing `1 / dt`
+    /// weights quick frames far more heavily, so an irregular run reads far
+    /// better than it plays — and irregular frames are exactly what a stalling
+    /// game produces.
+    #[test]
+    fn alternating_fast_and_slow_frames_report_the_rate_actually_delivered() {
+        let mut state = DiagnosticsState::default();
+        state.sample(0.010);
+        for _ in 0..400 {
+            state.sample(0.010);
+            state.sample(0.200);
+        }
+        // Two frames per 210 ms is 9.5 fps; averaging the rates would say ~52.
+        assert!((state.fps() - 9.5).abs() < 1.5, "got {}", state.fps());
+    }
+
+    #[test]
+    fn resetting_discards_the_previous_estimate() {
+        let mut state = DiagnosticsState::default();
+        for _ in 0..200 {
+            state.sample(1.0 / 60.0);
+        }
+        state.reset();
+        assert_eq!(state.fps(), 0.0);
+        // And the next run seeds afresh rather than gliding down from 60.
+        state.sample(2.0);
+        state.sample(1.0 / 8.0);
+        assert!((state.fps() - 8.0).abs() < 0.1, "got {}", state.fps());
     }
 
     #[test]

@@ -94,6 +94,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         // bail immediately unless the readout was spawned, so a normal run pays
         // a single resource lookup per frame.
         .add_systems(OnEnter(AppState::TitleScreen), diagnostics::setup_diagnostics)
+        .add_systems(OnEnter(AppState::Playing), diagnostics::reset_frame_estimate)
         .add_systems(Update, diagnostics::diagnostics_update_system)
         .add_systems(Update, diagnostics::diagnostics_resize_system)
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))

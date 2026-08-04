@@ -141,7 +141,7 @@ img 18
 | Row | Meaning |
 |:--|:--|
 | `vis` | Visible `Mesh3d` entities against the total spawned. Visibility is frustum-based, so this shows whether cost is driven by what is *in view* rather than by what exists. |
-| `fps` | Frame rate, smoothed. |
+| `fps` | Frame rate: a smoothed *frame time*, inverted for display. Smoothing the duration rather than the rate keeps an irregular run from reading better than it plays. The estimate is discarded when a game starts (and its first frame, which carries the world spawn, is not counted), so the figure is the game's own within a moment rather than the title screen's for the next several seconds. |
 | `mem` | WebAssembly linear-memory size — the **ceiling** the heap has grown to. It can only ever grow, so it never falls, even when memory is freed. Reads `n/a` on native builds. |
 | `live` | Bytes currently allocated and not yet freed, from the counting global allocator. Unlike `mem`, this **falls** when memory is genuinely returned, so it is the figure that shows whether ending a game released anything. |
 | `mes` | Distinct `Mesh` **assets** in `Assets<Mesh>`. |
