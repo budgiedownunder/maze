@@ -518,6 +518,91 @@ test.describe('Game host stored game-definition launch (?def=...)', () => {
     // Unpublished preview → the config is marked un-tracked (no win banners).
     expect(payload.leaderboardTracked).toBe(false)
   })
+
+  // A killed page runs no JavaScript on its way out, so the crash can only be
+  // noticed on the load the browser performs afterwards — by a run sentinel that
+  // outlived it. Without this the reload just starts the same game again.
+  test.describe('crash containment', () => {
+    const SENTINEL = 'mazeRunActive'
+
+    async function launch(page: Page) {
+      await stubDefHost(page, {
+        config: { timerSeconds: 90, mode: 'Tower' },
+        challengeKey: 'def:def-id',
+        leaderboardTracked: false,
+      })
+      await page.goto('/game/index.html?t=fake&def=def-id')
+    }
+
+    const sentinel = (page: Page) =>
+      page.evaluate((key) => sessionStorage.getItem(key), SENTINEL)
+
+    // Leaves behind what a killed run leaves behind. Seeded once and not on any
+    // later navigation, so a reload sees exactly what a real retry would: the
+    // sentinel already cleared by the load that reported it.
+    async function seedAbandonedRun(page: Page) {
+      await page.addInitScript((key) => {
+        if (sessionStorage.getItem('seeded')) return
+        sessionStorage.setItem('seeded', '1')
+        sessionStorage.setItem(key, 'def=def-id')
+      }, SENTINEL)
+    }
+
+    test('a started run is recorded, so a kill mid-play leaves a trace', async ({ page }) => {
+      await launch(page)
+      await capturedPayload(page)
+      expect(await sentinel(page)).toBe('def=def-id')
+    })
+
+    test('leaving the page deliberately clears the record', async ({ page }) => {
+      await launch(page)
+      await capturedPayload(page)
+      // `pagehide` covers every ordinary exit — navigation, reload, and being
+      // frozen into the back-forward cache.
+      await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+      expect(await sentinel(page)).toBeNull()
+    })
+
+    test('a run that never ended shows the stopped panel and does not restart the game', async ({ page }) => {
+      let wasmRequested = false
+      page.on('request', (r) => {
+        if (r.url().includes('maze_game_bevy_wasm_bg.wasm')) wasmRequested = true
+      })
+      await seedAbandonedRun(page)
+      await launch(page)
+      await expect(page.locator('#run-stopped')).toBeVisible()
+      await expect(page.locator('#run-stopped h1')).toHaveText('GAME STOPPED')
+      // The definition is never fetched, let alone started.
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload
+        )
+      ).toBeUndefined()
+      // Nor is the WASM binary — the slowest thing this page does, and the
+      // reason the check cannot wait for the module to run.
+      expect(wasmRequested).toBe(false)
+    })
+
+    // Navigating away fires `pagehide`, which puts the end panel up before the
+    // document is frozen — so returning through the back-forward cache would
+    // restore a page wearing both panels.
+    test('leaving a stopped page does not stack an end panel on top of it', async ({ page }) => {
+      await seedAbandonedRun(page)
+      await launch(page)
+      await expect(page.locator('#run-stopped')).toBeVisible()
+      await page.evaluate(() => window.dispatchEvent(new Event('pagehide')))
+      await expect(page.locator('#game-ended')).toHaveCount(0)
+      await expect(page.locator('#run-stopped')).toBeVisible()
+    })
+
+    test('Try Again starts the game rather than reporting the same stop twice', async ({ page }) => {
+      await seedAbandonedRun(page)
+      await launch(page)
+      await page.locator('#run-stopped button').click()
+      await capturedPayload(page)
+      await expect(page.locator('#run-stopped')).toHaveCount(0)
+    })
+  })
 })
 
 test.describe('Game host stored game-definition score submission (?def=)', () => {

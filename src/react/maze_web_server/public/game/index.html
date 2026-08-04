@@ -214,7 +214,8 @@
        the back-forward cache. Without it the restored page shows the
        canvas frozen on its last frame, which reads as a hung game. Not
        styled as an error: ending a run is ordinary, not a fault. */
-    #game-ended {
+    #game-ended,
+    #run-stopped {
       position: fixed;
       left: 50%;
       top: 50%;
@@ -231,13 +232,24 @@
       border: 2px solid #ffff00;
       border-radius: 12px;
     }
-    #game-ended h1 {
+    #game-ended h1,
+    #run-stopped h1 {
       font-size: 1.4rem;
       letter-spacing: 0.12em;
       font-weight: 700;
       color: #ffff00;
     }
-    #game-ended button {
+    /* Same shape as the ended panel, in the fatal-error red — a run cut short by
+       the browser is a fault, not an ordinary ending. */
+    #run-stopped { border-color: #ff7070; }
+    #run-stopped h1 { color: #ff7070; }
+    #run-stopped p {
+      max-width: 34ch;
+      text-align: center;
+      line-height: 1.4;
+    }
+    #game-ended button,
+    #run-stopped button {
       min-width: 200px;
       min-height: 56px;
       padding: 14px 20px;
@@ -256,7 +268,11 @@
     body.game-ended #controls,
     body.game-ended #touch-pause-btn,
     body.game-ended #play-again,
-    body.game-ended #pause-menu { display: none; }
+    body.game-ended #pause-menu,
+    body.run-stopped canvas,
+    body.run-stopped #controls,
+    body.run-stopped #touch-pause-btn,
+    body.run-stopped #pause-menu { display: none; }
 
     /* In-game pause menu — a host-side HTML overlay shown when Bevy
        reports paused=true via the maze-game-paused CustomEvent. Lives
@@ -427,6 +443,11 @@
     // does not process events until it is restored.
     function showGameEnded() {
       if (document.getElementById('game-ended')) return;
+      // A stopped run never started one, so there is no session to have ended.
+      // Leaving this to run would stack the two panels: navigating away from the
+      // stopped page fires `pagehide`, which adds this panel before the document
+      // is frozen, and returning through the back-forward cache restores both.
+      if (document.getElementById('run-stopped')) return;
       document.body.classList.add('game-ended');
       var panel = document.createElement('div');
       panel.id = 'game-ended';
@@ -441,6 +462,70 @@
       panel.appendChild(heading);
       panel.appendChild(again);
       document.body.appendChild(panel);
+    }
+
+    // Records that a run is under way, so a run that ends without the page ever
+    // being left can be recognised on the *next* load.
+    //
+    // When the browser kills this page's process no JavaScript runs — the panic
+    // hook, `window.onerror` and the bridge all die with it — and the browser
+    // then reloads the page, which would start the same game again, and again.
+    // `pagehide` fires for every ordinary way of leaving a page (navigation,
+    // reload, freezing into the back-forward cache) and does *not* fire for a
+    // kill, so a sentinel that outlives a load is the one signal available.
+    var RUN_SENTINEL_KEY = 'mazeRunActive';
+
+    function markRunStarted(subject) {
+      try { sessionStorage.setItem(RUN_SENTINEL_KEY, subject); } catch { /* storage disabled */ }
+    }
+
+    function clearRunSentinel() {
+      try { sessionStorage.removeItem(RUN_SENTINEL_KEY); } catch { /* storage disabled */ }
+    }
+
+    // The subject of a run that was under way when this tab last stopped, or
+    // `null` if the last page left cleanly (or there was none).
+    function abandonedRun() {
+      try { return sessionStorage.getItem(RUN_SENTINEL_KEY); } catch { return null; }
+    }
+
+    // Shown in place of the game after a killed run, instead of starting it
+    // again. Retrying is offered but never automatic: a game that dies reliably
+    // would otherwise restart for as long as the player watched it.
+    function showRunStopped() {
+      if (document.getElementById('run-stopped')) return;
+      var loading = document.getElementById('loading');
+      if (loading) loading.remove();
+      document.body.classList.add('run-stopped');
+      var panel = document.createElement('div');
+      panel.id = 'run-stopped';
+      panel.setAttribute('role', 'alert');
+      var heading = document.createElement('h1');
+      heading.textContent = 'GAME STOPPED';
+      var message = document.createElement('p');
+      message.textContent =
+        'The game stopped unexpectedly and the browser reloaded this page. '
+        + 'It has not been restarted. A game with fewer levels or a smaller maze may run better.';
+      var again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = '↻ Try Again';
+      again.addEventListener('click', function () { location.reload(); });
+      panel.appendChild(heading);
+      panel.appendChild(message);
+      panel.appendChild(again);
+      document.body.appendChild(panel);
+    }
+
+    // Checked here, in the document's own script, rather than in the module
+    // below: that module does not run until the WASM has been fetched and
+    // compiled, so a check there leaves the player watching "Loading game…"
+    // through a download that is about to be thrown away. Cleared as it is read,
+    // so an ordinary reload — or the retry offered by the panel — starts a game
+    // instead of reporting this stop a second time.
+    var mazeRunAbandoned = abandonedRun() !== null;
+    if (mazeRunAbandoned) {
+      clearRunSentinel();
+      showRunStopped();
     }
 
     (function () {
@@ -735,7 +820,11 @@
 
     let secs = 0;
     const timer = setInterval(() => {
-      document.getElementById('elapsed').textContent = `${++secs}s`;
+      // The loading panel may already have been replaced — by the stopped panel,
+      // or by the game starting — and a tick into a missing element would raise
+      // an error the failure handlers would report as a crash.
+      const elapsed = document.getElementById('elapsed');
+      if (elapsed) elapsed.textContent = `${++secs}s`;
     }, 1000);
 
     // Load-time errors the page detects itself (a missing subject, a failed
@@ -785,14 +874,18 @@
       return config;
     }
 
-    const t0 = performance.now();
-    const response = await fetch(WASM_URL);
-    const t1 = performance.now();
-    console.log(`[game] fetch: ${((t1 - t0) / 1000).toFixed(2)}s`);
-    await init({ module_or_path: response });
-    const t2 = performance.now();
-    console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
-    console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
+    // Skipped entirely for a run the page has already reported as stopped: the
+    // binary is the slowest thing this page does, and no game is going to run.
+    if (!mazeRunAbandoned) {
+      const t0 = performance.now();
+      const response = await fetch(WASM_URL);
+      const t1 = performance.now();
+      console.log(`[game] fetch: ${((t1 - t0) / 1000).toFixed(2)}s`);
+      await init({ module_or_path: response });
+      const t2 = performance.now();
+      console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
+      console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
+    }
 
     const canvas = document.getElementById('bevy-canvas');
     const params = new URLSearchParams(location.search);
@@ -827,6 +920,27 @@
       return startConfig;
     }
 
+    // Starts the game, recording that a run is under way for as long as it is.
+    // The sentinel goes down *before* the call: from this point the document can
+    // be killed at any moment, and a run that had not yet written the flag would
+    // be silently restarted on the reload that follows. A synchronous failure to
+    // start clears it again — that run never lived, and the player has already
+    // been told why. `subject` identifies which launch died.
+    // Returns whether the game started.
+    function startGame(startConfig, subject) {
+      markRunStarted(subject);
+      try {
+        start_with_config(JSON.stringify(startConfig));
+        document.getElementById('loading').remove();
+        canvas.focus({ preventScroll: true });
+        return true;
+      } catch (err) {
+        clearRunSentinel();
+        showLoadingError(`Failed to start game: ${err}`);
+        return false;
+      }
+    }
+
     // Teardown API, exposed unconditionally: this is how a native host releases
     // the game before navigating away, not a debug aid. The stop is honoured on
     // the game's next frame, so a caller that needs it to have happened must
@@ -843,6 +957,9 @@
     // and synchronously, so a document frozen a moment later carries it — a
     // restored page then shows an ended game rather than a stuck one.
     window.addEventListener('pagehide', () => {
+      // The page is being left deliberately, so the run did not die — clear the
+      // sentinel before anything else, or the next load reports a crash.
+      clearRunSentinel();
       showGameEnded();
       try { stop(); } catch { /* module may already be gone */ }
     });
@@ -860,7 +977,10 @@
     // `PREVIEW_STORAGE_KEY` in src/utils/definitionPreview.ts.
     const PREVIEW_STORAGE_KEY = 'gameDefinitionPreview';
 
-    if (mazeId) {
+    if (mazeRunAbandoned) {
+      // Already reported before this module ran; nothing is launched.
+      clearInterval(timer);
+    } else if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React app
       // writes the maze's effective launch settings to localStorage under
       // MODE_STORAGE_KEY before navigating here; we read them back and build
@@ -974,13 +1094,7 @@
       applyDebugOverrides(startConfig);
       // Win-banner record thresholds for this maze's board (un-tracked → none).
       await applyRecordThresholds(startConfig, `maze_id=${encodeURIComponent(mazeId)}`, token);
-      try {
-        start_with_config(JSON.stringify(startConfig));
-        document.getElementById('loading').remove();
-        canvas.focus({ preventScroll: true });
-      } catch (err) {
-        showLoadingError(`Failed to start game: ${err}`);
-      }
+      startGame(startConfig, `id=${mazeId}`);
     } else if (defId) {
       // /game/?def=<id> — a stored game definition. The fetch is auth-gated: the
       // server composes access and returns 404 for anything this user can't see.
@@ -1006,13 +1120,7 @@
           // Owner preview of an unpublished definition — playable but not tracked.
           startConfig.leaderboardTracked = false;
         }
-        try {
-          start_with_config(JSON.stringify(startConfig));
-          document.getElementById('loading').remove();
-          canvas.focus({ preventScroll: true });
-        } catch (err) {
-          showLoadingError(`Failed to start game: ${err}`);
-        }
+        startGame(startConfig, `def=${defId}`);
       } else {
         const body = await res.text().catch(() => '');
         showLoadingError(`Failed to load game definition (${res.status}): ${body || res.statusText}`);
@@ -1034,14 +1142,7 @@
       } else {
         const startConfig = applyDebugOverrides(payload.config);
         startConfig.leaderboardTracked = false;
-        try {
-          start_with_config(JSON.stringify(startConfig));
-          document.getElementById('loading').remove();
-          canvas.focus({ preventScroll: true });
-          showPreviewBanner(payload.seeded);
-        } catch (err) {
-          showLoadingError(`Failed to start game: ${err}`);
-        }
+        if (startGame(startConfig, 'preview')) showPreviewBanner(payload.seeded);
       }
     } else {
       // No ?id / ?def / ?preview — nothing to load. The host page is only
