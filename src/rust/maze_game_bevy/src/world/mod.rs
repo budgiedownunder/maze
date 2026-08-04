@@ -513,8 +513,8 @@ pub(crate) fn explore_cell_raw(
     }
 }
 
-fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32) {
-    commands.spawn((
+fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32, msaa: Option<u32>) {
+    let mut camera = commands.spawn((
         Camera3d::default(),
         // Explicit Projection so we can override Bevy's narrow default
         // vertical FOV — see CAMERA_FOV_VERTICAL_RADIANS for rationale.
@@ -527,6 +527,10 @@ fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32) {
         }),
         Transform::from_translation(start_pos).with_rotation(Quat::from_rotation_y(start_yaw)),
     ));
+    // Absent (the normal run), Bevy's own default multisampling stands.
+    if let Some(msaa) = crate::render::msaa_override(msaa) {
+        camera.insert(msaa);
+    }
 }
 
 /// Each frame, set the camera's vertical FOV from the current window
@@ -1404,7 +1408,7 @@ pub(crate) fn spawn_world(
         last_displayed_secs: -1,
     });
 
-    spawn_camera(&mut commands, start_pos, start_yaw);
+    spawn_camera(&mut commands, start_pos, start_yaw, config.msaa_samples);
     // Each level's effective sky (the top level may override it). The global dome
     // can only show one at a time, so spawn the bottom level's now and let
     // `sky_switch_on_level_change` re-skin it as the player climbs into a level

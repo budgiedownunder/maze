@@ -5,6 +5,7 @@ mod movement;
 mod outcome;
 mod overlays;
 mod palette;
+mod render;
 mod state;
 mod tick;
 mod transition;
@@ -59,6 +60,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .insert_resource(ClearColor(Color::BLACK))
         // Exists only to announce its own drop — see StopSignal.
         .insert_resource(crate::state::StopSignal)
+        .add_systems(Startup, crate::render::apply_render_scale)
         .add_systems(OnEnter(AppState::TitleScreen), title::setup_title)
         .add_systems(Update, title::tick_title.run_if(in_state(AppState::TitleScreen)))
         .add_systems(Update, title::update_title_countdown.run_if(in_state(AppState::TitleScreen)))

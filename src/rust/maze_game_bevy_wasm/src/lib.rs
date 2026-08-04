@@ -146,6 +146,16 @@ struct StartConfig {
     /// rendering exactly as it did before the readout existed.
     #[serde(default)]
     debug_memory: bool,
+    /// Developer override of the window's scale factor — physical pixels drawn
+    /// per logical pixel. Set by the host page from `?res=<fraction>`, which it
+    /// resolves against `window.devicePixelRatio` into the absolute value here.
+    /// Absent (the default) leaves the platform's own value.
+    #[serde(default)]
+    render_scale: Option<f32>,
+    /// Developer override of multisample anti-aliasing, in samples. Set by the
+    /// host page from `?msaa=<samples>`; absent leaves Bevy's own default.
+    #[serde(default)]
+    msaa_samples: Option<u32>,
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -448,6 +458,8 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         high_score_to_beat: cfg.high_score_to_beat,
         fastest_time_to_beat: cfg.fastest_time_to_beat,
         debug_memory: cfg.debug_memory,
+        render_scale: cfg.render_scale,
+        msaa_samples: cfg.msaa_samples,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -507,8 +519,11 @@ mod tests {
         assert!(!cfg.leaderboard_tracked);
         assert!(cfg.high_score_to_beat.is_none());
         assert!(cfg.fastest_time_to_beat.is_none());
-        // The diagnostics readout is off unless the host asks for it.
+        // The diagnostics readout and the render-target overrides are all off
+        // unless the host asks for them.
         assert!(!cfg.debug_memory);
+        assert!(cfg.render_scale.is_none());
+        assert!(cfg.msaa_samples.is_none());
         // The single landmark override must take effect; the rest fall
         // back to true.
         assert!(cfg.landmarks.wall_tint);
@@ -561,6 +576,17 @@ mod tests {
         let cfg: StartConfig =
             serde_json::from_str(r#"{ "debugMemory": true }"#).expect("payload must parse");
         assert!(cfg.debug_memory);
+        assert_eq!(cfg.timer_seconds, 60.0);
+    }
+
+    #[test]
+    fn start_config_carries_the_render_target_overrides() {
+        // `/game/?res=0.5&msaa=0` on a device pixel ratio of 3 — the host page
+        // resolves the fraction, so what arrives here is already absolute.
+        let cfg: StartConfig = serde_json::from_str(r#"{ "renderScale": 1.5, "msaaSamples": 1 }"#)
+            .expect("payload must parse");
+        assert_eq!(cfg.render_scale, Some(1.5));
+        assert_eq!(cfg.msaa_samples, Some(1));
         assert_eq!(cfg.timer_seconds, 60.0);
     }
 

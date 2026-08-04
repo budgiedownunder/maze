@@ -509,6 +509,16 @@ pub struct GameConfig {
     /// switched on per-launch by the host, and a normal run renders exactly as it
     /// did before the readout existed.
     pub debug_memory: bool,
+    /// Developer override of the window's scale factor — how many physical
+    /// pixels the renderer draws per logical pixel. `None` (the default) leaves
+    /// the platform's own value, which on a phone is its device pixel ratio. The
+    /// value is absolute, not a fraction: the host page turns `?res=<fraction>`
+    /// into one against `window.devicePixelRatio`. See [`crate::render`].
+    pub render_scale: Option<f32>,
+    /// Developer override of multisample anti-aliasing, in samples (`1` for off,
+    /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
+    /// place, which is what the game has always rendered with.
+    pub msaa_samples: Option<u32>,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -1078,6 +1088,8 @@ impl Default for GameConfig {
             high_score_to_beat: None,
             fastest_time_to_beat: None,
             debug_memory: false,
+            render_scale: None,
+            msaa_samples: None,
         }
     }
 }

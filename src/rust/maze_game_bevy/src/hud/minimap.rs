@@ -167,11 +167,17 @@ pub(crate) fn spawn_minimap(
     commands.insert_resource(MinimapConfig { center_x, center_y, iron_bars });
 
     // Overlay camera — does not clear the colour buffer so the 3D scene shows through.
-    commands.spawn((
+    let mut camera = commands.spawn((
         Camera2d,
         Camera { order: 1, clear_color: ClearColorConfig::None, ..default() },
         MinimapCamera,
     ));
+    // Kept in step with the 3D camera: two views of one window disagreeing about
+    // sample count is its own render cost, and would muddy any measurement taken
+    // against the override.
+    if let Some(msaa) = crate::render::msaa_override(config.msaa_samples) {
+        camera.insert(msaa);
+    }
 
     // Dark background — tagged so minimap_resize_system can reposition it
     // (along with the cells) when the window size changes.

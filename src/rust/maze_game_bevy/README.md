@@ -201,6 +201,7 @@ src/
 ├── palette.rs              cross-module colour constants
 ├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, MultiLevelRun, etc.)
 ├── images.rs               generic Bevy Image factory (sampler-tuned)
+├── render.rs               developer render-target overrides: window scale factor (apply_render_scale) + MSAA sample count (msaa_override); both absent by default
 ├── movement.rs             input + animation + quit
 ├── tick.rs                 central game_tick_system + damage-flash overlay system
 ├── outcome.rs              outcome_watcher_system (win / lose detection from MazeGame state)

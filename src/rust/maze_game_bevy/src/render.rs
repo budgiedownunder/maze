@@ -1,0 +1,101 @@
+//! Render-target settings the host can override, for measuring where a frame's
+//! time goes on a device.
+//!
+//! Neither of these is configured by the game normally: the drawing buffer is
+//! whatever the platform's scale factor makes it (a phone's device pixel ratio,
+//! typically 3), and multisampling is left at Bevy's own default. Both are
+//! therefore unmeasured costs, and on mobile both are paid per pixel — the kind
+//! of cost that barely moves when the scene's entity count changes.
+//!
+//! Both overrides default to absent, so a normal run renders exactly as it did
+//! before they existed.
+
+use crate::state::GameConfig;
+use bevy::prelude::*;
+
+/// `Startup`: applies [`GameConfig::render_scale`] to the primary window.
+///
+/// The scale factor is how many physical pixels the renderer draws per logical
+/// pixel, so halving it quarters the pixels shaded. The value is absolute rather
+/// than a fraction of the platform's own: the host page knows the device pixel
+/// ratio and does that arithmetic, which keeps the browser as the only thing
+/// that has to know what the device reports.
+pub(crate) fn apply_render_scale(config: Res<GameConfig>, mut windows: Query<&mut Window>) {
+    let Some(scale) = config.render_scale else {
+        return;
+    };
+    if scale <= 0.0 {
+        return;
+    }
+    for mut window in &mut windows {
+        window.resolution.set_scale_factor_override(Some(scale));
+    }
+}
+
+/// The [`Msaa`] setting for a sample count, or `None` to leave Bevy's default
+/// in place — which is what an absent or unusable value does, so a bad query
+/// string degrades to a normal run rather than to no anti-aliasing.
+///
+/// Only `1` (off) and `4` are accepted. The browser is the platform this knob
+/// exists to measure and WebGL2 supports no other sample count, so `2` and `8`
+/// could only ever produce a comparison that silently measured nothing.
+pub(crate) fn msaa_override(samples: Option<u32>) -> Option<Msaa> {
+    match samples? {
+        0 | 1 => Some(Msaa::Off),
+        4 => Some(Msaa::Sample4),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    fn scale_after(render_scale: Option<f32>) -> Option<f32> {
+        let mut app = App::new();
+        app.insert_resource(GameConfig { render_scale, ..default() });
+        let window = app.world_mut().spawn(Window::default()).id();
+        app.world_mut()
+            .run_system_once(apply_render_scale)
+            .expect("the render-scale system runs");
+        app.world()
+            .entity(window)
+            .get::<Window>()
+            .expect("the window survives")
+            .resolution
+            .scale_factor_override()
+    }
+
+    /// The default run must be untouched — an override left in place would
+    /// silently change how every game renders.
+    #[test]
+    fn no_render_scale_leaves_the_window_alone() {
+        assert_eq!(scale_after(None), None);
+    }
+
+    #[test]
+    fn a_render_scale_overrides_the_windows_scale_factor() {
+        assert_eq!(scale_after(Some(1.5)), Some(1.5));
+    }
+
+    /// A zero or negative scale would ask for a zero-pixel buffer.
+    #[test]
+    fn a_nonsensical_render_scale_is_ignored() {
+        assert_eq!(scale_after(Some(0.0)), None);
+        assert_eq!(scale_after(Some(-2.0)), None);
+    }
+
+    #[test]
+    fn msaa_maps_the_sample_counts_the_browser_supports() {
+        assert!(matches!(msaa_override(Some(1)), Some(Msaa::Off)));
+        assert!(matches!(msaa_override(Some(0)), Some(Msaa::Off)));
+        assert!(matches!(msaa_override(Some(4)), Some(Msaa::Sample4)));
+        assert!(msaa_override(None).is_none(), "absent → Bevy's default");
+        assert!(msaa_override(Some(3)).is_none(), "unrecognised → Bevy's default");
+        // 2 and 8 are valid Bevy settings but not on the web, so accepting them
+        // would offer a comparison that cannot run on the platform under test.
+        assert!(msaa_override(Some(2)).is_none());
+        assert!(msaa_override(Some(8)).is_none());
+    }
+}
