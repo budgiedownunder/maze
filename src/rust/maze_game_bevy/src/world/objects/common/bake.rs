@@ -16,6 +16,7 @@
 //! sparks, and the floating key group itself, which bobs and spins as a whole
 //! (its own sub-meshes are static within it, so they bake).
 
+use crate::world::LevelTag;
 use bevy::prelude::*;
 
 /// Uniform scale-up factor applied to each sibling outline stamp. The outline
@@ -122,17 +123,23 @@ impl BakedRig {
     /// order so a caller can tag one of them (the brazier's flickering bowl).
     /// `parent`, when given, adopts them so they ride an animated group (the
     /// key's bob and spin).
+    /// `tag` is `None` for a rig spawned under a `parent`: the root of that
+    /// hierarchy carries the level, and its children inherit visibility from it.
     pub(crate) fn spawn(
         &self,
         commands: &mut Commands,
         xform: Transform,
         parent: Option<Entity>,
+        tag: Option<LevelTag>,
     ) -> Vec<Option<Entity>> {
         self.slots
             .iter()
             .map(|slot| {
                 let slot = slot.as_ref()?;
                 let mut entity = commands.spawn(xform);
+                if let Some(tag) = tag {
+                    entity.insert(tag);
+                }
                 // Spawned even without render assets, matching the other spawn
                 // helpers, so headless entity counts match a rendering build.
                 if let (Some(mesh), Some(material)) = (slot.mesh.clone(), slot.material.clone()) {

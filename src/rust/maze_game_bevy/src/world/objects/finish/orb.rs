@@ -69,16 +69,18 @@ pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 FinishOrb { base_y },
+                placement.tag(),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
                 Transform::from_xyz(x, y, z),
             ));
         }
         _ => {
-            commands.spawn((FinishOrb { base_y }, Transform::from_xyz(x, y, z)));
+            commands.spawn((FinishOrb { base_y }, placement.tag(), Transform::from_xyz(x, y, z)));
         }
     }
     commands.spawn((
+        placement.tag(),
         PointLight {
             color: COLOR_ORB_LIGHT,
             intensity: ORB_LIGHT_INTENSITY,

@@ -5,7 +5,7 @@ pub(crate) mod vent;
 
 use crate::state::GameConfig;
 use crate::world::walls::{is_non_occluding_wall, WALL_THICKNESS};
-use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, LevelTag, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::CellEntity;
 use std::collections::HashMap;
@@ -83,6 +83,7 @@ pub(crate) fn wall_decoration_index(r: usize, c: usize, face_id: u32, seed: u64)
 #[allow(clippy::too_many_arguments)]
 fn spawn_decoration(
     commands: &mut Commands,
+    tag: LevelTag,
     assets: &WallDecorationAssets,
     r: usize,
     c: usize,
@@ -99,13 +100,14 @@ fn spawn_decoration(
         (Some(m), Some(mt)) => {
             commands.spawn((
                 WallDecoration,
+                tag,
                 Mesh3d(m),
                 MeshMaterial3d(mt),
                 Transform::from_translation(pos),
             ));
         }
         _ => {
-            commands.spawn((WallDecoration, Transform::from_translation(pos)));
+            commands.spawn((WallDecoration, tag, Transform::from_translation(pos)));
         }
     }
 }
@@ -147,6 +149,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     if (r == 0 && walled_edge) || (r > 0 && solid_wall(r - 1, c)) {
         spawn_decoration(
             commands,
+            placement.tag(),
             assets,
             r,
             c,
@@ -160,6 +163,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     if (r + 1 >= rows && walled_edge) || (r + 1 < rows && solid_wall(r + 1, c)) {
         spawn_decoration(
             commands,
+            placement.tag(),
             assets,
             r,
             c,
@@ -173,6 +177,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     if (c + 1 >= cols && walled_edge) || (c + 1 < cols && solid_wall(r, c + 1)) {
         spawn_decoration(
             commands,
+            placement.tag(),
             assets,
             r,
             c,
@@ -186,6 +191,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     if (c == 0 && walled_edge) || (c > 0 && solid_wall(r, c - 1)) {
         spawn_decoration(
             commands,
+            placement.tag(),
             assets,
             r,
             c,

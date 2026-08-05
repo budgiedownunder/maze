@@ -2495,6 +2495,127 @@ mod tests {
         }
     }
 
+    /// Counts entities carrying `T`, and how many of those also carry a
+    /// [`LevelTag`].
+    fn tagged_share<T: Component>(app: &mut App) -> (usize, usize) {
+        use crate::world::LevelTag;
+        let total = count_with::<T>(app);
+        let tagged = app
+            .world_mut()
+            .query_filtered::<Entity, (With<T>, With<LevelTag>)>()
+            .iter(app.world())
+            .count();
+        (total, tagged)
+    }
+
+    /// How many entities each level owns, by [`LevelTag`].
+    fn entities_per_level(app: &mut App) -> std::collections::BTreeMap<usize, usize> {
+        use crate::world::LevelTag;
+        let mut counts = std::collections::BTreeMap::new();
+        let mut query = app.world_mut().query::<&LevelTag>();
+        for tag in query.iter(app.world()) {
+            *counts.entry(tag.0).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// Every category of world geometry must carry the level it belongs to, or a
+    /// per-level policy silently leaves some of the floor behind when it hides
+    /// the rest of it.
+    #[test]
+    fn every_category_of_world_geometry_carries_its_level() {
+        use crate::world::decorations::floor::FloorAccent;
+        use crate::world::decorations::wall::WallDecoration;
+        use crate::world::floor::lines::FloorLine;
+        use crate::world::floor::FloorCell;
+        use crate::world::objects::dead_end::DeadEndObject;
+        use crate::world::walls::WallCell;
+
+        let mut app = make_playing_app();
+        for (name, (total, tagged)) in [
+            ("floor cells", tagged_share::<FloorCell>(&mut app)),
+            ("wall cells", tagged_share::<WallCell>(&mut app)),
+            ("floor lines", tagged_share::<FloorLine>(&mut app)),
+            ("wall decorations", tagged_share::<WallDecoration>(&mut app)),
+            ("floor accents", tagged_share::<FloorAccent>(&mut app)),
+            ("dead-end landmarks", tagged_share::<DeadEndObject>(&mut app)),
+        ] {
+            assert!(total > 0, "{name}: the demo grid should have some");
+            assert_eq!(tagged, total, "{name}: {} untagged", total - tagged);
+        }
+    }
+
+    /// The sky follows the camera and is shared by every floor, so it belongs to
+    /// no level — hiding a floor must never take the sky with it.
+    #[test]
+    fn global_scenery_carries_no_level() {
+        use crate::world::sky::stars::StarField;
+        let mut app = make_playing_app();
+        let (total, tagged) = tagged_share::<StarField>(&mut app);
+        assert_eq!(total, 1, "the demo sky has a starfield");
+        assert_eq!(tagged, 0, "the starfield belongs to no level");
+    }
+
+    /// The invariant a per-level policy rests on: **every root of world geometry
+    /// carries its level**, and the only untagged roots are the sky's — the dome
+    /// and the two lights it brings, which are shared by every floor.
+    ///
+    /// Descendants are exempt by design: hiding a tagged root hides its children
+    /// through inherited visibility, so they need no tag of their own. The 2D
+    /// content — sprites, text, 2D meshes — and the cameras are the HUD and the
+    /// minimap, which are not world geometry.
+    ///
+    /// If this fails, a spawn site was added without a `LevelTag` — find it by
+    /// widening the query, and tag it rather than adding it here.
+    #[test]
+    fn every_root_of_world_geometry_carries_its_level() {
+        use crate::world::sky::SkyEntity;
+        use crate::world::LevelTag;
+
+        let mut app = make_playing_app();
+        let untagged: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, (
+                With<Transform>,
+                Without<LevelTag>,
+                Without<ChildOf>,
+                Without<Sprite>,
+                Without<Text2d>,
+                Without<Mesh2d>,
+                Without<Camera>,
+                // The minimap's player arrow spawns as a bare transform when
+                // there are no render assets, so it has no 2D component to
+                // recognise it by here.
+                Without<crate::hud::minimap::MinimapPlayer>,
+            )>()
+            .iter(app.world())
+            .collect();
+        assert!(!untagged.is_empty(), "the sky is always there");
+        for entity in untagged {
+            assert!(
+                app.world().entity(entity).contains::<SkyEntity>(),
+                "{entity} is untagged world geometry, not sky",
+            );
+        }
+    }
+
+    /// A stack tags every one of its levels, and a tapered one tags fewer
+    /// entities the higher it goes — the levels are distinguishable, which is
+    /// what a windowing policy needs.
+    #[test]
+    fn a_tapered_stack_tags_each_level_separately() {
+        const LEVELS: [&str; 3] = [
+            r#"{"grid":[["S"," "," "," "],[" "," "," "," "],[" "," "," ","F"]]}"#,
+            r#"{"grid":[["S"," "," "],[" "," ","F"]]}"#,
+            r#"{"grid":[["S"," ","F"]]}"#,
+        ];
+        let mut app = make_playing_app_with_levels(&LEVELS);
+        let counts = entities_per_level(&mut app);
+        assert_eq!(counts.keys().copied().collect::<Vec<_>>(), vec![0, 1, 2], "got {counts:?}");
+        assert!(counts[&0] > counts[&1], "got {counts:?}");
+        assert!(counts[&1] > counts[&2], "got {counts:?}");
+    }
+
     /// Counts entities carrying a given marker component.
     fn count_with<T: Component>(app: &mut App) -> usize {
         app.world_mut()
@@ -2544,6 +2665,7 @@ mod tests {
         println!("  floor accents       {floor_accents}");
         println!("  star fields         {star_fields} (whole field baked into one mesh)");
         println!("  ---");
+        println!("  levelled            {:?} (entities per LevelTag)", entities_per_level(&mut app));
         println!("  dead-end CELLS      {dead_end_cells} (landmarks, not sub-meshes)");
         println!("  tagged subtotal     {tagged}");
         println!("  UNTAGGED residual   {} (prop sub-meshes + outlines)", meshes.saturating_sub(tagged));

@@ -3,6 +3,7 @@ use crate::world::walls::{
     WALL_TINT_VARIANTS,
 };
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::LevelTag;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -88,6 +89,7 @@ pub(crate) fn build_ns_panel_assets(
 
 pub(crate) fn spawn_ns_face_tinted(
     commands: &mut Commands,
+    tag: LevelTag,
     assets: &NsPanelAssets,
     kind: usize,
     tint: usize,
@@ -95,6 +97,7 @@ pub(crate) fn spawn_ns_face_tinted(
 ) {
     spawn_ns_panel(
         commands,
+        tag,
         assets.mesh.clone(),
         assets.tinted_mats[kind][tint].clone(),
         pos,
@@ -103,15 +106,17 @@ pub(crate) fn spawn_ns_face_tinted(
 
 pub(crate) fn spawn_ns_face_material(
     commands: &mut Commands,
+    tag: LevelTag,
     assets: &NsPanelAssets,
     kind: usize,
     pos: Vec3,
 ) {
-    spawn_ns_panel(commands, assets.mesh.clone(), assets.material_mats[kind].clone(), pos);
+    spawn_ns_panel(commands, tag, assets.mesh.clone(), assets.material_mats[kind].clone(), pos);
 }
 
 fn spawn_ns_panel(
     commands: &mut Commands,
+    tag: LevelTag,
     mesh: Option<Handle<Mesh>>,
     mat: Option<Handle<StandardMaterial>>,
     pos: Vec3,
@@ -120,13 +125,14 @@ fn spawn_ns_panel(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 WallCell,
+                tag,
                 Transform::from_translation(pos),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((WallCell, Transform::from_translation(pos)));
+            commands.spawn((WallCell, tag, Transform::from_translation(pos)));
         }
     }
 }

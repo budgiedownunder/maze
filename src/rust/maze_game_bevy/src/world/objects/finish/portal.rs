@@ -138,13 +138,14 @@ pub(crate) fn spawn_portal(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 FinishPortal,
+                placement.tag(),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
                 Transform::from_xyz(cx, centre_y, cz),
             ));
         }
         _ => {
-            commands.spawn((FinishPortal, Transform::from_xyz(cx, centre_y, cz)));
+            commands.spawn((FinishPortal, placement.tag(), Transform::from_xyz(cx, centre_y, cz)));
         }
     }
 
@@ -154,13 +155,14 @@ pub(crate) fn spawn_portal(
             (Some(mesh), Some(mat)) => {
                 commands.spawn((
                     PortalCap,
+                    placement.tag(),
                     Mesh3d(mesh),
                     MeshMaterial3d(mat),
                     Transform::from_xyz(cx, cap_y, cz),
                 ));
             }
             _ => {
-                commands.spawn((PortalCap, Transform::from_xyz(cx, cap_y, cz)));
+                commands.spawn((PortalCap, placement.tag(), Transform::from_xyz(cx, cap_y, cz)));
             }
         }
     }
@@ -179,13 +181,14 @@ pub(crate) fn spawn_portal(
             (Some(mesh), Some(mat)) => {
                 commands.spawn((
                     ring,
+                    placement.tag(),
                     Mesh3d(mesh),
                     MeshMaterial3d(mat),
                     Transform::from_xyz(cx, y, cz),
                 ));
             }
             _ => {
-                commands.spawn((ring, Transform::from_xyz(cx, y, cz)));
+                commands.spawn((ring, placement.tag(), Transform::from_xyz(cx, y, cz)));
             }
         }
     }

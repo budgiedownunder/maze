@@ -201,6 +201,7 @@ pub(crate) fn spawn_ghost(
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let root = commands
         .spawn((
+            placement.tag(),
             super::EnemyMarker {
                 id,
                 spawn_cell: (r, c),

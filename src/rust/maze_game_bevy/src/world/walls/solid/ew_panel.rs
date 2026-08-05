@@ -1,5 +1,6 @@
 use super::ns_panel::WallMaterialSpec;
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::LevelTag;
 use crate::world::walls::{
     WallCell, PANEL_H, PANEL_W, WALL_MATERIAL_VARIANTS, WALL_THICKNESS, WALL_TINT_OFFSETS,
     WALL_TINT_VARIANTS,
@@ -73,6 +74,7 @@ pub(crate) fn build_ew_panel_assets(
 
 pub(crate) fn spawn_ew_face_tinted(
     commands: &mut Commands,
+    tag: LevelTag,
     assets: &EwPanelAssets,
     kind: usize,
     tint: usize,
@@ -80,6 +82,7 @@ pub(crate) fn spawn_ew_face_tinted(
 ) {
     spawn_ew_panel(
         commands,
+        tag,
         assets.mesh.clone(),
         assets.tinted_mats[kind][tint].clone(),
         pos,
@@ -88,15 +91,17 @@ pub(crate) fn spawn_ew_face_tinted(
 
 pub(crate) fn spawn_ew_face_material(
     commands: &mut Commands,
+    tag: LevelTag,
     assets: &EwPanelAssets,
     kind: usize,
     pos: Vec3,
 ) {
-    spawn_ew_panel(commands, assets.mesh.clone(), assets.material_mats[kind].clone(), pos);
+    spawn_ew_panel(commands, tag, assets.mesh.clone(), assets.material_mats[kind].clone(), pos);
 }
 
 fn spawn_ew_panel(
     commands: &mut Commands,
+    tag: LevelTag,
     mesh: Option<Handle<Mesh>>,
     mat: Option<Handle<StandardMaterial>>,
     pos: Vec3,
@@ -105,13 +110,14 @@ fn spawn_ew_panel(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 WallCell,
+                tag,
                 Transform::from_translation(pos),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((WallCell, Transform::from_translation(pos)));
+            commands.spawn((WallCell, tag, Transform::from_translation(pos)));
         }
     }
 }

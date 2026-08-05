@@ -414,7 +414,7 @@ pub(crate) fn spawn_treasure_for_cell(
 
     // The open chest stands free so it stays behind, emptied, after collection.
     // It takes the (already offset) world `x`/`z` and the level for its own Y.
-    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, base_y);
+    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, base_y, placement.tag());
 
     // Collectible loot root — positioned + yawed at the cell so its children use
     // the same local frame as the chest interior. The flourish rises/shrinks
@@ -422,6 +422,7 @@ pub(crate) fn spawn_treasure_for_cell(
     let root = commands
         .spawn((
             TreasureMarker { cell: (r, c), level: placement.level, base_y },
+            placement.tag(),
             Transform::from_xyz(x, placement.world_y(0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
             Visibility::default(),
         ))

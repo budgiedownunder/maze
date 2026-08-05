@@ -41,7 +41,7 @@ use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
 use crate::world::walls::{is_non_occluding_wall, wall_kind_for_cell, WallAssets, PANEL_W};
-use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL, LevelTag};
 use bevy::prelude::*;
 use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
@@ -269,6 +269,7 @@ fn spawn_leaf(
 
     let pivot = commands
         .spawn((
+            LevelTag(level),
             DoorMarker {
                 cell: (r, c),
                 level,
@@ -301,6 +302,7 @@ fn spawn_leaf(
     if spec.motion == DoorMotion::Portcullis {
         portcullis::spawn_frame(
             commands,
+            LevelTag(level),
             door_assets.cuboid.clone(),
             spec.panel_mat.clone(),
             spec.edge_centre,

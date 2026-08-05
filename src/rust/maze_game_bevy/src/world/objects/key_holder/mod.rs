@@ -196,6 +196,7 @@ pub(crate) fn spawn_key_holder_for_cell(
     let holder = commands
         .spawn((
             KeyMarker { cell: (r, c), level: placement.level, base_y },
+            placement.tag(),
             Transform::from_xyz(x, placement.world_y(0.0), z),
             Visibility::default(),
         ))
@@ -207,12 +208,12 @@ pub(crate) fn spawn_key_holder_for_cell(
     let base_top = match style {
         KeyHolderStyle::Pedestal => {
             let h = common::pillar::KEYHOLDER_HEIGHT_SCALE;
-            common::pillar::spawn_pillar(commands, common_assets, x, z, h, base_y);
+            common::pillar::spawn_pillar(commands, common_assets, x, z, h, base_y, placement.tag());
             common::pillar::TOP_Y * h
         }
         KeyHolderStyle::Chest => {
             let yaw = common::yaw_toward_open_neighbour(grid, r, c);
-            common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Closed, base_y);
+            common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Closed, base_y, placement.tag());
             common::chest::TOP_Y
         }
         KeyHolderStyle::FloatingKey => 0.0, // key floats alone, no base
@@ -280,7 +281,7 @@ fn spawn_floating_key(
 
     // The key's own geometry, baked into one mesh per material and parented to
     // the group so it rides the bob and spin.
-    key_assets.key.spawn(commands, Transform::default(), Some(key_group));
+    key_assets.key.spawn(commands, Transform::default(), Some(key_group), None);
 }
 
 /// `Update`: bobs and spins every floating key. Mirrors the finish orb's

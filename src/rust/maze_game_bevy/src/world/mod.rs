@@ -133,7 +133,21 @@ pub(crate) fn level_offset_cells(
     }
 }
 
+/// The run level a piece of geometry belongs to.
+///
+/// Carried by everything `spawn_world` builds for a level, so a per-level policy
+/// — drawing only the floors near the player — has something to select on.
+/// Global scenery belongs to no level and carries none: the sky dome and its
+/// starfield follow the camera and are shared by every floor.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct LevelTag(pub(crate) usize);
+
 impl LevelPlacement {
+    /// This placement's level as a spawnable component.
+    pub(crate) fn tag(&self) -> LevelTag {
+        LevelTag(self.level)
+    }
+
     /// The placement for `level` given every level's footprint (`dims`, bottom level
     /// at index 0) under `alignment` for a run seeded with `seed`, with its floor at
     /// `base_y` (the precomputed [`level_bases`] entry). The X/Z offset comes from
@@ -741,6 +755,7 @@ fn spawn_underside_seal(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 UndersideSeal,
+                placement.tag(),
                 Transform::from_xyz(x, centre_y, z)
                     .with_scale(Vec3::new(1.0, height / floor::FLOOR_THICKNESS, 1.0)),
                 Mesh3d(mesh),
@@ -748,7 +763,7 @@ fn spawn_underside_seal(
             ));
         }
         _ => {
-            commands.spawn((UndersideSeal, Transform::from_xyz(x, centre_y, z)));
+            commands.spawn((UndersideSeal, placement.tag(), Transform::from_xyz(x, centre_y, z)));
         }
     };
 }
@@ -1751,7 +1766,7 @@ pub(crate) fn spawn_world(
                 } else {
                     pj.world_z(cr as f32 * CELL_SIZE + CELL_SIZE) - inset
                 };
-                support_pole::spawn_support_pole(&mut commands, &pole_assets, x, z, floor_below(x, z, i + 1), bases[i + 1]);
+                support_pole::spawn_support_pole(&mut commands, LevelTag(i + 1), &pole_assets, x, z, floor_below(x, z, i + 1), bases[i + 1]);
             }
         }
     }

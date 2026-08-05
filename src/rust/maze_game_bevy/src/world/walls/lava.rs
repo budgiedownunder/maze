@@ -12,7 +12,7 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{lcg, LevelPlacement, CELL_SIZE};
+use crate::world::{lcg, LevelPlacement, LevelTag, CELL_SIZE};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -119,6 +119,9 @@ const ROCK_EMISSIVE: LinearRgba = LinearRgba::new(0.06, 0.02, 0.0, 1.0);
 #[derive(Component)]
 pub(crate) struct LavaSurface {
     base_y: f32,
+    /// The run level this pool sits on, so a steam wisp emitted from it can be
+    /// tagged with the level it belongs to.
+    level: usize,
 }
 
 /// Marker on a dark rock bobbing on a lava surface. [`lava_animation_system`]
@@ -288,10 +291,10 @@ pub(crate) fn spawn_lava(
     let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((LavaSurface { base_y }, surface, Mesh3d(mesh), MeshMaterial3d(mat)));
+            commands.spawn((LavaSurface { base_y, level: placement.level }, placement.tag(), surface, Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((LavaSurface { base_y }, surface));
+            commands.spawn((LavaSurface { base_y, level: placement.level }, placement.tag(), surface));
         }
     }
     for (i, &(dx, dz)) in ROCK_OFFSETS.iter().take(rocks).enumerate() {
@@ -302,10 +305,10 @@ pub(crate) fn spawn_lava(
         let transform = Transform::from_translation(pos).with_scale(ROCK_SCALES[i]);
         match (assets.rock_mesh.clone(), assets.rock_material.clone()) {
             (Some(mesh), Some(mat)) => {
-                commands.spawn((LavaRock { base_y }, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
+                commands.spawn((LavaRock { base_y }, placement.tag(), transform, Mesh3d(mesh), MeshMaterial3d(mat)));
             }
             _ => {
-                commands.spawn((LavaRock { base_y }, transform));
+                commands.spawn((LavaRock { base_y }, placement.tag(), transform));
             }
         };
     }
@@ -460,9 +463,9 @@ pub(crate) fn lava_steam_system(
     };
     // The resting surface position of each lava cell (its level-correct Y, not the
     // bobbing Y), so a wisp sits on the pool at the right stacked height.
-    let cells: Vec<Vec3> = lava
+    let cells: Vec<(Vec3, usize)> = lava
         .iter()
-        .map(|(t, surface)| Vec3::new(t.translation.x, surface.base_y + SURFACE_Y, t.translation.z))
+        .map(|(t, s)| (Vec3::new(t.translation.x, s.base_y + SURFACE_Y, t.translation.z), s.level))
         .collect();
     if cells.is_empty() {
         return;
@@ -475,7 +478,7 @@ pub(crate) fn lava_steam_system(
         *timer -= STEAM_INTERVAL;
         for _ in 0..STEAM_POINTS {
             let idx = (lcg(&mut rng) * cells.len() as f32) as usize % cells.len();
-            let cell = cells[idx];
+            let (cell, level) = cells[idx];
             // An emit point scattered within the cell (±0.6) at the resting
             // surface level (not the bobbing Y, so the wisp sits on the pool).
             let ox = (lcg(&mut rng) - 0.5) * 1.2;
@@ -499,13 +502,14 @@ pub(crate) fn lava_steam_system(
                     (Some(mesh), Some(mat)) => {
                         commands.spawn((
                             dot,
+                            LevelTag(level),
                             Transform::from_translation(base).with_scale(Vec3::ZERO),
                             Mesh3d(mesh),
                             MeshMaterial3d(mat),
                         ));
                     }
                     _ => {
-                        commands.spawn((dot, Transform::from_translation(base).with_scale(Vec3::ZERO)));
+                        commands.spawn((dot, LevelTag(level), Transform::from_translation(base).with_scale(Vec3::ZERO)));
                     }
                 };
             }

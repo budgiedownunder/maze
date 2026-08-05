@@ -1,5 +1,6 @@
 use super::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::{build_emissive_material, CommonObjectAssets};
+use crate::world::LevelTag;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -407,6 +408,7 @@ pub(crate) fn build_chest_rig(
 /// Every chest is free-standing: the dead-end / key-holder chests are landmarks,
 /// and the treasure chest stays behind once its contents are collected — only
 /// the loot (a separate entity) is whisked away.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_chest(
     commands: &mut Commands,
     assets: &CommonObjectAssets,
@@ -415,6 +417,7 @@ pub(crate) fn spawn_chest(
     yaw: f32,
     lid: ChestLid,
     base_y: f32,
+    tag: LevelTag,
 ) {
     let rig = match lid {
         ChestLid::Closed => &assets.chest_closed,
@@ -424,6 +427,7 @@ pub(crate) fn spawn_chest(
         commands,
         Transform::from_xyz(x, base_y, z).with_rotation(Quat::from_rotation_y(yaw)),
         None,
+        Some(tag),
     );
 }
 
@@ -519,7 +523,7 @@ mod tests {
     fn chest_entities(lid: ChestLid) -> usize {
         let assets = build_common_object_assets(&mut None, &mut None);
         entities_spawned(|commands| {
-            spawn_chest(commands, &assets, 0.0, 0.0, 0.0, lid, 0.0);
+            spawn_chest(commands, &assets, 0.0, 0.0, 0.0, lid, 0.0, LevelTag(0));
         })
     }
 

@@ -1,6 +1,7 @@
 use super::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::{build_emissive_material, CommonObjectAssets};
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::LevelTag;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -101,9 +102,9 @@ pub(crate) fn build_brazier_rig(
     rig.finish(meshes)
 }
 
-pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32) {
+pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32, tag: LevelTag) {
     // `base_y` lifts the rig to its run level's floor; level 0 is `0.0`.
-    let parts = assets.brazier.spawn(commands, Transform::from_xyz(x, base_y, z), None);
+    let parts = assets.brazier.spawn(commands, Transform::from_xyz(x, base_y, z), None, Some(tag));
     // The bowl carries the `BrazierBowl` marker so the flicker system can find
     // the shared glow material handle.
     if let Some(bowl) = parts[GLOW] {
@@ -151,7 +152,7 @@ mod tests {
     fn a_brazier_costs_one_entity_per_material() {
         let assets = build_common_object_assets(&mut None, &mut None);
         let count = entities_spawned(|commands| {
-            spawn_brazier(commands, &assets, 0.0, 0.0, 0.0);
+            spawn_brazier(commands, &assets, 0.0, 0.0, 0.0, LevelTag(0));
         });
         assert_eq!(count, 4, "column + bowl + halo + one outline shell");
     }

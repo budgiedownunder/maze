@@ -259,7 +259,7 @@ pub(crate) fn spawn_hatch(
     let pos = Transform::from_xyz(cx, floor_y, cz);
     match (h.hole_mesh.clone(), assets.start_mat.clone()) {
         (Some(mesh), Some(green)) => {
-            commands.spawn((FloorCell, pos, Mesh3d(mesh), MeshMaterial3d(green)));
+            commands.spawn((FloorCell, placement.tag(), pos, Mesh3d(mesh), MeshMaterial3d(green)));
             // Stone underside cap only on an open-sky stack; a roofed level below
             // caps the opening with its own holed roof tile instead. The down-facing
             // `underside_mesh` (bottom-face UV) matches the surrounding floor
@@ -268,17 +268,18 @@ pub(crate) fn spawn_hatch(
             if !below_roofed {
                 if let (Some(under), Some(stone)) = (h.underside_mesh.clone(), h.hole_mat.clone()) {
                     let cap = Transform::from_xyz(cx, floor_y - gap, cz);
-                    commands.spawn((HatchUnderside, cap, Mesh3d(under), MeshMaterial3d(stone)));
+                    commands.spawn((HatchUnderside, placement.tag(), cap, Mesh3d(under), MeshMaterial3d(stone)));
                 }
             }
         }
         _ => {
-            commands.spawn((FloorCell, pos));
+            commands.spawn((FloorCell, placement.tag(), pos));
         }
     }
     // Rim (static) — metal ring framing the opening.
     if let (Some(mesh), Some(mat)) = (h.rim_mesh.clone(), h.metal_mat.clone()) {
         commands.spawn((
+            placement.tag(),
             Transform::from_xyz(cx, floor_y + LID_LIFT, cz),
             Mesh3d(mesh),
             MeshMaterial3d(mat),
@@ -295,8 +296,8 @@ pub(crate) fn spawn_hatch(
     };
     let xform = lid_transform(cx, cz, floor_y, OPEN_ANGLE);
     let lid = match (h.lid_mesh.clone(), h.lid_mat.clone()) {
-        (Some(mesh), Some(mat)) => commands.spawn((hatch, xform, Mesh3d(mesh), MeshMaterial3d(mat))).id(),
-        _ => commands.spawn((hatch, xform)).id(),
+        (Some(mesh), Some(mat)) => commands.spawn((hatch, placement.tag(), xform, Mesh3d(mesh), MeshMaterial3d(mat))).id(),
+        _ => commands.spawn((hatch, placement.tag(), xform)).id(),
     };
     // Crossed-wheel handle on the lid top — a ring + two perpendicular spokes,
     // spawned as children so they swing (and would twist) with the lid.

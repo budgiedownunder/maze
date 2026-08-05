@@ -23,7 +23,7 @@ use super::{pool_type_at, WALL_THICKNESS};
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::{GameConfig, WallType};
 use crate::world::textures::rock::make_rock_texture;
-use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, LevelTag, CELL_SIZE, HALF_CELL};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use maze::CellEntity;
@@ -102,16 +102,17 @@ pub(crate) fn build_rim_assets(
 
 fn spawn_skirt(
     commands: &mut Commands,
+    tag: LevelTag,
     mesh: Option<Handle<Mesh>>,
     mat: Option<Handle<StandardMaterial>>,
     pos: Vec3,
 ) {
     match (mesh, mat) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((PoolRim, Transform::from_translation(pos), Mesh3d(mesh), MeshMaterial3d(mat)));
+            commands.spawn((PoolRim, tag, Transform::from_translation(pos), Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((PoolRim, Transform::from_translation(pos)));
+            commands.spawn((PoolRim, tag, Transform::from_translation(pos)));
         }
     };
 }
@@ -152,15 +153,15 @@ pub(crate) fn spawn_pool_rim(
         pool_type_at(grid, cell_entities, config, nr, nc) != Some(wall_type)
     };
     if r == 0 || rimmed(r - 1, c) {
-        spawn_skirt(commands, assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z - edge));
+        spawn_skirt(commands, placement.tag(), assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z - edge));
     }
     if r + 1 >= rows || rimmed(r + 1, c) {
-        spawn_skirt(commands, assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z + edge));
+        spawn_skirt(commands, placement.tag(), assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z + edge));
     }
     if c + 1 >= cols || rimmed(r, c + 1) {
-        spawn_skirt(commands, assets.ew_mesh.clone(), mat.clone(), Vec3::new(x + edge, y, z));
+        spawn_skirt(commands, placement.tag(), assets.ew_mesh.clone(), mat.clone(), Vec3::new(x + edge, y, z));
     }
     if c == 0 || rimmed(r, c - 1) {
-        spawn_skirt(commands, assets.ew_mesh.clone(), mat.clone(), Vec3::new(x - edge, y, z));
+        spawn_skirt(commands, placement.tag(), assets.ew_mesh.clone(), mat.clone(), Vec3::new(x - edge, y, z));
     }
 }

@@ -1,5 +1,6 @@
 use super::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::{build_emissive_material, CommonObjectAssets};
+use crate::world::LevelTag;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -124,11 +125,13 @@ pub(crate) fn spawn_pillar(
     z: f32,
     height_scale: f32,
     base_y: f32,
+    tag: LevelTag,
 ) {
     assets.pillar.spawn(
         commands,
         Transform::from_xyz(x, base_y, z).with_scale(Vec3::new(1.0, height_scale, 1.0)),
         None,
+        Some(tag),
     );
 }
 
@@ -142,7 +145,7 @@ mod tests {
     fn a_pillar_costs_one_entity_per_material() {
         let assets = build_common_object_assets(&mut None, &mut None);
         let count = entities_spawned(|commands| {
-            spawn_pillar(commands, &assets, 0.0, 0.0, 1.0, 0.0);
+            spawn_pillar(commands, &assets, 0.0, 0.0, 1.0, 0.0, LevelTag(0));
         });
         assert_eq!(count, 3, "marble body, darker grooves, one outline shell");
     }

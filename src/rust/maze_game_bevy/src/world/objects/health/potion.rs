@@ -88,6 +88,7 @@ pub(crate) fn spawn_potion(commands: &mut Commands, assets: &PotionAssets, r: us
     let root = commands
         .spawn((
             super::HealthMarker { cell: (r, c), level: placement.level },
+            placement.tag(),
             Transform::from_xyz(x, placement.world_y(POTION_BASE_Y), z),
             Visibility::default(),
         ))

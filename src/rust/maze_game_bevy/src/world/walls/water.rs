@@ -118,10 +118,10 @@ pub(crate) fn spawn_water(
     let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((WaterSurface { base_y }, surface, Mesh3d(mesh), MeshMaterial3d(mat)));
+            commands.spawn((WaterSurface { base_y }, placement.tag(), surface, Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((WaterSurface { base_y }, surface));
+            commands.spawn((WaterSurface { base_y }, placement.tag(), surface));
         }
     }
 }

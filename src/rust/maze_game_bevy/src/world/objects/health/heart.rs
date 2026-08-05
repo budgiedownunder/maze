@@ -84,6 +84,7 @@ pub(crate) fn spawn_heart(commands: &mut Commands, assets: &HeartAssets, r: usiz
     let root = commands
         .spawn((
             super::HealthMarker { cell: (r, c), level: placement.level },
+            placement.tag(),
             Transform::from_xyz(x, placement.world_y(HEART_BASE_Y), z),
             Visibility::default(),
         ))

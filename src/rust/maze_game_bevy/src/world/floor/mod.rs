@@ -63,6 +63,7 @@ pub(crate) fn spawn_capped_tile<M: Bundle>(
             let top_h = FLOOR_THICKNESS - cap_h;
             // Plain-stone underside cap — the bottom slice, what the level below sees.
             commands.spawn((
+                placement.tag(),
                 Transform::from_xyz(x, bottom + cap_h / 2.0, z)
                     .with_scale(Vec3::new(1.0, STONE_CAP_FRAC, 1.0)),
                 Mesh3d(mesh.clone()),
@@ -72,6 +73,7 @@ pub(crate) fn spawn_capped_tile<M: Bundle>(
             commands.spawn((
                 marker,
                 FloorCell,
+                placement.tag(),
                 Transform::from_xyz(x, bottom + cap_h + top_h / 2.0, z)
                     .with_scale(Vec3::new(1.0, 1.0 - STONE_CAP_FRAC, 1.0)),
                 Mesh3d(mesh),
@@ -79,7 +81,7 @@ pub(crate) fn spawn_capped_tile<M: Bundle>(
             ));
         }
         _ => {
-            commands.spawn((marker, FloorCell, Transform::from_xyz(x, y, z)));
+            commands.spawn((marker, FloorCell, placement.tag(), Transform::from_xyz(x, y, z)));
         }
     }
 }
@@ -207,7 +209,7 @@ pub(crate) fn spawn_pool_edge_seal(
                 ));
             }
             _ => {
-                commands.spawn((PoolEdgeSeal, Transform::from_translation(pos)));
+                commands.spawn((PoolEdgeSeal, placement.tag(), Transform::from_translation(pos)));
             }
         };
     };

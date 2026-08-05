@@ -6,6 +6,7 @@
 //! frame; this module owns the rise motion and the frame geometry.
 
 use crate::world::walls::{PANEL_H, PANEL_W, WALL_HEIGHT};
+use crate::world::LevelTag;
 use bevy::prelude::*;
 
 /// How far the grille rises when fully open — just past its own height so the
@@ -29,6 +30,7 @@ pub(crate) fn leaf_transform(base_translation: Vec3, closed_yaw: f32, fraction: 
 /// `material`. The frame does not move; the grille rises behind it.
 pub(crate) fn spawn_frame(
     commands: &mut Commands,
+    tag: LevelTag,
     cuboid: Option<Handle<Mesh>>,
     material: Option<Handle<StandardMaterial>>,
     edge_centre: Vec3,
@@ -50,6 +52,7 @@ pub(crate) fn spawn_frame(
     let post_scale = Vec3::new(FRAME_THICKNESS, PANEL_H, FRAME_THICKNESS);
     for sign in [-1.0_f32, 1.0] {
         commands.spawn((
+            tag,
             Mesh3d(mesh.clone()),
             MeshMaterial3d(mat.clone()),
             piece(sign * half, PANEL_H / 2.0, post_scale),
@@ -61,6 +64,7 @@ pub(crate) fn spawn_frame(
     // than and in front of the posts, so it cleanly caps the gate; the slight overlap
     // with the post tops is hidden behind it.
     commands.spawn((
+        tag,
         Mesh3d(mesh),
         MeshMaterial3d(mat),
         piece(
@@ -84,6 +88,7 @@ mod tests {
         app.add_systems(Update, |mut commands: Commands| {
             spawn_frame(
                 &mut commands,
+                LevelTag(0),
                 Some(Handle::default()),
                 Some(Handle::default()),
                 Vec3::ZERO,

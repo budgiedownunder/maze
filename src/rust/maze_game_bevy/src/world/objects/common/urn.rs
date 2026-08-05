@@ -1,5 +1,6 @@
 use super::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::{build_emissive_material, CommonObjectAssets};
+use crate::world::LevelTag;
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -109,9 +110,9 @@ pub(crate) fn build_urn_rig(
     rig.finish(meshes)
 }
 
-pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32) {
+pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32, tag: LevelTag) {
     // `base_y` lifts the rig to its run level's floor; level 0 is `0.0`.
-    assets.urn.spawn(commands, Transform::from_xyz(x, base_y, z), None);
+    assets.urn.spawn(commands, Transform::from_xyz(x, base_y, z), None, Some(tag));
 }
 
 #[cfg(test)]
@@ -124,7 +125,7 @@ mod tests {
     fn an_urn_costs_one_entity_per_material() {
         let assets = build_common_object_assets(&mut None, &mut None);
         let count = entities_spawned(|commands| {
-            spawn_urn(commands, &assets, 0.0, 0.0, 0.0);
+            spawn_urn(commands, &assets, 0.0, 0.0, 0.0, LevelTag(0));
         });
         assert_eq!(count, 2, "the terracotta body and the darker bands");
     }

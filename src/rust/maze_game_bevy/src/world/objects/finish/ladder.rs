@@ -107,6 +107,7 @@ pub(crate) fn spawn_ladder(
         commands,
         Transform::from_translation(base).with_rotation(yaw),
         None,
+        Some(placement.tag()),
     );
     for part in parts.into_iter().flatten() {
         commands.entity(part).insert(FinishLadder);

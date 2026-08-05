@@ -215,6 +215,7 @@ pub(crate) fn spawn_goblin(
     let body = match (assets.body_mesh.clone(), assets.body_mat.clone()) {
         (Some(mesh), Some(mat)) => commands
             .spawn((
+                placement.tag(),
                 super::EnemyMarker {
                     id,
                     spawn_cell: (r, c),
@@ -227,6 +228,7 @@ pub(crate) fn spawn_goblin(
             .id(),
         _ => commands
             .spawn((
+                placement.tag(),
                 super::EnemyMarker {
                     id,
                     spawn_cell: (r, c),
