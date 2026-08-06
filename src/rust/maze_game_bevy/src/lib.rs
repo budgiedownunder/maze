@@ -2550,6 +2550,22 @@ mod tests {
         }
     }
 
+    /// The orb is the game's only shadow-casting light, and a point light's
+    /// shadow is a cube map — six extra scene passes, on the final level alone.
+    /// Dropping it is a diagnostic for how much that costs.
+    #[test]
+    fn the_finish_orb_can_be_left_out() {
+        use crate::world::objects::finish::orb::FinishOrb;
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+
+        let mut app = make_playing_app_with(MAZE);
+        assert_eq!(count_with::<FinishOrb>(&mut app), 1, "the orb is in by default");
+
+        let config = GameConfig { hide_finish_orb: true, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+        assert_eq!(count_with::<FinishOrb>(&mut app), 0);
+    }
+
     /// The sky follows the camera and is shared by every floor, so it belongs to
     /// no level — hiding a floor must never take the sky with it.
     #[test]

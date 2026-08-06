@@ -816,7 +816,7 @@
   <script type="module">
     import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=145';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=146';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -914,6 +914,12 @@
     // and animated, counted from the player's own floor — `0,0` is that floor
     // alone. Absent, every level is drawn, as always. A stack costs its whole
     // height on every frame otherwise, however little of it can be seen.
+    // `?orb=0` leaves the finish orb unspawned. It is the game's only
+    // shadow-casting light — a point light's shadow is a cube map, so six extra
+    // scene passes — and only the final level has one, which makes that level
+    // structurally dearer than the rest.
+    const hideFinishOrb = params.get('orb') === '0';
+
     const floors = (params.get('floors') ?? '').split(',').map(Number);
     const boundedFloors = floors.length === 2 && floors.every(Number.isInteger) && floors.every(n => n >= 0);
 
@@ -924,6 +930,7 @@
       startConfig.debugMemory = debugMemory;
       if (renderScale !== undefined) startConfig.renderScale = renderScale;
       if (msaaSamples !== undefined) startConfig.msaaSamples = msaaSamples;
+      if (hideFinishOrb) startConfig.hideFinishOrb = true;
       if (boundedFloors) {
         startConfig.levels = { ...(startConfig.levels ?? {}), visibleBelow: floors[0], visibleAbove: floors[1] };
       }

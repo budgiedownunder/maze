@@ -201,6 +201,11 @@ cd src/rust
 $env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_centre'; cargo run --release -p maze_game_bevy
 ```
 
+`MAZE_NO_ORB=1` leaves the finish orb unspawned (the browser host sets the same
+from `/game/?orb=0`). It is the only shadow-casting light in the game, on the
+final level alone, so it is the one thing that makes reaching the top of a stack
+dearer than any other floor.
+
 Use `--release` for anything you intend to compare: Bevy is much slower
 unoptimised, so a dev-profile frame rate says little. The browser host sets the
 same window from `/game/?floors=<below>,<above>`, and a stored game definition

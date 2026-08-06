@@ -58,7 +58,39 @@ pub(crate) fn build_orb_assets(
     OrbAssets { mesh, mat }
 }
 
-pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c: usize, placement: LevelPlacement) {
+/// Native override of [`GameConfig::hide_finish_orb`] — `MAZE_NO_ORB=1`. The
+/// browser host sets the flag from `/game/?orb=0`; a native run has no host to
+/// do it. Mirrors the `MAZE_DEBUG_MEM` convention, and is ignored under
+/// `cfg(test)` for the same reason.
+const NO_ORB_ENV: &str = "MAZE_NO_ORB";
+
+/// Whether an env value asks for the orb to be left out. `1` / `true` (any
+/// case); anything else, including unset, leaves it in.
+pub(crate) fn hide_orb_from(value: Option<&str>) -> bool {
+    matches!(value, Some(v) if v.eq_ignore_ascii_case("1") || v.eq_ignore_ascii_case("true"))
+}
+
+fn hide_orb_env() -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    hide_orb_from(std::env::var(NO_ORB_ENV).ok().as_deref())
+}
+
+pub(crate) fn spawn_orb(
+    commands: &mut Commands,
+    assets: &OrbAssets,
+    r: usize,
+    c: usize,
+    placement: LevelPlacement,
+    hide: bool,
+) {
+    // Skipped rather than hidden: a hidden light still costs its shadow passes
+    // in some pipelines, and the point of the flag is to remove the cost, not
+    // the pixels. Winning is grid-based, so the finish still works without it.
+    if hide || hide_orb_env() {
+        return;
+    }
     let x = placement.world_x(c as f32 * CELL_SIZE + 1.0);
     let z = placement.world_z(r as f32 * CELL_SIZE + 1.0);
     let y = placement.world_y(ORB_BASE_Y);

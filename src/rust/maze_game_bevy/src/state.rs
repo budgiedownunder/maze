@@ -518,6 +518,11 @@ pub struct GameConfig {
     /// How much of a multi-level stack is drawn and animated at once. Defaults
     /// to all of it, so a run renders exactly as it did before this existed.
     pub level_visibility: LevelVisibility,
+    /// Diagnostic: leave the finish orb unspawned. It is the game's **only**
+    /// shadow-casting light — a point light's shadow is a cube map, so six extra
+    /// scene passes — and it exists on the final level alone, which makes that
+    /// level structurally more expensive than any other. Off by default.
+    pub hide_finish_orb: bool,
     /// Developer override of multisample anti-aliasing, in samples (`1` for off,
     /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
     /// place, which is what the game has always rendered with.
@@ -1107,6 +1112,7 @@ impl Default for GameConfig {
             debug_memory: false,
             render_scale: None,
             level_visibility: LevelVisibility::default(),
+            hide_finish_orb: false,
             msaa_samples: None,
         }
     }

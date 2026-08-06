@@ -156,6 +156,11 @@ struct StartConfig {
     /// host page from `?msaa=<samples>`; absent leaves Bevy's own default.
     #[serde(default)]
     msaa_samples: Option<u32>,
+    /// Diagnostic: leave the finish orb unspawned. It is the game's only
+    /// shadow-casting light, and only the final level has one. Set by the host
+    /// page from `?orb=0`; absent (the default) draws it as always.
+    #[serde(default)]
+    hide_finish_orb: bool,
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -474,6 +479,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
             above: cfg.levels.visible_above,
         },
         msaa_samples: cfg.msaa_samples,
+        hide_finish_orb: cfg.hide_finish_orb,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -591,6 +597,16 @@ mod tests {
             serde_json::from_str(r#"{ "debugMemory": true }"#).expect("payload must parse");
         assert!(cfg.debug_memory);
         assert_eq!(cfg.timer_seconds, 60.0);
+    }
+
+    #[test]
+    fn start_config_can_drop_the_finish_orb() {
+        let cfg: StartConfig =
+            serde_json::from_str(r#"{ "hideFinishOrb": true }"#).expect("payload must parse");
+        assert!(cfg.hide_finish_orb);
+        // And it is in by default — the orb is the finish marker.
+        let plain: StartConfig = serde_json::from_str("{}").expect("payload must parse");
+        assert!(!plain.hide_finish_orb);
     }
 
     #[test]

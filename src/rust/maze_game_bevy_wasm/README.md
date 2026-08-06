@@ -16,6 +16,8 @@ Both entry points install a panic hook first, so a Rust panic — during generat
 
 `levels.visibleBelow` / `levels.visibleAbove` bound how much of a multi-level stack is drawn **and animated**, counted from the player's own floor; `0` and `0` is that floor alone. Absent on either side (the default) leaves every level live, as before. Every level of a stack is spawned up front and stays spawned, so without this a ten-level run pays for ten floors on every frame — both to draw them and to run their animation systems, whose transform writes cost even when the geometry is hidden. The host page sets them from `/game/?floors=<below>,<above>`.
 
+`hideFinishOrb` leaves the finish orb unspawned — a diagnostic, set from `/game/?orb=0`. The orb is the game's **only** shadow-casting light, and a point light's shadow is a cube map, so it costs six extra scene passes; only the final level has one, which makes that level structurally dearer than every other. Winning is grid-based, so the finish still works without it, but the player has no marker to aim at — this is for measurement, not for play.
+
 A change in `renderScale` is visible in the picture, so it confirms itself. A change in `msaaSamples` is not, and the diagnostics readout does not report the sample count actually in force — so confirm by some other means before drawing a conclusion from an MSAA comparison.
 
 ## Getting Started

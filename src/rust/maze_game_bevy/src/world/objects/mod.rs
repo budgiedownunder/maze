@@ -94,6 +94,7 @@ pub(crate) fn spawn_objects_for_cell(
         config.seed,
         is_final,
         ladder_allowed,
+        config.hide_finish_orb,
     );
     if !dead_end_skip.contains(&(r, c)) {
         dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, placement);
