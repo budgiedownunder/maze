@@ -67,6 +67,14 @@ pub(crate) fn build_orb_assets(
 /// `cfg(test)` for the same reason.
 const NO_ORB_ENV: &str = "MAZE_NO_ORB";
 
+/// Native override of [`GameConfig::disable_orb_shadows`] — `MAZE_NO_ORB_SHADOWS=1`.
+/// The browser host sets the flag from `/game/?shadows=0`.
+const NO_ORB_SHADOWS_ENV: &str = "MAZE_NO_ORB_SHADOWS";
+
+/// Native override of [`GameConfig::disable_orb_light`] — `MAZE_NO_ORB_LIGHT=1`.
+/// The browser host sets the flag from `/game/?light=0`.
+const NO_ORB_LIGHT_ENV: &str = "MAZE_NO_ORB_LIGHT";
+
 /// Whether an env value asks for the orb to be left out. `1` / `true` (any
 /// case); anything else, including unset, leaves it in.
 pub(crate) fn hide_orb_from(value: Option<&str>) -> bool {
@@ -80,6 +88,21 @@ fn hide_orb_env() -> bool {
     hide_orb_from(std::env::var(NO_ORB_ENV).ok().as_deref())
 }
 
+fn no_orb_shadows_env() -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    hide_orb_from(std::env::var(NO_ORB_SHADOWS_ENV).ok().as_deref())
+}
+
+fn no_orb_light_env() -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    hide_orb_from(std::env::var(NO_ORB_LIGHT_ENV).ok().as_deref())
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_orb(
     commands: &mut Commands,
     assets: &OrbAssets,
@@ -87,6 +110,8 @@ pub(crate) fn spawn_orb(
     c: usize,
     placement: LevelPlacement,
     hide: bool,
+    no_shadows: bool,
+    no_light: bool,
 ) {
     // Skipped rather than hidden: a hidden light still costs its shadow passes
     // in some pipelines, and the point of the flag is to remove the cost, not
@@ -114,13 +139,21 @@ pub(crate) fn spawn_orb(
             commands.spawn((FinishOrb { base_y }, placement.tag(), Transform::from_xyz(x, y, z)));
         }
     }
+    // Without a light the orb still reads: its material is emissive, so the
+    // sphere glows on its own. What goes is the pool of light on the walls and
+    // floor around it, and the glow left on the win screen.
+    if no_light || no_orb_light_env() {
+        return;
+    }
     commands.spawn((
         placement.tag(),
         PointLight {
             color: COLOR_ORB_LIGHT,
             intensity: ORB_LIGHT_INTENSITY,
             radius: ORB_LIGHT_RADIUS,
-            shadows_enabled: true,
+            // The game's only shadow caster, and a point light's shadow is a
+            // cube map: six extra scene passes, on the final level alone.
+            shadows_enabled: !(no_shadows || no_orb_shadows_env()),
             ..default()
         },
         Transform::from_xyz(x, y, z),

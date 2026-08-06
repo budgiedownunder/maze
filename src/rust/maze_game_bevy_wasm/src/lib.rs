@@ -161,6 +161,23 @@ struct StartConfig {
     /// page from `?orb=0`; absent (the default) draws it as always.
     #[serde(default)]
     hide_finish_orb: bool,
+    /// Diagnostic: keep the finish orb but stop its light casting shadows —
+    /// six scene passes fewer. Set by the host page from `?shadows=0`.
+    #[serde(default)]
+    disable_orb_shadows: bool,
+    /// Diagnostic: keep the finish orb but give it no light. The orb is
+    /// emissive so it still glows; the pool of light it casts does not. Set by
+    /// the host page from `?light=0`, and supersedes `disableOrbShadows`.
+    #[serde(default)]
+    disable_orb_light: bool,
+    /// Diagnostic: stop the water / lava pool wave rewriting a transform on
+    /// every surface and rock each frame. Set from `?wall_animation=0`.
+    #[serde(default)]
+    freeze_wall_animation: bool,
+    /// Diagnostic: drop the point light on every key holder and treasure — the
+    /// meshes are emissive, so they still glow. Set from `?glow=0`.
+    #[serde(default)]
+    disable_object_glow: bool,
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -480,6 +497,10 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         },
         msaa_samples: cfg.msaa_samples,
         hide_finish_orb: cfg.hide_finish_orb,
+        disable_orb_shadows: cfg.disable_orb_shadows,
+        disable_orb_light: cfg.disable_orb_light,
+        freeze_wall_animation: cfg.freeze_wall_animation,
+        disable_object_glow: cfg.disable_object_glow,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -604,9 +625,27 @@ mod tests {
         let cfg: StartConfig =
             serde_json::from_str(r#"{ "hideFinishOrb": true }"#).expect("payload must parse");
         assert!(cfg.hide_finish_orb);
-        // And it is in by default — the orb is the finish marker.
+        // And it is in, with its shadows, by default — the orb is the finish
+        // marker and the shadows are what the game has always drawn.
         let plain: StartConfig = serde_json::from_str("{}").expect("payload must parse");
         assert!(!plain.hide_finish_orb);
+        assert!(!plain.disable_orb_shadows);
+        let unlit: StartConfig =
+            serde_json::from_str(r#"{ "disableOrbShadows": true }"#).expect("payload must parse");
+        assert!(unlit.disable_orb_shadows);
+        assert!(!unlit.hide_finish_orb, "the orb itself stays");
+        let dark: StartConfig =
+            serde_json::from_str(r#"{ "disableOrbLight": true }"#).expect("payload must parse");
+        assert!(dark.disable_orb_light);
+        assert!(!dark.hide_finish_orb, "the orb itself stays");
+        assert!(!plain.disable_orb_light);
+        assert!(!plain.freeze_wall_animation);
+        assert!(!plain.disable_object_glow);
+        let still: StartConfig =
+            serde_json::from_str(r#"{ "freezeWallAnimation": true, "disableObjectGlow": true }"#)
+                .expect("payload must parse");
+        assert!(still.freeze_wall_animation);
+        assert!(still.disable_object_glow);
     }
 
     #[test]

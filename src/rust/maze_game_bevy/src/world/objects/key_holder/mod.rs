@@ -21,7 +21,7 @@
 
 use super::common::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::common::{self, CommonObjectAssets};
-use crate::state::KeyHolderStyle;
+use crate::state::{GameConfig, KeyHolderStyle};
 use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 use std::f32::consts::{FRAC_PI_2, TAU};
@@ -179,6 +179,7 @@ pub(crate) fn spawn_key_holder_for_cell(
     key_assets: &KeyHolderAssets,
     common_assets: &CommonObjectAssets,
     style: KeyHolderStyle,
+    config: &GameConfig,
     grid: &[Vec<char>],
     cell: char,
     r: usize,
@@ -222,7 +223,7 @@ pub(crate) fn spawn_key_holder_for_cell(
     };
     let rest_y = KEY_REST_Y.max(base_top + KEY_CLEARANCE);
 
-    spawn_floating_key(commands, key_assets, holder, rest_y);
+    spawn_floating_key(commands, key_assets, holder, rest_y, config.disable_object_glow);
 }
 
 fn spawn_floating_key(
@@ -230,6 +231,7 @@ fn spawn_floating_key(
     key_assets: &KeyHolderAssets,
     holder: Entity,
     rest_y: f32,
+    disable_glow: bool,
 ) {
     // The floating key group bobs and spins as one (in the holder's local
     // frame); its sub-meshes, glow, and sparks are children. A uniform scale
@@ -243,7 +245,9 @@ fn spawn_floating_key(
         .id();
     commands.entity(holder).add_child(key_group);
 
-    // Enchanted glow — a warm point light at the key.
+    // Enchanted glow — a warm point light at the key. Skipped when the glow
+    // switch is on: the key's own material is emissive, so it still shines.
+    if !disable_glow {
     let glow = commands
         .spawn((
             PointLight {
@@ -257,6 +261,7 @@ fn spawn_floating_key(
         ))
         .id();
     commands.entity(key_group).add_child(glow);
+    }
 
     // Radiating sparks — a ring of tiny emissive spheres flung outward and
     // shrinking on staggered phases (see `key_sparks_system`).

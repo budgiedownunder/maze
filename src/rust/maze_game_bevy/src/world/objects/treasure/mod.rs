@@ -50,7 +50,7 @@ pub(crate) mod silver;
 
 use super::common::bake::{baked_handle, outline_scaled};
 use super::common::{self, CommonObjectAssets};
-use crate::state::TreasureStyle;
+use crate::state::{GameConfig, TreasureStyle};
 use crate::world::{LevelPlacement, CELL_SIZE};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
@@ -403,6 +403,7 @@ pub(crate) fn spawn_treasure_for_cell(
     // Sparkle rays for this chest — uniform across the maze (see rays_per_treasure).
     ray_count: usize,
     placement: LevelPlacement,
+    config: &GameConfig,
 ) {
     if cell != 'T' {
         return;
@@ -428,7 +429,9 @@ pub(crate) fn spawn_treasure_for_cell(
         ))
         .id();
 
-    // Style-tinted glow above the loot — one point light per chest.
+    // Style-tinted glow above the loot — one point light per chest. Skipped
+    // when the glow switch is on: the loot's own materials are emissive.
+    if !config.disable_object_glow {
     let glow = commands
         .spawn((
             PointLight {
@@ -442,6 +445,7 @@ pub(crate) fn spawn_treasure_for_cell(
         ))
         .id();
     commands.entity(root).add_child(glow);
+    }
 
     // Style-specific loot pile + matching sparkle ring inside the open trunk.
     let ctx = LootContext {

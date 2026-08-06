@@ -12,6 +12,7 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::state::GameConfig;
 use crate::world::visibility::LevelWindow;
 use crate::world::{icosphere, lcg, CELL_SIZE, LevelPlacement, LevelTag};
 use bevy::asset::RenderAssetUsages;
@@ -321,6 +322,7 @@ pub(crate) fn spawn_lava(
 /// cells. The two `&mut Transform` queries are kept disjoint by marker.
 pub(crate) fn lava_animation_system(
     time: Res<Time>,
+    config: Res<GameConfig>,
     window: Res<LevelWindow>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut surfaces: Query<(&mut Transform, &LavaSurface), Without<LavaRock>>,
@@ -328,6 +330,9 @@ pub(crate) fn lava_animation_system(
     surface_mats: Query<&MeshMaterial3d<StandardMaterial>, With<LavaSurface>>,
 ) {
     let t = time.elapsed_secs();
+    // Frozen: the wave's whole cost is the per-surface transform write, so the
+    // ablation has to skip the loop rather than write the same value.
+    if !config.freeze_wall_animation {
     for (mut tr, surface) in surfaces.iter_mut() {
         // A floor outside the window is neither drawn nor moved: the write alone
         // would re-run transform propagation and re-upload the instance.
@@ -346,6 +351,7 @@ pub(crate) fn lava_animation_system(
         tr.translation.y =
             rock.base_y + (SURFACE_Y - ROCK_SINK) + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
         tr.rotation = Quat::from_rotation_y(t * ROCK_SPIN) * Quat::from_rotation_x(t * ROCK_SPIN * 0.6);
+    }
     }
     // Drift the shared ripple texture (one material across all lava tiles).
     if let (Some(materials), Some(handle)) = (materials.as_mut(), surface_mats.iter().next()) {

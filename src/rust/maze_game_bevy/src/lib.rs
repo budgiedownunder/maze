@@ -61,6 +61,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         // Exists only to announce its own drop — see StopSignal.
         .insert_resource(crate::state::StopSignal)
         .add_systems(Startup, crate::render::apply_render_scale)
+        .add_systems(Startup, crate::render::apply_env_overrides)
         .init_resource::<crate::world::visibility::LevelWindow>()
         .add_systems(
             Update,

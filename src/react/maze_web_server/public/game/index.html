@@ -816,7 +816,7 @@
   <script type="module">
     import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=147';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=150';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -919,6 +919,17 @@
     // scene passes — and only the final level has one, which makes that level
     // structurally dearer than the rest.
     const hideFinishOrb = params.get('orb') === '0';
+    // `?shadows=0` keeps the orb but stops its light casting — six scene passes
+    // fewer, with the finish still marked.
+    const disableOrbShadows = params.get('shadows') === '0';
+    // `?light=0` goes further: the orb keeps its own glow (its material is
+    // emissive) but lights nothing around it, so there is no shadow to cast.
+    const disableOrbLight = params.get('light') === '0';
+    // `?wall_animation=0` stills the water / lava pool wave; `?glow=0` drops the
+    // point light every key holder and treasure carries. Both are per-frame
+    // costs a maze pays in proportion to how much of that content it holds.
+    const freezeWallAnimation = params.get('wall_animation') === '0';
+    const disableObjectGlow = params.get('glow') === '0';
 
     const floors = (params.get('floors') ?? '').split(',').map(Number);
     const boundedFloors = floors.length === 2 && floors.every(Number.isInteger) && floors.every(n => n >= 0);
@@ -931,6 +942,10 @@
       if (renderScale !== undefined) startConfig.renderScale = renderScale;
       if (msaaSamples !== undefined) startConfig.msaaSamples = msaaSamples;
       if (hideFinishOrb) startConfig.hideFinishOrb = true;
+      if (disableOrbShadows) startConfig.disableOrbShadows = true;
+      if (disableOrbLight) startConfig.disableOrbLight = true;
+      if (freezeWallAnimation) startConfig.freezeWallAnimation = true;
+      if (disableObjectGlow) startConfig.disableObjectGlow = true;
       if (boundedFloors) {
         startConfig.levels = { ...(startConfig.levels ?? {}), visibleBelow: floors[0], visibleAbove: floors[1] };
       }

@@ -201,8 +201,15 @@ cd src/rust
 $env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_centre'; cargo run --release -p maze_game_bevy
 ```
 
-`MAZE_NO_ORB=1` leaves the finish orb unspawned (the browser host sets the same
-from `/game/?orb=0`). It is the only shadow-casting light in the game, on the
+`MAZE_NO_WALL_ANIM=1` (`/game/?wall_animation=0`) stills the water / lava pool
+wave, and `MAZE_NO_GLOW=1` (`/game/?glow=0`) drops the point light on every key
+holder and treasure — both diagnostics for where a frame goes.
+
+`MAZE_NO_ORB_LIGHT=1` keeps the finish orb but gives it no light
+(`/game/?light=0` in the browser) — it is emissive, so it still glows, but it
+stops lighting its surroundings. `MAZE_NO_ORB_SHADOWS=1` is milder: the light
+stays but stops casting shadows (`/game/?shadows=0`); `MAZE_NO_ORB=1` leaves the orb out
+altogether (`/game/?orb=0`). It is the only shadow-casting light in the game, on the
 final level alone, so it is the one thing that makes reaching the top of a stack
 dearer than any other floor.
 

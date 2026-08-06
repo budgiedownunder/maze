@@ -95,6 +95,8 @@ pub(crate) fn spawn_objects_for_cell(
         is_final,
         ladder_allowed,
         config.hide_finish_orb,
+        config.disable_orb_shadows,
+        config.disable_orb_light,
     );
     if !dead_end_skip.contains(&(r, c)) {
         dead_end::spawn_dead_end_object_for_cell(commands, &assets.common, grid, cell, r, c, config, placement);
@@ -129,6 +131,7 @@ pub(crate) fn spawn_objects_for_cell(
         &assets.key_holder,
         &assets.common,
         key_holder,
+        config,
         grid,
         cell,
         r,
@@ -148,5 +151,6 @@ pub(crate) fn spawn_objects_for_cell(
         c,
         treasure_rays,
         placement,
+        config,
     );
 }

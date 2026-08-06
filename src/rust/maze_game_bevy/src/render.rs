@@ -7,7 +7,11 @@
 //! therefore unmeasured costs, and on mobile both are paid per pixel — the kind
 //! of cost that barely moves when the scene's entity count changes.
 //!
-//! Both overrides default to absent, so a normal run renders exactly as it did
+//! It also folds the native env overrides for the diagnostic switches into the
+//! config once at startup, so the per-frame systems that read them never touch
+//! the environment.
+//!
+//! Every override defaults to absent, so a normal run renders exactly as it did
 //! before they existed.
 
 use crate::state::GameConfig;
@@ -30,6 +34,27 @@ pub(crate) fn apply_render_scale(config: Res<GameConfig>, mut windows: Query<&mu
     for mut window in &mut windows {
         window.resolution.set_scale_factor_override(Some(scale));
     }
+}
+
+/// Whether an env value asks for a diagnostic switch. `1` / `true` (any case);
+/// anything else, including unset, leaves it off.
+pub(crate) fn env_flag_from(value: Option<&str>) -> bool {
+    matches!(value, Some(v) if v.eq_ignore_ascii_case("1") || v.eq_ignore_ascii_case("true"))
+}
+
+fn env_flag(name: &str) -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    env_flag_from(std::env::var(name).ok().as_deref())
+}
+
+/// `Startup`: folds the native switches into the config, so the systems reading
+/// them each frame see a plain `bool` and never look at the environment. The
+/// browser host sets the same fields from its query string.
+pub(crate) fn apply_env_overrides(mut config: ResMut<GameConfig>) {
+    config.freeze_wall_animation |= env_flag("MAZE_NO_WALL_ANIM");
+    config.disable_object_glow |= env_flag("MAZE_NO_GLOW");
 }
 
 /// The [`Msaa`] setting for a sample count, or `None` to leave Bevy's default

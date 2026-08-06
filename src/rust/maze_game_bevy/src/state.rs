@@ -523,6 +523,31 @@ pub struct GameConfig {
     /// scene passes — and it exists on the final level alone, which makes that
     /// level structurally more expensive than any other. Off by default.
     pub hide_finish_orb: bool,
+    /// Diagnostic: keep the finish orb but stop its light casting shadows. A
+    /// point light's shadow is a cube map — six extra scene passes — and the orb
+    /// is the only shadow caster in the game. Separates that cost from the orb
+    /// itself, which [`Self::hide_finish_orb`] removes wholesale. Off by
+    /// default, leaving the shadows the game has always drawn.
+    pub disable_orb_shadows: bool,
+    /// Diagnostic: keep the finish orb but give it no light at all. The orb's
+    /// material is emissive, so it still reads as a glowing beacon — what goes
+    /// is the pool of light it casts on the surrounding walls and floor, and the
+    /// glow left behind on the win screen. Supersedes
+    /// [`Self::disable_orb_shadows`], which has nothing to act on without a
+    /// light. Off by default.
+    pub disable_orb_light: bool,
+    /// Diagnostic: stop the water / lava pool wave rewriting a `Transform` on
+    /// every surface and rock, every frame. Each write marks the entity changed,
+    /// so transform propagation and the per-instance upload run again for it —
+    /// the cost that makes a pool wall dearer than a solid one. The pools go
+    /// still; their ripple texture keeps scrolling. Off by default.
+    pub freeze_wall_animation: bool,
+    /// Diagnostic: drop the point light every key holder and every treasure
+    /// carries. Their meshes are emissive, so they still glow; what goes is the
+    /// light each casts on its surroundings. A shadowless point light measured
+    /// ~7.6 ms a frame on an iPhone, and a maze spawns one per `K` and per `T`
+    /// cell with no budget. Off by default.
+    pub disable_object_glow: bool,
     /// Developer override of multisample anti-aliasing, in samples (`1` for off,
     /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
     /// place, which is what the game has always rendered with.
@@ -1113,6 +1138,10 @@ impl Default for GameConfig {
             render_scale: None,
             level_visibility: LevelVisibility::default(),
             hide_finish_orb: false,
+            disable_orb_shadows: false,
+            disable_orb_light: false,
+            freeze_wall_animation: false,
+            disable_object_glow: false,
             msaa_samples: None,
         }
     }

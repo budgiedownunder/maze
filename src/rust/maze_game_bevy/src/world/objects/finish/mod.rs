@@ -50,6 +50,8 @@ pub(crate) fn spawn_finish_for_cell(
     is_final: bool,
     ladder_allowed: bool,
     hide_finish_orb: bool,
+    disable_orb_shadows: bool,
+    disable_orb_light: bool,
 ) {
     // 'F'-cell predicate is enforced once here; the per-object spawn
     // helpers below run unconditionally and assume a finish cell.
@@ -57,7 +59,16 @@ pub(crate) fn spawn_finish_for_cell(
         return;
     }
     if is_final {
-        orb::spawn_orb(commands, &assets.orb, r, c, placement, hide_finish_orb);
+        orb::spawn_orb(
+            commands,
+            &assets.orb,
+            r,
+            c,
+            placement,
+            hide_finish_orb,
+            disable_orb_shadows,
+            disable_orb_light,
+        );
         return;
     }
     let rig = finish_type.concrete_for_cell(r, c, seed);
