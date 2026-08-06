@@ -182,6 +182,31 @@ $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_edge'; cargo run -p maze
 As with `MAZE_DEMO`, it is ignored under `cargo test` so a variable left set in a
 shell cannot change what the headless tests spawn.
 
+### Level visibility window
+
+A multi-level run spawns every level up front and keeps it spawned, so a tall
+stack pays for its whole height on every frame — both drawing floors the player
+cannot see and running their animation systems, whose transform writes cost even
+while the geometry is hidden. `MAZE_FLOORS=<below>,<above>` bounds both, counted
+from the player's own floor; `0,0` is that floor alone. Unset (the default) draws
+and animates every level, as before.
+
+```bash
+cd src/rust
+MAZE_FLOORS=0,0 MAZE_DEBUG_MEM=1 MAZE_DEMO=multilevel_centre cargo run --release -p maze_game_bevy
+```
+
+```powershell
+cd src/rust
+$env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_centre'; cargo run --release -p maze_game_bevy
+```
+
+Use `--release` for anything you intend to compare: Bevy is much slower
+unoptimised, so a dev-profile frame rate says little. The browser host sets the
+same window from `/game/?floors=<below>,<above>`, and a stored game definition
+can carry it as `levels.visibleBelow` / `levels.visibleAbove`. Ignored under
+`cargo test`, like the variables above.
+
 ### Testing
 
 To test the `maze_game_bevy` crate:
@@ -209,6 +234,7 @@ src/
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
 │   ├── gallery.rs          MAZE_DEMO rig-gallery demos (focus selector + maze JSON)
 │   ├── levels.rs           multi-level generation: N chained level grids (generate_level_maze_jsons)
+│   ├── visibility.rs       LevelWindow: which floors of a stack are drawn AND animated (LevelTag-keyed); apply_level_window hides the rest on a level change, and the animation systems skip them
 │   ├── support_pole.rs     SupportPole — slim column used to brace a floating upper level at its unsupported corners
 │   ├── textures/           shared procedural world textures
 │   │   ├── mod.rs          module declarations

@@ -515,10 +515,27 @@ pub struct GameConfig {
     /// value is absolute, not a fraction: the host page turns `?res=<fraction>`
     /// into one against `window.devicePixelRatio`. See [`crate::render`].
     pub render_scale: Option<f32>,
+    /// How much of a multi-level stack is drawn and animated at once. Defaults
+    /// to all of it, so a run renders exactly as it did before this existed.
+    pub level_visibility: LevelVisibility,
     /// Developer override of multisample anti-aliasing, in samples (`1` for off,
     /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
     /// place, which is what the game has always rendered with.
     pub msaa_samples: Option<u32>,
+}
+
+/// How many levels either side of the player's own stay drawn and animated in a
+/// multi-level run. `None` on a side means every level that way — the default,
+/// and what the game did before the window existed. `Some(0)` on both sides
+/// draws and animates the player's own floor and nothing else.
+///
+/// Both sides must be set for the window to apply at all: a half-open window
+/// still leaves a tall stack paying for most of itself, so it is not worth the
+/// ambiguity of a partial setting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LevelVisibility {
+    pub below: Option<u32>,
+    pub above: Option<u32>,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -1089,6 +1106,7 @@ impl Default for GameConfig {
             fastest_time_to_beat: None,
             debug_memory: false,
             render_scale: None,
+            level_visibility: LevelVisibility::default(),
             msaa_samples: None,
         }
     }

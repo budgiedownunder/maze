@@ -816,7 +816,7 @@
   <script type="module">
     import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=144';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=145';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -910,6 +910,13 @@
     const msaaValue = Number(params.get('msaa'));
     const msaaSamples = params.has('msaa') && Number.isInteger(msaaValue) ? msaaValue : undefined;
 
+    // `?floors=<below>,<above>` bounds how much of a multi-level stack is drawn
+    // and animated, counted from the player's own floor — `0,0` is that floor
+    // alone. Absent, every level is drawn, as always. A stack costs its whole
+    // height on every frame otherwise, however little of it can be seen.
+    const floors = (params.get('floors') ?? '').split(',').map(Number);
+    const boundedFloors = floors.length === 2 && floors.every(Number.isInteger) && floors.every(n => n >= 0);
+
     // Applied to every launch branch, so a run can be measured however it was
     // started. Each override is only sent when asked for, leaving an ordinary
     // launch's payload byte-identical to what it was before these existed.
@@ -917,6 +924,9 @@
       startConfig.debugMemory = debugMemory;
       if (renderScale !== undefined) startConfig.renderScale = renderScale;
       if (msaaSamples !== undefined) startConfig.msaaSamples = msaaSamples;
+      if (boundedFloors) {
+        startConfig.levels = { ...(startConfig.levels ?? {}), visibleBelow: floors[0], visibleAbove: floors[1] };
+      }
       return startConfig;
     }
 

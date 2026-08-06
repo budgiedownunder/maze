@@ -12,6 +12,7 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::visibility::LevelWindow;
 use crate::world::{lcg, LevelPlacement, LevelTag, CELL_SIZE};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
@@ -320,18 +321,27 @@ pub(crate) fn spawn_lava(
 /// cells. The two `&mut Transform` queries are kept disjoint by marker.
 pub(crate) fn lava_animation_system(
     time: Res<Time>,
+    window: Res<LevelWindow>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut surfaces: Query<(&mut Transform, &LavaSurface), Without<LavaRock>>,
-    mut rocks: Query<(&mut Transform, &LavaRock), Without<LavaSurface>>,
+    mut rocks: Query<(&mut Transform, &LavaRock, &LevelTag), Without<LavaSurface>>,
     surface_mats: Query<&MeshMaterial3d<StandardMaterial>, With<LavaSurface>>,
 ) {
     let t = time.elapsed_secs();
     for (mut tr, surface) in surfaces.iter_mut() {
+        // A floor outside the window is neither drawn nor moved: the write alone
+        // would re-run transform propagation and re-upload the instance.
+        if !window.contains(surface.level) {
+            continue;
+        }
         let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
         tr.translation.y = surface.base_y + SURFACE_Y + dy;
         tr.rotation = rot;
     }
-    for (mut tr, rock) in rocks.iter_mut() {
+    for (mut tr, rock, tag) in rocks.iter_mut() {
+        if !window.contains(tag.0) {
+            continue;
+        }
         let phase = (tr.translation.x + tr.translation.z) * ROCK_K;
         tr.translation.y =
             rock.base_y + (SURFACE_Y - ROCK_SINK) + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
@@ -430,19 +440,23 @@ fn steam_puff(p: f32) -> f32 {
 /// `Update` system: rises and dissipates existing steam wisps, and sparsely emits
 /// new ones scattered over the lava surfaces. Spawn positions are sampled from the
 /// live [`LavaSurface`] tiles, so steam only comes off actual lava.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn lava_steam_system(
     mut commands: Commands,
     time: Res<Time>,
+    window: Res<LevelWindow>,
     steam_assets: Option<Res<LavaSteamAssets>>,
     lava: Query<(&Transform, &LavaSurface)>,
-    mut wisps: Query<(Entity, &mut LavaSteam, &mut Transform), Without<LavaSurface>>,
+    mut wisps: Query<(Entity, &mut LavaSteam, &mut Transform, &LevelTag), Without<LavaSurface>>,
     mut rng: Local<u64>,
     mut timer: Local<f32>,
 ) {
     let dt = time.delta_secs();
 
     // Advance existing wisps.
-    for (entity, mut wisp, mut tr) in wisps.iter_mut() {
+    for (entity, mut wisp, mut tr, tag) in wisps.iter_mut() {
+        // Off-window wisps still age out — they are despawned on schedule rather
+        // than frozen, so returning to a floor does not find stale steam.
         wisp.age += dt;
         let p = wisp.age / wisp.lifetime;
         if p >= 1.0 {
@@ -453,6 +467,9 @@ pub(crate) fn lava_steam_system(
         // horizontal sway that grows with height.
         let rise = wisp.rise * (1.0 - (1.0 - p).powi(2));
         let wob = (p * wisp.sway_freq).sin() * p;
+        if !window.contains(tag.0) {
+            continue;
+        }
         tr.translation = wisp.base + Vec3::new(wisp.sway_x * wob, rise, wisp.sway_z * wob);
         tr.scale = Vec3::splat(steam_puff(p));
     }
@@ -465,6 +482,7 @@ pub(crate) fn lava_steam_system(
     // bobbing Y), so a wisp sits on the pool at the right stacked height.
     let cells: Vec<(Vec3, usize)> = lava
         .iter()
+        .filter(|(_, s)| window.contains(s.level))
         .map(|(t, s)| (Vec3::new(t.translation.x, s.base_y + SURFACE_Y, t.translation.z), s.level))
         .collect();
     if cells.is_empty() {

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use maze_game_bevy::{
     DoorStyle, EnemyType, FinishType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks,
-    LayeredAlignment, LevelDifficultyChange, PendingLevels, SkyType, WallType,
+    LayeredAlignment, LevelDifficultyChange, LevelVisibility, PendingLevels, SkyType, WallType,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -181,6 +181,14 @@ struct LevelsStartConfig {
     hide_completed_enemies: bool,
     #[serde(default)]
     perimeter_random: bool,
+    /// Levels below / above the player's own that stay drawn and animated.
+    /// Absent on either side (the default) draws every level, as before. Both
+    /// set — `0` and `0` being the tightest — bounds a tall stack's per-frame
+    /// cost to the floors near the player.
+    #[serde(default)]
+    visible_below: Option<u32>,
+    #[serde(default)]
+    visible_above: Option<u32>,
     #[serde(default)]
     top: Option<TopStartConfig>,
 }
@@ -206,6 +214,8 @@ impl Default for LevelsStartConfig {
             alignment: default_alignment(),
             taper: false,
             hide_completed_enemies: false,
+            visible_below: None,
+            visible_above: None,
             perimeter_random: false,
             top: None,
         }
@@ -459,6 +469,10 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         fastest_time_to_beat: cfg.fastest_time_to_beat,
         debug_memory: cfg.debug_memory,
         render_scale: cfg.render_scale,
+        level_visibility: LevelVisibility {
+            below: cfg.levels.visible_below,
+            above: cfg.levels.visible_above,
+        },
         msaa_samples: cfg.msaa_samples,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
@@ -577,6 +591,23 @@ mod tests {
             serde_json::from_str(r#"{ "debugMemory": true }"#).expect("payload must parse");
         assert!(cfg.debug_memory);
         assert_eq!(cfg.timer_seconds, 60.0);
+    }
+
+    #[test]
+    fn start_config_bounds_the_levels_drawn_when_the_host_asks() {
+        // `/game/?floors=0,0` — the player's own floor and nothing else.
+        let cfg: StartConfig =
+            serde_json::from_str(r#"{ "levels": { "visibleBelow": 0, "visibleAbove": 1 } }"#)
+                .expect("payload must parse");
+        assert_eq!(cfg.levels.visible_below, Some(0));
+        assert_eq!(cfg.levels.visible_above, Some(1));
+    }
+
+    #[test]
+    fn start_config_draws_every_level_by_default() {
+        let cfg: StartConfig = serde_json::from_str("{}").expect("payload must parse");
+        assert!(cfg.levels.visible_below.is_none());
+        assert!(cfg.levels.visible_above.is_none());
     }
 
     #[test]

@@ -14,8 +14,8 @@ mod world;
 pub use alloc::{live_bytes, request_stop};
 pub use state::{
     install_panic_hook, DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult,
-    HealthStyle, KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle,
-    WallType,
+    HealthStyle, KeyHolderStyle, Landmarks, LayeredAlignment, LevelVisibility, PendingLevels,
+    SkyType, TreasureStyle, WallType,
 };
 pub use world::gallery::validate_demo_env;
 pub use world::{
@@ -61,6 +61,11 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         // Exists only to announce its own drop — see StopSignal.
         .insert_resource(crate::state::StopSignal)
         .add_systems(Startup, crate::render::apply_render_scale)
+        .init_resource::<crate::world::visibility::LevelWindow>()
+        .add_systems(
+            Update,
+            crate::world::visibility::apply_level_window.run_if(in_state(AppState::Playing)),
+        )
         .add_systems(OnEnter(AppState::TitleScreen), title::setup_title)
         .add_systems(Update, title::tick_title.run_if(in_state(AppState::TitleScreen)))
         .add_systems(Update, title::update_title_countdown.run_if(in_state(AppState::TitleScreen)))

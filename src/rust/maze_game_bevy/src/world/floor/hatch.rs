@@ -9,9 +9,10 @@
 
 use super::{tile, FloorAssets, FloorCell};
 use crate::state::MultiLevelRun;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE, LevelTag};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
+use crate::world::visibility::LevelWindow;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -343,9 +344,14 @@ pub(crate) fn hatch_close_watcher(
 /// Swings each closing hatch lid from open to sealed over [`CLOSE_DURATION`].
 pub(crate) fn hatch_animation_system(
     time: Res<Time>,
-    mut hatches: Query<(&mut LevelHatch, &mut Transform)>,
+    window: Res<LevelWindow>,
+    mut hatches: Query<(&mut LevelHatch, &mut Transform, &LevelTag)>,
 ) {
-    for (mut hatch, mut transform) in &mut hatches {
+    for (mut hatch, mut transform, tag) in &mut hatches {
+        // Off-window floors are neither drawn nor animated.
+        if !window.contains(tag.0) {
+            continue;
+        }
         if !hatch.closing || hatch.anim >= 1.0 {
             continue;
         }

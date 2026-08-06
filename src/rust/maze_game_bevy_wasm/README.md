@@ -14,6 +14,8 @@ Both entry points install a panic hook first, so a Rust panic — during generat
 
 `renderScale` and `msaaSamples` override the render target, for measuring how much of a frame goes on per-pixel work. `renderScale` is the window's scale factor — physical pixels drawn per logical pixel — and `msaaSamples` a multisample count, where the browser accepts only `1` (off) or `4`; any other value leaves Bevy's default in place. Both default to absent, leaving the platform's pixel ratio and Bevy's own default alone. The host page sets them from `/game/?res=<fraction>&msaa=<samples>`, where `res` is a fraction of the device's pixel ratio (`0.5` renders at half linear resolution, a quarter of the pixels) — the page resolves it into the absolute value this field takes, since the browser is what knows the ratio.
 
+`levels.visibleBelow` / `levels.visibleAbove` bound how much of a multi-level stack is drawn **and animated**, counted from the player's own floor; `0` and `0` is that floor alone. Absent on either side (the default) leaves every level live, as before. Every level of a stack is spawned up front and stays spawned, so without this a ten-level run pays for ten floors on every frame — both to draw them and to run their animation systems, whose transform writes cost even when the geometry is hidden. The host page sets them from `/game/?floors=<below>,<above>`.
+
 A change in `renderScale` is visible in the picture, so it confirms itself. A change in `msaaSamples` is not, and the diagnostics readout does not report the sample count actually in force — so confirm by some other means before drawing a conclusion from an MSAA comparison.
 
 ## Getting Started

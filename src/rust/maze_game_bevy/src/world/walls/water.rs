@@ -9,7 +9,8 @@
 //! gently undulates the surface and scrolls a tileable ripple texture across it.
 
 use super::rim::RECESS_DEPTH;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::visibility::LevelWindow;
+use crate::world::{LevelPlacement, LevelTag, CELL_SIZE};
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -135,12 +136,18 @@ pub(crate) fn spawn_water(
 /// the enemy / health / door systems.
 pub(crate) fn water_animation_system(
     time: Res<Time>,
+    window: Res<LevelWindow>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
-    mut surfaces: Query<(&mut Transform, &WaterSurface)>,
+    mut surfaces: Query<(&mut Transform, &WaterSurface, &LevelTag)>,
     surface_mats: Query<&MeshMaterial3d<StandardMaterial>, With<WaterSurface>>,
 ) {
     let t = time.elapsed_secs();
-    for (mut tr, surface) in surfaces.iter_mut() {
+    for (mut tr, surface, tag) in surfaces.iter_mut() {
+        // A floor outside the window is neither drawn nor moved: the write alone
+        // would re-run transform propagation and re-upload the instance.
+        if !window.contains(tag.0) {
+            continue;
+        }
         let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
         tr.translation.y = surface.base_y + SURFACE_Y + dy;
         tr.rotation = rot;

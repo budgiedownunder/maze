@@ -7,6 +7,7 @@ pub(crate) mod roof;
 pub(crate) mod sky;
 pub(crate) mod support_pole;
 pub(crate) mod textures;
+pub(crate) mod visibility;
 pub(crate) mod walls;
 
 pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COUNT};

@@ -8,7 +8,8 @@
 //! above.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE, LevelTag};
+use crate::world::visibility::LevelWindow;
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -196,8 +197,16 @@ pub(crate) fn spawn_portal(
 
 /// Slides each portal ring down its column, wrapping back to the top — the
 /// flowing-energy aura. Runs only while playing.
-pub(crate) fn portal_system(time: Res<Time>, mut rings: Query<(&mut Transform, &mut PortalRing)>) {
-    for (mut t, mut ring) in &mut rings {
+pub(crate) fn portal_system(
+    time: Res<Time>,
+    window: Res<LevelWindow>,
+    mut rings: Query<(&mut Transform, &mut PortalRing, &LevelTag)>,
+) {
+    for (mut t, mut ring, tag) in &mut rings {
+        // Off-window floors are neither drawn nor animated.
+        if !window.contains(tag.0) {
+            continue;
+        }
         ring.phase = (ring.phase + time.delta_secs() * RING_TRAVEL_RATE).fract();
         t.translation.y = ring.base_y + (1.0 - ring.phase) * ring.height;
     }
