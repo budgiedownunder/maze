@@ -20,6 +20,7 @@
 use super::dome::SKY_RADIUS;
 use super::next_unit;
 use crate::palette::UNLIT_FULL_BRIGHT;
+use crate::world::icosphere;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -69,10 +70,7 @@ pub(crate) fn spawn_stars(
 
     let baked = match (meshes.as_mut(), positions.is_empty()) {
         (Some(store), false) => {
-            let base = Sphere::new(STAR_RADIUS)
-                .mesh()
-                .ico(0)
-                .expect("ico(0) is well within the subdivision limit");
+            let base = icosphere(STAR_RADIUS, 0);
             let mut acc = base
                 .clone()
                 .transformed_by(Transform::from_translation(positions[0]));

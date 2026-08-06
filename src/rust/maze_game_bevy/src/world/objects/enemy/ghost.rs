@@ -4,7 +4,7 @@
 //! sit on the face, each with a central black eyeball; there's no mouth.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::mesh::{Indices, PrimitiveTopology};
@@ -144,11 +144,13 @@ pub(crate) fn build_ghost_assets(
     });
     let hem_sphere_mesh = meshes
         .as_mut()
-        .map(|m| m.add(Sphere::new(HEM_SPHERE_RADIUS)));
+        .map(|m| m.add(icosphere(HEM_SPHERE_RADIUS, 2)));
     let eye_sphere_mesh = meshes
         .as_mut()
-        .map(|m| m.add(Sphere::new(EYE_ARC_SPHERE_RADIUS)));
-    let eyeball_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(EYEBALL_RADIUS)));
+        .map(|m| m.add(icosphere(EYE_ARC_SPHERE_RADIUS, 1)));
+    let eyeball_mesh = meshes
+        .as_mut()
+        .map(|m| m.add(icosphere(EYEBALL_RADIUS, 1)));
     let translucent_mat = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             // Translucent: the base colour carries the alpha (alpha blend

@@ -13,7 +13,7 @@
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::world::visibility::LevelWindow;
-use crate::world::{lcg, LevelPlacement, LevelTag, CELL_SIZE};
+use crate::world::{icosphere, lcg, CELL_SIZE, LevelPlacement, LevelTag};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -418,7 +418,9 @@ pub(crate) fn build_lava_steam_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> LavaSteamAssets {
-    let mesh = meshes.as_mut().map(|m| m.add(Sphere::new(STEAM_RADIUS)));
+    // A dot covers a couple of pixels at most, so the coarsest icosphere there
+    // is — and a lava game holds a hundred or so of them at once.
+    let mesh = meshes.as_mut().map(|m| m.add(icosphere(STEAM_RADIUS, 0)));
     let material = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             base_color: Color::srgba(0.88, 0.84, 0.80, STEAM_ALPHA),

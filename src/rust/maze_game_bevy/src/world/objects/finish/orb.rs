@@ -1,7 +1,7 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameState;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -47,7 +47,10 @@ pub(crate) fn build_orb_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> OrbAssets {
-    let mesh = meshes.as_mut().map(|m| m.add(Sphere::new(ORB_RADIUS)));
+    // The light below casts shadows, so the orb is drawn seven times a frame —
+    // once for the view and six for the cube map. Its triangle count is paid
+    // over each of them.
+    let mesh = meshes.as_mut().map(|m| m.add(icosphere(ORB_RADIUS, 3)));
     let mat = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             base_color: EMISSIVE_ONLY_BASE,

@@ -4,7 +4,7 @@
 //! motion vocabulary.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -48,7 +48,7 @@ pub(crate) fn build_potion_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> PotionAssets {
-    let body_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(BODY_RADIUS)));
+    let body_mesh = meshes.as_mut().map(|m| m.add(icosphere(BODY_RADIUS, 2)));
     let neck_mesh = meshes
         .as_mut()
         .map(|m| m.add(Cylinder::new(NECK_RADIUS, NECK_HEIGHT)));

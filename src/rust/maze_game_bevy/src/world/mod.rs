@@ -429,6 +429,23 @@ fn merge_treasure(acc: &mut Vec<(maze::TreasureStyle, u32)>, add: &[(maze::Treas
     }
 }
 
+/// An icosphere of `radius`, tessellated to `subdivisions`.
+///
+/// Every sphere in the game goes through here rather than `Sphere::new(r)`,
+/// whose mesh takes Bevy's default `Ico { subdivisions: 5 }` — **20,480
+/// triangles**, wildly out of proportion to anything the game draws, and paid
+/// again for every shadow pass the mesh appears in. Each caller names a count
+/// suited to what the sphere actually covers on screen.
+///
+/// `ico` is fallible only past ~79 subdivisions, where an icosphere outgrows the
+/// `u16` index buffer; the small literals used here cannot reach it.
+pub(crate) fn icosphere(radius: f32, subdivisions: u32) -> Mesh {
+    Sphere::new(radius)
+        .mesh()
+        .ico(subdivisions)
+        .expect("a low subdivision count is well within the limit")
+}
+
 pub(crate) fn lcg(state: &mut u64) -> f32 {
     *state = state
         .wrapping_mul(6364136223846793005)

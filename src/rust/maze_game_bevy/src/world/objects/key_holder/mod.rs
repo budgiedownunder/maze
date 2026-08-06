@@ -22,7 +22,7 @@
 use super::common::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::common::{self, CommonObjectAssets};
 use crate::state::KeyHolderStyle;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
@@ -166,7 +166,9 @@ pub(crate) fn build_key_holder_assets(
     }
     KeyHolderAssets {
         key: rig.finish(meshes),
-        spark_mesh: meshes.as_mut().map(|m| m.add(Sphere::new(SPARK_MESH_RADIUS))),
+        spark_mesh: meshes
+            .as_mut()
+            .map(|m| m.add(icosphere(SPARK_MESH_RADIUS, 0))),
         spark_mat: common::build_emissive_material(materials, SPARK_EMISSIVE),
     }
 }

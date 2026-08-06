@@ -5,7 +5,7 @@
 //! surfaces.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
@@ -57,7 +57,7 @@ pub(crate) fn build_heart_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> HeartAssets {
-    let lobe_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(LOBE_RADIUS)));
+    let lobe_mesh = meshes.as_mut().map(|m| m.add(icosphere(LOBE_RADIUS, 2)));
     let tip_mesh = meshes
         .as_mut()
         .map(|m| m.add(build_tip_pyramid_mesh(TIP_HALF_WIDTH_X, TIP_HALF_DEPTH_Z, TIP_HEIGHT)));
