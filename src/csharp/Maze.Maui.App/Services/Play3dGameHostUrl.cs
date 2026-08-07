@@ -29,6 +29,35 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
+        /// Appends a query parameter to a launch URL, choosing <c>?</c> or
+        /// <c>&amp;</c> for it. The bare-launch branch can produce a URL with no
+        /// query at all, so neither separator is safe to assume.
+        /// </summary>
+        /// <param name="url">The launch URL so far</param>
+        /// <param name="parameter">The parameter, as <c>name=value</c></param>
+        /// <returns>The URL with the parameter appended</returns>
+        public static string AppendParameter(string url, string parameter) =>
+            url + (url.Contains('?') ? "&" : "?") + parameter;
+
+        /// <summary>
+        /// Whether this build is running on a phone or tablet, and so wants the
+        /// game's mobile mode.
+        /// </summary>
+        /// <remarks>
+        /// Tablets are included deliberately: an iPad measured better than an
+        /// iPhone but still fell to a few frames a second on a ten-level lava
+        /// stack with every floor drawn, and a playable game that draws one floor
+        /// beats an unplayable one that draws them all.
+        /// <para>
+        /// Mac Catalyst has to be excluded explicitly — .NET reports it as iOS
+        /// as well, and it is a desktop.
+        /// </para>
+        /// </remarks>
+        /// <returns><c>true</c> on iOS or Android; <c>false</c> elsewhere</returns>
+        public static bool IsMobilePlatform() =>
+            (OperatingSystem.IsIOS() && !OperatingSystem.IsMacCatalyst()) || OperatingSystem.IsAndroid();
+
+        /// <summary>
         /// Assembles the launch URL for a specific stored maze
         /// (<c>?id=&lt;mazeId&gt;&amp;t=&lt;token&gt;</c>), optionally appending the
         /// user's per-launch settings query so <c>/game/index.html</c> can override

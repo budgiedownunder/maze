@@ -113,8 +113,16 @@ namespace Maze.Maui.App.Views
             // Debug-only rather than a setting: appsettings.json ships as a
             // bundled asset, so switching it there would need a rebuild and
             // redeploy anyway — the same cost as this, with more machinery.
-            gameUrl += gameUrl.Contains('?') ? "&mem=1" : "?mem=1";
+            gameUrl = Play3dGameHostUrl.AppendParameter(gameUrl, "mem=1");
 #endif
+            // On a phone or tablet, ask the game for the settings measured to
+            // matter there. What the mode implies is the game's decision, not
+            // the app's; all this does is say where it is running — which MAUI
+            // knows for certain, where a browser would have to infer it.
+            if (Play3dGameHostUrl.IsMobilePlatform())
+            {
+                gameUrl = Play3dGameHostUrl.AppendParameter(gameUrl, "mobile_mode=1");
+            }
 
             MazeGameWebView.Source = new UrlWebViewSource { Url = gameUrl };
         }
