@@ -20,6 +20,8 @@ Both entry points install a panic hook first, so a Rust panic — during generat
 
 `freezeWallAnimation` (`/game/?wall_animation=0`) stops the water / lava pool wave rewriting a transform on every surface and rock each frame — each write marks the entity changed, so propagation and the per-instance upload run again for it, which is what makes a pool wall dearer than a solid one. The pools go still; their ripple texture keeps scrolling. `disableObjectGlow` (`/game/?glow=0`) drops the point light every key holder and every treasure carries; their meshes are emissive so they still glow, but they stop lighting their surroundings. A maze spawns one such light per `K` and per `T` cell with no budget, and a shadowless point light measured ~7.6 ms a frame on an iPhone.
 
+`allowLadders` (`/game/?ladders=0` to turn it off) decides whether an interim level may finish with a ladder; it defaults to on. Turned off, the finish type resolves to a portal — and because the rig drawn, the transition animation, the hatch cut into the floor above and the hole in a roofed finish tile all read that one value, they follow without anything else being set. A ladder only makes sense when the floor above it is drawn, so this pairs with a level window that hides it.
+
 A change in `renderScale` is visible in the picture, so it confirms itself. A change in `msaaSamples` is not, and the diagnostics readout does not report the sample count actually in force — so confirm by some other means before drawing a conclusion from an MSAA comparison.
 
 ## Getting Started

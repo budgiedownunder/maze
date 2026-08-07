@@ -2626,6 +2626,37 @@ mod tests {
         }
     }
 
+    /// Turning ladders off resolves the finish type once, and everything that
+    /// reads it follows: the rig drawn, the hatch cut into the floor above, and
+    /// the hole in a roofed level's finish tile. This is the test that the claim
+    /// holds end to end rather than only at the value that was rewritten.
+    #[test]
+    fn disallowing_ladders_removes_the_climb_and_everything_built_for_it() {
+        use crate::world::floor::hatch::LevelHatch;
+        use crate::world::objects::finish::{ladder::FinishLadder, portal::FinishPortal};
+        // Level 1's start sits over level 0's finish, which is what a ladder
+        // needs; without that the choice would fall back to a portal anyway.
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," ","F"]]}"#,
+            r#"{"grid":[[" "," ","S"],[" "," ","F"]]}"#,
+        ];
+
+        let with_ladders = GameConfig { finish_type: FinishType::Ladder, ..GameConfig::default() };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, with_ladders);
+        assert!(count_with::<FinishLadder>(&mut app) > 0, "the ladder is the baseline");
+        assert!(count_with::<LevelHatch>(&mut app) > 0, "and it brings a hatch above it");
+
+        let without = GameConfig {
+            finish_type: FinishType::Ladder,
+            allow_ladders: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, without);
+        assert_eq!(count_with::<FinishLadder>(&mut app), 0, "no ladder");
+        assert_eq!(count_with::<LevelHatch>(&mut app), 0, "and so no hatch to climb through");
+        assert!(count_with::<FinishPortal>(&mut app) > 0, "a portal stands in its place");
+    }
+
     /// With the window closed to the player's own floor, nothing belonging to
     /// another floor may still be drawn — a stray visible entity is geometry
     /// hanging in the air above the player.

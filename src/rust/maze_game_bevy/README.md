@@ -201,6 +201,11 @@ cd src/rust
 $env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_centre'; cargo run --release -p maze_game_bevy
 ```
 
+`MAZE_NO_LADDERS=1` (`/game/?ladders=0`) stops interim levels finishing with a
+ladder: the finish type resolves to a portal, which takes the hatch above and
+the climb animation with it. A ladder climbing into a floor that is not drawn
+reads as rising into nothing, so this pairs with a level window.
+
 `MAZE_NO_WALL_ANIM=1` (`/game/?wall_animation=0`) stills the water / lava pool
 wave, and `MAZE_NO_GLOW=1` (`/game/?glow=0`) drops the point light on every key
 holder and treasure — both diagnostics for where a frame goes.

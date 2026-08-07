@@ -14,7 +14,7 @@
 //! Every override defaults to absent, so a normal run renders exactly as it did
 //! before they existed.
 
-use crate::state::GameConfig;
+use crate::state::{FinishType, GameConfig};
 use bevy::prelude::*;
 
 /// `Startup`: applies [`GameConfig::render_scale`] to the primary window.
@@ -55,6 +55,24 @@ fn env_flag(name: &str) -> bool {
 pub(crate) fn apply_env_overrides(mut config: ResMut<GameConfig>) {
     config.freeze_wall_animation |= env_flag("MAZE_NO_WALL_ANIM");
     config.disable_object_glow |= env_flag("MAZE_NO_GLOW");
+    if env_flag("MAZE_NO_LADDERS") {
+        config.allow_ladders = false;
+    }
+    resolve_ladders(&mut config);
+}
+
+/// Collapses [`GameConfig::allow_ladders`] into the finish type, once, before
+/// anything reads it.
+///
+/// Every consumer of the ladder-or-portal choice — the rig spawned at an interim
+/// finish, the climb-versus-step animation, the hatch given to the floor above,
+/// and the hole cut in a roofed level's finish tile — resolves it from
+/// `finish_type`. Rewriting that single value is therefore the whole mechanism:
+/// there is no second condition that could fall out of step with it.
+pub(crate) fn resolve_ladders(config: &mut GameConfig) {
+    if !config.allow_ladders && config.finish_type != FinishType::Portal {
+        config.finish_type = FinishType::Portal;
+    }
 }
 
 /// The [`Msaa`] setting for a sample count, or `None` to leave Bevy's default
@@ -109,6 +127,35 @@ mod tests {
     fn a_nonsensical_render_scale_is_ignored() {
         assert_eq!(scale_after(Some(0.0)), None);
         assert_eq!(scale_after(Some(-2.0)), None);
+    }
+
+    /// The switch collapses into the finish type, which is what every consumer
+    /// reads — so there is nothing else to keep in step.
+    #[test]
+    fn disallowing_ladders_resolves_the_finish_type_to_a_portal() {
+        for authored in [FinishType::Ladder, FinishType::Random] {
+            let mut config =
+                GameConfig { allow_ladders: false, finish_type: authored, ..GameConfig::default() };
+            resolve_ladders(&mut config);
+            assert_eq!(config.finish_type, FinishType::Portal, "from {authored:?}");
+        }
+    }
+
+    #[test]
+    fn allowing_ladders_leaves_the_authored_finish_type_alone() {
+        for authored in [FinishType::Ladder, FinishType::Portal, FinishType::Random] {
+            let mut config = GameConfig { finish_type: authored, ..GameConfig::default() };
+            resolve_ladders(&mut config);
+            assert_eq!(config.finish_type, authored, "the default allows ladders");
+        }
+    }
+
+    #[test]
+    fn a_portal_game_is_untouched_either_way() {
+        let mut config =
+            GameConfig { allow_ladders: false, finish_type: FinishType::Portal, ..GameConfig::default() };
+        resolve_ladders(&mut config);
+        assert_eq!(config.finish_type, FinishType::Portal);
     }
 
     #[test]

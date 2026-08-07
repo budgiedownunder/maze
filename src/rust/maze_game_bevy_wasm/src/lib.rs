@@ -178,6 +178,17 @@ struct StartConfig {
     /// meshes are emissive, so they still glow. Set from `?glow=0`.
     #[serde(default)]
     disable_object_glow: bool,
+    /// Whether an interim level may finish with a ladder. Absent means yes, as
+    /// the game has always played. Set to `false` (from `?ladders=0`) the finish
+    /// type resolves to a portal, which takes the hatch above and the climb
+    /// animation with it — a ladder into a floor that is not drawn reads as
+    /// climbing into nothing.
+    #[serde(default = "default_allow_ladders")]
+    allow_ladders: bool,
+}
+
+fn default_allow_ladders() -> bool {
+    true
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -501,6 +512,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         disable_orb_light: cfg.disable_orb_light,
         freeze_wall_animation: cfg.freeze_wall_animation,
         disable_object_glow: cfg.disable_object_glow,
+        allow_ladders: cfg.allow_ladders,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -641,6 +653,10 @@ mod tests {
         assert!(!plain.disable_orb_light);
         assert!(!plain.freeze_wall_animation);
         assert!(!plain.disable_object_glow);
+        assert!(plain.allow_ladders, "a game climbs ladders unless told not to");
+        let flat: StartConfig =
+            serde_json::from_str(r#"{ "allowLadders": false }"#).expect("payload must parse");
+        assert!(!flat.allow_ladders);
         let still: StartConfig =
             serde_json::from_str(r#"{ "freezeWallAnimation": true, "disableObjectGlow": true }"#)
                 .expect("payload must parse");

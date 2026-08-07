@@ -548,6 +548,18 @@ pub struct GameConfig {
     /// ~7.6 ms a frame on an iPhone, and a maze spawns one per `K` and per `T`
     /// cell with no budget. Off by default.
     pub disable_object_glow: bool,
+    /// Whether an interim level may finish with a **ladder**. `true` by default.
+    ///
+    /// A ladder only makes sense when the floor above is drawn — climbing into
+    /// hidden space reads as rising into nothing. Turning this off resolves
+    /// [`Self::finish_type`] to [`FinishType::Portal`], which is a coherent
+    /// story on its own: the player is transported elsewhere rather than up.
+    ///
+    /// The override lands on the one value every consumer reads, so the rig
+    /// drawn, the transition animation, the hatch in the floor above and the
+    /// hole in a roofed level's finish tile all follow without a second
+    /// condition to keep in step.
+    pub allow_ladders: bool,
     /// Developer override of multisample anti-aliasing, in samples (`1` for off,
     /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
     /// place, which is what the game has always rendered with.
@@ -1142,6 +1154,7 @@ impl Default for GameConfig {
             disable_orb_light: false,
             freeze_wall_animation: false,
             disable_object_glow: false,
+            allow_ladders: true,
             msaa_samples: None,
         }
     }
