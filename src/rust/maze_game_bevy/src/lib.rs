@@ -2567,6 +2567,98 @@ mod tests {
         assert_eq!(count_with::<FinishOrb>(&mut app), 0);
     }
 
+    /// A playing app **with asset stores**, so every spawn helper takes its
+    /// `Some(mesh)` branch — the one that actually ships.
+    ///
+    /// Without this a spawn written as two match arms can carry a `LevelTag` on
+    /// the asset-less arm alone, and no headless test can tell: they all take
+    /// that arm. That is exactly how an untagged pool edge seal reached a device
+    /// and hung, unhideable, over the player's head.
+    fn make_playing_app_with_assets(levels: &[&str], config: GameConfig) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin, AssetPlugin::default()));
+        app.init_asset::<Mesh>().init_asset::<StandardMaterial>().init_asset::<Image>();
+        app.init_asset::<ColorMaterial>();
+        app.insert_resource(config);
+        app.insert_resource(crate::state::PendingLevels(
+            levels.iter().map(|s| s.to_string()).collect(),
+        ));
+        build_app(&mut app, None);
+        app.update();
+        app.world_mut().resource_mut::<NextState<AppState>>().set(AppState::Playing);
+        app.update();
+        app
+    }
+
+    /// The same invariant as `every_root_of_world_geometry_carries_its_level`,
+    /// on the world that spawns the most: a multi-level pool-walled stack, which
+    /// adds rims, pool edge seals, undersides, support poles, hatches and a
+    /// transition rig that a single-level demo never builds.
+    #[test]
+    fn a_multi_level_pool_stack_tags_every_root_too() {
+        use crate::world::sky::SkyEntity;
+        use crate::world::LevelTag;
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," "," "],["W"," ","F"]]}"#,
+            r#"{"grid":[["S","W"," "],[" ","W","F"]]}"#,
+        ];
+        let config = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let mut app = make_playing_app_with_assets(&LEVELS, config);
+        let untagged: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, (
+                With<Transform>,
+                Without<LevelTag>,
+                Without<ChildOf>,
+                Without<Sprite>,
+                Without<Text2d>,
+                Without<Mesh2d>,
+                Without<Camera>,
+                Without<crate::hud::minimap::MinimapPlayer>,
+            )>()
+            .iter(app.world())
+            .collect();
+        for entity in untagged {
+            assert!(
+                app.world().entity(entity).contains::<SkyEntity>(),
+                "{entity} is untagged world geometry in a multi-level stack",
+            );
+        }
+    }
+
+    /// With the window closed to the player's own floor, nothing belonging to
+    /// another floor may still be drawn — a stray visible entity is geometry
+    /// hanging in the air above the player.
+    #[test]
+    fn a_closed_window_hides_every_other_floor() {
+        use crate::world::LevelTag;
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," "," "],[" "," ","F"]]}"#,
+            r#"{"grid":[["S","W","W"],[" "," ","F"]]}"#,
+        ];
+        let config = GameConfig {
+            level_visibility: LevelVisibility { below: Some(0), above: Some(0) },
+            wall_type: WallType::Lava,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, config);
+        app.update();
+
+        let mut visible_elsewhere: Vec<usize> = app
+            .world_mut()
+            .query::<(&LevelTag, &Visibility)>()
+            .iter(app.world())
+            .filter(|(tag, vis)| tag.0 != 0 && **vis != Visibility::Hidden)
+            .map(|(tag, _)| tag.0)
+            .collect();
+        visible_elsewhere.sort_unstable();
+        visible_elsewhere.dedup();
+        assert!(
+            visible_elsewhere.is_empty(),
+            "levels {visible_elsewhere:?} still have visible geometry",
+        );
+    }
+
     /// The sky follows the camera and is shared by every floor, so it belongs to
     /// no level — hiding a floor must never take the sky with it.
     #[test]
