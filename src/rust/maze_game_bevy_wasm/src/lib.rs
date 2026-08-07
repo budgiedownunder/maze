@@ -185,6 +185,13 @@ struct StartConfig {
     /// climbing into nothing.
     #[serde(default = "default_allow_ladders")]
     allow_ladders: bool,
+    /// Run with the settings a phone needs — set from `?mobile_mode=1`. One
+    /// policy rather than a handful of parameters: it turns on the individual
+    /// switches that measurement justified (own floor only, portals instead of
+    /// ladders, no key / treasure / orb lights) and leaves the ones that
+    /// measured null alone.
+    #[serde(default)]
+    mobile_mode: bool,
 }
 
 fn default_allow_ladders() -> bool {
@@ -513,6 +520,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         freeze_wall_animation: cfg.freeze_wall_animation,
         disable_object_glow: cfg.disable_object_glow,
         allow_ladders: cfg.allow_ladders,
+        mobile_mode: cfg.mobile_mode,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -654,6 +662,10 @@ mod tests {
         assert!(!plain.freeze_wall_animation);
         assert!(!plain.disable_object_glow);
         assert!(plain.allow_ladders, "a game climbs ladders unless told not to");
+        assert!(!plain.mobile_mode);
+        let mobile: StartConfig =
+            serde_json::from_str(r#"{ "mobileMode": true }"#).expect("payload must parse");
+        assert!(mobile.mobile_mode);
         let flat: StartConfig =
             serde_json::from_str(r#"{ "allowLadders": false }"#).expect("payload must parse");
         assert!(!flat.allow_ladders);

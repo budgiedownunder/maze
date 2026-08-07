@@ -14,7 +14,7 @@
 //! Every override defaults to absent, so a normal run renders exactly as it did
 //! before they existed.
 
-use crate::state::{FinishType, GameConfig};
+use crate::state::{FinishType, GameConfig, LevelVisibility};
 use bevy::prelude::*;
 
 /// `Startup`: applies [`GameConfig::render_scale`] to the primary window.
@@ -53,12 +53,44 @@ fn env_flag(name: &str) -> bool {
 /// them each frame see a plain `bool` and never look at the environment. The
 /// browser host sets the same fields from its query string.
 pub(crate) fn apply_env_overrides(mut config: ResMut<GameConfig>) {
+    config.mobile_mode |= env_flag("MAZE_MOBILE");
+    // First, so the individual switches below can only add to what it implies.
+    resolve_mobile_mode(&mut config);
     config.freeze_wall_animation |= env_flag("MAZE_NO_WALL_ANIM");
     config.disable_object_glow |= env_flag("MAZE_NO_GLOW");
     if env_flag("MAZE_NO_LADDERS") {
         config.allow_ladders = false;
     }
     resolve_ladders(&mut config);
+}
+
+/// Applies what [`GameConfig::mobile_mode`] implies.
+///
+/// Each of these was measured on an iPhone rather than assumed:
+///
+/// - **Only the player's own floor is drawn and animated.** A ten-level stack
+///   spent about 150 ms a frame on floors nobody could see — by a wide margin
+///   the largest cost found.
+/// - **No ladders**, so the finish resolves to a portal. A ladder climbing into
+///   a floor that is not drawn reads as rising into nothing; a portal needs no
+///   visible destination.
+/// - **No key or treasure glow, and no light at the finish orb.** A shadowless
+///   point light costs about 7 ms on that device, measured twice from different
+///   sources, and a maze spawns one per key and per treasure. The meshes are
+///   emissive, so every one of them still glows — what goes is the light they
+///   cast on their surroundings.
+///
+/// Deliberately absent: the render scale and MSAA overrides, which measured
+/// null, and freezing the pool animation, which measured null and leaves the
+/// lava rocks submerged.
+pub(crate) fn resolve_mobile_mode(config: &mut GameConfig) {
+    if !config.mobile_mode {
+        return;
+    }
+    config.level_visibility = LevelVisibility { below: Some(0), above: Some(0) };
+    config.allow_ladders = false;
+    config.disable_object_glow = true;
+    config.disable_orb_light = true;
 }
 
 /// Collapses [`GameConfig::allow_ladders`] into the finish type, once, before
@@ -127,6 +159,55 @@ mod tests {
     fn a_nonsensical_render_scale_is_ignored() {
         assert_eq!(scale_after(Some(0.0)), None);
         assert_eq!(scale_after(Some(-2.0)), None);
+    }
+
+    #[test]
+    fn mobile_mode_implies_what_the_measurements_justified() {
+        let mut config = GameConfig { mobile_mode: true, ..GameConfig::default() };
+        resolve_mobile_mode(&mut config);
+        assert_eq!(
+            config.level_visibility,
+            LevelVisibility { below: Some(0), above: Some(0) },
+            "only the player's own floor",
+        );
+        assert!(!config.allow_ladders, "nothing climbs into a hidden floor");
+        assert!(config.disable_object_glow);
+        assert!(config.disable_orb_light);
+    }
+
+    /// The switches that measured null stay off: turning them on would cost
+    /// picture quality — and, for the pool freeze, the lava rocks — for nothing.
+    #[test]
+    fn mobile_mode_leaves_the_switches_that_measured_null_alone() {
+        let mut config = GameConfig { mobile_mode: true, ..GameConfig::default() };
+        resolve_mobile_mode(&mut config);
+        assert!(config.render_scale.is_none());
+        assert!(config.msaa_samples.is_none());
+        assert!(!config.freeze_wall_animation);
+    }
+
+    #[test]
+    fn without_the_mode_nothing_is_implied() {
+        let mut config = GameConfig::default();
+        resolve_mobile_mode(&mut config);
+        assert_eq!(config.level_visibility, LevelVisibility::default());
+        assert!(config.allow_ladders);
+        assert!(!config.disable_object_glow);
+        assert!(!config.disable_orb_light);
+    }
+
+    /// The mode reaches the finish type through `allow_ladders`, so the two
+    /// resolutions have to run in that order.
+    #[test]
+    fn mobile_mode_resolves_interim_finishes_to_portals() {
+        let mut config = GameConfig {
+            mobile_mode: true,
+            finish_type: FinishType::Ladder,
+            ..GameConfig::default()
+        };
+        resolve_mobile_mode(&mut config);
+        resolve_ladders(&mut config);
+        assert_eq!(config.finish_type, FinishType::Portal);
     }
 
     /// The switch collapses into the finish type, which is what every consumer

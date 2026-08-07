@@ -560,6 +560,17 @@ pub struct GameConfig {
     /// hole in a roofed level's finish tile all follow without a second
     /// condition to keep in step.
     pub allow_ladders: bool,
+    /// Run with the settings a phone needs. Off by default; the host page sets
+    /// it from `?mobile_mode=1`, being the only part that can tell what it is
+    /// running on.
+    ///
+    /// It is a policy, not a mechanism: it turns on the individual switches that
+    /// measurement justified, and nothing else. See `render::resolve_mobile_mode`
+    /// for what it implies and why. Those switches remain individually settable
+    /// as diagnostics, but they can only *add* restrictions on top of the mode —
+    /// a `bool` cannot distinguish "false by default" from "false on purpose", so
+    /// there is no lifting one back off.
+    pub mobile_mode: bool,
     /// Developer override of multisample anti-aliasing, in samples (`1` for off,
     /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
     /// place, which is what the game has always rendered with.
@@ -1155,6 +1166,7 @@ impl Default for GameConfig {
             freeze_wall_animation: false,
             disable_object_glow: false,
             allow_ladders: true,
+            mobile_mode: false,
             msaa_samples: None,
         }
     }

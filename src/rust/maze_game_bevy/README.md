@@ -201,6 +201,11 @@ cd src/rust
 $env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_centre'; cargo run --release -p maze_game_bevy
 ```
 
+`MAZE_MOBILE=1` (`/game/?mobile_mode=1`) runs with the settings a phone needs —
+own floor only, portals instead of ladders, and no point light on keys,
+treasures or the finish orb. One policy rather than a handful of parameters; the
+switches below stay available as diagnostics and can only add to it.
+
 `MAZE_NO_LADDERS=1` (`/game/?ladders=0`) stops interim levels finishing with a
 ladder: the finish type resolves to a portal, which takes the hatch above and
 the climb animation with it. A ladder climbing into a floor that is not drawn

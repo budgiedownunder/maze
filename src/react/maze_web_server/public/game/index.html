@@ -816,7 +816,7 @@
   <script type="module">
     import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=153';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=154';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -934,6 +934,10 @@
     // floor the window is hiding reads as rising into nothing; a portal that
     // transports you elsewhere does not need the destination to be visible.
     const allowLadders = params.get('ladders') !== '0';
+    // `?mobile_mode=1` is the one a phone wants: it turns on the settings that
+    // measured worth having on a device, so the individual switches above stay
+    // diagnostics rather than something a caller has to assemble by hand.
+    const mobileMode = params.get('mobile_mode') === '1';
 
     const floors = (params.get('floors') ?? '').split(',').map(Number);
     const boundedFloors = floors.length === 2 && floors.every(Number.isInteger) && floors.every(n => n >= 0);
@@ -951,6 +955,7 @@
       if (freezeWallAnimation) startConfig.freezeWallAnimation = true;
       if (disableObjectGlow) startConfig.disableObjectGlow = true;
       if (!allowLadders) startConfig.allowLadders = false;
+      if (mobileMode) startConfig.mobileMode = true;
       if (boundedFloors) {
         startConfig.levels = { ...(startConfig.levels ?? {}), visibleBelow: floors[0], visibleAbove: floors[1] };
       }
