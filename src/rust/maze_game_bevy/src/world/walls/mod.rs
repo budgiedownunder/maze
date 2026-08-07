@@ -422,8 +422,9 @@ pub(crate) fn spawn_non_occluding_for_cell(
     c: usize,
     placement: LevelPlacement,
     // Rocks each lava cell gets — the global across-levels budget computed once in
-    // `spawn_world` (see `lava::run_lava_rocks`). Ignored for non-lava cells.
-    lava_rocks: usize,
+    // Lava cells across the whole run; this cell's rock count is derived from
+    // it (see `lava::rocks_for_cell`). Ignored for non-lava cells.
+    lava_cells_total: usize,
 ) {
     match wall_type {
         // Water / lava render a recessed surface plus rim skirts filling the band
@@ -435,7 +436,8 @@ pub(crate) fn spawn_non_occluding_for_cell(
         }
         WallType::Lava => {
             let surface = pool_surface_transform(grid, cell_entities, config, wall_type, r, c, placement);
-            lava::spawn_lava(commands, &assets.lava, r, c, placement, surface, lava_rocks);
+            let rocks = lava::rocks_for_cell(lava_cells_total, r, c, placement.level);
+            lava::spawn_lava(commands, &assets.lava, r, c, placement, surface, rocks);
             rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c, placement);
         }
         // The fence needs the grid + overrides to bar only the edges facing a

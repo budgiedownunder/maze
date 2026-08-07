@@ -648,8 +648,9 @@ fn spawn_level(
     // whole stack. See `rays_per_chest`.
     treasure_rays: usize,
     // Rocks each lava cell on this level gets — likewise a global across-levels
-    // budget computed once in `spawn_world`. See `lava::run_lava_rocks`.
-    lava_rocks: usize,
+    // Lava cells across the whole run, from which each cell's rock count is
+    // derived. See `lava::rocks_for_cell`.
+    lava_cells_total: usize,
     // The level-above's placement + `(rows, cols)` footprint, or `None` for the top
     // level — forwarded to the door spawn so a raised portcullis under a taper gap
     // (no cell above its world XZ) stays visible instead of hiding.
@@ -695,7 +696,7 @@ fn spawn_level(
                     continue;
                 }
                 walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
-                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_rocks);
+                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_cells_total);
                 // On a lifted (floating) level, a pool cell's basin side below the
                 // rim would otherwise show through to the level below — and, under
                 // taper, to its exposed surrounding ring. Seal its exposed edges so
@@ -1579,7 +1580,7 @@ pub(crate) fn spawn_world(
     // Likewise every lava cell on every level bobs its rocks each frame, so the
     // rock budget is global to the whole stack — bound by the total lava cells over
     // all levels (see `run_lava_rocks`).
-    let lava_rocks = walls::lava::run_lava_rocks(level_meta.iter().map(|(_, _, l)| *l));
+    let lava_cells_total: usize = level_meta.iter().map(|(_, _, l)| *l).sum();
 
     // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
     // only when the next level's start sits directly above it (same world XZ) so
@@ -1686,7 +1687,7 @@ pub(crate) fn spawn_world(
             // The live level reuses the already-parsed grid + per-cell overrides.
             let placement = level_placements[0];
             let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
+            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_cells_total, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
         } else {
             // Upper levels need only their grid + per-cell overrides for the static
             // geometry; the game options don't affect either, so parse without them.
@@ -1696,7 +1697,7 @@ pub(crate) fn spawn_world(
             let level_cells = level_game.cell_entities().clone();
             let placement = level_placements[level];
             let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
+            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_cells_total, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
         }
     }
 
