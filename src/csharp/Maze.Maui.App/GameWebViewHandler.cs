@@ -29,18 +29,19 @@ namespace Maze.Maui.App
         internal static event Action<Models.GameFailure>? GameFailureReceived;
 
         /// <summary>
+        /// Raised when the game reports that it has finished tearing down and
+        /// released its memory. Lets the page wait for the release before
+        /// destroying the document, rather than guessing at a delay.
+        /// </summary>
+        internal static event Action? GameStoppedReceived;
+
+        /// <summary>
         /// Invoked by the per-platform handler code when a bridge message
         /// arrives. The page multiplexes results and failures over one channel,
         /// so the payload's envelope decides which event it becomes — see
         /// <see cref="Models.HostMessage.KindOf"/>.
         /// </summary>
         /// <param name="json">Raw JSON payload from the platform bridge</param>
-        /// <summary>
-        /// Raised when the game reports that it has finished tearing down and
-        /// released its memory. Lets the page wait for the release before
-        /// destroying the document, rather than guessing at a delay.
-        /// </summary>
-        internal static event Action? GameStoppedReceived;
 
         internal static void RaiseHostMessage(string json)
         {
