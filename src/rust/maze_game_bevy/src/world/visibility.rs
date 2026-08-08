@@ -17,7 +17,8 @@
 //! consulted by both halves.
 
 use crate::state::{GameConfig, GameState, LevelVisibility, MultiLevelRun};
-use crate::world::LevelTag;
+use crate::world::objects::door::DoorMarker;
+use crate::world::{GlowLight, LevelTag};
 use bevy::prelude::*;
 
 /// How much of a stack is drawn and animated, as an inclusive level range.
@@ -26,15 +27,28 @@ use bevy::prelude::*;
 #[derive(Resource, Default, PartialEq, Eq, Debug)]
 pub(crate) struct LevelWindow {
     bounds: Option<(usize, usize)>,
+    /// The lights' own range, which may be narrower than the scene's — a floor
+    /// can be drawn without paying for the glows on it.
+    light_bounds: Option<(usize, usize)>,
+}
+
+fn within(bounds: Option<(usize, usize)>, level: usize) -> bool {
+    match bounds {
+        None => true,
+        Some((low, high)) => level >= low && level <= high,
+    }
 }
 
 impl LevelWindow {
     /// Whether `level` is currently drawn and animated.
     pub(crate) fn contains(&self, level: usize) -> bool {
-        match self.bounds {
-            None => true,
-            Some((low, high)) => level >= low && level <= high,
-        }
+        within(self.bounds, level)
+    }
+
+    /// Whether `level`'s point lights are lit. A floor that is not drawn is
+    /// never lit either, whatever the lights' own range says.
+    pub(crate) fn lights_lit(&self, level: usize) -> bool {
+        self.contains(level) && within(self.light_bounds, level)
     }
 }
 
@@ -47,6 +61,10 @@ impl LevelWindow {
 /// which is the hardest place to inspect it. Mirrors the `MAZE_DEBUG_MEM`
 /// convention.
 const FLOORS_ENV: &str = "MAZE_FLOORS";
+
+/// Native override of the *lights* range — `MAZE_LIGHTS=0,0` leaves only the
+/// player's own floor lit while every floor stays drawn.
+const LIGHTS_ENV: &str = "MAZE_LIGHTS";
 
 /// Parses a `<below>,<above>` pair. Anything else — a missing side, a negative,
 /// a non-number, or unset — leaves the setting alone, so a stray value cannot
@@ -67,6 +85,13 @@ pub(crate) fn level_visibility_env() -> Option<LevelVisibility> {
         return None;
     }
     level_visibility_from(std::env::var(FLOORS_ENV).ok().as_deref())
+}
+
+pub(crate) fn light_visibility_env() -> Option<LevelVisibility> {
+    if cfg!(test) {
+        return None;
+    }
+    level_visibility_from(std::env::var(LIGHTS_ENV).ok().as_deref())
 }
 
 /// The window around `current` for a run configured with `below` / `above`
@@ -102,24 +127,36 @@ pub(crate) fn apply_level_window(
     state: Res<GameState>,
     run: Option<Res<MultiLevelRun>>,
     mut window: ResMut<LevelWindow>,
-    mut tagged: Query<(&LevelTag, &mut Visibility)>,
+    // Doors are excluded deliberately: `door_animation_system` owns their
+    // visibility, because a leaf has a second reason to be hidden that this pass
+    // knows nothing about — a raised portcullis or a sunk slide has travelled
+    // into the neighbouring level, where it would read as a phantom panel. Two
+    // systems writing one component means the last writer wins, and which that
+    // is depends on schedule order.
+    mut tagged: Query<(&LevelTag, &mut Visibility, Has<GlowLight>), Without<DoorMarker>>,
 ) {
     let current = run.as_ref().map_or(0, |r| r.current_level);
     // A transition climbs toward the level above, so that is what to reveal.
     let reveal = state.transition.as_ref().map(|_| current + 1);
     // The env override stands in for the host's `?floors=` on a native run.
     let visibility = level_visibility_env().unwrap_or(config.level_visibility);
+    let lights = light_visibility_env().unwrap_or(config.light_visibility);
     let bounds = window_bounds(visibility.below, visibility.above, current, reveal);
-    if window.bounds == bounds {
+    let light_bounds = window_bounds(
+        lights.below,
+        lights.above,
+        current,
+        reveal,
+    );
+    if window.bounds == bounds && window.light_bounds == light_bounds {
         return;
     }
     window.bounds = bounds;
-    for (tag, mut visibility) in &mut tagged {
-        let wanted = if window.contains(tag.0) {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
+    window.light_bounds = light_bounds;
+    for (tag, mut visibility, is_glow) in &mut tagged {
+        // A glow answers to both ranges; everything else only to the scene's.
+        let lit = if is_glow { window.lights_lit(tag.0) } else { window.contains(tag.0) };
+        let wanted = if lit { Visibility::Inherited } else { Visibility::Hidden };
         if *visibility != wanted {
             *visibility = wanted;
         }
@@ -150,6 +187,33 @@ mod tests {
         assert!(level_visibility_from(Some("all")).is_none());
     }
 
+    /// The point of a separate range: a floor stays drawn while its glows go
+    /// out. Nothing else in the scene is affected.
+    #[test]
+    fn lights_can_be_narrowed_without_narrowing_the_scene() {
+        let window = LevelWindow {
+            bounds: None,
+            light_bounds: window_bounds(Some(0), Some(0), 4, None),
+        };
+        assert!(window.contains(0), "every floor is still drawn");
+        assert!(window.contains(9));
+        assert!(window.lights_lit(4), "the player's own floor keeps its glows");
+        assert!(!window.lights_lit(3));
+        assert!(!window.lights_lit(5));
+    }
+
+    /// A floor nobody draws is never lit either, whatever the lights' own range
+    /// says — otherwise a hidden floor would still pay for its point lights.
+    #[test]
+    fn an_undrawn_floor_is_never_lit() {
+        let window = LevelWindow {
+            bounds: window_bounds(Some(0), Some(0), 2, None),
+            light_bounds: None,
+        };
+        assert!(!window.contains(5));
+        assert!(!window.lights_lit(5));
+    }
+
     #[test]
     fn an_unset_margin_leaves_every_level_drawn() {
         assert_eq!(window_bounds(None, None, 3, None), None);
@@ -160,7 +224,10 @@ mod tests {
 
     #[test]
     fn a_zero_margin_keeps_only_the_players_own_level() {
-        let window = LevelWindow { bounds: window_bounds(Some(0), Some(0), 4, None) };
+        let window = LevelWindow {
+            bounds: window_bounds(Some(0), Some(0), 4, None),
+            light_bounds: None,
+        };
         assert!(window.contains(4));
         assert!(!window.contains(3));
         assert!(!window.contains(5));

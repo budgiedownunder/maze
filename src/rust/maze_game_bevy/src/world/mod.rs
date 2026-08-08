@@ -143,6 +143,17 @@ pub(crate) fn level_offset_cells(
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct LevelTag(pub(crate) usize);
 
+/// Marks a decorative point light — the finish orb's, and the one every key
+/// holder and treasure carries.
+///
+/// These answer to their own level range as well as the scene's, so a stack can
+/// be drawn in full while only the floors near the player pay for their glows.
+/// A shadowless point light measured ~7 ms a frame on an iPhone, which on a tall
+/// stack is the dominant cost; the meshes are emissive, so the objects still
+/// glow when their light is out.
+#[derive(Component)]
+pub(crate) struct GlowLight;
+
 impl LevelPlacement {
     /// This placement's level as a spawnable component.
     pub(crate) fn tag(&self) -> LevelTag {

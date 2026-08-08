@@ -522,6 +522,51 @@ test.describe('Game host stored game-definition launch (?def=...)', () => {
   // A killed page runs no JavaScript on its way out, so the crash can only be
   // noticed on the load the browser performs afterwards — by a run sentinel that
   // outlived it. Without this the reload just starts the same game again.
+  // The MAUI app knows its platform for a fact and appends the parameter; a
+  // browser has to judge, so the page does it here — and an explicit value in
+  // the URL always wins over the judgement.
+  test.describe('mobile mode', () => {
+    async function launchAndCapture(page: Page, query = '') {
+      await stubDefHost(page, {
+        config: { timerSeconds: 90, mode: 'Tower' },
+        challengeKey: 'def:def-id',
+        leaderboardTracked: false,
+      })
+      await page.goto(`/game/index.html?t=fake&def=def-id${query}`)
+      return await capturedPayload(page)
+    }
+
+    test('a desktop browser is left on the full settings', async ({ page }) => {
+      const payload = await launchAndCapture(page)
+      expect(payload.mobileMode).toBeUndefined()
+    })
+
+    test('an explicit mobile_mode=1 is honoured on a desktop', async ({ page }) => {
+      const payload = await launchAndCapture(page, '&mobile_mode=1')
+      expect(payload.mobileMode).toBe(true)
+    })
+
+    test.describe('on a touch device', () => {
+      // Playwright disallows overriding the browser type inside a describe, so
+      // the device settings are spread with that key omitted.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
+      const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
+      test.use(pixel7)
+
+      test('the page asks for mobile mode without being told to', async ({ page }) => {
+        const payload = await launchAndCapture(page)
+        expect(payload.mobileMode).toBe(true)
+      })
+
+      test('an explicit mobile_mode=0 overrides the detection', async ({ page }) => {
+        // How a phone is measured *without* the mode, which is most of how the
+        // settings it turns on were chosen in the first place.
+        const payload = await launchAndCapture(page, '&mobile_mode=0')
+        expect(payload.mobileMode).toBeUndefined()
+      })
+    })
+  })
+
   test.describe('crash containment', () => {
     const SENTINEL = 'mazeRunActive'
 

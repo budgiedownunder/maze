@@ -223,6 +223,10 @@ altogether (`/game/?orb=0`). It is the only shadow-casting light in the game, on
 final level alone, so it is the one thing that makes reaching the top of a stack
 dearer than any other floor.
 
+`MAZE_LIGHTS=<below>,<above>` narrows the point lights alone, leaving every
+floor drawn — a middle setting for a device with headroom for the geometry but
+not for dozens of glows.
+
 Use `--release` for anything you intend to compare: Bevy is much slower
 unoptimised, so a dev-profile frame rate says little. The browser host sets the
 same window from `/game/?floors=<below>,<above>`, and a stored game definition

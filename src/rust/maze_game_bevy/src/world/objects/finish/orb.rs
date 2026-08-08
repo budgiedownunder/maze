@@ -1,7 +1,7 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::GameState;
-use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
+use crate::world::{icosphere, GlowLight, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -147,6 +147,7 @@ pub(crate) fn spawn_orb(
     }
     commands.spawn((
         placement.tag(),
+        GlowLight,
         PointLight {
             color: COLOR_ORB_LIGHT,
             intensity: ORB_LIGHT_INTENSITY,

@@ -518,6 +518,15 @@ pub struct GameConfig {
     /// How much of a multi-level stack is drawn and animated at once. Defaults
     /// to all of it, so a run renders exactly as it did before this existed.
     pub level_visibility: LevelVisibility,
+    /// How much of a stack keeps its **point lights**, independently of how much
+    /// of it is drawn. Defaults to all of it.
+    ///
+    /// A shadowless point light measured ~7 ms a frame on an iPhone, and a maze
+    /// spawns one per key and per treasure, so a tall stack with every floor
+    /// drawn carries dozens. This narrows the lights without narrowing the
+    /// scene: distant floors keep their shape, their lava and their props, and
+    /// lose only the glow they cast — which is the cost that was measured.
+    pub light_visibility: LevelVisibility,
     /// Diagnostic: leave the finish orb unspawned. It is the game's **only**
     /// shadow-casting light — a point light's shadow is a cube map, so six extra
     /// scene passes — and it exists on the final level alone, which makes that
@@ -1160,6 +1169,7 @@ impl Default for GameConfig {
             debug_memory: false,
             render_scale: None,
             level_visibility: LevelVisibility::default(),
+            light_visibility: LevelVisibility::default(),
             hide_finish_orb: false,
             disable_orb_shadows: false,
             disable_orb_light: false,

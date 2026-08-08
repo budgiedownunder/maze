@@ -51,7 +51,7 @@ pub(crate) mod silver;
 use super::common::bake::{baked_handle, outline_scaled};
 use super::common::{self, CommonObjectAssets};
 use crate::state::{GameConfig, TreasureStyle};
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{GlowLight, LevelPlacement, CELL_SIZE};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -434,6 +434,8 @@ pub(crate) fn spawn_treasure_for_cell(
     if !config.disable_object_glow {
     let glow = commands
         .spawn((
+            GlowLight,
+            placement.tag(),
             PointLight {
                 color: glow_color(style),
                 intensity: GLOW_INTENSITY,

@@ -22,7 +22,7 @@
 use super::common::bake::{BakedRig, RigBuilder, UnitMeshes};
 use super::common::{self, CommonObjectAssets};
 use crate::state::{GameConfig, KeyHolderStyle};
-use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
+use crate::world::{GlowLight, LevelTag, icosphere, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 use std::f32::consts::{FRAC_PI_2, TAU};
 
@@ -223,7 +223,7 @@ pub(crate) fn spawn_key_holder_for_cell(
     };
     let rest_y = KEY_REST_Y.max(base_top + KEY_CLEARANCE);
 
-    spawn_floating_key(commands, key_assets, holder, rest_y, config.disable_object_glow);
+    spawn_floating_key(commands, key_assets, holder, rest_y, config.disable_object_glow, placement.tag());
 }
 
 fn spawn_floating_key(
@@ -232,6 +232,7 @@ fn spawn_floating_key(
     holder: Entity,
     rest_y: f32,
     disable_glow: bool,
+    tag: LevelTag,
 ) {
     // The floating key group bobs and spins as one (in the holder's local
     // frame); its sub-meshes, glow, and sparks are children. A uniform scale
@@ -250,6 +251,8 @@ fn spawn_floating_key(
     if !disable_glow {
     let glow = commands
         .spawn((
+            GlowLight,
+            tag,
             PointLight {
                 color: GLOW_COLOR,
                 intensity: GLOW_INTENSITY,

@@ -2657,6 +2657,35 @@ mod tests {
         assert!(count_with::<FinishPortal>(&mut app) > 0, "a portal stands in its place");
     }
 
+    /// A door on a floor the window is not drawing must be hidden like anything
+    /// else on it. Doors are the one thing the window pass does not own — the
+    /// door system does, because a leaf has a second reason to hide — and that
+    /// system skips levels other than the live one, so the hiding has to happen
+    /// before it does. Without that, every door on every hidden floor kept its
+    /// last visibility and floated there alone.
+    #[test]
+    fn a_closed_window_hides_doors_on_other_floors_too() {
+        use crate::world::objects::door::DoorMarker;
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," ","F"]]}"#,
+            r#"{"grid":[[" ","K","S"],["D"," ","F"]]}"#,
+        ];
+        let config = GameConfig {
+            level_visibility: LevelVisibility { below: Some(0), above: Some(0) },
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, config);
+        app.update();
+
+        let upper_doors_visible = app
+            .world_mut()
+            .query::<(&DoorMarker, &Visibility)>()
+            .iter(app.world())
+            .filter(|(marker, vis)| marker.level != 0 && **vis != Visibility::Hidden)
+            .count();
+        assert_eq!(upper_doors_visible, 0, "a door on a hidden floor floats alone");
+    }
+
     /// With the window closed to the player's own floor, nothing belonging to
     /// another floor may still be drawn — a stray visible entity is geometry
     /// hanging in the air above the player.

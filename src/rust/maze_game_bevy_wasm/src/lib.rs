@@ -229,6 +229,12 @@ struct LevelsStartConfig {
     visible_below: Option<u32>,
     #[serde(default)]
     visible_above: Option<u32>,
+    /// The same, for point lights alone — a floor can stay drawn while its key,
+    /// treasure and orb glows go out. Set from `?lights=<below>,<above>`.
+    #[serde(default)]
+    lights_below: Option<u32>,
+    #[serde(default)]
+    lights_above: Option<u32>,
     #[serde(default)]
     top: Option<TopStartConfig>,
 }
@@ -256,6 +262,8 @@ impl Default for LevelsStartConfig {
             hide_completed_enemies: false,
             visible_below: None,
             visible_above: None,
+            lights_below: None,
+            lights_above: None,
             perimeter_random: false,
             top: None,
         }
@@ -513,6 +521,10 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
             below: cfg.levels.visible_below,
             above: cfg.levels.visible_above,
         },
+        light_visibility: LevelVisibility {
+            below: cfg.levels.lights_below,
+            above: cfg.levels.lights_above,
+        },
         msaa_samples: cfg.msaa_samples,
         hide_finish_orb: cfg.hide_finish_orb,
         disable_orb_shadows: cfg.disable_orb_shadows,
@@ -684,6 +696,14 @@ mod tests {
                 .expect("payload must parse");
         assert_eq!(cfg.levels.visible_below, Some(0));
         assert_eq!(cfg.levels.visible_above, Some(1));
+        // The lights have their own range, and default to unbounded with it.
+        assert!(cfg.levels.lights_below.is_none());
+        let lit: StartConfig =
+            serde_json::from_str(r#"{ "levels": { "lightsBelow": 0, "lightsAbove": 0 } }"#)
+                .expect("payload must parse");
+        assert_eq!(lit.levels.lights_below, Some(0));
+        assert_eq!(lit.levels.lights_above, Some(0));
+        assert!(lit.levels.visible_below.is_none(), "the scene stays drawn");
     }
 
     #[test]
