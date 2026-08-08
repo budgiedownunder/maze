@@ -185,11 +185,12 @@ shell cannot change what the headless tests spawn.
 ### Level visibility window
 
 A multi-level run spawns every level up front and keeps it spawned, so a tall
-stack pays for its whole height on every frame — both drawing floors the player
-cannot see and running their animation systems, whose transform writes cost even
-while the geometry is hidden. `MAZE_FLOORS=<below>,<above>` bounds both, counted
-from the player's own floor; `0,0` is that floor alone. Unset (the default) draws
-and animates every level, as before.
+stack pays for its whole height on every frame. `MAZE_FLOORS=<below>,<above>`
+bounds what is drawn **and** animated, counted from the player's own floor; `0,0`
+is that floor alone. Unset (the default) draws and animates every level, as
+before. The saving measured on a device came from not *drawing* the other floors;
+skipping their animation was measured separately and made no difference, so it is
+kept for tidiness rather than for speed.
 
 ```bash
 cd src/rust
@@ -249,18 +250,21 @@ The crate is organised into focused per-concern modules under `src/`:
 ```
 src/
 ├── lib.rs                  module decls + public re-exports + build_app
+├── main.rs                 the native desktop binary (validates MAZE_DEMO, then build_app + run)
 ├── palette.rs              cross-module colour constants
 ├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, MultiLevelRun, etc.)
 ├── images.rs               generic Bevy Image factory (sampler-tuned)
-├── render.rs               developer render-target overrides: window scale factor (apply_render_scale) + MSAA sample count (msaa_override); both absent by default
+├── alloc.rs                counting global allocator (live_bytes) + request_stop — what the readout's `live` row reports, and the only figure that FALLS when memory is returned
+├── render.rs               render-target overrides (window scale factor, MSAA) AND the settings policies: apply_env_overrides folds the native switches in once, resolve_mobile_mode applies what a phone needs, resolve_ladders collapses that into the finish type
 ├── movement.rs             input + animation + quit
 ├── tick.rs                 central game_tick_system + damage-flash overlay system
+├── transition.rs           the interim-finish transition between levels: a ladder climb or a portal step, plus the portal's screen flash
 ├── outcome.rs              outcome_watcher_system (win / lose detection from MazeGame state)
 ├── world/                  3D scene construction
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
 │   ├── gallery.rs          MAZE_DEMO rig-gallery demos (focus selector + maze JSON)
 │   ├── levels.rs           multi-level generation: N chained level grids (generate_level_maze_jsons)
-│   ├── visibility.rs       LevelWindow: which floors of a stack are drawn AND animated (LevelTag-keyed); apply_level_window hides the rest on a level change, and the animation systems skip them
+│   ├── visibility.rs       LevelWindow: two LevelTag-keyed ranges — which floors are drawn, and (separately, and never wider) which keep their point lights; apply_level_window re-applies both when the player changes level
 │   ├── support_pole.rs     SupportPole — slim column used to brace a floating upper level at its unsupported corners
 │   ├── textures/           shared procedural world textures
 │   │   ├── mod.rs          module declarations
@@ -325,7 +329,9 @@ src/
 │   │   │   ├── panel.rs    the wall-material door slab
 │   │   │   ├── keyhole.rs  brass lock plate + dark keyhole cutout
 │   │   │   ├── swing.rs    swinging-leaf rig (straight corridors)
-│   │   │   └── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   │   ├── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   │   ├── portcullis.rs raising-grille rig + its frame (hidden once fully raised where a cell sits above)
+│   │   │   └── dissolve.rs leaf that holds its pose while its materials fade away
 │   │   ├── enemy/          'E' cells: a moving rig that chases the player
 │   │   │   ├── mod.rs      EnemyMarker + EnemyAssets dispatcher (by per-cell enemyType override, else GameConfig.enemy_type) + shared animation system
 │   │   │   ├── goblin.rs   default goblin rig: green body with painted mouth and per-side eyeballs
@@ -365,6 +371,7 @@ src/
 │   ├── level.rs            level readout (multi-level runs only)
 │   ├── clock.rs            top-centre countdown clock + lose-state trigger
 │   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change
+│   ├── diagnostics.rs      the developer readout below the minimap (vis / fps / mem / live / mes / mat / img) + its frame-time estimator
 │   └── bag/                bottom inventory HUD
 │       ├── mod.rs          BagHud + bag_hud_system (grouped per-type icon + ×N chips, wrapping, rebuilt on change)
 │       ├── treasure.rs     per-style procedural treasure icons (silver/gold ingot bar, bright diamond, quartered jewels)
