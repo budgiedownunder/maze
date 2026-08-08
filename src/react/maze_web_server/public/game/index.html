@@ -934,10 +934,32 @@
     // floor the window is hiding reads as rising into nothing; a portal that
     // transports you elsewhere does not need the destination to be visible.
     const allowLadders = params.get('ladders') !== '0';
+    // Whether this looks like a phone or a tablet.
+    //
+    // Unlike the MAUI app, which knows its own platform for a fact, a browser has
+    // to judge. `(pointer: coarse)` is the primary signal because it describes
+    // the *primary* input: a touch laptop driven by a mouse reports `fine` and is
+    // correctly left alone. iPadOS is the awkward case — Safari there presents
+    // itself as desktop Safari on a Mac, so a `MacIntel` platform reporting more
+    // than one touch point is an iPad rather than a desktop.
+    function looksLikeAMobileDevice() {
+      const touchPoints = navigator.maxTouchPoints ?? 0;
+      const iPadInDesktopClothing = navigator.platform === 'MacIntel' && touchPoints > 1;
+      const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+      return iPadInDesktopClothing || (coarsePointer && touchPoints > 0);
+    }
+
     // `?mobile_mode=1` is the one a phone wants: it turns on the settings that
     // measured worth having on a device, so the individual switches above stay
     // diagnostics rather than something a caller has to assemble by hand.
-    const mobileMode = params.get('mobile_mode') === '1';
+    //
+    // Absent, the page decides for itself. An explicit value always wins, so
+    // `?mobile_mode=0` is how you measure a phone *without* it — and the MAUI
+    // app, which appends the parameter on iOS and Android, is never second-
+    // guessed by a detection it does not need.
+    const mobileModeParam = params.get('mobile_mode');
+    const mobileMode =
+      mobileModeParam !== null ? mobileModeParam === '1' : looksLikeAMobileDevice();
 
     const floors = (params.get('floors') ?? '').split(',').map(Number);
     const boundedFloors = floors.length === 2 && floors.every(Number.isInteger) && floors.every(n => n >= 0);
