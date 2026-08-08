@@ -70,7 +70,12 @@ const LIGHTS_ENV: &str = "MAZE_LIGHTS";
 /// a non-number, or unset — leaves the setting alone, so a stray value cannot
 /// silently change what a run draws.
 pub(crate) fn level_visibility_from(value: Option<&str>) -> Option<LevelVisibility> {
-    let (below, above) = value?.split_once(',')?;
+    let value = value?;
+    // `all` is how a range that defaults to narrow is opened back up.
+    if value.trim().eq_ignore_ascii_case("all") {
+        return Some(LevelVisibility { below: None, above: None });
+    }
+    let (below, above) = value.split_once(',')?;
     Some(LevelVisibility {
         below: Some(below.trim().parse().ok()?),
         above: Some(above.trim().parse().ok()?),
@@ -184,7 +189,35 @@ mod tests {
         assert!(level_visibility_from(Some("1")).is_none());
         assert!(level_visibility_from(Some("1,")).is_none());
         assert!(level_visibility_from(Some("-1,2")).is_none());
-        assert!(level_visibility_from(Some("all")).is_none());
+        assert!(level_visibility_from(Some("nonsense")).is_none());
+        // `all` is the one word it takes, for opening up a range whose default
+        // is narrow — the lights.
+        assert_eq!(
+            level_visibility_from(Some("all")),
+            Some(LevelVisibility { below: None, above: None }),
+        );
+        assert_eq!(level_visibility_from(Some(" ALL ")), level_visibility_from(Some("all")));
+    }
+
+    /// The default the game ships with: lights reach the player's own floor and
+    /// no further, while the scene stays whole. A ten-level lava stack ran at
+    /// 10-25 fps on a desktop with every floor lit against 45-50 lit this way.
+    #[test]
+    fn lights_reach_only_the_players_own_floor_by_default() {
+        let config = GameConfig::default();
+        assert_eq!(config.light_visibility, LevelVisibility { below: Some(0), above: Some(0) });
+        assert_eq!(config.level_visibility, LevelVisibility::default(), "the scene is untouched");
+    }
+
+    /// A single-level game must be unaffected — the range is around the floor
+    /// the player is on, and there is only one.
+    #[test]
+    fn a_single_level_game_is_fully_lit_by_the_default() {
+        let window = LevelWindow {
+            bounds: None,
+            light_bounds: window_bounds(Some(0), Some(0), 0, None),
+        };
+        assert!(window.lights_lit(0));
     }
 
     /// The point of a separate range: a floor stays drawn while its glows go

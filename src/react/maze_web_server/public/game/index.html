@@ -816,7 +816,7 @@
   <script type="module">
     import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=157';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=158';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -968,9 +968,7 @@
         : undefined;
     };
     const floors = pair('floors');
-    // `?lights=<below>,<above>` narrows the point lights alone, leaving every
-    // floor drawn — a middle setting between a full stack and one floor, for a
-    // device with headroom for the geometry but not for dozens of glows.
+    const lightsAll = params.get('lights') === 'all';
     const lights = pair('lights');
 
     // Applied to every launch branch, so a run can be measured however it was
@@ -987,11 +985,15 @@
       if (disableObjectGlow) startConfig.disableObjectGlow = true;
       if (!allowLadders) startConfig.allowLadders = false;
       if (mobileMode) startConfig.mobileMode = true;
-      if (floors || lights) {
+      if (floors || lights || lightsAll) {
         startConfig.levels = {
           ...(startConfig.levels ?? {}),
           ...(floors ? { visibleBelow: floors[0], visibleAbove: floors[1] } : {}),
           ...(lights ? { lightsBelow: lights[0], lightsAbove: lights[1] } : {}),
+          // Explicit nulls, not omission: the field defaults to the player's own
+          // floor, so leaving it out would keep the narrow range rather than
+          // widen it.
+          ...(lightsAll ? { lightsBelow: null, lightsAbove: null } : {}),
         };
       }
       return startConfig;

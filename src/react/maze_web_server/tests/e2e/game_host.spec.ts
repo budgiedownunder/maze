@@ -536,6 +536,21 @@ test.describe('Game host stored game-definition launch (?def=...)', () => {
       return await capturedPayload(page)
     }
 
+    test('the lights range is left to its own default unless asked', async ({ page }) => {
+      // Lights reach the player's own floor unless told otherwise, and that
+      // default lives in the game rather than here — so an ordinary launch must
+      // send nothing about it.
+      const payload = await launchAndCapture(page)
+      expect(payload.levels?.lightsBelow).toBeUndefined()
+    })
+
+    test('lights=all sends explicit nulls, since omission would keep the default', async ({ page }) => {
+      const payload = await launchAndCapture(page, '&lights=all')
+      expect(payload.levels.lightsBelow).toBeNull()
+      expect(payload.levels.lightsAbove).toBeNull()
+      expect(payload.levels.visibleBelow).toBeUndefined()
+    })
+
     test('a desktop browser is left on the full settings', async ({ page }) => {
       const payload = await launchAndCapture(page)
       expect(payload.mobileMode).toBeUndefined()

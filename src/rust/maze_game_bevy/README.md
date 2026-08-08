@@ -224,9 +224,12 @@ altogether (`/game/?orb=0`). It is the only shadow-casting light in the game, on
 final level alone, so it is the one thing that makes reaching the top of a stack
 dearer than any other floor.
 
-`MAZE_LIGHTS=<below>,<above>` narrows the point lights alone, leaving every
-floor drawn — a middle setting for a device with headroom for the geometry but
-not for dozens of glows.
+Point lights reach the player's own floor and no further **by default**, on
+every platform: a ten-level lava stack ran at 10-25 fps on a desktop with every
+floor lit and 45-50 lit this way, with the scene itself untouched.
+`MAZE_LIGHTS=all` lights the whole stack again, and
+`MAZE_LIGHTS=<below>,<above>` picks any range between. Single-level games are
+unaffected — the range is around the floor the player is on.
 
 Use `--release` for anything you intend to compare: Bevy is much slower
 unoptimised, so a dev-profile frame rate says little. The browser host sets the

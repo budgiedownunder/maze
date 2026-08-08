@@ -519,13 +519,20 @@ pub struct GameConfig {
     /// to all of it, so a run renders exactly as it did before this existed.
     pub level_visibility: LevelVisibility,
     /// How much of a stack keeps its **point lights**, independently of how much
-    /// of it is drawn. Defaults to all of it.
+    /// of it is drawn. **Defaults to the player's own floor.**
     ///
     /// A shadowless point light measured ~7 ms a frame on an iPhone, and a maze
     /// spawns one per key and per treasure, so a tall stack with every floor
-    /// drawn carries dozens. This narrows the lights without narrowing the
-    /// scene: distant floors keep their shape, their lava and their props, and
-    /// lose only the glow they cast — which is the cost that was measured.
+    /// drawn carries dozens of them: a ten-level lava stack ran at 10-25 fps on
+    /// a desktop with them all lit and 45-50 with only the player's floor lit.
+    /// The scene is untouched — distant floors keep their shape, their lava and
+    /// their props, and their objects keep glowing, since the meshes are
+    /// emissive. What goes is the light those objects cast on their own floor,
+    /// which the player is not standing on.
+    ///
+    /// Single-level games are unaffected: a `{0, 0}` range around level 0 lights
+    /// the only floor there is. Set both sides to `None` to light everything, as
+    /// the game did before this was measured.
     pub light_visibility: LevelVisibility,
     /// Diagnostic: leave the finish orb unspawned. It is the game's **only**
     /// shadow-casting light — a point light's shadow is a cube map, so six extra
@@ -1169,7 +1176,7 @@ impl Default for GameConfig {
             debug_memory: false,
             render_scale: None,
             level_visibility: LevelVisibility::default(),
-            light_visibility: LevelVisibility::default(),
+            light_visibility: LevelVisibility { below: Some(0), above: Some(0) },
             hide_finish_orb: false,
             disable_orb_shadows: false,
             disable_orb_light: false,

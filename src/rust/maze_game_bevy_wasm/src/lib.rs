@@ -198,6 +198,11 @@ fn default_allow_ladders() -> bool {
     true
 }
 
+/// Point lights reach the player's own floor and no further unless asked.
+fn default_lights_own_floor() -> Option<u32> {
+    Some(0)
+}
+
 /// Shape of the nested `levels` object in the host JSON payload — the
 /// multi-level run settings. Kept as a separate type so it defaults field-wise.
 /// The payload may also carry `perimeterRandom` / `top`, which serde ignores
@@ -229,11 +234,13 @@ struct LevelsStartConfig {
     visible_below: Option<u32>,
     #[serde(default)]
     visible_above: Option<u32>,
-    /// The same, for point lights alone — a floor can stay drawn while its key,
-    /// treasure and orb glows go out. Set from `?lights=<below>,<above>`.
-    #[serde(default)]
+    /// The same, for point lights alone — a floor stays drawn while its key,
+    /// treasure and orb glows go out. **Defaults to the player's own floor**,
+    /// which is where the measured cost is worth paying; an explicit `null` on
+    /// either side lights the whole stack again (`?lights=all`).
+    #[serde(default = "default_lights_own_floor")]
     lights_below: Option<u32>,
-    #[serde(default)]
+    #[serde(default = "default_lights_own_floor")]
     lights_above: Option<u32>,
     #[serde(default)]
     top: Option<TopStartConfig>,
@@ -262,8 +269,8 @@ impl Default for LevelsStartConfig {
             hide_completed_enemies: false,
             visible_below: None,
             visible_above: None,
-            lights_below: None,
-            lights_above: None,
+            lights_below: default_lights_own_floor(),
+            lights_above: default_lights_own_floor(),
             perimeter_random: false,
             top: None,
         }
@@ -696,14 +703,21 @@ mod tests {
                 .expect("payload must parse");
         assert_eq!(cfg.levels.visible_below, Some(0));
         assert_eq!(cfg.levels.visible_above, Some(1));
-        // The lights have their own range, and default to unbounded with it.
-        assert!(cfg.levels.lights_below.is_none());
+        // The lights have their own range, defaulting to the player's own floor.
+        assert_eq!(cfg.levels.lights_below, Some(0));
         let lit: StartConfig =
             serde_json::from_str(r#"{ "levels": { "lightsBelow": 0, "lightsAbove": 0 } }"#)
                 .expect("payload must parse");
         assert_eq!(lit.levels.lights_below, Some(0));
         assert_eq!(lit.levels.lights_above, Some(0));
         assert!(lit.levels.visible_below.is_none(), "the scene stays drawn");
+        // An explicit null is how `?lights=all` opens the range back up — the
+        // field defaults to narrow, so omitting it would keep the default.
+        let everything: StartConfig =
+            serde_json::from_str(r#"{ "levels": { "lightsBelow": null, "lightsAbove": null } }"#)
+                .expect("payload must parse");
+        assert!(everything.levels.lights_below.is_none());
+        assert!(everything.levels.lights_above.is_none());
     }
 
     #[test]
