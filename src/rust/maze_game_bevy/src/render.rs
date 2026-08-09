@@ -64,20 +64,49 @@ pub(crate) fn apply_env_overrides(mut config: ResMut<GameConfig>) {
     resolve_ladders(&mut config);
 }
 
+/// The largest footprint, in cells, that [`resolve_mobile_mode`] will draw at
+/// one time.
+///
+/// One 40x40 level draws about 7,300 mesh entities and plays on an iPhone; two
+/// of them, about 14,600, exhausts its memory within a few turns. The budget is
+/// therefore the measured survivable figure rather than a chosen one — at
+/// roughly 4.55 entities per cell for brick walls, 1,600 cells is that 7,300.
+///
+/// Pool walls cost more per cell than brick — rims, edge seals and surfaces —
+/// so a water or lava maze at the budget is dearer than the brick maze the
+/// budget came from. That margin is not modelled; the budget is deliberately
+/// set at the survivable figure rather than above it.
+const MOBILE_DRAWN_CELL_BUDGET: u64 = 1600;
+
+/// Whether a stack of this footprint can afford to be drawn two floors deep.
+///
+/// Judged on the base level, which a tapered stack's upper floors only ever
+/// undercut, so this errs toward drawing less. A footprint of zero is a size
+/// the config does not carry rather than an empty maze — the single-stored-maze
+/// path — and such a game has no floor above to draw, so it costs nothing to
+/// treat as affordable.
+fn fits_drawn_budget(rows: u32, cols: u32) -> bool {
+    let footprint = rows as u64 * cols as u64;
+    footprint * 2 <= MOBILE_DRAWN_CELL_BUDGET
+}
+
 /// Applies what [`GameConfig::mobile_mode`] implies.
 ///
 /// Each of these was measured on an iPhone rather than assumed:
 ///
-/// - **The player's own floor and the one above it are drawn and animated.** A
-///   ten-level stack spent about 150 ms a frame on floors nobody could see, so
-///   the window is narrow. It reaches upward rather than both ways because that
-///   is the direction of travel: the floor below holds nothing the player still
-///   needs, while the floor above is where the finish is. The floor above is
-///   drawn but *unlit*, since the lights keep their own range.
-/// - **Ladders are left enabled.** A ladder is coherent exactly when the floor
-///   it climbs into is drawn, which the window guarantees. Turning
-///   [`GameConfig::allow_ladders`] off still resolves interim finishes to
-///   portals — the mode simply does not turn it off.
+/// - **The player's own floor is drawn and animated, and the one above it when
+///   the maze is small enough to afford it.** A ten-level stack spent about
+///   150 ms a frame on floors nobody could see, so the window is narrow. It
+///   reaches upward rather than both ways because that is the direction of
+///   travel: the floor below holds nothing the player still needs, while the
+///   floor above is where the finish is. The floor above is drawn but *unlit*,
+///   since the lights keep their own range. See
+///   [`MOBILE_DRAWN_CELL_BUDGET`] for when it is given up.
+/// - **Ladders follow the floor above.** A ladder is coherent exactly when the
+///   floor it climbs into is drawn, so the mode leaves
+///   [`GameConfig::allow_ladders`] alone while that floor is drawn and turns it
+///   off when it is not. Turning it off independently still resolves interim
+///   finishes to portals.
 /// - **No key or treasure glow, and no light at the finish orb.** A shadowless
 ///   point light costs about 7 ms on that device, measured twice from different
 ///   sources, and a maze spawns one per key and per treasure. The meshes are
@@ -91,7 +120,15 @@ pub(crate) fn resolve_mobile_mode(config: &mut GameConfig) {
     if !config.mobile_mode {
         return;
     }
-    config.level_visibility = LevelVisibility { below: Some(0), above: Some(1) };
+    let draw_floor_above = fits_drawn_budget(config.rows, config.cols);
+    config.level_visibility = LevelVisibility {
+        below: Some(0),
+        above: Some(if draw_floor_above { 1 } else { 0 }),
+    };
+    if !draw_floor_above {
+        // Nothing to climb into, so an interim finish becomes a portal.
+        config.allow_ladders = false;
+    }
     config.disable_object_glow = true;
     config.disable_orb_light = true;
 }
@@ -164,9 +201,11 @@ mod tests {
         assert_eq!(scale_after(Some(-2.0)), None);
     }
 
+    /// A maze within the drawn budget — see the large-maze case for the other
+    /// side of it.
     #[test]
     fn mobile_mode_implies_what_the_measurements_justified() {
-        let mut config = GameConfig { mobile_mode: true, ..GameConfig::default() };
+        let mut config = GameConfig { mobile_mode: true, rows: 15, cols: 15, ..GameConfig::default() };
         resolve_mobile_mode(&mut config);
         assert_eq!(
             config.level_visibility,
@@ -176,6 +215,59 @@ mod tests {
         assert!(config.allow_ladders, "the floor a ladder climbs into is drawn");
         assert!(config.disable_object_glow);
         assert!(config.disable_orb_light);
+    }
+
+    /// A maze too large to draw two floors of gives up the floor above — and
+    /// its ladders with it, since there is then nothing to climb into. A 40x40
+    /// stack drawn two floors deep is what exhausted an iPhone's memory.
+    #[test]
+    fn a_large_maze_keeps_to_the_players_own_floor() {
+        let mut config = GameConfig { mobile_mode: true, rows: 40, cols: 40, ..GameConfig::default() };
+        resolve_mobile_mode(&mut config);
+        assert_eq!(
+            config.level_visibility,
+            LevelVisibility { below: Some(0), above: Some(0) },
+        );
+        assert!(!config.allow_ladders, "nothing to climb into");
+    }
+
+    /// The maze the floor-above window was measured on stays as it was.
+    #[test]
+    fn a_small_maze_still_draws_the_floor_above() {
+        let mut config = GameConfig { mobile_mode: true, rows: 15, cols: 15, ..GameConfig::default() };
+        resolve_mobile_mode(&mut config);
+        assert_eq!(
+            config.level_visibility,
+            LevelVisibility { below: Some(0), above: Some(1) },
+        );
+        assert!(config.allow_ladders);
+    }
+
+    /// The budget covers *both* floors, so the largest square maze that keeps
+    /// the floor above is the one whose two levels together fit it.
+    #[test]
+    fn the_budget_counts_both_floors() {
+        assert!(fits_drawn_budget(28, 28), "784 cells a floor, 1568 drawn");
+        assert!(!fits_drawn_budget(29, 29), "841 a floor, 1682 drawn");
+        // A size the config does not carry costs nothing to allow: that path is
+        // a single stored maze, which has no floor above.
+        assert!(fits_drawn_budget(0, 0));
+    }
+
+    /// A large maze reaches the finish type through the same one value, so an
+    /// interim ladder becomes a portal without a second condition.
+    #[test]
+    fn a_large_maze_resolves_interim_finishes_to_portals() {
+        let mut config = GameConfig {
+            mobile_mode: true,
+            rows: 40,
+            cols: 40,
+            finish_type: FinishType::Ladder,
+            ..GameConfig::default()
+        };
+        resolve_mobile_mode(&mut config);
+        resolve_ladders(&mut config);
+        assert_eq!(config.finish_type, FinishType::Portal);
     }
 
     /// The lights keep their own, narrower range: the floor above is drawn so a
