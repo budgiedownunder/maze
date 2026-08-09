@@ -247,6 +247,21 @@ mod tests {
         assert!(!window.lights_lit(5));
     }
 
+    /// What `mobile_mode` asks for: the floor above is drawn so a ladder has
+    /// somewhere to climb to, without carrying that floor's point lights with
+    /// it, and the floor already left behind is dropped.
+    #[test]
+    fn a_scene_window_reaching_upward_draws_the_floor_above_unlit() {
+        let window = LevelWindow {
+            bounds: window_bounds(Some(0), Some(1), 4, None),
+            light_bounds: window_bounds(Some(0), Some(0), 4, None),
+        };
+        assert!(window.contains(5), "the floor above is drawn");
+        assert!(!window.lights_lit(5), "but it is not lit");
+        assert!(window.contains(4) && window.lights_lit(4), "the player's own floor is both");
+        assert!(!window.contains(3), "the floor below is not drawn");
+    }
+
     #[test]
     fn an_unset_margin_leaves_every_level_drawn() {
         assert_eq!(window_bounds(None, None, 3, None), None);

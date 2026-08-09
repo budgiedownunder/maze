@@ -203,14 +203,18 @@ $env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multileve
 ```
 
 `MAZE_MOBILE=1` (`/game/?mobile_mode=1`) runs with the settings a phone needs —
-own floor only, portals instead of ladders, and no point light on keys,
-treasures or the finish orb. One policy rather than a handful of parameters; the
-switches below stay available as diagnostics and can only add to it.
+the player's own floor and the one above it, and no point light on keys,
+treasures or the finish orb. The window reaches upward because that is the
+direction of travel, and it is what keeps a ladder coherent: the floor it climbs
+into is drawn, though not lit, since the lights keep their own narrower range.
+One policy rather than a handful of parameters; the switches below stay
+available as diagnostics and can only add to it.
 
 `MAZE_NO_LADDERS=1` (`/game/?ladders=0`) stops interim levels finishing with a
 ladder: the finish type resolves to a portal, which takes the hatch above and
 the climb animation with it. A ladder climbing into a floor that is not drawn
-reads as rising into nothing, so this pairs with a level window.
+reads as rising into nothing, so this pairs with a level window that hides the
+destination.
 
 `MAZE_NO_WALL_ANIM=1` (`/game/?wall_animation=0`) stills the water / lava pool
 wave, and `MAZE_NO_GLOW=1` (`/game/?glow=0`) drops the point light on every key

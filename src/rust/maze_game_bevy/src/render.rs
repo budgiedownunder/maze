@@ -68,12 +68,16 @@ pub(crate) fn apply_env_overrides(mut config: ResMut<GameConfig>) {
 ///
 /// Each of these was measured on an iPhone rather than assumed:
 ///
-/// - **Only the player's own floor is drawn and animated.** A ten-level stack
-///   spent about 150 ms a frame on floors nobody could see — by a wide margin
-///   the largest cost found.
-/// - **No ladders**, so the finish resolves to a portal. A ladder climbing into
-///   a floor that is not drawn reads as rising into nothing; a portal needs no
-///   visible destination.
+/// - **The player's own floor and the one above it are drawn and animated.** A
+///   ten-level stack spent about 150 ms a frame on floors nobody could see, so
+///   the window is narrow. It reaches upward rather than both ways because that
+///   is the direction of travel: the floor below holds nothing the player still
+///   needs, while the floor above is where the finish is. The floor above is
+///   drawn but *unlit*, since the lights keep their own range.
+/// - **Ladders are left enabled.** A ladder is coherent exactly when the floor
+///   it climbs into is drawn, which the window guarantees. Turning
+///   [`GameConfig::allow_ladders`] off still resolves interim finishes to
+///   portals — the mode simply does not turn it off.
 /// - **No key or treasure glow, and no light at the finish orb.** A shadowless
 ///   point light costs about 7 ms on that device, measured twice from different
 ///   sources, and a maze spawns one per key and per treasure. The meshes are
@@ -87,8 +91,7 @@ pub(crate) fn resolve_mobile_mode(config: &mut GameConfig) {
     if !config.mobile_mode {
         return;
     }
-    config.level_visibility = LevelVisibility { below: Some(0), above: Some(0) };
-    config.allow_ladders = false;
+    config.level_visibility = LevelVisibility { below: Some(0), above: Some(1) };
     config.disable_object_glow = true;
     config.disable_orb_light = true;
 }
@@ -167,12 +170,37 @@ mod tests {
         resolve_mobile_mode(&mut config);
         assert_eq!(
             config.level_visibility,
-            LevelVisibility { below: Some(0), above: Some(0) },
-            "only the player's own floor",
+            LevelVisibility { below: Some(0), above: Some(1) },
+            "the player's own floor and the one being climbed toward",
         );
-        assert!(!config.allow_ladders, "nothing climbs into a hidden floor");
+        assert!(config.allow_ladders, "the floor a ladder climbs into is drawn");
         assert!(config.disable_object_glow);
         assert!(config.disable_orb_light);
+    }
+
+    /// The lights keep their own, narrower range: the floor above is drawn so a
+    /// ladder has somewhere to go, not so it can carry a floor's worth of point
+    /// lights with it.
+    #[test]
+    fn mobile_mode_leaves_the_lights_narrower_than_the_scene() {
+        let mut config = GameConfig { mobile_mode: true, ..GameConfig::default() };
+        resolve_mobile_mode(&mut config);
+        assert_eq!(config.light_visibility, LevelVisibility { below: Some(0), above: Some(0) });
+    }
+
+    /// The mode no longer forces portals, but the switch on top of it still
+    /// does — a switch may add a restriction the mode did not impose.
+    #[test]
+    fn turning_ladders_off_over_the_mode_still_forces_portals() {
+        let mut config = GameConfig {
+            mobile_mode: true,
+            finish_type: FinishType::Ladder,
+            allow_ladders: false,
+            ..GameConfig::default()
+        };
+        resolve_mobile_mode(&mut config);
+        resolve_ladders(&mut config);
+        assert_eq!(config.finish_type, FinishType::Portal);
     }
 
     /// The switches that measured null stay off: turning them on would cost
@@ -196,10 +224,10 @@ mod tests {
         assert!(!config.disable_orb_light);
     }
 
-    /// The mode reaches the finish type through `allow_ladders`, so the two
-    /// resolutions have to run in that order.
+    /// The mode draws the floor a ladder climbs into, so it leaves a ladder
+    /// finish standing where it once resolved it to a portal.
     #[test]
-    fn mobile_mode_resolves_interim_finishes_to_portals() {
+    fn mobile_mode_keeps_a_ladder_finish() {
         let mut config = GameConfig {
             mobile_mode: true,
             finish_type: FinishType::Ladder,
@@ -207,7 +235,7 @@ mod tests {
         };
         resolve_mobile_mode(&mut config);
         resolve_ladders(&mut config);
-        assert_eq!(config.finish_type, FinishType::Portal);
+        assert_eq!(config.finish_type, FinishType::Ladder);
     }
 
     /// The switch collapses into the finish type, which is what every consumer

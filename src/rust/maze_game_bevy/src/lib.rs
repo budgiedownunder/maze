@@ -2847,6 +2847,148 @@ mod tests {
         assert!(meshes > tagged, "the residual is the figure of interest");
     }
 
+    /// Counts entities carrying a marker on one level of a stack.
+    fn count_on_level<T: Component>(app: &mut App, level: usize) -> usize {
+        use crate::world::LevelTag;
+        app.world_mut()
+            .query_filtered::<&LevelTag, With<T>>()
+            .iter(app.world())
+            .filter(|tag| tag.0 == level)
+            .count()
+    }
+
+    /// Reports how a stack divides into the floor's **fabric** — what a shell
+    /// option would keep drawing on every level — and its **content**, which
+    /// would follow the player.
+    ///
+    /// The split is the ceiling on what such an option could buy: keeping every
+    /// floor's fabric drawn keeps its cost, so the saving is bounded by the
+    /// content column and no design can better it.
+    ///
+    /// Pool surfaces count as fabric, not content. A lava or water cell has no
+    /// floor tile — the recessed surface *is* the bottom of the basin — so
+    /// hiding it opens a hole straight through the stack.
+    ///
+    /// Run with `cargo test -p maze_game_bevy shell_split -- --nocapture`.
+    #[test]
+    fn shell_split_by_level() {
+        use crate::world::floor::hatch::{HatchUnderside, LevelHatch};
+        use crate::world::floor::lines::FloorLine;
+        use crate::world::floor::PoolEdgeSeal;
+        use crate::world::support_pole::SupportPole;
+        use crate::world::walls::rim::PoolRim;
+        use crate::world::{grid_to_json, LevelTag, UndersideSeal};
+
+        const STACK: usize = 10;
+        let json = grid_to_json(&demo_grid());
+        let levels = vec![json.as_str(); STACK];
+        let config = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let mut app = make_playing_app_with_assets(&levels, config);
+
+        let total = entities_per_level(&mut app);
+        let mut fabric = std::collections::BTreeMap::new();
+        let mut query = app.world_mut().query_filtered::<&LevelTag, Or<(
+            With<FloorCell>,
+            With<FloorLine>,
+            With<PoolEdgeSeal>,
+            With<HatchUnderside>,
+            With<LevelHatch>,
+            With<RoofCell>,
+            With<WallCell>,
+            With<PoolRim>,
+            With<LavaSurface>,
+            With<WaterSurface>,
+            With<IronFenceBars>,
+            With<SupportPole>,
+            With<UndersideSeal>,
+            With<DoorMarker>,
+        )>>();
+        for tag in query.iter(app.world()) {
+            *fabric.entry(tag.0).or_insert(0usize) += 1;
+        }
+
+        println!("--- shell split ({STACK}-level lava stack, demo grid) ---");
+        println!("level    total   fabric  content   content %");
+        for (level, total) in &total {
+            let fabric = fabric.get(level).copied().unwrap_or(0);
+            let content = total.saturating_sub(fabric);
+            let share = 100.0 * content as f32 / *total as f32;
+            println!("{level:>5} {total:>8} {fabric:>8} {content:>8} {share:>10.0}%");
+        }
+
+        println!("  --- what the fabric is made of (level 5) ---");
+        for (name, count) in [
+            ("wall panels", count_on_level::<WallCell>(&mut app, 5)),
+            ("floor lines", count_on_level::<FloorLine>(&mut app, 5)),
+            ("floor cells", count_on_level::<FloorCell>(&mut app, 5)),
+            ("roof cells", count_on_level::<RoofCell>(&mut app, 5)),
+            ("pool rims", count_on_level::<PoolRim>(&mut app, 5)),
+            ("lava surfaces", count_on_level::<LavaSurface>(&mut app, 5)),
+            ("underside seals", count_on_level::<UndersideSeal>(&mut app, 5)),
+            ("pool edge seals", count_on_level::<PoolEdgeSeal>(&mut app, 5)),
+            ("support poles", count_on_level::<SupportPole>(&mut app, 5)),
+            ("doors", count_on_level::<DoorMarker>(&mut app, 5)),
+        ] {
+            println!("  {name:<20} {count:>5}");
+        }
+
+        let all: usize = total.values().sum();
+        let all_fabric: usize = fabric.values().sum();
+        let one_floor = total.values().next().copied().unwrap_or(0);
+        let one_content = one_floor - fabric.values().next().copied().unwrap_or(0);
+        println!("  ---");
+        println!("everything drawn        {all}");
+        println!("shell (fabric + 1 content) {}", all_fabric + one_content);
+        println!("one floor only          {one_floor}");
+
+        // The demo grid is sparse in objects. Repeat on a grid where every open
+        // cell carries one, to bound the content share from above.
+        let mut dense = demo_grid();
+        let fill = ['T', 'K', 'H', 'E'];
+        let mut n = 0;
+        for row in dense.iter_mut() {
+            for cell in row.iter_mut() {
+                if *cell == ' ' {
+                    *cell = fill[n % fill.len()];
+                    n += 1;
+                }
+            }
+        }
+        let dense_json = grid_to_json(&dense);
+        let dense_levels = vec![dense_json.as_str(); STACK];
+        let config = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let mut dense_app = make_playing_app_with_assets(&dense_levels, config);
+        let dense_total: usize = entities_per_level(&mut dense_app).values().sum();
+        let mut dense_fabric = 0usize;
+        let mut dense_query = dense_app.world_mut().query_filtered::<&LevelTag, Or<(
+            With<FloorCell>,
+            With<FloorLine>,
+            With<PoolEdgeSeal>,
+            With<HatchUnderside>,
+            With<LevelHatch>,
+            With<RoofCell>,
+            With<WallCell>,
+            With<PoolRim>,
+            With<LavaSurface>,
+            With<WaterSurface>,
+            With<IronFenceBars>,
+            With<SupportPole>,
+            With<UndersideSeal>,
+            With<DoorMarker>,
+        )>>();
+        for _ in dense_query.iter(dense_app.world()) {
+            dense_fabric += 1;
+        }
+        println!("  --- every open cell carrying an object ---");
+        println!("everything drawn        {dense_total}");
+        println!(
+            "  fabric                {dense_fabric} ({:.0}%)",
+            100.0 * dense_fabric as f32 / dense_total as f32
+        );
+
+        assert!(all_fabric > 0 && all > all_fabric, "both columns must be populated");
+    }
+
     /// Counts the diagnostics readout's entities (background strip + text).
     fn diagnostics_entities(app: &mut App) -> usize {
         use crate::hud::diagnostics::DiagnosticsReadout;
