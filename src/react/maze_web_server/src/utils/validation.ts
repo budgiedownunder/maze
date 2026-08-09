@@ -40,6 +40,21 @@ export const MAX_TOTAL_FEATURES = 16
 export const MAX_SPARE_DOOR_COUNT = MAX_DOOR_COUNT
 export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
 
+// Largest number of rows or columns a 3D game definition may be authored with.
+// A judgement about play rather than a limit the renderer imposes: a 40x40 floor
+// renders but is tedious to walk. Applies to game definitions only — an authored
+// 2D maze is bounded by the store's cell cap alone.
+//
+// Matches the largest shipped preset (Hard), so the curated games sit inside the
+// same rule an authored one does.
+//
+// Deliberately has no Rust twin. `GameDefinition.config` is opaque to the server,
+// and clamping rows/cols at generation time would change what a given seed
+// produces, silently altering a shared game's layout and invalidating its
+// leaderboard — unlike `MAX_LEVEL_COUNT`, where clamping merely plays fewer
+// levels. Existing over-cap definitions therefore keep their size until edited.
+export const MAX_GAME_MAZE_DIMENSION = 30
+
 // Returns true when the rows × cols product would exceed the server-reported
 // store cap. A null cap means the configured store imposes no cap, in which
 // case this always returns false.
@@ -124,6 +139,10 @@ export function validateMazeGenerationFields(
 
   if (!Number.isInteger(rows) || rows < 3) return 'Rows must be a whole number of 3 or more.'
   if (!Number.isInteger(cols) || cols < 3) return 'Columns must be a whole number of 3 or more.'
+  if (kind === 'game') {
+    if (rows > MAX_GAME_MAZE_DIMENSION) return `Rows cannot exceed ${MAX_GAME_MAZE_DIMENSION}.`
+    if (cols > MAX_GAME_MAZE_DIMENSION) return `Columns cannot exceed ${MAX_GAME_MAZE_DIMENSION}.`
+  }
   if (exceedsMazeCellCap(rows, cols, maxMazeCells)) {
     return `Total cells (rows × columns) cannot exceed ${maxMazeCells}.`
   }

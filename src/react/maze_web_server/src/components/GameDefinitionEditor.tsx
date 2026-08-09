@@ -17,7 +17,7 @@ import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
-import { validateMazeGenerationFields } from '../utils/validation'
+import { MAX_GAME_MAZE_DIMENSION, validateMazeGenerationFields } from '../utils/validation'
 import { MAX_LEVEL_COUNT, FINISH_TYPES, ROTATIONS, isGameplayChange, reshuffleConfirmMessage, rotationLabel, rotationDescription, type FinishType, type Rotation } from '../utils/gameDefinitions'
 import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
@@ -290,7 +290,11 @@ export function GameDefinitionEditor({
         </FieldGroup>
         {/* The grid is the ground floor when the game stacks multiple levels. */}
         <FieldGroup title={isMultiLevel ? 'Ground Floor Grid' : 'Grid'} id="grid">
-          <MazeGenerationFields value={form.generation} onChange={patchGeneration} />
+          <MazeGenerationFields
+            value={form.generation}
+            onChange={patchGeneration}
+            maxDimension={MAX_GAME_MAZE_DIMENSION}
+          />
         </FieldGroup>
         {/* Level progression only applies to a multi-level game. */}
         {isMultiLevel && (

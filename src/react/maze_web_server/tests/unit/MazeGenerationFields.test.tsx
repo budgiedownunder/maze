@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MazeGenerationFields, type MazeGenerationFieldsValue } from '../../src/components/MazeGenerationFields'
-import { validateMazeGenerationFields } from '../../src/utils/validation'
+import { MAX_GAME_MAZE_DIMENSION, validateMazeGenerationFields } from '../../src/utils/validation'
 
 const VALID: MazeGenerationFieldsValue = {
   rows: '10',
@@ -24,6 +24,16 @@ describe('validateMazeGenerationFields (game subject — no positions)', () => {
   it('rejects rows / cols below 3', () => {
     expect(validateMazeGenerationFields({ ...VALID, rows: '2' }, null, 'game')).toBe('Rows must be a whole number of 3 or more.')
     expect(validateMazeGenerationFields({ ...VALID, cols: '2' }, null, 'game')).toBe('Columns must be a whole number of 3 or more.')
+  })
+
+  it('bounds each dimension to the game cap', () => {
+    const at = String(MAX_GAME_MAZE_DIMENSION)
+    const over = String(MAX_GAME_MAZE_DIMENSION + 1)
+    expect(validateMazeGenerationFields({ ...VALID, rows: at, cols: at }, null, 'game')).toBeNull()
+    expect(validateMazeGenerationFields({ ...VALID, rows: over }, null, 'game'))
+      .toBe(`Rows cannot exceed ${MAX_GAME_MAZE_DIMENSION}.`)
+    expect(validateMazeGenerationFields({ ...VALID, cols: over }, null, 'game'))
+      .toBe(`Columns cannot exceed ${MAX_GAME_MAZE_DIMENSION}.`)
   })
 
   it('enforces the cell cap when one is set', () => {
@@ -92,6 +102,15 @@ describe('validateMazeGenerationFields (maze subject — positions checked)', ()
     expect(validateMazeGenerationFields({ ...MAZE_VALID, finishCol: '0' }, null, 'maze')).toBe('Finish Column must be between 1 and 10.')
   })
 
+  // The dimension cap is a 3D-game judgement, not a generator limit: an authored
+  // maze is bounded by the store's cell cap alone. `kind` is what keeps the two
+  // apart, so this pins that an over-cap grid is fine here.
+  it('does not apply the game dimension cap', () => {
+    const big = String(MAX_GAME_MAZE_DIMENSION + 1)
+    const grid = { ...MAZE_VALID, rows: big, cols: big, finishRow: big, finishCol: big }
+    expect(validateMazeGenerationFields(grid, null, 'maze')).toBeNull()
+  })
+
   it('requires start and finish to differ', () => {
     expect(validateMazeGenerationFields({ ...MAZE_VALID, finishRow: '1', finishCol: '1' }, null, 'maze')).toBe(
       'Start and Finish cells must be different.',
@@ -120,6 +139,23 @@ describe('MazeGenerationFields', () => {
     expect(screen.queryByLabelText('Treasure')).toBeNull()
     expect(screen.queryByLabelText(/Start Row/)).toBeNull()
     expect(screen.queryByLabelText(/Finish Row/)).toBeNull()
+  })
+
+  // The spinner bound is opt-in: the game editor passes one, the Generate dialog
+  // does not, so an authored maze keeps the arrows unbounded.
+  it('leaves the size spinners unbounded when given no maximum', () => {
+    render(<MazeGenerationFields value={VALID} onChange={vi.fn()} />)
+    expect(screen.getByLabelText('Rows')).not.toHaveAttribute('max')
+    expect(screen.getByLabelText('Columns')).not.toHaveAttribute('max')
+  })
+
+  it('bounds the size spinners when given a maximum', () => {
+    render(<MazeGenerationFields value={VALID} onChange={vi.fn()} maxDimension={MAX_GAME_MAZE_DIMENSION} />)
+    const max = String(MAX_GAME_MAZE_DIMENSION)
+    expect(screen.getByLabelText('Rows')).toHaveAttribute('max', max)
+    expect(screen.getByLabelText('Columns')).toHaveAttribute('max', max)
+    // The distance field is not a dimension and keeps its own bounds.
+    expect(screen.getByLabelText('Min Start to Finish Distance')).not.toHaveAttribute('max')
   })
 
   it('reports a patch when a field changes', () => {
