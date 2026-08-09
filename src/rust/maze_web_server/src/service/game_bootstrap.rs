@@ -47,6 +47,9 @@ struct DifficultyPreset {
     max_hp: u32,
     /// Number of stacked levels (1 = single level).
     level_count: u32,
+    /// Whether upper levels shrink over the one below, so the stack reads as a
+    /// tower from the ground floor. Inert on a single-level preset.
+    taper: bool,
 }
 
 const EASY: DifficultyPreset = DifficultyPreset {
@@ -67,6 +70,7 @@ const EASY: DifficultyPreset = DifficultyPreset {
     enemy_move_period_ms: 1800,
     max_hp: 3,
     level_count: 1,
+    taper: false,
 };
 
 const TRICKY: DifficultyPreset = DifficultyPreset {
@@ -87,14 +91,15 @@ const TRICKY: DifficultyPreset = DifficultyPreset {
     enemy_move_period_ms: 1500,
     max_hp: 3,
     level_count: 2,
+    taper: true,
 };
 
 const HARD: DifficultyPreset = DifficultyPreset {
     name: "Hard",
     title: "HARD 3D",
     mode: "Hard",
-    rows: 40,
-    cols: 40,
+    rows: 30,
+    cols: 30,
     timer_seconds: 600,
     seed: 25_252_525,
     min_solution_length: 45,
@@ -107,6 +112,7 @@ const HARD: DifficultyPreset = DifficultyPreset {
     enemy_move_period_ms: 1200,
     max_hp: 3,
     level_count: 3,
+    taper: true,
 };
 
 /// The shipped presets, in the order they appear in the "Difficulty" collection.
@@ -138,6 +144,7 @@ const DAILY: DifficultyPreset = DifficultyPreset {
     enemy_move_period_ms: 1500,
     max_hp: 3,
     level_count: 1,
+    taper: false,
 };
 
 /// The name of the seeded curated daily-challenge collection.
@@ -188,7 +195,7 @@ fn curated_config(preset: &DifficultyPreset) -> serde_json::Value {
             "difficultyChange": "easier",
             "resetBag": true,
             "alignment": "edge",
-            "taper": false,
+            "taper": preset.taper,
             "perimeterRandom": false,
             "hideCompletedEnemies": false,
             "top": null
