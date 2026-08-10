@@ -316,6 +316,19 @@ fn default_max_hp() -> u32 {
     3
 }
 
+/// A usable maximum HP, treating `0` as unset.
+///
+/// The stored `config` is client-owned and never validated server-side, so a
+/// zero can reach here — an editor that stores a blank number field as `0` is
+/// the obvious way. It cannot be passed on: the game derives its starting HP as
+/// `starting_hp.unwrap_or(max_hp).clamp(1, max_hp)`, and `clamp` **panics** when
+/// `min > max`, killing the run on the countdown rather than degrading. Falling
+/// back to the default matches how the other unusable values crossing this seam
+/// are handled, and leaves a deliberate `1` alone.
+fn usable_max_hp(max_hp: u32) -> u32 {
+    if max_hp == 0 { default_max_hp() } else { max_hp }
+}
+
 fn default_enemy_type() -> String {
     "goblin".to_string()
 }
@@ -500,7 +513,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         key_holder: KeyHolderStyle::from_wire_str(&cfg.key_holder),
         enemy_move_period_ms: cfg.enemy_move_period_ms,
         enemy_damage: cfg.enemy_damage,
-        max_hp: cfg.max_hp,
+        max_hp: usable_max_hp(cfg.max_hp),
         starting_hp: cfg.starting_hp,
         enemy_type: EnemyType::from_wire_str(&cfg.enemy_type),
         health_style: HealthStyle::from_wire_str(&cfg.health_style),
@@ -659,6 +672,17 @@ mod tests {
             serde_json::from_str(r#"{ "debugMemory": true }"#).expect("payload must parse");
         assert!(cfg.debug_memory);
         assert_eq!(cfg.timer_seconds, 60.0);
+    }
+
+    /// A stored config carrying `maxHp: 0` — an editor writing a blank number
+    /// field — must not reach the game: it derives its starting HP with
+    /// `clamp(1, max_hp)`, which panics when the cap is below 1, killing the run
+    /// on the countdown. A deliberate `1` is left alone.
+    #[test]
+    fn a_zero_max_hp_falls_back_to_the_default() {
+        assert_eq!(usable_max_hp(0), default_max_hp());
+        assert_eq!(usable_max_hp(1), 1, "a one-HP game is a choice, not a mistake");
+        assert_eq!(usable_max_hp(5), 5);
     }
 
     #[test]
