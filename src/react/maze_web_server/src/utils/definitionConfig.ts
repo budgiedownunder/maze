@@ -98,6 +98,10 @@ export interface DefinitionConfig {
   healthStyle: HealthStyle
   enemyMovePeriodMs: number
   maxHp: number
+  // Omitted entirely to start the player at full health — the game reads an
+  // absent value as "equal to maxHp", so writing a number here would be a second
+  // place holding one that a later maxHp change could silently contradict.
+  startingHp?: number
   levels: DefinitionLevelsConfig
 }
 
@@ -135,6 +139,8 @@ export interface DefinitionFormState {
   minimapRadius: string
   enemyMovePeriodMs: string
   maxHp: string
+  // Blank means full health; see `DefinitionConfig.startingHp`.
+  startingHp: string
   levels: DefinitionLevelsFormValue
   // Pass-through: not edited in the content editor (access is managed elsewhere;
   // the seed is auto-minted + hidden), but carried so a Save never resets them.
@@ -185,6 +191,7 @@ export const DEFINITION_DEFAULTS: DefinitionFormState = {
   minimapRadius: '5',
   enemyMovePeriodMs: '1500',
   maxHp: '3',
+  startingHp: '',
   levels: {
     count: '1',
     finishType: 'ladder',
@@ -252,6 +259,8 @@ export function buildDefinitionConfig(form: DefinitionFormState): {
     healthStyle: form.objects.healthStyle,
     enemyMovePeriodMs: toInt(form.enemyMovePeriodMs),
     maxHp: toInt(form.maxHp),
+    // Blank leaves the key out, so the game starts the player at full health.
+    ...(form.startingHp.trim() === '' ? {} : { startingHp: toInt(form.startingHp) }),
     levels: {
       count: toInt(form.levels.count),
       finishType: form.levels.finishType,
@@ -390,6 +399,9 @@ export function parseDefinitionConfig(config: Record<string, unknown>, meta: Def
     minimapRadius: numStr(config.minimapRadius, d.minimapRadius),
     enemyMovePeriodMs: numStr(config.enemyMovePeriodMs, d.enemyMovePeriodMs),
     maxHp: numStr(config.maxHp, d.maxHp),
+    // An absent key round-trips as blank rather than as a number, so reopening a
+    // game that starts at full health and saving it again does not pin one in.
+    startingHp: config.startingHp === undefined ? '' : String(config.startingHp),
     levels: {
       count: numStr(levels.count, d.levels.count),
       finishType: oneOf(levels.finishType, FINISH_TYPES, d.levels.finishType),

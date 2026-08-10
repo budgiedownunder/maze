@@ -17,7 +17,7 @@ import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
-import { MAX_GAME_MAZE_DIMENSION, validateMazeGenerationFields } from '../utils/validation'
+import { MAX_GAME_MAZE_DIMENSION, validateHpFields, validateMazeGenerationFields } from '../utils/validation'
 import { MAX_LEVEL_COUNT, FINISH_TYPES, ROTATIONS, isGameplayChange, reshuffleConfirmMessage, rotationLabel, rotationDescription, type FinishType, type Rotation } from '../utils/gameDefinitions'
 import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
@@ -153,7 +153,12 @@ export function GameDefinitionEditor({
   // Finish (from any step) safe. The generation error also shows in the pinned
   // footer, so it stays visible while the user is on another step.
   const generationError = validateMazeGenerationFields(form.generation, max_maze_cells, 'game')
-  const canCommit = form.name.trim() !== '' && generationError === null
+  // A starting HP above the cap generates perfectly well — the maze crate clamps
+  // it — so it blocks the save rather than the preview, which only asks whether
+  // a config is generatable.
+  const hpError = validateHpFields(form.startingHp, form.maxHp)
+  const formError = generationError ?? hpError
+  const canCommit = form.name.trim() !== '' && formError === null
   // Preview only needs a generatable config — a name is a save-only requirement.
   const canPreview = generationError === null
 
@@ -216,7 +221,7 @@ export function GameDefinitionEditor({
       commitLabel={commitLabel}
       onPreview={onPreview && handlePreview}
       canPreview={canPreview}
-      footerNote={generationError && <p role="alert" className="error-msg">{generationError}</p>}
+      footerNote={formError && <p role="alert" className="error-msg">{formError}</p>}
     >
       <div {...modalTabPanelProps(ID_PREFIX, 'general', activeStep)}>
         <FieldGroup title="Details" id="details">
@@ -359,6 +364,7 @@ export function GameDefinitionEditor({
         <AdvancedFields
           value={{
             maxHp: form.maxHp,
+            startingHp: form.startingHp,
             enemyMovePeriodMs: form.enemyMovePeriodMs,
             minimapCellPx: form.minimapCellPx,
             minimapRadius: form.minimapRadius,

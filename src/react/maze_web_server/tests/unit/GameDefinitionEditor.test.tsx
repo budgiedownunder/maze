@@ -177,6 +177,35 @@ describe('GameDefinitionEditor — canCommit gating', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Enemies must be a whole number between 0 and 8.')
   })
 
+  // A starting HP over the cap generates fine — the engine clamps it — so the
+  // point of refusing is that a game must not be saved claiming a start it will
+  // never give.
+  it('disables Finish and reports the error when Starting HP exceeds Max HP', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    const group = within(screen.getByRole('group', { name: 'Health & Enemies' }))
+    fireEvent.change(group.getByLabelText('Starting HP'), { target: { value: '4' } })
+    expect(screen.getByRole('alert')).toHaveTextContent('Starting HP cannot exceed Max HP.')
+    expect(commitButton()).toBeDisabled()
+
+    // Raising the cap to match resolves it — the pair is judged together.
+    fireEvent.change(group.getByLabelText('Max HP'), { target: { value: '4' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(commitButton()).toBeEnabled()
+  })
+
+  // A blank Max HP stores as 0, and the game's `clamp(1, maxHp)` panics on that
+  // — the run dies on the countdown with "stopped unexpectedly". Refusing the
+  // save is what keeps an unplayable definition from being written at all.
+  it('disables Finish when Max HP is blank', async () => {
+    renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' } })
+    await userEvent.click(screen.getByRole('tab', { name: 'Advanced' }))
+    const group = within(screen.getByRole('group', { name: 'Health & Enemies' }))
+    fireEvent.change(group.getByLabelText('Max HP'), { target: { value: '' } })
+    expect(screen.getByRole('alert')).toHaveTextContent('Max HP must be a whole number of 1 or more.')
+    expect(commitButton()).toBeDisabled()
+  })
+
   it('honours the server-reported cell cap', () => {
     renderEditor({ initialForm: { ...DEFINITION_DEFAULTS, name: 'Tower' }, maxMazeCells: 50 })
     // The 8×8 defaults are 64 cells, over a cap of 50.

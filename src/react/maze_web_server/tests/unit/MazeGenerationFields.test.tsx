@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MazeGenerationFields, type MazeGenerationFieldsValue } from '../../src/components/MazeGenerationFields'
-import { MAX_GAME_MAZE_DIMENSION, validateMazeGenerationFields } from '../../src/utils/validation'
+import {
+  MAX_GAME_MAZE_DIMENSION,
+  validateHpFields,
+  validateMazeGenerationFields,
+} from '../../src/utils/validation'
 
 const VALID: MazeGenerationFieldsValue = {
   rows: '10',
@@ -125,6 +129,41 @@ describe('validateMazeGenerationFields (maze subject — positions checked)', ()
     expect(validateMazeGenerationFields({ ...MAZE_VALID, minSolutionLength: '0' }, null, 'maze')).toBe(
       'Min Start to Finish Distance must be a whole number of 1 or more.',
     )
+  })
+})
+
+describe('validateHpFields', () => {
+  // Blank is the default and means "start at full health", so it must stay valid
+  // however high the cap is.
+  it('accepts a blank starting value at any cap', () => {
+    expect(validateHpFields('', '5')).toBeNull()
+    expect(validateHpFields('   ', '5')).toBeNull()
+  })
+
+  it('accepts a starting value at or below the cap', () => {
+    expect(validateHpFields('5', '5')).toBeNull()
+    expect(validateHpFields('1', '5')).toBeNull()
+  })
+
+  it('rejects a starting value above the cap', () => {
+    expect(validateHpFields('6', '5')).toBe('Starting HP cannot exceed Max HP.')
+  })
+
+  it('rejects a starting value that is not a whole number of 1 or more', () => {
+    expect(validateHpFields('0', '5')).toBe('Starting HP must be a whole number of 1 or more.')
+    expect(validateHpFields('-1', '5')).toBe('Starting HP must be a whole number of 1 or more.')
+    expect(validateHpFields('two', '5')).toBe('Starting HP must be a whole number of 1 or more.')
+  })
+
+  // A blank cap stores as 0, and the game derives its starting HP with
+  // `clamp(1, maxHp)`, which panics when the cap is below 1 — so a missing cap
+  // is an error in its own right rather than something to ignore. It is reported
+  // ahead of the starting value, which cannot be judged without it.
+  it('rejects a cap that is blank or below 1', () => {
+    expect(validateHpFields('', '')).toBe('Max HP must be a whole number of 1 or more.')
+    expect(validateHpFields('7', '')).toBe('Max HP must be a whole number of 1 or more.')
+    expect(validateHpFields('', '0')).toBe('Max HP must be a whole number of 1 or more.')
+    expect(validateHpFields('', 'lots')).toBe('Max HP must be a whole number of 1 or more.')
   })
 })
 

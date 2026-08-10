@@ -48,6 +48,29 @@ describe('buildDefinitionConfig', () => {
     expect(config.seed).toBe(42)
   })
 
+  // Blank is the default and means "start at full health". The key must be
+  // absent rather than zero or maxHp: the game reads an absent value as equal to
+  // maxHp, so writing a number would be a second place holding one that a later
+  // maxHp change could contradict.
+  it('omits startingHp entirely when it is blank', () => {
+    const { config } = buildDefinitionConfig(sampleForm)
+    expect('startingHp' in config).toBe(false)
+  })
+
+  it('carries an explicit startingHp through as a number', () => {
+    const { config } = buildDefinitionConfig({ ...sampleForm, startingHp: '2' })
+    expect(config.startingHp).toBe(2)
+  })
+
+  // The blank case is covered by the whole-form round-trip below, `sampleForm`
+  // carrying the default. This is the other half: a set value must survive a
+  // reopen rather than reverting to full health.
+  it('round-trips an explicit startingHp', () => {
+    const { config } = buildDefinitionConfig({ ...sampleForm, startingHp: '2' })
+    const back = parseDefinitionConfig(config as unknown as Record<string, unknown>, sampleMeta)
+    expect(back.startingHp).toBe('2')
+  })
+
   it('folds scene + decor toggles into the nested landmarks object', () => {
     const { config } = buildDefinitionConfig(sampleForm)
     expect(config.landmarks).toEqual({

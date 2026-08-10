@@ -12,7 +12,7 @@ import type { DefinitionFormState } from '../utils/definitionConfig'
 
 export type AdvancedFieldsValue = Pick<
   DefinitionFormState,
-  'maxHp' | 'enemyMovePeriodMs' | 'minimapCellPx' | 'minimapRadius' | 'title' | 'mode'
+  'maxHp' | 'startingHp' | 'enemyMovePeriodMs' | 'minimapCellPx' | 'minimapRadius' | 'title' | 'mode'
 >
 
 interface AdvancedFieldsProps {
@@ -60,6 +60,22 @@ export function AdvancedFields({ value, onChange, namePlaceholder, levelsGroup }
   return (
     <>
       <FieldGroup title="Health & Enemies" id="health-enemies">
+        {/* Starting HP leads: you choose how much health the player has, then
+            the cap it can be healed back to. Blank is a real choice rather than
+            an empty field — it starts the player at full health — so the
+            placeholder says so, a bare empty number box reading as unset. */}
+        <label className="modal-stacked-input">
+          Starting HP
+          <input
+            type="number"
+            className="input"
+            value={value.startingHp}
+            min={1}
+            max={value.maxHp === '' ? undefined : Number(value.maxHp)}
+            placeholder="Full health"
+            onChange={e => onChange({ startingHp: e.target.value })}
+          />
+        </label>
         {numberField('maxHp', 'Max HP', 1)}
         {numberField('enemyMovePeriodMs', 'Enemy move period (ms)', 1)}
       </FieldGroup>

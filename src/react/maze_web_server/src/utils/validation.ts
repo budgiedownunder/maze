@@ -55,6 +55,23 @@ export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
 // levels. Existing over-cap definitions therefore keep their size until edited.
 export const MAX_GAME_MAZE_DIMENSION = 30
 
+// The advanced HP pair, as raw input strings.
+//
+// A blank starting value is valid — it means "start at full health" — but a
+// blank *cap* is not: it stores as 0, and the game computes its starting HP as
+// `clamp(1, maxHp)`, which panics outright when the cap is below 1. So the cap
+// is checked first and on its own terms, rather than being ignored as
+// unparseable.
+export function validateHpFields(startingHp: string, maxHp: string): string | null {
+  const max = parseInt(maxHp, 10)
+  if (!Number.isInteger(max) || max < 1) return 'Max HP must be a whole number of 1 or more.'
+  if (startingHp.trim() === '') return null
+  const starting = parseInt(startingHp, 10)
+  if (!Number.isInteger(starting) || starting < 1) return 'Starting HP must be a whole number of 1 or more.'
+  if (starting > max) return 'Starting HP cannot exceed Max HP.'
+  return null
+}
+
 // Returns true when the rows × cols product would exceed the server-reported
 // store cap. A null cap means the configured store imposes no cap, in which
 // case this always returns false.
