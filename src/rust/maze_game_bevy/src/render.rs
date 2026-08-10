@@ -68,9 +68,12 @@ pub(crate) fn apply_env_overrides(mut config: ResMut<GameConfig>) {
 /// one time.
 ///
 /// One 40x40 level draws about 7,300 mesh entities and plays on an iPhone; two
-/// of them, about 14,600, exhausts its memory within a few turns. The budget is
-/// therefore the measured survivable figure rather than a chosen one — at
-/// roughly 4.55 entities per cell for brick walls, 1,600 cells is that 7,300.
+/// of them, about 14,600, sees the run cut short within a few turns — the device
+/// swamped, or the platform stepping in. Which of those was never isolated, and
+/// the game's own heap is unremarkable when it happens, so this bounds the
+/// rendering load rather than any allocation. The budget is the measured
+/// survivable figure rather than a chosen one — at roughly 4.55 entities per
+/// cell for brick walls, 1,600 cells is that 7,300.
 ///
 /// Pool walls cost more per cell than brick — rims, edge seals and surfaces —
 /// so a water or lava maze at the budget is dearer than the brick maze the
@@ -219,7 +222,7 @@ mod tests {
 
     /// A maze too large to draw two floors of gives up the floor above — and
     /// its ladders with it, since there is then nothing to climb into. A 40x40
-    /// stack drawn two floors deep is what exhausted an iPhone's memory.
+    /// stack drawn two floors deep is what cut an iPhone's run short.
     #[test]
     fn a_large_maze_keeps_to_the_players_own_floor() {
         let mut config = GameConfig { mobile_mode: true, rows: 40, cols: 40, ..GameConfig::default() };
