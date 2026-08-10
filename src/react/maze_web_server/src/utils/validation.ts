@@ -45,8 +45,8 @@ export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
 // renders but is tedious to walk. Applies to game definitions only — an authored
 // 2D maze is bounded by the store's cell cap alone.
 //
-// Matches the largest shipped preset (Hard), so the curated games sit inside the
-// same rule an authored one does.
+// Set above the largest shipped preset rather than at it, so a curated game is
+// not the ceiling an authored one is measured against.
 //
 // Deliberately has no Rust twin. `GameDefinition.config` is opaque to the server,
 // and clamping rows/cols at generation time would change what a given seed
