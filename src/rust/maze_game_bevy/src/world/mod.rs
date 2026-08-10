@@ -1312,7 +1312,7 @@ pub(crate) fn spawn_world(
         enemy_move_period_ms: Some(config.enemy_move_period_ms),
         enemy_damage: Some(config.enemy_damage),
         max_hp: Some(config.max_hp),
-        starting_hp: Some(config.starting_hp),
+        starting_hp: config.starting_hp,
     };
     // `MAZE_DEMO=<focus>` native run — a rig showroom or the multi-level stack;
     // both relax the round timer so there's no pressure while inspecting. These
@@ -1409,6 +1409,11 @@ pub(crate) fn spawn_world(
         .expect("maze JSON is host-validated or a hardcoded demo, so it always parses");
     let grid = game.grid().to_vec();
     let cell_entities = game.cell_entities().clone();
+    // Read the HP the game actually starts with rather than re-deriving it from
+    // the config: `starting_hp` is an `Option` the maze crate resolves (`None`
+    // means full health) and clamps, so asking it is the only way the HUD and the
+    // player agree.
+    let (hud_max_hp, hud_start_hp) = (game.max_hp(), game.hp());
 
     let start_row = game.player_row();
     let start_col = game.player_col();
@@ -1846,8 +1851,8 @@ pub(crate) fn spawn_world(
         &mut commands,
         &window,
         &mut images,
-        config.max_hp,
-        config.starting_hp,
+        hud_max_hp,
+        hud_start_hp,
     );
 
     // Record the run state and spawn the level indicator (a no-op for a

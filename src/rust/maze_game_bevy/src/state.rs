@@ -434,10 +434,13 @@ pub struct GameConfig {
     /// Maximum player HP — also the heal cap. Threaded into
     /// `MazeGameOptions::max_hp`. Default `3`.
     pub max_hp: u32,
-    /// Starting player HP. Threaded into `MazeGameOptions::starting_hp`
-    /// (clamped to `[1, max_hp]` inside the maze crate). Default `3`
-    /// (= `max_hp` → start at full health).
-    pub starting_hp: u32,
+    /// Starting player HP, or `None` (the default) to start at full health.
+    ///
+    /// Passed to `MazeGameOptions::starting_hp` untouched, so `None` carries the
+    /// maze crate's own meaning — *equal to `max_hp`* — rather than a number
+    /// this layer has to keep in step with it. A concrete value gives the player
+    /// a damaged start and is clamped to `[1, max_hp]` there.
+    pub starting_hp: Option<u32>,
     /// Visual variant used for every enemy in the session. Default
     /// `Goblin`. The AI and damage mechanics are identical across
     /// variants — only the spawned rig differs.
@@ -1156,7 +1159,7 @@ impl Default for GameConfig {
             enemy_move_period_ms: 1500.0,
             enemy_damage: 1,
             max_hp: 3,
-            starting_hp: 3,
+            starting_hp: None,
             enemy_type: EnemyType::default(),
             health_style: HealthStyle::default(),
             layered_alignment: LayeredAlignment::default(),

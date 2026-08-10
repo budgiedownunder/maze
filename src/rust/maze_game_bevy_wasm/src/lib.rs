@@ -114,8 +114,11 @@ struct StartConfig {
     enemy_damage: u32,
     #[serde(default = "default_max_hp")]
     max_hp: u32,
-    #[serde(default = "default_starting_hp")]
-    starting_hp: u32,
+    /// Absent (the default) starts the player at full health, whatever `maxHp`
+    /// is — the maze crate's own rule, carried through rather than restated.
+    /// A value gives a damaged start and is clamped to `[1, maxHp]` there.
+    #[serde(default)]
+    starting_hp: Option<u32>,
     #[serde(default = "default_enemy_type")]
     enemy_type: String,
     #[serde(default = "default_health_style")]
@@ -310,10 +313,6 @@ fn default_enemy_damage() -> u32 {
 }
 
 fn default_max_hp() -> u32 {
-    3
-}
-
-fn default_starting_hp() -> u32 {
     3
 }
 
@@ -590,7 +589,10 @@ mod tests {
         assert_eq!(cfg.enemy_move_period_ms, 1500.0);
         assert_eq!(cfg.enemy_damage, 1);
         assert_eq!(cfg.max_hp, 3);
-        assert_eq!(cfg.starting_hp, 3);
+        // Absent means full health, not a literal 3 — a curated preset or an
+        // authored game raising `maxHp` sends no starting value, and a fixed
+        // default here would begin every one of them at 3.
+        assert_eq!(cfg.starting_hp, None);
         assert_eq!(cfg.enemy_type, "goblin");
         assert_eq!(cfg.health_style, "heart");
         assert!(cfg.difficulty.is_none());

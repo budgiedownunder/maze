@@ -1701,6 +1701,40 @@ mod tests {
         assert_eq!(count, max_hp);
     }
 
+    /// Raising `max_hp` alone must start the player at full health. It did not:
+    /// `starting_hp` was a plain `u32` defaulting to a literal 3, so a game
+    /// configured for 5 HP began at 3 of 5 — and every curated preset and
+    /// authored game hits that path, because neither sends a starting value.
+    #[test]
+    fn a_raised_max_hp_starts_the_player_at_full_health() {
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+        let config = GameConfig { max_hp: 5, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+        let state = app.world().resource::<GameState>();
+        assert_eq!(state.game.max_hp(), 5);
+        assert_eq!(state.game.hp(), 5, "absent starting HP means full, not 3");
+
+        // The HUD is drawn from the game rather than the config, so it agrees.
+        let hearts = app
+            .world_mut()
+            .query::<&crate::hud::hp::HpHeartIcon>()
+            .iter(app.world())
+            .count();
+        assert_eq!(hearts, 5);
+    }
+
+    /// A concrete starting value still gives a damaged start — the point of
+    /// keeping it settable rather than always full.
+    #[test]
+    fn an_explicit_starting_hp_still_gives_a_damaged_start() {
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+        let config = GameConfig { max_hp: 5, starting_hp: Some(2), ..GameConfig::default() };
+        let app = make_playing_app_with_maze_and_config(MAZE, config);
+        let state = app.world().resource::<GameState>();
+        assert_eq!(state.game.max_hp(), 5);
+        assert_eq!(state.game.hp(), 2);
+    }
+
     #[test]
     fn demo_grid_is_well_formed_with_enemy_and_health() {
         // Extends `demo_grid_is_well_formed` for the new vocabulary —
