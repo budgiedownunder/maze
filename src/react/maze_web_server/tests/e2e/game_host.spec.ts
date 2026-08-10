@@ -808,9 +808,13 @@ test.describe('Game host failure reporting', () => {
     await expect(page.locator('#pause-menu')).toBeAttached()
   }
 
-  // Lets the module script really run: its listeners and window handles are
-  // registered there, so a test that aborts the module registers none of them.
-  async function loadWithModuleRunning(page: Page, url = '/game/index.html?t=fake&id=test-id') {
+  // Serves the wasm-bindgen glue so the module can import it. Nothing in the
+  // repo provides it — `public/game/` holds only `index.html`, the rest being
+  // wasm-pack output — so a test that lets the module run must supply its own or
+  // it passes on a developer's machine and 404s on a clean checkout. The page
+  // fetches the binary itself before calling `init`, so the exported names are
+  // all a stub needs.
+  async function stubGlueModule(page: Page) {
     await page.route('**/maze_game_bevy_wasm.js**', (route) => {
       route.fulfill({
         contentType: 'application/javascript',
@@ -823,6 +827,12 @@ test.describe('Game host failure reporting', () => {
         `,
       })
     })
+  }
+
+  // Lets the module script really run: its listeners and window handles are
+  // registered there, so a test that aborts the module registers none of them.
+  async function loadWithModuleRunning(page: Page, url = '/game/index.html?t=fake&id=test-id') {
+    await stubGlueModule(page)
     await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
       route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
     })
@@ -851,8 +861,11 @@ test.describe('Game host failure reporting', () => {
 
   test('reports a failed WASM load as a load-phase failure', async ({ page }) => {
     // The real rejection path: the module runs and its top-level await on the
-    // WASM fetch rejects.
+    // WASM fetch rejects. The glue is stubbed so the module can import at all —
+    // the rejection under test is the page's own `fetch(WASM_URL)`, which comes
+    // before `init` is ever called.
     await installHostBridge(page)
+    await stubGlueModule(page)
     await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
     await page.goto('/game/index.html?t=fake&id=test-id')
 
