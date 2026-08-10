@@ -15,6 +15,7 @@ A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **Re
 - [Overview](#overview)
 - [Components](#components)
 - [Architecture](#architecture)
+- [Performance](#performance)
 - [Screenshots](#screenshots)
 - [Getting Started](#getting-started)
 - [Contributing](#contributing)
@@ -123,6 +124,18 @@ The following components are present:
 ![Architecture Diagram](./docs/diagrams/architecture.png)
 
 > See [`docs/diagrams/architecture.puml`](./docs/diagrams/architecture.puml) for the PlantUML source.
+
+## Performance
+
+The 3D game renders the same world everywhere, but not the same amount of it. A multi-level run builds every floor up front and an open-sky maze does not occlude itself, so a phone can be asked to draw a whole stack at once. That is more than a phone sustains: the frame rate collapses, and a large enough run is liable to be cut short — the device swamped, or the platform stepping in and reclaiming the page. What varies by platform is how much of that stack is drawn and lit at any moment, so that the game survives on a phone or tablet when it otherwise would likely not.
+
+**On desktop**, every floor of a stack is drawn. Only the point lights are narrowed: the keys, treasures and finish orb light the floor the player is standing on and no other. Distant floors keep their shape and their contents, and those objects still glow, because their materials are emissive — what goes is the light they cast on a floor nobody is on.
+
+**On a phone or tablet**, the game additionally draws only the player's own floor and the one above it, and drops those point lights entirely. The window reaches upward because that is the direction of travel, and because a ladder is coherent exactly when the floor it climbs into is drawn — so ladders survive. A maze too large to afford both floors keeps just its own, and its interim finishes become portals, which need no visible destination.
+
+**Which platform it is** is decided by whoever knows best. The MAUI app knows its own platform for a fact and says so; a browser cannot, so the hosted page judges from a coarse pointer and its own touch signals. An explicit `?mobile_mode=0` or `=1` on the game URL overrides either.
+
+See [`maze_game_bevy`](./src/rust/maze_game_bevy/README.md) and [`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md) for the individual switches, which remain available as diagnostics.
 
 ## Screenshots
 

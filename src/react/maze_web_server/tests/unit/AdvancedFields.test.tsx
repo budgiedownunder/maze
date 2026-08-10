@@ -4,6 +4,7 @@ import { AdvancedFields, type AdvancedFieldsValue } from '../../src/components/A
 
 const BASE: AdvancedFieldsValue = {
   maxHp: '3',
+  startingHp: '',
   enemyMovePeriodMs: '1500',
   minimapCellPx: '10',
   minimapRadius: '5',
@@ -25,6 +26,17 @@ describe('AdvancedFields', () => {
     const he = group('Health & Enemies')
     expect(he.getByLabelText('Max HP')).toHaveValue(3)
     expect(he.getByLabelText('Enemy move period (ms)')).toHaveValue(1500)
+
+    // Blank Starting HP is a choice rather than an omission, so the field says
+    // what blank does and bounds its spinner by the Max HP beside it.
+    const starting = he.getByLabelText('Starting HP')
+    expect(starting).toHaveValue(null)
+    expect(starting).toHaveAttribute('placeholder', 'Full health')
+    expect(starting).toHaveAttribute('max', '3')
+
+    // Starting HP leads Max HP: the amount first, then the cap it heals back to.
+    const inputs = he.getAllByRole('spinbutton')
+    expect(inputs.indexOf(starting)).toBeLessThan(inputs.indexOf(he.getByLabelText('Max HP')))
 
     const minimap = group('Minimap')
     expect(minimap.getByLabelText('Cell size (px)')).toHaveValue(10)
@@ -66,6 +78,15 @@ describe('AdvancedFields', () => {
     expect(onChange).toHaveBeenCalledWith({ maxHp: '7' })
     fireEvent.change(group('Minimap').getByLabelText('Cell size (px)'), { target: { value: '14' } })
     expect(onChange).toHaveBeenCalledWith({ minimapCellPx: '14' })
+    fireEvent.change(group('Health & Enemies').getByLabelText('Starting HP'), { target: { value: '2' } })
+    expect(onChange).toHaveBeenCalledWith({ startingHp: '2' })
+  })
+
+  /// The spinner bound follows whatever Max HP currently is, rather than a
+  /// constant that would drift from it.
+  it('bounds Starting HP by the current Max HP', () => {
+    renderFields({ maxHp: '5' })
+    expect(group('Health & Enemies').getByLabelText('Starting HP')).toHaveAttribute('max', '5')
   })
 
   it('reports the override text patches', () => {

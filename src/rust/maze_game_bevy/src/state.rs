@@ -434,10 +434,13 @@ pub struct GameConfig {
     /// Maximum player HP — also the heal cap. Threaded into
     /// `MazeGameOptions::max_hp`. Default `3`.
     pub max_hp: u32,
-    /// Starting player HP. Threaded into `MazeGameOptions::starting_hp`
-    /// (clamped to `[1, max_hp]` inside the maze crate). Default `3`
-    /// (= `max_hp` → start at full health).
-    pub starting_hp: u32,
+    /// Starting player HP, or `None` (the default) to start at full health.
+    ///
+    /// Passed to `MazeGameOptions::starting_hp` untouched, so `None` carries the
+    /// maze crate's own meaning — *equal to `max_hp`* — rather than a number
+    /// this layer has to keep in step with it. A concrete value gives the player
+    /// a damaged start and is clamped to `[1, max_hp]` there.
+    pub starting_hp: Option<u32>,
     /// Visual variant used for every enemy in the session. Default
     /// `Goblin`. The AI and damage mechanics are identical across
     /// variants — only the spawned rig differs.
@@ -504,6 +507,107 @@ pub struct GameConfig {
     /// means an empty board, so the first run is itself a record (see
     /// `is_fastest_time`).
     pub fastest_time_to_beat: Option<u64>,
+    /// Whether to show the developer diagnostics readout (memory, entity counts,
+    /// frame rate) below the minimap. Off by default: it is a development tool,
+    /// switched on per-launch by the host, and a normal run renders exactly as it
+    /// did before the readout existed.
+    pub debug_memory: bool,
+    /// Developer override of the window's scale factor — how many physical
+    /// pixels the renderer draws per logical pixel. `None` (the default) leaves
+    /// the platform's own value, which on a phone is its device pixel ratio. The
+    /// value is absolute, not a fraction: the host page turns `?res=<fraction>`
+    /// into one against `window.devicePixelRatio`. See [`crate::render`].
+    pub render_scale: Option<f32>,
+    /// How much of a multi-level stack is drawn and animated at once. Defaults
+    /// to all of it, so a run renders exactly as it did before this existed.
+    pub level_visibility: LevelVisibility,
+    /// How much of a stack keeps its **point lights**, independently of how much
+    /// of it is drawn. **Defaults to the player's own floor.**
+    ///
+    /// A shadowless point light measured ~7 ms a frame on an iPhone, and a maze
+    /// spawns one per key and per treasure, so a tall stack with every floor
+    /// drawn carries dozens of them: a ten-level lava stack ran at 10-25 fps on
+    /// a desktop with them all lit and 45-50 with only the player's floor lit.
+    /// The scene is untouched — distant floors keep their shape, their lava and
+    /// their props, and their objects keep glowing, since the meshes are
+    /// emissive. What goes is the light those objects cast on their own floor,
+    /// which the player is not standing on.
+    ///
+    /// Single-level games are unaffected: a `{0, 0}` range around level 0 lights
+    /// the only floor there is. Set both sides to `None` to light everything, as
+    /// the game did before this was measured.
+    pub light_visibility: LevelVisibility,
+    /// Diagnostic: leave the finish orb unspawned. It is the game's **only**
+    /// shadow-casting light — a point light's shadow is a cube map, so six extra
+    /// scene passes — and it exists on the final level alone, which makes that
+    /// level structurally more expensive than any other. Off by default.
+    pub hide_finish_orb: bool,
+    /// Diagnostic: keep the finish orb but stop its light casting shadows. A
+    /// point light's shadow is a cube map — six extra scene passes — and the orb
+    /// is the only shadow caster in the game. Separates that cost from the orb
+    /// itself, which [`Self::hide_finish_orb`] removes wholesale. Off by
+    /// default, leaving the shadows the game has always drawn.
+    pub disable_orb_shadows: bool,
+    /// Diagnostic: keep the finish orb but give it no light at all. The orb's
+    /// material is emissive, so it still reads as a glowing beacon — what goes
+    /// is the pool of light it casts on the surrounding walls and floor, and the
+    /// glow left behind on the win screen. Supersedes
+    /// [`Self::disable_orb_shadows`], which has nothing to act on without a
+    /// light. Off by default.
+    pub disable_orb_light: bool,
+    /// Diagnostic: stop the water / lava pool wave rewriting a `Transform` on
+    /// every surface and rock, every frame. Each write marks the entity changed,
+    /// so transform propagation and the per-instance upload run again for it —
+    /// the cost that makes a pool wall dearer than a solid one. The pools go
+    /// still; their ripple texture keeps scrolling. Off by default.
+    pub freeze_wall_animation: bool,
+    /// Diagnostic: drop the point light every key holder and every treasure
+    /// carries. Their meshes are emissive, so they still glow; what goes is the
+    /// light each casts on its surroundings. A shadowless point light measured
+    /// ~7.6 ms a frame on an iPhone, and a maze spawns one per `K` and per `T`
+    /// cell with no budget. Off by default.
+    pub disable_object_glow: bool,
+    /// Whether an interim level may finish with a **ladder**. `true` by default.
+    ///
+    /// A ladder only makes sense when the floor above is drawn — climbing into
+    /// hidden space reads as rising into nothing. Turning this off resolves
+    /// [`Self::finish_type`] to [`FinishType::Portal`], which is a coherent
+    /// story on its own: the player is transported elsewhere rather than up.
+    ///
+    /// The override lands on the one value every consumer reads, so the rig
+    /// drawn, the transition animation, the hatch in the floor above and the
+    /// hole in a roofed level's finish tile all follow without a second
+    /// condition to keep in step.
+    pub allow_ladders: bool,
+    /// Run with the settings a phone needs. Off by default; the host page sets
+    /// it from `?mobile_mode=1`, being the only part that can tell what it is
+    /// running on.
+    ///
+    /// It is a policy, not a mechanism: it turns on the individual switches that
+    /// measurement justified, and nothing else. See `render::resolve_mobile_mode`
+    /// for what it implies and why. Those switches remain individually settable
+    /// as diagnostics, but they can only *add* restrictions on top of the mode —
+    /// a `bool` cannot distinguish "false by default" from "false on purpose", so
+    /// there is no lifting one back off.
+    pub mobile_mode: bool,
+    /// Developer override of multisample anti-aliasing, in samples (`1` for off,
+    /// or `2` / `4` / `8`). `None` (the default) leaves Bevy's own default in
+    /// place, which is what the game has always rendered with.
+    pub msaa_samples: Option<u32>,
+}
+
+/// How many levels either side of the player's own stay drawn and animated in a
+/// multi-level run. `None` on a side means every level that way — the default,
+/// and what the game did before the window existed. `Some(0)` on both sides
+/// draws and animates the player's own floor and nothing else.
+///
+/// Both sides must be set for the window to apply at all: a half-open window
+/// still leaves a tall stack paying for most of itself, so it is not worth the
+/// ambiguity of a partial setting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LevelVisibility {
+    pub below: Option<u32>,
+    pub above: Option<u32>,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -1055,7 +1159,7 @@ impl Default for GameConfig {
             enemy_move_period_ms: 1500.0,
             enemy_damage: 1,
             max_hp: 3,
-            starting_hp: 3,
+            starting_hp: None,
             enemy_type: EnemyType::default(),
             health_style: HealthStyle::default(),
             layered_alignment: LayeredAlignment::default(),
@@ -1072,6 +1176,18 @@ impl Default for GameConfig {
             leaderboard_tracked: false,
             high_score_to_beat: None,
             fastest_time_to_beat: None,
+            debug_memory: false,
+            render_scale: None,
+            level_visibility: LevelVisibility::default(),
+            light_visibility: LevelVisibility { below: Some(0), above: Some(0) },
+            hide_finish_orb: false,
+            disable_orb_shadows: false,
+            disable_orb_light: false,
+            freeze_wall_animation: false,
+            disable_object_glow: false,
+            allow_ladders: true,
+            mobile_mode: false,
+            msaa_samples: None,
         }
     }
 }
@@ -1106,25 +1222,35 @@ pub struct GameResult {
     pub extras: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
+/// Dispatches `name` on the browser `window` with `detail` attached. Every
+/// game→host event shares this tail, so each caller only has to build its own
+/// detail value. A missing `window` (not a browser context) is a silent no-op.
+#[cfg(target_arch = "wasm32")]
+fn dispatch_host_event(name: &str, detail: &wasm_bindgen::JsValue) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let init = web_sys::CustomEventInit::new();
+    init.set_detail(detail);
+    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict(name, &init) {
+        let _ = window.dispatch_event(&event);
+    }
+}
+
 /// Dispatches a `maze-game-result` CustomEvent on the browser `window` so the
 /// hosting page (React `/game/` wrapper, or the MAUI WebView) can react to the
 /// outcome. Wrapped behind `#[cfg(target_arch = "wasm32")]` so native builds
 /// (cargo run -p maze_game_bevy) compile without any browser dependencies.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn dispatch_game_result(result: &GameResult) {
-    use wasm_bindgen::JsValue;
     let Ok(json) = serde_json::to_string(result) else {
         return;
     };
-    let Some(window) = web_sys::window() else {
+    let Ok(detail) = js_sys::JSON::parse(&json) else {
+        // Parse failed. Nothing useful can be sent, so send nothing.
         return;
     };
-    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
-    let init = web_sys::CustomEventInit::new();
-    init.set_detail(&detail);
-    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-result", &init) {
-        let _ = window.dispatch_event(&event);
-    }
+    dispatch_host_event("maze-game-result", &detail);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1135,24 +1261,141 @@ pub(crate) fn dispatch_game_result(_result: &GameResult) {
 
 /// Dispatches a `maze-game-paused` CustomEvent on the browser `window` so the
 /// container page/application can swap its pause/play state in sync with the Bevy
-/// game state. Detail is `{ "paused": bool }`.
+/// game state. Detail is `{ "paused": bool }`, built directly rather than
+/// formatted into JSON text and parsed back.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn dispatch_pause_state(paused: bool) {
     use wasm_bindgen::JsValue;
-    let Some(window) = web_sys::window() else {
-        return;
-    };
-    let json = format!("{{\"paused\":{}}}", paused);
-    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
-    let init = web_sys::CustomEventInit::new();
-    init.set_detail(&detail);
-    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-paused", &init) {
-        let _ = window.dispatch_event(&event);
-    }
+    let detail = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &JsValue::from_str("paused"),
+        &JsValue::from_bool(paused),
+    );
+    dispatch_host_event("maze-game-paused", &detail);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn dispatch_pause_state(_paused: bool) {}
+
+/// Renders a panic's source location as `file:line:column`. `None` — the runtime
+/// recorded no location — reads as `"unknown"`, so the host always receives a
+/// non-empty field rather than having to handle a missing one.
+pub(crate) fn format_panic_location(location: Option<(&str, u32, u32)>) -> String {
+    match location {
+        Some((file, line, column)) => format!("{file}:{line}:{column}"),
+        None => "unknown".to_string(),
+    }
+}
+
+/// Extracts a panic payload's message. `panic!` payloads are `&str` or `String`;
+/// a payload of any other type carries no readable text, so it reports its shape
+/// instead of an empty string.
+pub(crate) fn format_panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_string()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_string()
+    }
+}
+
+/// Dispatches a `maze-game-panic` CustomEvent on the browser `window` so the
+/// hosting page can report why the game died. Detail is
+/// `{ "message": string, "location": string }`. Without it a Rust panic reaches
+/// the browser as a bare `RuntimeError: unreachable` carrying no reason at all.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn dispatch_panic(message: &str, location: &str) {
+    use wasm_bindgen::JsValue;
+    // Built directly as a JS object. This runs on the panic path — which may
+    // itself be an allocation failure — so it does the least work it can.
+    let detail = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &JsValue::from_str("message"),
+        &JsValue::from_str(message),
+    );
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &JsValue::from_str("location"),
+        &JsValue::from_str(location),
+    );
+    dispatch_host_event("maze-game-panic", &detail);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn dispatch_panic(_message: &str, _location: &str) {}
+
+/// Dispatches a `maze-game-stopped` CustomEvent, telling the host the game has
+/// been torn down. Detail-free: the fact of it is the whole message.
+#[cfg(target_arch = "wasm32")]
+fn dispatch_stopped() {
+    dispatch_host_event("maze-game-stopped", &wasm_bindgen::JsValue::NULL);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dispatch_stopped() {}
+
+/// Announces the game's teardown from inside the teardown itself.
+///
+/// Bevy offers no "app exited" hook — once the `App` is dropped no Bevy code can
+/// run, and the web runner never returns to provide a completion point. Dropping
+/// a resource is the one thing that happens *at* that moment, so this exists
+/// purely for its [`Drop`].
+///
+/// Lets a host wait for the release rather than guess at a delay.
+#[derive(Resource)]
+pub(crate) struct StopSignal;
+
+impl Drop for StopSignal {
+    fn drop(&mut self) {
+        dispatch_stopped();
+    }
+}
+
+/// Installs the panic hook that forwards a Rust panic to the hosting page as a
+/// `maze-game-panic` event before delegating to whichever hook was already in
+/// place. Call it before building the app, so a panic raised during maze
+/// generation or world spawn is still reported.
+///
+/// Only the **first** panic is forwarded: on wasm the `requestAnimationFrame`
+/// loop can keep driving an already-poisoned app and panic again every frame, and
+/// a flood of follow-on events would bury the original cause.
+///
+/// Installing more than once is safe — the hook goes in place on the first call
+/// and later calls do nothing, so entry points can each call it unconditionally.
+///
+/// # Examples
+///
+/// ```
+/// use maze_game_bevy::install_panic_hook;
+///
+/// install_panic_hook();
+/// // Idempotent — a second call leaves the single installed hook alone.
+/// install_panic_hook();
+/// ```
+pub fn install_panic_hook() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Once;
+
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            static REPORTED: AtomicBool = AtomicBool::new(false);
+            if !REPORTED.swap(true, Ordering::Relaxed) {
+                let message = format_panic_message(info.payload());
+                let location = format_panic_location(
+                    info.location()
+                        .map(|loc| (loc.file(), loc.line(), loc.column())),
+                );
+                dispatch_panic(&message, &location);
+            }
+            previous(info);
+        }));
+    });
+}
 
 #[cfg(test)]
 mod tests {
@@ -1383,5 +1626,43 @@ mod tests {
         let a = anim(5.0, 1.0);
         assert_eq!(a.current_pos(), Vec3::splat(4.0));
         assert_eq!(a.current_yaw(), 8.0);
+    }
+
+    #[test]
+    fn panic_location_renders_file_line_and_column() {
+        assert_eq!(
+            format_panic_location(Some(("src/world/mod.rs", 1243, 5))),
+            "src/world/mod.rs:1243:5",
+        );
+    }
+
+    #[test]
+    fn panic_location_without_a_recorded_site_is_reported_as_unknown() {
+        // The host always gets a non-empty location rather than a missing field.
+        assert_eq!(format_panic_location(None), "unknown");
+    }
+
+    #[test]
+    fn panic_message_reads_both_str_and_string_payloads() {
+        // `panic!("literal")` carries a &str; a formatted `panic!("{x}")` carries
+        // a String. Both are the readable cases and must come through verbatim.
+        let borrowed: Box<dyn std::any::Any + Send> = Box::new("maze JSON did not parse");
+        assert_eq!(
+            format_panic_message(borrowed.as_ref()),
+            "maze JSON did not parse"
+        );
+        let owned: Box<dyn std::any::Any + Send> = Box::new("level 3 of 20 failed".to_string());
+        assert_eq!(format_panic_message(owned.as_ref()), "level 3 of 20 failed");
+    }
+
+    #[test]
+    fn panic_message_falls_back_for_a_payload_carrying_no_text() {
+        // `panic_any` can carry an arbitrary type — report its shape rather than
+        // handing the host an empty reason.
+        let payload: Box<dyn std::any::Any + Send> = Box::new(42u32);
+        assert_eq!(
+            format_panic_message(payload.as_ref()),
+            "non-string panic payload"
+        );
     }
 }

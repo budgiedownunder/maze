@@ -49,6 +49,31 @@ namespace Maze.Maui.App
             // delegate identity is stable across re-subscribes.
             core.WebMessageReceived -= OnWebMessageReceived;
             core.WebMessageReceived += OnWebMessageReceived;
+
+            // A dead WebView2 process leaves a blank control and reports nothing
+            // to the page, so the failure has to be surfaced from here. Desktop
+            // has memory to spare and this is not expected to fire — it is the
+            // same hazard the mobile platforms close, kept consistent.
+            core.ProcessFailed -= OnProcessFailed;
+            core.ProcessFailed += OnProcessFailed;
+        }
+
+        /// <summary>
+        /// Reports a failed WebView2 process as a game failure. WebView2 names
+        /// the cause outright, so an out-of-memory kill is distinguished from an
+        /// ordinary crash rather than guessed at.
+        /// </summary>
+        private static void OnProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs e)
+        {
+            bool outOfMemory = e.Reason == CoreWebView2ProcessFailedReason.OutOfMemory;
+            RaiseHostFailure(new Models.GameFailure
+            {
+                Reason = outOfMemory
+                    ? "The game ran out of memory and had to close."
+                    : Models.GameFailure.GenericReason,
+                Detail = $"webview2-process-failed kind={e.ProcessFailedKind} reason={e.Reason}",
+                Phase = null,
+            });
         }
 
         private static async Task ClearCacheOnceAsync(CoreWebView2 core)
@@ -64,7 +89,7 @@ namespace Maze.Maui.App
             {
                 var json = e.TryGetWebMessageAsString();
                 if (!string.IsNullOrEmpty(json))
-                    RaiseGameResult(json);
+                    RaiseHostMessage(json);
             }
             catch (Exception)
             {

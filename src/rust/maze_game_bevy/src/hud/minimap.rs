@@ -34,8 +34,14 @@ const COLOR_MINIMAP_LAVA: Color = Color::srgb(1.0, 0.42, 0.08);
 const COLOR_MINIMAP_DIM_BG: Color = Color::srgba(0.10, 0.10, 0.14, 0.80);
 const COLOR_MINIMAP_DIM_TEXT: Color = Color::srgb(0.67, 0.60, 0.92);
 const MINIMAP_DIM_FONT: f32 = 18.0;
-const MINIMAP_DIM_STRIP_H: f32 = 22.0;
+pub(crate) const MINIMAP_DIM_STRIP_H: f32 = 22.0;
 const MINIMAP_DIM_GAP: f32 = 2.0;
+/// Screen-edge inset and muted palette, shared with the diagnostics readout that
+/// sits directly beneath this strip so the whole top-right column reads as one
+/// block rather than two unrelated panels.
+pub(crate) const MINIMAP_EDGE_MARGIN: f32 = MAP_MARGIN;
+pub(crate) const MINIMAP_PANEL_BG: Color = COLOR_MINIMAP_DIM_BG;
+pub(crate) const MINIMAP_PANEL_TEXT: Color = COLOR_MINIMAP_DIM_TEXT;
 
 /// How a minimap cell should render: a flat colour, or the iron-fence look —
 /// the steel-teal base overlaid with thin black vertical bars.
@@ -161,11 +167,17 @@ pub(crate) fn spawn_minimap(
     commands.insert_resource(MinimapConfig { center_x, center_y, iron_bars });
 
     // Overlay camera — does not clear the colour buffer so the 3D scene shows through.
-    commands.spawn((
+    let mut camera = commands.spawn((
         Camera2d,
         Camera { order: 1, clear_color: ClearColorConfig::None, ..default() },
         MinimapCamera,
     ));
+    // Kept in step with the 3D camera: two views of one window disagreeing about
+    // sample count is its own render cost, and would muddy any measurement taken
+    // against the override.
+    if let Some(msaa) = crate::render::msaa_override(config.msaa_samples) {
+        camera.insert(msaa);
+    }
 
     // Dark background — tagged so minimap_resize_system can reposition it
     // (along with the cells) when the window size changes.
@@ -274,7 +286,7 @@ pub(crate) fn minimap_dimensions_update_system(
 /// The y of the dimensions strip: centred just below the minimap's dark
 /// background (which is `map_size + 4` tall, centred on `center_y`), with a
 /// small gap.
-fn minimap_dimensions_y(center_y: f32, map_size: f32) -> f32 {
+pub(crate) fn minimap_dimensions_y(center_y: f32, map_size: f32) -> f32 {
     center_y - (map_size + 4.0) / 2.0 - MINIMAP_DIM_GAP - MINIMAP_DIM_STRIP_H / 2.0
 }
 

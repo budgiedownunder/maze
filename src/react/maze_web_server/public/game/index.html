@@ -187,6 +187,93 @@
       }
     }
 
+    /* Fatal-error banner. The loading panel is removed once the game
+       starts, so a crash mid-play has nothing to write into — this is
+       the standalone overlay used from that point on. Centred over the
+       canvas and above every other overlay, since the run is over. */
+    #fatal-error {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      max-width: min(90vw, 420px);
+      padding: 16px 20px;
+      font-family: sans-serif;
+      font-size: 1rem;
+      line-height: 1.4;
+      text-align: center;
+      color: #ff7070;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #ff7070;
+      border-radius: 12px;
+    }
+
+    /* Shown once the game has been torn down and its memory released —
+       navigating away does that, and the page may later be restored from
+       the back-forward cache. Without it the restored page shows the
+       canvas frozen on its last frame, which reads as a hung game. Not
+       styled as an error: ending a run is ordinary, not a fault. */
+    #game-ended,
+    #run-stopped {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      padding: 24px 32px;
+      font-family: sans-serif;
+      color: #fff;
+      background: #000;
+      border: 2px solid #ffff00;
+      border-radius: 12px;
+    }
+    #game-ended h1,
+    #run-stopped h1 {
+      font-size: 1.4rem;
+      letter-spacing: 0.12em;
+      font-weight: 700;
+      color: #ffff00;
+    }
+    /* Same shape as the ended panel, in the fatal-error red — a run cut short by
+       the browser is a fault, not an ordinary ending. */
+    #run-stopped { border-color: #ff7070; }
+    #run-stopped h1 { color: #ff7070; }
+    #run-stopped p {
+      max-width: 34ch;
+      text-align: center;
+      line-height: 1.4;
+    }
+    #game-ended button,
+    #run-stopped button {
+      min-width: 200px;
+      min-height: 56px;
+      padding: 14px 20px;
+      font-size: 1rem;
+      font-family: inherit;
+      color: #fff;
+      background: #2f9e44;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    /* The canvas holds a stale frame and everything else here drives a game
+       that no longer exists — hide the lot so only the panel remains, including
+       a pause menu left open when the player navigated away. */
+    body.game-ended canvas,
+    body.game-ended #controls,
+    body.game-ended #touch-pause-btn,
+    body.game-ended #play-again,
+    body.game-ended #pause-menu,
+    body.run-stopped canvas,
+    body.run-stopped #controls,
+    body.run-stopped #touch-pause-btn,
+    body.run-stopped #pause-menu { display: none; }
+
     /* In-game pause menu — a host-side HTML overlay shown when Bevy
        reports paused=true via the maze-game-paused CustomEvent. Lives
        outside the canvas so taps don't fall through to the Bevy
@@ -298,22 +385,225 @@
     })();
   </script>
   <script>
-    window.addEventListener('maze-game-result', function (e) {
-      // Forward the result to the MAUI platform bridge so the native host can
-      // capture it. Each platform exposes a different channel; a plain browser
-      // tab (React) has none — the CustomEvent itself remains observable.
+    /* Host bridge + failure capture. Deliberately a plain script placed
+       before the module below: the module uses top-level await and may
+       never run at all if the WASM fetch or instantiation fails, and
+       these handlers have to be listening before that can happen. */
+
+    // Forwards one payload to the native host. Each platform exposes a
+    // different channel; a plain browser tab (React) has none, so this is
+    // a no-op there and the page's own UI carries the information.
+    //
+    // The Android channel is still named `onGameResult` — it is the
+    // channel, not the message type, and renaming it means changing the
+    // JavascriptInterface export on the C# side too.
+    function postToHost(payload) {
       try {
-        var payload = JSON.stringify(e.detail);
+        var json = JSON.stringify(payload);
         if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
-          window.chrome.webview.postMessage(payload);                       // Windows WebView2
+          window.chrome.webview.postMessage(json);                       // Windows WebView2
         } else if (window.MazeMauiHost && window.MazeMauiHost.onGameResult) {
-          window.MazeMauiHost.onGameResult(payload);                        // Android JavascriptInterface
+          window.MazeMauiHost.onGameResult(json);                        // Android JavascriptInterface
         } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.MazeMauiHost) {
-          window.webkit.messageHandlers.MazeMauiHost.postMessage(payload);  // iOS / MacCatalyst WKWebView
+          window.webkit.messageHandlers.MazeMauiHost.postMessage(json);  // iOS / MacCatalyst WKWebView
         }
       } catch (err) {
-        console.error('[game-result] bridge forward failed', err);
+        console.error('[host-bridge] forward failed', err);
       }
+    }
+
+    // Shows a fatal message to the player. Writes into the loading panel
+    // while it still exists (a failure to start), and otherwise builds a
+    // standalone overlay — the loading panel is removed once the game
+    // starts, so a crash mid-play would otherwise leave a frozen canvas
+    // and no explanation.
+    function showFatalError(message) {
+      var loading = document.getElementById('loading');
+      if (loading) {
+        var spinner = loading.querySelector('.spinner');
+        if (spinner) spinner.remove();
+        var p = loading.querySelector('p') || loading.appendChild(document.createElement('p'));
+        p.textContent = message;
+        p.style.color = '#ff7070';
+        return;
+      }
+      if (document.getElementById('fatal-error')) return;
+      var el = document.createElement('div');
+      el.id = 'fatal-error';
+      el.setAttribute('role', 'alert');
+      el.textContent = message;
+      document.body.appendChild(el);
+    }
+
+    // Replaces the game with an end-of-session panel. Called alongside the
+    // teardown rather than after it: the DOM change has to be made *before* the
+    // document is frozen into the back-forward cache, so a page restored later
+    // shows this instead of a canvas stuck on its final frame. Waiting for the
+    // game's own teardown confirmation would be too late — a frozen document
+    // does not process events until it is restored.
+    function showGameEnded() {
+      if (document.getElementById('game-ended')) return;
+      // A stopped run never started one, so there is no session to have ended.
+      // Leaving this to run would stack the two panels: navigating away from the
+      // stopped page fires `pagehide`, which adds this panel before the document
+      // is frozen, and returning through the back-forward cache restores both.
+      if (document.getElementById('run-stopped')) return;
+      document.body.classList.add('game-ended');
+      var panel = document.createElement('div');
+      panel.id = 'game-ended';
+      panel.setAttribute('role', 'status');
+      var heading = document.createElement('h1');
+      heading.textContent = 'GAME ENDED';
+      var again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = '↻ Play Again';
+      // Same query string, so the same maze or definition is replayed.
+      again.addEventListener('click', function () { location.reload(); });
+      panel.appendChild(heading);
+      panel.appendChild(again);
+      document.body.appendChild(panel);
+    }
+
+    // Records that a run is under way, so a run that ends without the page ever
+    // being left can be recognised on the *next* load.
+    //
+    // When the browser kills this page's process no JavaScript runs — the panic
+    // hook, `window.onerror` and the bridge all die with it — and the browser
+    // then reloads the page, which would start the same game again, and again.
+    // `pagehide` fires for every ordinary way of leaving a page (navigation,
+    // reload, freezing into the back-forward cache) and does *not* fire for a
+    // kill, so a sentinel that outlives a load is the one signal available.
+    var RUN_SENTINEL_KEY = 'mazeRunActive';
+
+    function markRunStarted(subject) {
+      try { sessionStorage.setItem(RUN_SENTINEL_KEY, subject); } catch { /* storage disabled */ }
+    }
+
+    function clearRunSentinel() {
+      try { sessionStorage.removeItem(RUN_SENTINEL_KEY); } catch { /* storage disabled */ }
+    }
+
+    // The subject of a run that was under way when this tab last stopped, or
+    // `null` if the last page left cleanly (or there was none).
+    function abandonedRun() {
+      try { return sessionStorage.getItem(RUN_SENTINEL_KEY); } catch { return null; }
+    }
+
+    // Shown in place of the game after a killed run, instead of starting it
+    // again. Retrying is offered but never automatic: a game that dies reliably
+    // would otherwise restart for as long as the player watched it.
+    function showRunStopped() {
+      if (document.getElementById('run-stopped')) return;
+      var loading = document.getElementById('loading');
+      if (loading) loading.remove();
+      document.body.classList.add('run-stopped');
+      var panel = document.createElement('div');
+      panel.id = 'run-stopped';
+      panel.setAttribute('role', 'alert');
+      var heading = document.createElement('h1');
+      heading.textContent = 'GAME STOPPED';
+      var message = document.createElement('p');
+      message.textContent =
+        'The game stopped unexpectedly and the browser reloaded this page. '
+        + 'It has not been restarted. A game with fewer levels or a smaller maze may run better.';
+      var again = document.createElement('button');
+      again.type = 'button';
+      again.textContent = '↻ Try Again';
+      again.addEventListener('click', function () { location.reload(); });
+      panel.appendChild(heading);
+      panel.appendChild(message);
+      panel.appendChild(again);
+      document.body.appendChild(panel);
+    }
+
+    // Checked here, in the document's own script, rather than in the module
+    // below: that module does not run until the WASM has been fetched and
+    // compiled, so a check there leaves the player watching "Loading game…"
+    // through a download that is about to be thrown away. Cleared as it is read,
+    // so an ordinary reload — or the retry offered by the panel — starts a game
+    // instead of reporting this stop a second time.
+    var mazeRunAbandoned = abandonedRun() !== null;
+    if (mazeRunAbandoned) {
+      clearRunSentinel();
+      showRunStopped();
+    }
+
+    (function () {
+      // Substrings that mark a failure as an exhausted-memory one rather
+      // than an ordinary bug. Matched case-insensitively against the whole
+      // error text. `RangeError` earns its place here because that is what
+      // a failed WebAssembly.Memory growth surfaces as in practice.
+      var OUT_OF_MEMORY_SIGNATURES = [
+        'out of memory',
+        'oom',
+        'memory.grow',
+        'allocation failed',
+        'allocation size overflow',
+        'rangeerror',
+        'array buffer allocation failed',
+      ];
+
+      var OUT_OF_MEMORY_REASON =
+        'The game ran out of memory. Try a game with fewer levels or a smaller maze.';
+      var GENERIC_REASON = 'The game stopped unexpectedly.';
+
+      // Whether this run has already reported. A Rust panic leaves Bevy's
+      // requestAnimationFrame loop running over a poisoned app, which can
+      // throw again every frame; without this the bridge is flooded and the
+      // first — real — cause is buried.
+      var reported = false;
+
+      function classifyFailure(text) {
+        var haystack = String(text || '').toLowerCase();
+        for (var i = 0; i < OUT_OF_MEMORY_SIGNATURES.length; i++) {
+          if (haystack.indexOf(OUT_OF_MEMORY_SIGNATURES[i]) !== -1) {
+            return OUT_OF_MEMORY_REASON;
+          }
+        }
+        return GENERIC_REASON;
+      }
+
+      function reportFailure(detail) {
+        if (reported) return;
+        reported = true;
+        // Read the phase before touching the DOM: the loading panel is
+        // present only until the game starts, so its presence is what
+        // distinguishes a failure to start from a crash during play.
+        var phase = document.getElementById('loading') ? 'load' : 'play';
+        var reason = classifyFailure(detail);
+        showFatalError(reason);
+        postToHost({ kind: 'failure', reason: reason, detail: String(detail || ''), phase: phase });
+      }
+
+      // A Rust panic, forwarded by the WASM module's panic hook. Carries a
+      // real message and source location, so it is the most useful of the
+      // three sources — the other two see only what the browser reports.
+      window.addEventListener('maze-game-panic', function (e) {
+        var d = (e && e.detail) || {};
+        reportFailure(d.message ? d.message + ' (' + d.location + ')' : 'panic');
+      });
+
+      // Uncaught errors, including anything thrown out of Bevy's animation
+      // frame callback once the game is running.
+      window.addEventListener('error', function (e) {
+        reportFailure((e && (e.message || (e.error && e.error.message))) || 'error');
+      });
+
+      // The module script's top-level await chain rejects here — a failed
+      // WASM fetch, a failed instantiation, or a failed maze/definition load.
+      window.addEventListener('unhandledrejection', function (e) {
+        var r = e && e.reason;
+        reportFailure((r && (r.message || r)) || 'unhandled rejection');
+      });
+    })();
+  </script>
+  <script>
+    window.addEventListener('maze-game-result', function (e) {
+      // Forward the result to the MAUI platform bridge so the native host can
+      // capture it. Tagged `kind: "result"` so the host can tell it from the
+      // failure payloads that share this channel; a host predating the envelope
+      // ignores the extra field and still reads it as a result.
+      postToHost(Object.assign({ kind: 'result' }, e.detail));
 
       // Record the run on the server when the player won. Fire-and-forget so a
       // failed submit never blocks the Play Again affordance below.
@@ -323,6 +613,27 @@
       // string (?id / ?def preserved). Works in both the React browser tab and
       // the MAUI WebView.
       showPlayAgain();
+    });
+
+    // The game has finished tearing down and released its memory. Forwarded so a
+    // native host can wait for the release before destroying the document,
+    // rather than guessing at a delay.
+    window.addEventListener('maze-game-stopped', function () {
+      postToHost({ kind: 'stopped' });
+      // Logged unconditionally, like the load timings above — the only visible
+      // confirmation that the teardown ran. Read on the next task rather than
+      // inline: the event is dispatched from *within* the drop, so a figure
+      // taken now would be mid-release.
+      setTimeout(function () {
+        // Via the window handle rather than the module's `live_bytes` import:
+        // this listener lives in a plain script, which has no access to module
+        // scope. The figure is therefore only available on a diagnostics launch,
+        // which is the only time anyone is reading it.
+        var live = window.__mazeLiveBytes
+          ? (window.__mazeLiveBytes() / (1024 * 1024)).toFixed(1) + ' MB'
+          : 'n/a (launch with ?mem=1 for the figure)';
+        console.log('[game] stopped — live ' + live);
+      }, 0);
     });
 
     // Records a won 3D run against the server leaderboard. Only wins are
@@ -503,24 +814,26 @@
     })();
   </script>
   <script type="module">
-    import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
+    import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=136';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=163';
 
     let secs = 0;
     const timer = setInterval(() => {
-      document.getElementById('elapsed').textContent = `${++secs}s`;
+      // The loading panel may already have been replaced — by the stopped panel,
+      // or by the game starting — and a tick into a missing element would raise
+      // an error the failure handlers would report as a crash.
+      const elapsed = document.getElementById('elapsed');
+      if (elapsed) elapsed.textContent = `${++secs}s`;
     }, 1000);
 
+    // Load-time errors the page detects itself (a missing subject, a failed
+    // fetch) — as opposed to the crashes the failure handlers catch. Both
+    // render through the same overlay so a stopped game looks the same however
+    // it stopped.
     function showLoadingError(message) {
       clearInterval(timer);
-      const loading = document.getElementById('loading');
-      if (!loading) return;
-      const spinner = loading.querySelector('.spinner');
-      if (spinner) spinner.remove();
-      const p = loading.querySelector('p') ?? loading.appendChild(document.createElement('p'));
-      p.textContent = message;
-      p.style.color = '#ff7070';
+      showFatalError(message);
     }
 
     // Top row of a subject's leaderboard for one metric. `score` sorts
@@ -561,25 +874,192 @@
       return config;
     }
 
-    const t0 = performance.now();
-    const response = await fetch(WASM_URL);
-    const t1 = performance.now();
-    console.log(`[game] fetch: ${((t1 - t0) / 1000).toFixed(2)}s`);
-    await init({ module_or_path: response });
-    const t2 = performance.now();
-    console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
-    console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
+    // Skipped entirely for a run the page has already reported as stopped: the
+    // binary is the slowest thing this page does, and no game is going to run.
+    if (!mazeRunAbandoned) {
+      const t0 = performance.now();
+      const response = await fetch(WASM_URL);
+      const t1 = performance.now();
+      console.log(`[game] fetch: ${((t1 - t0) / 1000).toFixed(2)}s`);
+      await init({ module_or_path: response });
+      const t2 = performance.now();
+      console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
+      console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
+    }
 
     const canvas = document.getElementById('bevy-canvas');
     const params = new URLSearchParams(location.search);
     const mazeId = params.get('id');
     const defId = params.get('def');
     const isPreview = params.get('preview');
+    // `?mem=1` turns on the in-game developer diagnostics readout (memory,
+    // entity counts, frame rate). Applies to every launch branch below, so a
+    // run can be measured however it was started.
+    const debugMemory = params.get('mem') === '1';
+
+    // `?res=<fraction>` and `?msaa=<samples>` are developer knobs for finding
+    // where a frame's time goes on a device. `res` is a fraction of the device's
+    // own pixel ratio — `0.5` renders at half linear resolution, a quarter of
+    // the pixels — resolved here rather than in Bevy because the browser is what
+    // knows the ratio. `msaa` is a sample count, `0`/`1` for off. Absent, the
+    // game renders exactly as it always has.
+    const renderFraction = Number(params.get('res'));
+    const renderScale = params.has('res') && renderFraction > 0
+      ? (window.devicePixelRatio || 1) * renderFraction
+      : undefined;
+    const msaaValue = Number(params.get('msaa'));
+    const msaaSamples = params.has('msaa') && Number.isInteger(msaaValue) ? msaaValue : undefined;
+
+    // `?floors=<below>,<above>` bounds how much of a multi-level stack is drawn
+    // and animated, counted from the player's own floor — `0,0` is that floor
+    // alone. Absent, every level is drawn, as always. A stack costs its whole
+    // height on every frame otherwise, however little of it can be seen.
+    // `?orb=0` leaves the finish orb unspawned. It is the game's only
+    // shadow-casting light — a point light's shadow is a cube map, so six extra
+    // scene passes — and only the final level has one, which makes that level
+    // structurally dearer than the rest.
+    const hideFinishOrb = params.get('orb') === '0';
+    // `?shadows=0` keeps the orb but stops its light casting — six scene passes
+    // fewer, with the finish still marked.
+    const disableOrbShadows = params.get('shadows') === '0';
+    // `?light=0` goes further: the orb keeps its own glow (its material is
+    // emissive) but lights nothing around it, so there is no shadow to cast.
+    const disableOrbLight = params.get('light') === '0';
+    // `?wall_animation=0` stills the water / lava pool wave; `?glow=0` drops the
+    // point light every key holder and treasure carries. Both are per-frame
+    // costs a maze pays in proportion to how much of that content it holds.
+    const freezeWallAnimation = params.get('wall_animation') === '0';
+    const disableObjectGlow = params.get('glow') === '0';
+    // `?ladders=0` resolves interim finishes to portals. A ladder climbing into a
+    // floor the window is hiding reads as rising into nothing; a portal that
+    // transports you elsewhere does not need the destination to be visible.
+    const allowLadders = params.get('ladders') !== '0';
+    // Whether this looks like a phone or a tablet.
+    //
+    // Unlike the MAUI app, which knows its own platform for a fact, a browser has
+    // to judge. `(pointer: coarse)` is the primary signal because it describes
+    // the *primary* input: a touch laptop driven by a mouse reports `fine` and is
+    // correctly left alone. iPadOS is the awkward case — Safari there presents
+    // itself as desktop Safari on a Mac, so a `MacIntel` platform reporting more
+    // than one touch point is an iPad rather than a desktop.
+    function looksLikeAMobileDevice() {
+      const touchPoints = navigator.maxTouchPoints ?? 0;
+      const iPadInDesktopClothing = navigator.platform === 'MacIntel' && touchPoints > 1;
+      const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+      return iPadInDesktopClothing || (coarsePointer && touchPoints > 0);
+    }
+
+    // `?mobile_mode=1` is the one a phone wants: it turns on the settings that
+    // measured worth having on a device, so the individual switches above stay
+    // diagnostics rather than something a caller has to assemble by hand.
+    //
+    // Absent, the page decides for itself. An explicit value always wins, so
+    // `?mobile_mode=0` is how you measure a phone *without* it — and the MAUI
+    // app, which appends the parameter on iOS and Android, is never second-
+    // guessed by a detection it does not need.
+    const mobileModeParam = params.get('mobile_mode');
+    const mobileMode =
+      mobileModeParam !== null ? mobileModeParam === '1' : looksLikeAMobileDevice();
+
+    const pair = (name) => {
+      const parts = (params.get(name) ?? '').split(',').map(Number);
+      return parts.length === 2 && parts.every(Number.isInteger) && parts.every(n => n >= 0)
+        ? parts
+        : undefined;
+    };
+    const floors = pair('floors');
+    const lightsAll = params.get('lights') === 'all';
+    const lights = pair('lights');
+
+    // Applied to every launch branch, so a run can be measured however it was
+    // started. Each override is only sent when asked for, leaving an ordinary
+    // launch's payload byte-identical to what it was before these existed.
+    function applyDebugOverrides(startConfig) {
+      startConfig.debugMemory = debugMemory;
+      if (renderScale !== undefined) startConfig.renderScale = renderScale;
+      if (msaaSamples !== undefined) startConfig.msaaSamples = msaaSamples;
+      if (hideFinishOrb) startConfig.hideFinishOrb = true;
+      if (disableOrbShadows) startConfig.disableOrbShadows = true;
+      if (disableOrbLight) startConfig.disableOrbLight = true;
+      if (freezeWallAnimation) startConfig.freezeWallAnimation = true;
+      if (disableObjectGlow) startConfig.disableObjectGlow = true;
+      if (!allowLadders) startConfig.allowLadders = false;
+      if (mobileMode) startConfig.mobileMode = true;
+      if (floors || lights || lightsAll) {
+        startConfig.levels = {
+          ...(startConfig.levels ?? {}),
+          ...(floors ? { visibleBelow: floors[0], visibleAbove: floors[1] } : {}),
+          ...(lights ? { lightsBelow: lights[0], lightsAbove: lights[1] } : {}),
+          // Explicit nulls, not omission: the field defaults to the player's own
+          // floor, so leaving it out would keep the narrow range rather than
+          // widen it.
+          ...(lightsAll ? { lightsBelow: null, lightsAbove: null } : {}),
+        };
+      }
+      return startConfig;
+    }
+
+    // Starts the game, recording that a run is under way for as long as it is.
+    // The sentinel goes down *before* the call: from this point the document can
+    // be killed at any moment, and a run that had not yet written the flag would
+    // be silently restarted on the reload that follows. A synchronous failure to
+    // start clears it again — that run never lived, and the player has already
+    // been told why. `subject` identifies which launch died.
+    // Returns whether the game started.
+    function startGame(startConfig, subject) {
+      markRunStarted(subject);
+      try {
+        start_with_config(JSON.stringify(startConfig));
+        document.getElementById('loading').remove();
+        canvas.focus({ preventScroll: true });
+        return true;
+      } catch (err) {
+        clearRunSentinel();
+        showLoadingError(`Failed to start game: ${err}`);
+        return false;
+      }
+    }
+
+    // Teardown API, exposed unconditionally: this is how a native host releases
+    // the game before navigating away, not a debug aid. The stop is honoured on
+    // the game's next frame, so a caller that needs it to have happened must
+    // give it one.
+    window.__mazeStop = stop;
+
+    // Best effort on the way out. The document is about to be destroyed and the
+    // app may get no frame to act on, so this is a cheap backstop rather than
+    // the mechanism — the deliberate wait lives on the native side.
+    //
+    // Unconditional, including when the page is only being frozen into the
+    // back-forward cache: a game we might return to still holds its memory, and
+    // the browser reclaims it no sooner than it chooses. The panel goes up first
+    // and synchronously, so a document frozen a moment later carries it — a
+    // restored page then shows an ended game rather than a stuck one.
+    window.addEventListener('pagehide', () => {
+      // The page is being left deliberately, so the run did not die — clear the
+      // sentinel before anything else, or the next load reports a crash.
+      clearRunSentinel();
+      showGameEnded();
+      try { stop(); } catch { /* module may already be gone */ }
+    });
+
+    if (debugMemory) {
+      // Diagnostic only. A function rather than a value on purpose: if
+      // `__mazeStop` drops the Bevy app, the in-game readout goes with it and
+      // cannot report its own funeral, whereas this keeps answering. Read it
+      // either side of a stop to see whether the world was actually released —
+      // the in-game `mem` row cannot show that, because WebAssembly linear
+      // memory only ever grows.
+      window.__mazeLiveBytes = live_bytes;
+    }
     // localStorage handoff key for an editor preview — mirrors
     // `PREVIEW_STORAGE_KEY` in src/utils/definitionPreview.ts.
     const PREVIEW_STORAGE_KEY = 'gameDefinitionPreview';
 
-    if (mazeId) {
+    if (mazeRunAbandoned) {
+      // Already reported before this module ran; nothing is launched.
+      clearInterval(timer);
+    } else if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React app
       // writes the maze's effective launch settings to localStorage under
       // MODE_STORAGE_KEY before navigating here; we read them back and build
@@ -690,15 +1170,10 @@
         },
         mazeJson: JSON.stringify(maze.definition),
       };
+      applyDebugOverrides(startConfig);
       // Win-banner record thresholds for this maze's board (un-tracked → none).
       await applyRecordThresholds(startConfig, `maze_id=${encodeURIComponent(mazeId)}`, token);
-      try {
-        start_with_config(JSON.stringify(startConfig));
-        document.getElementById('loading').remove();
-        canvas.focus({ preventScroll: true });
-      } catch (err) {
-        showLoadingError(`Failed to start game: ${err}`);
-      }
+      startGame(startConfig, `id=${mazeId}`);
     } else if (defId) {
       // /game/?def=<id> — a stored game definition. The fetch is auth-gated: the
       // server composes access and returns 404 for anything this user can't see.
@@ -715,7 +1190,7 @@
       });
       if (res.ok) {
         const play = await res.json();
-        const startConfig = play.config;
+        const startConfig = applyDebugOverrides(play.config);
         if (play.leaderboardTracked) {
           window.__mazeDefChallenge = play.challengeKey;
           await applyRecordThresholds(
@@ -724,13 +1199,7 @@
           // Owner preview of an unpublished definition — playable but not tracked.
           startConfig.leaderboardTracked = false;
         }
-        try {
-          start_with_config(JSON.stringify(startConfig));
-          document.getElementById('loading').remove();
-          canvas.focus({ preventScroll: true });
-        } catch (err) {
-          showLoadingError(`Failed to start game: ${err}`);
-        }
+        startGame(startConfig, `def=${defId}`);
       } else {
         const body = await res.text().catch(() => '');
         showLoadingError(`Failed to load game definition (${res.status}): ${body || res.statusText}`);
@@ -750,16 +1219,9 @@
       if (!payload || !payload.config) {
         showLoadingError('No preview to show — launch a preview from the game editor.');
       } else {
-        const startConfig = payload.config;
+        const startConfig = applyDebugOverrides(payload.config);
         startConfig.leaderboardTracked = false;
-        try {
-          start_with_config(JSON.stringify(startConfig));
-          document.getElementById('loading').remove();
-          canvas.focus({ preventScroll: true });
-          showPreviewBanner(payload.seeded);
-        } catch (err) {
-          showLoadingError(`Failed to start game: ${err}`);
-        }
+        if (startGame(startConfig, 'preview')) showPreviewBanner(payload.seeded);
       }
     } else {
       // No ?id / ?def / ?preview — nothing to load. The host page is only

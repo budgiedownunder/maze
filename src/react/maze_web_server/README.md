@@ -105,6 +105,23 @@ npm run dev:mock
 
 In mock mode the login handler accepts any email address and password.
 
+### 3D diagnostics readout
+
+To have every 3D launch turn on the in-game diagnostics readout (memory, visible
+and total mesh counts, frame rate — see the
+[`maze_game_bevy` README](../../rust/maze_game_bevy/README.md#diagnostic-overlay)):
+
+```bash
+npm run dev:debug          # Vite dev server
+npm run build:debug        # a dist/ for the Rust server to serve — use this to test on a phone
+```
+
+Both set `VITE_DEBUG_MEM=true`, which makes the launch helpers append `mem=1` to
+the `/game/` URL. **Development only — never build this way for deployment.** An
+ordinary `npm run build` compiles the flag out entirely; the host page still
+honours a `mem=1` typed into the address bar, so a normal build can be switched
+on for one launch without rebuilding.
+
 ## Production build
 
 ```bash

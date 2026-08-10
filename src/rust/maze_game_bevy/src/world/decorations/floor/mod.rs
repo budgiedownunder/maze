@@ -125,13 +125,14 @@ pub(crate) fn spawn_floor_accents_for_cell(
         (Some(mesh), Some(mt)) => {
             commands.spawn((
                 FloorAccent,
+                placement.tag(),
                 Mesh3d(mesh),
                 MeshMaterial3d(mt),
                 Transform::from_xyz(x, y, z),
             ));
         }
         _ => {
-            commands.spawn((FloorAccent, Transform::from_xyz(x, y, z)));
+            commands.spawn((FloorAccent, placement.tag(), Transform::from_xyz(x, y, z)));
         }
     }
 }

@@ -7,6 +7,7 @@ pub(crate) mod roof;
 pub(crate) mod sky;
 pub(crate) mod support_pole;
 pub(crate) mod textures;
+pub(crate) mod visibility;
 pub(crate) mod walls;
 
 pub use levels::{generate_level_maze_jsons, LevelDifficultyChange, MAX_LEVEL_COUNT};
@@ -133,7 +134,32 @@ pub(crate) fn level_offset_cells(
     }
 }
 
+/// The run level a piece of geometry belongs to.
+///
+/// Carried by everything `spawn_world` builds for a level, so a per-level policy
+/// — drawing only the floors near the player — has something to select on.
+/// Global scenery belongs to no level and carries none: the sky dome and its
+/// starfield follow the camera and are shared by every floor.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct LevelTag(pub(crate) usize);
+
+/// Marks a decorative point light — the finish orb's, and the one every key
+/// holder and treasure carries.
+///
+/// These answer to their own level range as well as the scene's, so a stack can
+/// be drawn in full while only the floors near the player pay for their glows.
+/// A shadowless point light measured ~7 ms a frame on an iPhone, which on a tall
+/// stack is the dominant cost; the meshes are emissive, so the objects still
+/// glow when their light is out.
+#[derive(Component)]
+pub(crate) struct GlowLight;
+
 impl LevelPlacement {
+    /// This placement's level as a spawnable component.
+    pub(crate) fn tag(&self) -> LevelTag {
+        LevelTag(self.level)
+    }
+
     /// The placement for `level` given every level's footprint (`dims`, bottom level
     /// at index 0) under `alignment` for a run seeded with `seed`, with its floor at
     /// `base_y` (the precomputed [`level_bases`] entry). The X/Z offset comes from
@@ -414,6 +440,23 @@ fn merge_treasure(acc: &mut Vec<(maze::TreasureStyle, u32)>, add: &[(maze::Treas
     }
 }
 
+/// An icosphere of `radius`, tessellated to `subdivisions`.
+///
+/// Every sphere in the game goes through here rather than `Sphere::new(r)`,
+/// whose mesh takes Bevy's default `Ico { subdivisions: 5 }` — **20,480
+/// triangles**, wildly out of proportion to anything the game draws, and paid
+/// again for every shadow pass the mesh appears in. Each caller names a count
+/// suited to what the sphere actually covers on screen.
+///
+/// `ico` is fallible only past ~79 subdivisions, where an icosphere outgrows the
+/// `u16` index buffer; the small literals used here cannot reach it.
+pub(crate) fn icosphere(radius: f32, subdivisions: u32) -> Mesh {
+    Sphere::new(radius)
+        .mesh()
+        .ico(subdivisions)
+        .expect("a low subdivision count is well within the limit")
+}
+
 pub(crate) fn lcg(state: &mut u64) -> f32 {
     *state = state
         .wrapping_mul(6364136223846793005)
@@ -513,8 +556,8 @@ pub(crate) fn explore_cell_raw(
     }
 }
 
-fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32) {
-    commands.spawn((
+fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32, msaa: Option<u32>) {
+    let mut camera = commands.spawn((
         Camera3d::default(),
         // Explicit Projection so we can override Bevy's narrow default
         // vertical FOV — see CAMERA_FOV_VERTICAL_RADIANS for rationale.
@@ -527,6 +570,10 @@ fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32) {
         }),
         Transform::from_translation(start_pos).with_rotation(Quat::from_rotation_y(start_yaw)),
     ));
+    // Absent (the normal run), Bevy's own default multisampling stands.
+    if let Some(msaa) = crate::render::msaa_override(msaa) {
+        camera.insert(msaa);
+    }
 }
 
 /// Each frame, set the camera's vertical FOV from the current window
@@ -612,8 +659,9 @@ fn spawn_level(
     // whole stack. See `rays_per_chest`.
     treasure_rays: usize,
     // Rocks each lava cell on this level gets — likewise a global across-levels
-    // budget computed once in `spawn_world`. See `lava::run_lava_rocks`.
-    lava_rocks: usize,
+    // Lava cells across the whole run, from which each cell's rock count is
+    // derived. See `lava::rocks_for_cell`.
+    lava_cells_total: usize,
     // The level-above's placement + `(rows, cols)` footprint, or `None` for the top
     // level — forwarded to the door spawn so a raised portcullis under a taper gap
     // (no cell above its world XZ) stays visible instead of hiding.
@@ -659,7 +707,7 @@ fn spawn_level(
                     continue;
                 }
                 walls::spawn_walls_for_cell(commands, assets.wall, grid, cell_entities, r, c, config, placement);
-                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_rocks);
+                walls::spawn_non_occluding_for_cell(commands, assets.nonoccluding, grid, cell_entities, config, wall_type, r, c, placement, lava_cells_total);
                 // On a lifted (floating) level, a pool cell's basin side below the
                 // rim would otherwise show through to the level below — and, under
                 // taper, to its exposed surrounding ring. Seal its exposed edges so
@@ -737,6 +785,7 @@ fn spawn_underside_seal(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 UndersideSeal,
+                placement.tag(),
                 Transform::from_xyz(x, centre_y, z)
                     .with_scale(Vec3::new(1.0, height / floor::FLOOR_THICKNESS, 1.0)),
                 Mesh3d(mesh),
@@ -744,7 +793,7 @@ fn spawn_underside_seal(
             ));
         }
         _ => {
-            commands.spawn((UndersideSeal, Transform::from_xyz(x, centre_y, z)));
+            commands.spawn((UndersideSeal, placement.tag(), Transform::from_xyz(x, centre_y, z)));
         }
     };
 }
@@ -1263,7 +1312,7 @@ pub(crate) fn spawn_world(
         enemy_move_period_ms: Some(config.enemy_move_period_ms),
         enemy_damage: Some(config.enemy_damage),
         max_hp: Some(config.max_hp),
-        starting_hp: Some(config.starting_hp),
+        starting_hp: config.starting_hp,
     };
     // `MAZE_DEMO=<focus>` native run — a rig showroom or the multi-level stack;
     // both relax the round timer so there's no pressure while inspecting. These
@@ -1360,6 +1409,11 @@ pub(crate) fn spawn_world(
         .expect("maze JSON is host-validated or a hardcoded demo, so it always parses");
     let grid = game.grid().to_vec();
     let cell_entities = game.cell_entities().clone();
+    // Read the HP the game actually starts with rather than re-deriving it from
+    // the config: `starting_hp` is an `Option` the maze crate resolves (`None`
+    // means full health) and clamps, so asking it is the only way the HUD and the
+    // player agree.
+    let (hud_max_hp, hud_start_hp) = (game.max_hp(), game.hp());
 
     let start_row = game.player_row();
     let start_col = game.player_col();
@@ -1404,7 +1458,7 @@ pub(crate) fn spawn_world(
         last_displayed_secs: -1,
     });
 
-    spawn_camera(&mut commands, start_pos, start_yaw);
+    spawn_camera(&mut commands, start_pos, start_yaw, config.msaa_samples);
     // Each level's effective sky (the top level may override it). The global dome
     // can only show one at a time, so spawn the bottom level's now and let
     // `sky_switch_on_level_change` re-skin it as the player climbs into a level
@@ -1453,26 +1507,34 @@ pub(crate) fn spawn_world(
         object: &object_assets,
         roof: &roof_assets,
     };
-    // The bottom level's footprint is the reference the upper levels' `Centre`
-    // offsets are measured against.
-    let base_dims = (grid.len(), grid.first().map_or(0, |row| row.len()));
+    /// A level's static content: its grid and its sparse per-cell rig overrides.
+    struct LevelSource {
+        grid: Vec<Vec<char>>,
+        cells: HashMap<(usize, usize), Vec<CellEntity>>,
+    }
+
+    // Every level's static content, parsed once. Five passes below want one or
+    // both of these — footprints, pool detection, start/finish anchors, the spawn
+    // loop and the support poles — and each would otherwise re-parse every upper
+    // level for itself, and re-clone level 0's. Level 0 needs no parse at all: the
+    // live game already holds it.
+    let mut level_sources: Vec<LevelSource> = Vec::with_capacity(levels.len());
+    level_sources.push(LevelSource { grid: grid.clone(), cells: cell_entities });
+    for json in levels.iter().skip(1) {
+        let g = MazeGame::from_json(json)
+            .expect("multi-level maze JSON is host-validated or a hardcoded demo");
+        level_sources
+            .push(LevelSource { grid: g.grid().to_vec(), cells: g.cell_entities().clone() });
+    }
+    let level_sources = level_sources;
 
     // Each level's `(rows, cols)` footprint. A door spawn reads the level-above's
     // footprint to decide whether a raised portcullis has a cell to intrude on (a
     // tapered upper level may leave a gap above a lower door — see
-    // `objects::door::has_cell_above`). Level 0 reuses the already-parsed grid.
-    let level_dims: Vec<(usize, usize)> = levels
+    // `objects::door::has_cell_above`).
+    let level_dims: Vec<(usize, usize)> = level_sources
         .iter()
-        .enumerate()
-        .map(|(level, json)| {
-            if level == 0 {
-                base_dims
-            } else {
-                let g = MazeGame::from_json(json)
-                    .expect("multi-level maze JSON is host-validated or a hardcoded demo");
-                (g.grid().len(), g.grid().first().map_or(0, |row| row.len()))
-            }
-        })
+        .map(|s| (s.grid.len(), s.grid.first().map_or(0, |row| row.len())))
         .collect();
 
     // Precompute each level's world-space floor Y (the `base_level_y` table) before
@@ -1481,19 +1543,13 @@ pub(crate) fn spawn_world(
     // wall-top of the level below — where each cell's underside is sealed — instead
     // of poking through into it. A pool-free level adds nothing (sits on the walls
     // below as before). `level_bases` accumulates this in one pass.
-    // Per level, from one parse of its grid: whether it carries a pool, its
-    // treasure-cell count, and its lava-cell count.
-    let level_meta: Vec<(bool, usize, usize)> = levels
+    // Per level: whether it carries a pool, its treasure-cell count, and its
+    // lava-cell count.
+    let level_meta: Vec<(bool, usize, usize)> = level_sources
         .iter()
         .enumerate()
-        .map(|(level, json)| {
-            let (lgrid, lcells) = if level == 0 {
-                (grid.clone(), cell_entities.clone())
-            } else {
-                let g = MazeGame::from_json(json)
-                    .expect("multi-level maze JSON is host-validated or a hardcoded demo");
-                (g.grid().to_vec(), g.cell_entities().clone())
-            };
+        .map(|(level, source)| {
+            let (lgrid, lcells) = (&source.grid, &source.cells);
             // Detect pools against this level's effective wall type — a rolled
             // `random` water / lava level must be counted here too (it drives the
             // pool lift + the cross-level lava-rocks budget below).
@@ -1509,7 +1565,7 @@ pub(crate) fn spawn_world(
             let mut lava_cells = 0usize;
             for (r, row) in lgrid.iter().enumerate() {
                 for c in 0..row.len() {
-                    match walls::pool_type_at(&lgrid, &lcells, &lcfg, r, c) {
+                    match walls::pool_type_at(lgrid, lcells, &lcfg, r, c) {
                         Some(WallType::Lava) => {
                             has_pool = true;
                             lava_cells += 1;
@@ -1542,7 +1598,7 @@ pub(crate) fn spawn_world(
     // Likewise every lava cell on every level bobs its rocks each frame, so the
     // rock budget is global to the whole stack — bound by the total lava cells over
     // all levels (see `run_lava_rocks`).
-    let lava_rocks = walls::lava::run_lava_rocks(level_meta.iter().map(|(_, _, l)| *l));
+    let lava_cells_total: usize = level_meta.iter().map(|(_, _, l)| *l).sum();
 
     // Per-level world (start XZ, finish XZ). An interim finish may use a ladder
     // only when the next level's start sits directly above it (same world XZ) so
@@ -1563,23 +1619,15 @@ pub(crate) fn spawn_world(
     // decides whether the next start sits directly above (the ladder-vs-portal
     // constraint); the finish cell resolves the concrete rig kind for the hatch.
     type LevelAnchor = (Option<Vec2>, Option<Vec2>, Option<(usize, usize)>);
-    let level_anchors: Vec<LevelAnchor> = levels
+    let level_anchors: Vec<LevelAnchor> = level_sources
         .iter()
         .enumerate()
-        .map(|(level, json)| {
-            let lgrid: Vec<Vec<char>> = if level == 0 {
-                grid.clone()
-            } else {
-                MazeGame::from_json(json)
-                    .expect("multi-level maze JSON is host-validated or a hardcoded demo")
-                    .grid()
-                    .to_vec()
-            };
+        .map(|(level, source)| {
             let placement = level_placements[level];
             (
-                cell_world_xz(&lgrid, 'S', placement),
-                cell_world_xz(&lgrid, 'F', placement),
-                find_cell(&lgrid, 'F'),
+                cell_world_xz(&source.grid, 'S', placement),
+                cell_world_xz(&source.grid, 'F', placement),
+                find_cell(&source.grid, 'F'),
             )
         })
         .collect();
@@ -1606,7 +1654,7 @@ pub(crate) fn spawn_world(
         })
         .collect();
 
-    for (level, level_json) in levels.iter().enumerate() {
+    for (level, source) in level_sources.iter().enumerate() {
         let is_final = level + 1 == level_count;
         // The vertical gap this level was lifted by — non-zero only for an upper
         // level that carries a pool. Where non-zero, each cell's underside is
@@ -1645,22 +1693,12 @@ pub(crate) fn spawn_world(
         // top, so it always renders under the base sky — hence the base sky's
         // enclosure decides it. Drives the start-cell hatch's underside.
         let below_roofed = level >= 1 && config.sky_type.is_enclosed();
-        if level == 0 {
-            // The live level reuses the already-parsed grid + per-cell overrides.
-            let placement = level_placements[0];
-            let level_config = level_render_config(&config, is_final, level_count > 1, &grid, 0);
-            spawn_level(&mut commands, &level_assets, &mut materials, &grid, &cell_entities, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
-        } else {
-            // Upper levels need only their grid + per-cell overrides for the static
-            // geometry; the game options don't affect either, so parse without them.
-            let level_game = MazeGame::from_json(level_json)
-                .expect("multi-level maze JSON is host-validated or a hardcoded demo");
-            let level_grid = level_game.grid().to_vec();
-            let level_cells = level_game.cell_entities().clone();
-            let placement = level_placements[level];
-            let level_config = level_render_config(&config, is_final, level_count > 1, &level_grid, level);
-            spawn_level(&mut commands, &level_assets, &mut materials, &level_grid, &level_cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_rocks, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
-        }
+        // Static geometry needs only the grid + per-cell overrides, which the
+        // game options do not affect — so every level, live or not, spawns the
+        // same way from its parsed source.
+        let placement = level_placements[level];
+        let level_config = level_render_config(&config, is_final, level_count > 1, &source.grid, level);
+        spawn_level(&mut commands, &level_assets, &mut materials, &source.grid, &source.cells, &level_config, placement, is_final, ladder_allowed, &dead_end_skip, hatch_at_start, finish_is_ladder_here, below_roofed, gap, treasure_rays, lava_cells_total, level_placements.get(level + 1).copied(), level_dims.get(level + 1).copied());
     }
 
     // Support poles: a level with no solid walls (e.g. all water / lava) carries
@@ -1671,21 +1709,6 @@ pub(crate) fn spawn_world(
     // never from the top level. Visual-only.
     if level_count > 1 {
         let pole_assets = support_pole::build_support_pole_assets(&mut meshes, &mut materials);
-        // (grid, cell-entities, placement) per level — level 0 reuses the live grid.
-        let level_info = levels
-            .iter()
-            .enumerate()
-            .map(|(level, json)| {
-                let (g, cells) = if level == 0 {
-                    (grid.clone(), cell_entities.clone())
-                } else {
-                    let lg = MazeGame::from_json(json)
-                        .expect("multi-level maze JSON is host-validated or a hardcoded demo");
-                    (lg.grid().to_vec(), lg.cell_entities().clone())
-                };
-                (g, cells, level_placements[level])
-            })
-            .collect::<Vec<_>>();
         // A perimeter wall carries the upper floor's edges only when it's solid (a
         // water/lava perimeter is a non-occluding pool ring and can't).
         let perimeter_solid = config.perimeter_walls && !config.wall_type.is_non_occluding();
@@ -1697,7 +1720,7 @@ pub(crate) fn spawn_world(
         // at the nearer level's floor height. The base level always sits under it.
         let floor_below = |x: f32, z: f32, upper: usize| -> f32 {
             for l in (0..upper).rev() {
-                let (gl, _, pl) = &level_info[l];
+                let (gl, pl) = (&level_sources[l].grid, level_placements[l]);
                 let rows_l = gl.len();
                 let cols_l = gl.first().map_or(0, |r| r.len());
                 let within = x >= pl.world_x(0.0)
@@ -1711,8 +1734,8 @@ pub(crate) fn spawn_world(
             bases[0]
         };
         for i in 0..level_count - 1 {
-            let (gi, ci, pi) = &level_info[i];
-            let (gj, _, pj) = &level_info[i + 1];
+            let (gi, ci, pi) = (&level_sources[i].grid, &level_sources[i].cells, level_placements[i]);
+            let (gj, pj) = (&level_sources[i + 1].grid, level_placements[i + 1]);
             let rows_i = gi.len();
             let cols_i = gi.first().map_or(0, |r| r.len());
             let rows_j = gj.len();
@@ -1747,7 +1770,7 @@ pub(crate) fn spawn_world(
                 } else {
                     pj.world_z(cr as f32 * CELL_SIZE + CELL_SIZE) - inset
                 };
-                support_pole::spawn_support_pole(&mut commands, &pole_assets, x, z, floor_below(x, z, i + 1), bases[i + 1]);
+                support_pole::spawn_support_pole(&mut commands, LevelTag(i + 1), &pole_assets, x, z, floor_below(x, z, i + 1), bases[i + 1]);
             }
         }
     }
@@ -1769,7 +1792,6 @@ pub(crate) fn spawn_world(
                 ),
                 _ => objects::finish::ladder::spawn_ladder(
                     &mut commands,
-                    &object_assets.common,
                     &object_assets.finish.ladder,
                     &grid,
                     r,
@@ -1798,8 +1820,8 @@ pub(crate) fn spawn_world(
         &mut commands,
         &window,
         &mut images,
-        config.max_hp,
-        config.starting_hp,
+        hud_max_hp,
+        hud_start_hp,
     );
 
     // Record the run state and spawn the level indicator (a no-op for a

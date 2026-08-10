@@ -36,14 +36,14 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 ### Visual features
 
 - **Procedural brick-pattern** texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
-- **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades. Bypassed when **per-quadrant wall material variation** is on for that difficulty.
-- **Configurable wall texture** — when **per-quadrant wall material variation** is off, the chosen wall texture (one of brick / dressed stone / wood / cobblestone) applies uniformly across the maze, with the per-cell tint variation still riding on top. Selected per difficulty via `[game.play3d.<difficulty>] wall_type`; default `brick`. Bypassed when **wall material variation** is on (same gating as `wall_tint`). `wall_type = "random"` rolls one of the seven wall types (the four solid textures plus water / lava / iron-fence) **per level**, seeded off the maze, so each level is one coherent — but independently chosen — style. The per-cell rig selectors (`enemy_type` / `health_style` / `key_holder`) likewise accept `"random"`, rolling a concrete rig **per cell** seeded off the maze (a per-cell override in the maze JSON still wins).
+- **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades. Bypassed when **per-quadrant wall material variation** is on.
+- **Configurable wall texture** — when **per-quadrant wall material variation** is off, the chosen wall texture (one of brick / dressed stone / wood / cobblestone) applies uniformly across the maze, with the per-cell tint variation still riding on top. Set by `GameConfig::wall_type`; default `brick`. Bypassed when **wall material variation** is on (same gating as `wall_tint`). `wall_type = "random"` rolls one of the seven wall types (the four solid textures plus water / lava / iron-fence) **per level**, seeded off the maze, so each level is one coherent — but independently chosen — style. The per-cell rig selectors (`enemy_type` / `health_style` / `key_holder`) likewise accept `"random"`, rolling a concrete rig **per cell** seeded off the maze (a per-cell override in the maze JSON still wins).
 - **Non-occluding wall types** — beyond the four solid textures, a wall cell's `wallType` override (falling back to the per-maze `wall_type`) can skin it as a floor-level **water** or **lava** pool, or a see-through **iron-fence** grille, so it reads as something you can see across rather than an occluding barrier.
-- **Per-quadrant wall material variation** — splits the maze into a 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall material (brick / dressed stone / wood / cobblestone), with the quadrant-to-kind mapping permuted by the seed so different seeds rotate which quadrant gets which material. Supersedes the per-cell tint variation AND the configured `wall_type` when on. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_material_variation`. The wood and cobblestone textures are RGB-coloured at 128×128 with per-plank / per-cobble tone palettes (honey / oak / walnut / dark-walnut for wood; warm-light, warm-mid, brown-weathered, mossy-green for cobblestone); brick and dressed stone are still greyscale at 64×64 with emissive-tinted chromaticity.
-- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), `sunset` (warm orange with sparse dark clouds and sparse stars), and two enclosed modes, `dungeon` and `chamber`. The open-air modes each render a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ship a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. The enclosed modes instead cap every passable cell with a ceiling tile at the top of the walls and dim the lighting, sealing the player in (the dome behind is near-black so the grout gaps between tiles read as dark seams): `dungeon` uses a hewn dark-rock ceiling (a tileable rock-face texture tinted by a dim emissive), while `chamber` uses the cell's own wall material so the maze reads as a finished, built interior (brick maze → brick ceiling, timber maze → timber ceiling). Each ceiling tile is inset so a grid of dark grout lines separates adjacent tiles — that structure is what keeps it reading as a solid coffered ceiling rather than open sky. Selected per difficulty via `[game.play3d.<difficulty>] sky_type`; default `night`. In a multi-level run the top level can take its own `sky_type` (and `perimeter_walls`) via the `[game.play3d.<difficulty>.levels.top]` override, so a run can climb from sealed lower floors out to an open-sky summit — the single global dome + lighting switches to the new sky on arrival as the player ascends into a level whose effective sky differs (lower levels keep the base sky).
-- **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each landmark is a composite of several scaled primitives (a brazier is column + bowl + halo with a sin-flicker on the bowl glow; an urn is a stacked-cylinder vase silhouette with two darker pattern bands wrapping the belly; a pillar is base + shaft + capital with vertical perimeter grooves around the discs; a chest is body + rounded lid + leather binding cross on every side face + lid-top binding + front-face keyhole). Every visible sub-mesh ships paired with a slightly-larger black sibling using the inverted-hull outline trick (`cull_mode: Face::Front`) so each part reads as distinct from its neighbours and from the corridor walls behind it. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
-- **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
-- **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
+- **Per-quadrant wall material variation** — splits the maze into a 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall material (brick / dressed stone / wood / cobblestone), with the quadrant-to-kind mapping permuted by the seed so different seeds rotate which quadrant gets which material. Supersedes the per-cell tint variation AND the configured `wall_type` when on. Toggled by `GameConfig::landmarks.wall_material_variation`. The wood and cobblestone textures are RGB-coloured at 128×128 with per-plank / per-cobble tone palettes (honey / oak / walnut / dark-walnut for wood; warm-light, warm-mid, brown-weathered, mossy-green for cobblestone); brick and dressed stone are still greyscale at 64×64 with emissive-tinted chromaticity.
+- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), `sunset` (warm orange with sparse dark clouds and sparse stars), and two enclosed modes, `dungeon` and `chamber`. The open-air modes each render a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ship a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. The enclosed modes instead cap every passable cell with a ceiling tile at the top of the walls and dim the lighting, sealing the player in (the dome behind is near-black so the grout gaps between tiles read as dark seams): `dungeon` uses a hewn dark-rock ceiling (a tileable rock-face texture tinted by a dim emissive), while `chamber` uses the cell's own wall material so the maze reads as a finished, built interior (brick maze → brick ceiling, timber maze → timber ceiling). Each ceiling tile is inset so a grid of dark grout lines separates adjacent tiles — that structure is what keeps it reading as a solid coffered ceiling rather than open sky. Set by `GameConfig::sky_type`; default `night`. In a multi-level run the top level can take its own sky (and perimeter walls) via `GameConfig::top_sky_type` / `top_perimeter_walls`, so a run can climb from sealed lower floors out to an open-sky summit — the single global dome + lighting switches to the new sky on arrival as the player ascends into a level whose effective sky differs (lower levels keep the base sky).
+- **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each landmark is a composite of several scaled primitives (a brazier is column + bowl + halo with a sin-flicker on the bowl glow; an urn is a stacked-cylinder vase silhouette with two darker pattern bands wrapping the belly; a pillar is base + shaft + capital with vertical perimeter grooves around the discs; a chest is body + rounded lid + leather binding cross on every side face + lid-top binding + front-face keyhole). Every visible sub-mesh ships paired with a slightly-larger black sibling using the inverted-hull outline trick (`cull_mode: Face::Front`) so each part reads as distinct from its neighbours and from the corridor walls behind it. Toggled by `GameConfig::landmarks.dead_end_objects`.
+- **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Toggled by `GameConfig::landmarks.wall_decorations`.
+- **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Toggled by `GameConfig::landmarks.floor_accents`.
 - **Keys, doors & a bag** — `K` cells render a glowing gold key — a ringed bow, shaft, and teeth, each paired with a black inverted-hull outline so the parts read distinctly — floating, bobbing, and slowly spinning a fixed clearance above its holder. Walk onto one to auto-collect it — the key rises and shrinks away in a brief flourish, leaving the holder behind as an emptied stand — adding it to the **bag HUD** (a row of grouped item chips centred along the bottom of the screen — each item type shown once as an icon with a rolling `xN` count: a key chip plus one chip per collected treasure style, each style with its own icon; a type whose count is zero is dropped, so the key chip disappears once keys are spent, and chips wrap onto rows above when they exceed the window width). `D` cells are **doors** rendered in the surrounding cell's wall material, marked with a brass keyhole and eligible for the same sparse wall decorations as ordinary wall panels. A door cell is locked — impassable from every side — until you hold forward against it while carrying a key, which consumes the key and opens it over ~1 s, permanently. How a door *opens* depends on the cell's shape: a **straight corridor** (two open edges on opposing sides) gets a single leaf that **swings** on a hinge; any other topology (corner, T-junction, open area) seals **each** open edge with a leaf that **slides down into the floor**, since a swing would sweep awkwardly through the open space. The key-holder base reuses the shared decorative-prop rigs — `pedestal` renders the broken **pillar**, `chest` the bound treasure **chest** (its lock face turned toward the corridor), and `floating-key` stands the key alone — and the door open-style (swing / slide / portcullis / dissolve) are each chosen per cell from the cell's `keyHolder` / `doorStyle` override, falling back to the per-maze `GameConfig.key_holder` / `GameConfig.door_style`. The built-in demo maze places a key in a dead-end and a door guarding the finish, so the mechanic is playable from `cargo run` with no maze authoring.
 - **Enemies, HP & health pickups** — `E` cells spawn a moving enemy rig that bobs in place and chases the player along a wall-aware BFS shortest path at a fixed move period (default 1500 ms per cell, `N > E > S > W` tie-break on equal-distance choices). Two visual rigs — **Goblin** (default — green body with painted ear-to-ear mouth and per-side eyeballs) and **Ghost** (translucent floating figure with a hemisphere head, truncated-cone body, rippling sheet hem, and a glowing-red eyeball inside each arch-shaped eye) — are chosen per cell from its `enemyType` override, falling back to the per-maze `GameConfig.enemy_type`. Same-cell collisions — whether the player walks onto an enemy's cell or an enemy steps onto the player's cell — fire `GameEvent::PlayerDamaged` and a brief red damage-flash overlay; the **HP HUD** (top-left, "LIFE" label + a row of red heart icons that dim as HP drops) is rebuilt on every change. Reaching 0 HP routes through the same lose path as a wall-clock timeout — movement freezes and the lose overlay appears. `H` cells spawn a floating health pickup with a gentle scale pulse + Y-spin idle, its rig — **Heart** (default — two upper sphere lobes + a flat-faced downward pyramid tip whose corners tuck flush into the lobes) and **Potion** (capped bottle with a glowing liquid) — chosen per cell from its `healthStyle` override, falling back to the per-maze `GameConfig.health_style`. Auto-pickup on walk-over: when `hp < max_hp` the cell clears + a `PlayerHealed` event fires + HP increments; when `hp == max_hp` the cell stays + a `PlayerNotHealed` event surfaces an "already at full health" hint so the host can flash it. In a multi-level run only the **current** level's enemies chase; every other level's enemies idle-bob in place until you climb to that level.
 - **Treasure** — `T` cells render an **open chest** (the shared chest rig with its lid swung open) heaped almost overflowing with loot: coins for **silver** / **gold**, faceted gems for **diamonds** / **jewels**, chosen per cell from the cell's `style` override (default silver). A ring of sparkles radiates from the loot beneath a style-tinted glow. The chest faces outward from a dead-end (and along a corridor) like the key-holder / dead-end chests, and at a dead-end treasure takes precedence over the landmark prop. Walk onto it to auto-collect: the loot rises and shrinks away in a brief flourish while the open chest stays behind, emptied (the engine clears the cell so it can't be re-collected). The collected value is folded into the run score via `MazeGame::score`, and a per-style treasure chip appears in the bag HUD. The built-in demo places one bare (silver) treasure in a dead-end so it's playable from `cargo run`.
@@ -123,6 +123,126 @@ cd src/rust
 $env:MAZE_DEMO = 'gallery'; cargo run -p maze_game_bevy
 ```
 
+### Diagnostic overlay
+
+`GameConfig::debug_memory` adds a readout below the minimap's dimensions footer,
+for investigating what grows as more of a maze comes into view:
+
+```
+vis 1234/5678
+fps 58
+mem 214 MB
+live 96 MB
+mes 42
+mat 31
+img 18
+```
+
+| Row | Meaning |
+|:--|:--|
+| `vis` | Visible `Mesh3d` entities against the total spawned. Visibility is frustum-based, so this shows whether cost is driven by what is *in view* rather than by what exists. |
+| `fps` | Frame rate: a smoothed *frame time*, inverted for display. Smoothing the duration rather than the rate keeps an irregular run from reading better than it plays. The estimate is discarded when a game starts (and its first frame, which carries the world spawn, is not counted), so the figure is the game's own within a moment rather than the title screen's for the next several seconds. |
+| `mem` | WebAssembly linear-memory size — the **ceiling** the heap has grown to. It can only ever grow, so it never falls, even when memory is freed. Reads `n/a` on native builds. |
+| `live` | Bytes currently allocated and not yet freed, from the counting global allocator. Unlike `mem`, this **falls** when memory is genuinely returned, so it is the figure that shows whether ending a game released anything. |
+| `mes` | Distinct `Mesh` **assets** in `Assets<Mesh>`. |
+| `mat` | Distinct `StandardMaterial` **assets**. |
+| `img` | Distinct `Image` (texture) **assets**. |
+
+The last three count **assets, not instances**: one wall mesh shared by a
+thousand cells counts once. That is the point of showing them next to `vis` —
+`vis` grows with what is drawn, `mes` / `mat` / `img` grow with what is
+*resident*, and the two answer different questions.
+
+Rows are left-aligned to the minimap's left edge, one metric each, so nothing
+runs off the screen edge. The readout recomputes four times a second rather than
+every frame, so it does not meaningfully change the figures it reports.
+
+The readout appears from the **title-screen countdown**, before the world is
+built, and carries through into play. The title reading is therefore the
+pre-world baseline — the difference between it and the first frame of play is
+what the world itself costs, which separates fixed module overhead from scene
+cost.
+
+Off unless asked for: the browser host sets it from `/game/?mem=1` and the MAUI
+app appends that parameter in Debug builds. Nothing is spawned otherwise.
+
+A native run has no host to set it, so use `MAZE_DEBUG_MEM=1` (accepts `1` or
+`true`). It combines with `MAZE_DEMO`:
+
+```bash
+cd src/rust
+MAZE_DEBUG_MEM=1 MAZE_DEMO=multilevel_edge cargo run -p maze_game_bevy
+```
+
+```powershell
+cd src/rust
+$env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_edge'; cargo run -p maze_game_bevy
+```
+
+As with `MAZE_DEMO`, it is ignored under `cargo test` so a variable left set in a
+shell cannot change what the headless tests spawn.
+
+### Level visibility window
+
+A multi-level run spawns every level up front and keeps it spawned, so a tall
+stack pays for its whole height on every frame. `MAZE_FLOORS=<below>,<above>`
+bounds what is drawn **and** animated, counted from the player's own floor; `0,0`
+is that floor alone. Unset (the default) draws and animates every level, as
+before. The saving measured on a device came from not *drawing* the other floors;
+skipping their animation was measured separately and made no difference, so it is
+kept for tidiness rather than for speed.
+
+```bash
+cd src/rust
+MAZE_FLOORS=0,0 MAZE_DEBUG_MEM=1 MAZE_DEMO=multilevel_centre cargo run --release -p maze_game_bevy
+```
+
+```powershell
+cd src/rust
+$env:MAZE_FLOORS = '0,0'; $env:MAZE_DEBUG_MEM = '1'; $env:MAZE_DEMO = 'multilevel_centre'; cargo run --release -p maze_game_bevy
+```
+
+`MAZE_MOBILE=1` (`/game/?mobile_mode=1`) runs with the settings a phone needs —
+the player's own floor, and no point light on keys, treasures or the finish orb.
+The floor **above** is drawn too while the maze is small enough to afford both,
+because that is the direction of travel and it is what keeps a ladder coherent:
+the floor it climbs into is drawn, though not lit, since the lights keep their
+own narrower range. Past that footprint the floor above is given up and interim
+finishes become portals, there being nothing to climb into. One policy rather
+than a handful of parameters; the switches below stay available as diagnostics
+and can only add to it.
+
+`MAZE_NO_LADDERS=1` (`/game/?ladders=0`) stops interim levels finishing with a
+ladder: the finish type resolves to a portal, which takes the hatch above and
+the climb animation with it. A ladder climbing into a floor that is not drawn
+reads as rising into nothing, so this pairs with a level window that hides the
+destination.
+
+`MAZE_NO_WALL_ANIM=1` (`/game/?wall_animation=0`) stills the water / lava pool
+wave, and `MAZE_NO_GLOW=1` (`/game/?glow=0`) drops the point light on every key
+holder and treasure — both diagnostics for where a frame goes.
+
+`MAZE_NO_ORB_LIGHT=1` keeps the finish orb but gives it no light
+(`/game/?light=0` in the browser) — it is emissive, so it still glows, but it
+stops lighting its surroundings. `MAZE_NO_ORB_SHADOWS=1` is milder: the light
+stays but stops casting shadows (`/game/?shadows=0`); `MAZE_NO_ORB=1` leaves the orb out
+altogether (`/game/?orb=0`). It is the only shadow-casting light in the game, on the
+final level alone, so it is the one thing that makes reaching the top of a stack
+dearer than any other floor.
+
+Point lights reach the player's own floor and no further **by default**, on
+every platform: a ten-level lava stack ran at 10-25 fps on a desktop with every
+floor lit and 45-50 lit this way, with the scene itself untouched.
+`MAZE_LIGHTS=all` lights the whole stack again, and
+`MAZE_LIGHTS=<below>,<above>` picks any range between. Single-level games are
+unaffected — the range is around the floor the player is on.
+
+Use `--release` for anything you intend to compare: Bevy is much slower
+unoptimised, so a dev-profile frame rate says little. The browser host sets the
+same window from `/game/?floors=<below>,<above>`, and a stored game definition
+can carry it as `levels.visibleBelow` / `levels.visibleAbove`. Ignored under
+`cargo test`, like the variables above.
+
 ### Testing
 
 To test the `maze_game_bevy` crate:
@@ -139,16 +259,21 @@ The crate is organised into focused per-concern modules under `src/`:
 ```
 src/
 ├── lib.rs                  module decls + public re-exports + build_app
+├── main.rs                 the native desktop binary (validates MAZE_DEMO, then build_app + run)
 ├── palette.rs              cross-module colour constants
 ├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, MultiLevelRun, etc.)
 ├── images.rs               generic Bevy Image factory (sampler-tuned)
+├── alloc.rs                counting global allocator (live_bytes) + request_stop — what the readout's `live` row reports, and the only figure that FALLS when memory is returned
+├── render.rs               render-target overrides (window scale factor, MSAA) AND the settings policies: apply_env_overrides folds the native switches in once, resolve_mobile_mode applies what a phone needs, resolve_ladders collapses that into the finish type
 ├── movement.rs             input + animation + quit
 ├── tick.rs                 central game_tick_system + damage-flash overlay system
+├── transition.rs           the interim-finish transition between levels: a ladder climb or a portal step, plus the portal's screen flash
 ├── outcome.rs              outcome_watcher_system (win / lose detection from MazeGame state)
 ├── world/                  3D scene construction
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
 │   ├── gallery.rs          MAZE_DEMO rig-gallery demos (focus selector + maze JSON)
 │   ├── levels.rs           multi-level generation: N chained level grids (generate_level_maze_jsons)
+│   ├── visibility.rs       LevelWindow: two LevelTag-keyed ranges — which floors are drawn, and (separately, and never wider) which keep their point lights; apply_level_window re-applies both when the player changes level
 │   ├── support_pole.rs     SupportPole — slim column used to brace a floating upper level at its unsupported corners
 │   ├── textures/           shared procedural world textures
 │   │   ├── mod.rs          module declarations
@@ -193,7 +318,8 @@ src/
 │   │   ├── mod.rs          ObjectAssets bundle (incl. shared CommonObjectAssets) + spawn_objects_for_cell (finish, dead-end, key holders, doors, enemies, health, treasure)
 │   │   ├── overrides.rs    per-cell rig resolvers (cell override → default) for every per-cell entity rig
 │   │   ├── common/         shared decorative-prop rigs + helpers (used by dead_end AND key_holder)
-│   │   │   ├── mod.rs      CommonObjectAssets + spawn_with_outline (optional parent) + emissive/outline material helpers + OUTLINE_SCALE + yaw_toward_open_neighbour
+│   │   │   ├── mod.rs      CommonObjectAssets (the baked rigs) + emissive/outline material helpers + yaw_toward_open_neighbour
+│   │   │   ├── bake.rs     RigBuilder / BakedRig: a prop's sub-meshes merged into one mesh per material (bodies + one outline shell), baked once and spawned as one entity per material + OUTLINE_SCALE
 │   │   │   ├── brazier.rs  brazier rig + BrazierBowl marker + brazier_flicker_system
 │   │   │   ├── urn.rs      urn rig + materials
 │   │   │   ├── pillar.rs   broken-pillar rig + materials + TOP_Y apex
@@ -212,7 +338,9 @@ src/
 │   │   │   ├── panel.rs    the wall-material door slab
 │   │   │   ├── keyhole.rs  brass lock plate + dark keyhole cutout
 │   │   │   ├── swing.rs    swinging-leaf rig (straight corridors)
-│   │   │   └── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   │   ├── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   │   ├── portcullis.rs raising-grille rig + its frame (hidden once fully raised where a cell sits above)
+│   │   │   └── dissolve.rs leaf that holds its pose while its materials fade away
 │   │   ├── enemy/          'E' cells: a moving rig that chases the player
 │   │   │   ├── mod.rs      EnemyMarker + EnemyAssets dispatcher (by per-cell enemyType override, else GameConfig.enemy_type) + shared animation system
 │   │   │   ├── goblin.rs   default goblin rig: green body with painted mouth and per-side eyeballs
@@ -252,6 +380,7 @@ src/
 │   ├── level.rs            level readout (multi-level runs only)
 │   ├── clock.rs            top-centre countdown clock + lose-state trigger
 │   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change
+│   ├── diagnostics.rs      the developer readout below the minimap (vis / fps / mem / live / mes / mat / img) + its frame-time estimator
 │   └── bag/                bottom inventory HUD
 │       ├── mod.rs          BagHud + bag_hud_system (grouped per-type icon + ×N chips, wrapping, rebuilt on change)
 │       ├── treasure.rs     per-style procedural treasure icons (silver/gold ingot bar, bright diamond, quartered jewels)
@@ -278,7 +407,9 @@ camera is lifted + centred onto the live level the same way. Only the top level
 keeps the finish orb. It finishes with
 the HUD (clock, score, status bar, minimap, HP, bag) + paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, `generate_level_maze_jsons` (multi-level:
-N chained level grids, bottom first), `MAX_LEVEL_COUNT`, and the public types
+N chained level grids, bottom first), `MAX_LEVEL_COUNT`, `install_panic_hook`
+(forwards a Rust panic to the browser host as a `maze-game-panic` event), and the
+public types
 `GameConfig`, `Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
 `TreasureStyle`, `LevelDifficultyChange`, `GameOutcome`, `GameResult`.
 Everything else is `pub(crate)` or fully private.

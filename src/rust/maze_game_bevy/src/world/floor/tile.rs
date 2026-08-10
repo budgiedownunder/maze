@@ -41,13 +41,14 @@ pub(crate) fn spawn_tile(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 FloorCell,
+                placement.tag(),
                 Transform::from_xyz(x, y, z),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
             ));
         }
         _ => {
-            commands.spawn((FloorCell, Transform::from_xyz(x, y, z)));
+            commands.spawn((FloorCell, placement.tag(), Transform::from_xyz(x, y, z)));
         }
     }
 }

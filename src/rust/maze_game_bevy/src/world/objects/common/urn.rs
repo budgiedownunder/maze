@@ -1,4 +1,6 @@
-use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
+use super::bake::{BakedRig, RigBuilder, UnitMeshes};
+use super::{build_emissive_material, CommonObjectAssets};
+use crate::world::LevelTag;
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -63,130 +65,68 @@ const JOIN_RING_BELLY_TOP_SCALE: Vec3 = Vec3::new(0.56, 0.025, 0.56);
 const JOIN_RING_UPPER_BELLY_TOP_Y: f32 = 0.65;
 const JOIN_RING_UPPER_BELLY_TOP_SCALE: Vec3 = Vec3::new(0.46, 0.025, 0.46);
 
-pub(crate) fn build_urn_material(
-    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    build_emissive_material(materials, URN_EMISSIVE)
-}
+// Rig slots — one combined mesh per material. The urn deliberately has no
+// outline slot: the stacked cylinders' vertical silhouettes are slightly offset
+// from each other in radius, and a black outline at each layer's edge fails to
+// connect across the steps — it reads as broken "vertical edging" rather than a
+// single piece. The darker terracotta join rings and belly bands already provide
+// the horizontal contrast needed to delineate the layers.
+const BODY: usize = 0;
+const BAND: usize = 1;
 
-pub(crate) fn build_dark_terracotta_material(
+/// Bakes the urn rig in its local frame: a stacked-cylinder vase silhouette,
+/// with the rim, two belly bands and two join rings in the darker terracotta.
+pub(crate) fn build_urn_rig(
+    prims: &UnitMeshes,
+    meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    build_emissive_material(materials, BAND_EMISSIVE)
-}
-
-pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32) {
-    let body = assets.urn_mat.clone();
-    let band = assets.dark_terracotta_mat.clone();
-    // Lift each stacked-cylinder part to its run level's floor base; level 0 is `0.0`.
-    let pos = |y: f32| Vec3::new(x, base_y + y, z);
-    // The urn deliberately skips the inverted-hull outline: the stacked
-    // cylinders' vertical silhouettes are slightly offset from each
-    // other in radius, and a black outline at each layer's edge fails
-    // to connect across the steps — it reads as broken "vertical
-    // edging" rather than a single piece. The darker terracotta join
-    // rings and belly bands already provide the horizontal contrast
-    // needed to delineate the layers.
-    let outline = || -> Option<Handle<StandardMaterial>> { None };
-    let mesh = || assets.cylinder.clone();
+) -> BakedRig {
+    let mut rig = RigBuilder::new(&[
+        build_emissive_material(materials, URN_EMISSIVE),
+        build_emissive_material(materials, BAND_EMISSIVE),
+    ]);
+    let mut add = |slot: usize, y: f32, scale: Vec3| {
+        rig.add(slot, &prims.cylinder, Transform::from_xyz(0.0, y, 0.0).with_scale(scale));
+    };
 
     // Body stack.
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        body.clone(),
-        outline(),
-        Transform::from_translation(pos(BASE_Y)).with_scale(BASE_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        body.clone(),
-        outline(),
-        Transform::from_translation(pos(LOWER_BELLY_Y)).with_scale(LOWER_BELLY_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        body.clone(),
-        outline(),
-        Transform::from_translation(pos(BELLY_Y)).with_scale(BELLY_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        body.clone(),
-        outline(),
-        Transform::from_translation(pos(UPPER_BELLY_Y)).with_scale(UPPER_BELLY_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        body,
-        outline(),
-        Transform::from_translation(pos(NECK_Y)).with_scale(NECK_SCALE),
-        (),
-    );
+    add(BODY, BASE_Y, BASE_SCALE);
+    add(BODY, LOWER_BELLY_Y, LOWER_BELLY_SCALE);
+    add(BODY, BELLY_Y, BELLY_SCALE);
+    add(BODY, UPPER_BELLY_Y, UPPER_BELLY_SCALE);
+    add(BODY, NECK_Y, NECK_SCALE);
 
-    // Rim + two pattern bands all share the darker terracotta material.
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        band.clone(),
-        outline(),
-        Transform::from_translation(pos(RIM_Y)).with_scale(RIM_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        band.clone(),
-        outline(),
-        Transform::from_translation(pos(BAND_A_Y)).with_scale(BAND_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        band.clone(),
-        outline(),
-        Transform::from_translation(pos(BAND_B_Y)).with_scale(BAND_SCALE),
-        (),
-    );
+    // Rim + two pattern bands.
+    add(BAND, RIM_Y, RIM_SCALE);
+    add(BAND, BAND_A_Y, BAND_SCALE);
+    add(BAND, BAND_B_Y, BAND_SCALE);
 
-    // Join rings at the two wider→narrower steps. Without these, the
-    // top edge of the wider cylinder reads as a single flat shade and
-    // the join with the narrower cylinder above is invisible.
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        band.clone(),
-        outline(),
-        Transform::from_translation(pos(JOIN_RING_BELLY_TOP_Y))
-            .with_scale(JOIN_RING_BELLY_TOP_SCALE),
-        (),
-    );
-    spawn_with_outline(
-        commands,
-        None,
-        mesh(),
-        band,
-        outline(),
-        Transform::from_translation(pos(JOIN_RING_UPPER_BELLY_TOP_Y))
-            .with_scale(JOIN_RING_UPPER_BELLY_TOP_SCALE),
-        (),
-    );
+    // Join rings at the two wider→narrower steps. Without these, the top edge of
+    // the wider cylinder reads as a single flat shade and the join with the
+    // narrower cylinder above is invisible.
+    add(BAND, JOIN_RING_BELLY_TOP_Y, JOIN_RING_BELLY_TOP_SCALE);
+    add(BAND, JOIN_RING_UPPER_BELLY_TOP_Y, JOIN_RING_UPPER_BELLY_TOP_SCALE);
+
+    rig.finish(meshes)
+}
+
+pub(crate) fn spawn_urn(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32, tag: LevelTag) {
+    // `base_y` lifts the rig to its run level's floor; level 0 is `0.0`.
+    assets.urn.spawn(commands, Transform::from_xyz(x, base_y, z), None, Some(tag));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_support::entities_spawned;
+    use super::super::build_common_object_assets;
+    use super::*;
+
+    #[test]
+    fn an_urn_costs_one_entity_per_material() {
+        let assets = build_common_object_assets(&mut None, &mut None);
+        let count = entities_spawned(|commands| {
+            spawn_urn(commands, &assets, 0.0, 0.0, 0.0, LevelTag(0));
+        });
+        assert_eq!(count, 2, "the terracotta body and the darker bands");
+    }
 }

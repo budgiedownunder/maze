@@ -1,3 +1,5 @@
+import { withDebugMem } from './debugMem'
+
 // localStorage key the `/game/` host page reads to launch an editor preview.
 // Mirrors `PREVIEW_STORAGE_KEY` in public/game/index.html — keep them in sync.
 const PREVIEW_STORAGE_KEY = 'gameDefinitionPreview'
@@ -15,5 +17,5 @@ export function launchDefinitionPreview(config: Record<string, unknown>, seeded:
   } catch {
     /* storage disabled / quota — the host shows a "no preview" message. */
   }
-  window.open('/game/?preview=1', '_blank')
+  window.open(withDebugMem('/game/?preview=1'), '_blank')
 }

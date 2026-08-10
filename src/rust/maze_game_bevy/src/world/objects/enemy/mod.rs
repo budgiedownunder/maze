@@ -13,7 +13,8 @@ pub(crate) mod ghost;
 pub(crate) mod goblin;
 
 use crate::state::{EnemyType, GameConfig, GameState, MultiLevelRun};
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{LevelPlacement, CELL_SIZE, LevelTag};
+use crate::world::visibility::LevelWindow;
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -84,7 +85,8 @@ pub(crate) fn enemy_animation_system(
     config: Res<GameConfig>,
     run: Res<MultiLevelRun>,
     time: Res<Time>,
-    mut markers: Query<(&EnemyMarker, &mut Transform)>,
+    window: Res<LevelWindow>,
+    mut markers: Query<(&EnemyMarker, &mut Transform, &LevelTag)>,
 ) {
     // Build an id→Enemy lookup once per frame from the live (current) level's
     // game. Enemy counts are bounded by `MAX_ENEMY_COUNT`, so the O(n) build cost
@@ -104,7 +106,11 @@ pub(crate) fn enemy_animation_system(
             (time.elapsed_secs() * ghost::BOB_RATE).sin() * ghost::BOB_AMPLITUDE,
         ),
     };
-    for (marker, mut t) in markers.iter_mut() {
+    for (marker, mut t, tag) in markers.iter_mut() {
+        // Off-window floors are neither drawn nor animated.
+        if !window.contains(tag.0) {
+            continue;
+        }
         // Only the current level's enemies follow their runtime position. Every
         // other level's enemies hold the position they were last left at (their
         // `MazeGame` isn't ticked) — completed levels below, not-yet-reached levels

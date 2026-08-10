@@ -16,6 +16,7 @@
 //! rise from a lower level to the one above it — never from the top level, which
 //! holds nothing up.
 
+use crate::world::LevelTag;
 use bevy::prelude::*;
 
 /// Pole radius — slim, so it reads as a support column without crowding the cell.
@@ -73,6 +74,7 @@ pub(crate) fn build_support_pole_assets(
 /// degenerate (non-positive) span stays harmless.
 pub(crate) fn spawn_support_pole(
     commands: &mut Commands,
+    tag: LevelTag,
     assets: &SupportPoleAssets,
     x: f32,
     z: f32,
@@ -84,10 +86,10 @@ pub(crate) fn spawn_support_pole(
     let transform = Transform::from_xyz(x, mid_y, z).with_scale(Vec3::new(1.0, height, 1.0));
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((SupportPole, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
+            commands.spawn((SupportPole, tag, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((SupportPole, transform));
+            commands.spawn((SupportPole, tag, transform));
         }
     }
 }

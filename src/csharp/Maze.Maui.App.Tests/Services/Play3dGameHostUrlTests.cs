@@ -77,5 +77,41 @@ namespace Maze.Maui.App.Tests.Services
         {
             Assert.Equal("https://maze.example.com/game/", Play3dGameHostUrl.BuildForToken(ApiRoot, null));
         }
+
+        [Fact]
+        public void AppendParameter_OnAUrlThatAlreadyHasAQuery_UsesAnAmpersand()
+        {
+            Assert.Equal(
+                "https://maze.example.com/game/?id=m1&mobile_mode=1",
+                Play3dGameHostUrl.AppendParameter("https://maze.example.com/game/?id=m1", "mobile_mode=1"));
+        }
+
+        [Fact]
+        public void AppendParameter_OnABareUrl_StartsTheQuery()
+        {
+            // The signed-out launch has no query at all, so neither separator is
+            // safe to assume.
+            Assert.Equal(
+                "https://maze.example.com/game/?mobile_mode=1",
+                Play3dGameHostUrl.AppendParameter("https://maze.example.com/game/", "mobile_mode=1"));
+        }
+
+        [Fact]
+        public void AppendParameter_Twice_KeepsBoth()
+        {
+            var url = Play3dGameHostUrl.AppendParameter("https://maze.example.com/game/", "mem=1");
+            Assert.Equal(
+                "https://maze.example.com/game/?mem=1&mobile_mode=1",
+                Play3dGameHostUrl.AppendParameter(url, "mobile_mode=1"));
+        }
+
+        [Fact]
+        public void IsMobilePlatform_MatchesTheHostThisTestRunsOn()
+        {
+            // The test host is a desktop, so the predicate must say so — a build
+            // that reported mobile here would hand every desktop run the phone's
+            // settings.
+            Assert.False(Play3dGameHostUrl.IsMobilePlatform());
+        }
     }
 }

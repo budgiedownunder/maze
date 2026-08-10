@@ -14,6 +14,8 @@ pub(crate) mod potion;
 
 use crate::state::HealthStyle;
 use crate::world::LevelPlacement;
+use crate::world::LevelTag;
+use crate::world::visibility::LevelWindow;
 use bevy::prelude::*;
 
 /// Scale-pulse frequency (radians/sec) applied to every health pickup.
@@ -74,11 +76,16 @@ pub(crate) fn spawn_health_for_cell(
 /// and rotation.
 pub(crate) fn health_animation_system(
     time: Res<Time>,
-    mut pickups: Query<&mut Transform, With<HealthMarker>>,
+    window: Res<LevelWindow>,
+    mut pickups: Query<(&mut Transform, &LevelTag), With<HealthMarker>>,
 ) {
     let scale = 1.0 + (time.elapsed_secs() * PULSE_RATE).sin() * PULSE_AMPLITUDE;
     let yaw = time.elapsed_secs() * SPIN_RATE;
-    for mut t in pickups.iter_mut() {
+    for (mut t, tag) in pickups.iter_mut() {
+        // Off-window floors are neither drawn nor animated.
+        if !window.contains(tag.0) {
+            continue;
+        }
         t.scale = Vec3::splat(scale);
         t.rotation = Quat::from_rotation_y(yaw);
     }

@@ -21,9 +21,15 @@ export interface MazeGenerationFieldsValue {
 interface MazeGenerationFieldsProps {
   value: MazeGenerationFieldsValue
   onChange: (patch: Partial<MazeGenerationFieldsValue>) => void
+  // Upper bound for the rows/cols spinners. Optional because only the game
+  // definition editor has one — an authored 2D maze is bounded by the store's
+  // cell cap, which is a product of both fields and so cannot be an attribute.
+  // Cosmetic either way: `max` bounds the arrows, not what can be typed, and
+  // `validateMazeGenerationFields` is what refuses the value.
+  maxDimension?: number
 }
 
-export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsProps) {
+export function MazeGenerationFields({ value, onChange, maxDimension }: MazeGenerationFieldsProps) {
   return (
     <>
       <label>
@@ -33,6 +39,7 @@ export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsPr
           className="input"
           value={value.rows}
           min={3}
+          max={maxDimension}
           onChange={e => onChange({ rows: e.target.value })}
         />
       </label>
@@ -43,6 +50,7 @@ export function MazeGenerationFields({ value, onChange }: MazeGenerationFieldsPr
           className="input"
           value={value.cols}
           min={3}
+          max={maxDimension}
           onChange={e => onChange({ cols: e.target.value })}
         />
       </label>

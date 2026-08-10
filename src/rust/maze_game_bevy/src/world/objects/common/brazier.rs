@@ -1,5 +1,7 @@
-use super::{build_emissive_material, spawn_with_outline, CommonObjectAssets};
+use super::bake::{BakedRig, RigBuilder, UnitMeshes};
+use super::{build_emissive_material, CommonObjectAssets};
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::LevelTag;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -51,29 +53,12 @@ pub(crate) const FLICKER_DETUNE_RATIO: f32 = 1.7;
 #[derive(Component)]
 pub(crate) struct BrazierBowl;
 
-pub(crate) fn build_stone_material(
-    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    materials.as_mut().map(|m| {
-        m.add(StandardMaterial {
-            base_color: EMISSIVE_ONLY_BASE,
-            emissive: STONE_EMISSIVE,
-            ..default()
-        })
-    })
-}
-
-pub(crate) fn build_glow_material(
-    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    build_emissive_material(materials, GLOW_EMISSIVE)
-}
-
-pub(crate) fn build_halo_material(
-    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
-) -> Option<Handle<StandardMaterial>> {
-    build_emissive_material(materials, HALO_EMISSIVE)
-}
+// Rig slots — one combined mesh per material. The bowl has its own slot
+// regardless, which is what keeps the flickering part a separate entity.
+const STONE: usize = 0;
+const GLOW: usize = 1;
+const HALO: usize = 2;
+const OUTLINE: usize = 3;
 
 /// Returns the per-frame multiplier applied to [`GLOW_EMISSIVE`] for the
 /// brazier bowl. Pure function so unit tests can sweep `t` without
@@ -85,42 +70,46 @@ pub(crate) fn flicker_factor(t: f32) -> f32 {
     1.0 + FLICKER_AMPLITUDE * phase * 0.5
 }
 
-pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32) {
-    // Lift each part to its run level's floor base; level 0 is `0.0`.
-    let pos = |y: f32| Vec3::new(x, base_y + y, z);
+/// Bakes the brazier rig in its local frame: a stone column, a glowing bowl on
+/// top, and a halo disc above that, each with an outline shell.
+pub(crate) fn build_brazier_rig(
+    prims: &UnitMeshes,
+    meshes: &mut Option<ResMut<Assets<Mesh>>>,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    outline_mat: &Option<Handle<StandardMaterial>>,
+) -> BakedRig {
+    let stone = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: EMISSIVE_ONLY_BASE,
+            emissive: STONE_EMISSIVE,
+            ..default()
+        })
+    });
+    let mut rig = RigBuilder::new(&[
+        stone,
+        build_emissive_material(materials, GLOW_EMISSIVE),
+        build_emissive_material(materials, HALO_EMISSIVE),
+        outline_mat.clone(),
+    ]);
+    let pose = |y: f32, scale: Vec3| Transform::from_xyz(0.0, y, 0.0).with_scale(scale);
     // Stone column — steady, no flicker.
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        assets.stone_mat.clone(),
-        assets.outline_mat.clone(),
-        Transform::from_translation(pos(COLUMN_Y)).with_scale(COLUMN_SCALE),
-        (),
-    );
-    // Glowing bowl — carries the `BrazierBowl` marker so the flicker
-    // system can find its shared glow material handle.
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        assets.glow_mat.clone(),
-        assets.outline_mat.clone(),
-        Transform::from_translation(pos(BOWL_Y)).with_scale(BOWL_SCALE),
-        BrazierBowl,
-    );
-    // Halo — a thin disc of stronger orange just above the bowl. Steady
-    // (no flicker marker) so it frames the bowl's modulation rather
-    // than competing with it.
-    spawn_with_outline(
-        commands,
-        None,
-        assets.cylinder.clone(),
-        assets.halo_mat.clone(),
-        assets.outline_mat.clone(),
-        Transform::from_translation(pos(HALO_Y)).with_scale(HALO_SCALE),
-        (),
-    );
+    rig.add_with_outline(STONE, OUTLINE, &prims.cylinder, pose(COLUMN_Y, COLUMN_SCALE));
+    // Glowing bowl. Its own material, so the flicker reaches it and nothing else.
+    rig.add_with_outline(GLOW, OUTLINE, &prims.cylinder, pose(BOWL_Y, BOWL_SCALE));
+    // Halo — a thin disc of stronger orange just above the bowl. Steady, so it
+    // frames the bowl's modulation rather than competing with it.
+    rig.add_with_outline(HALO, OUTLINE, &prims.cylinder, pose(HALO_Y, HALO_SCALE));
+    rig.finish(meshes)
+}
+
+pub(crate) fn spawn_brazier(commands: &mut Commands, assets: &CommonObjectAssets, x: f32, z: f32, base_y: f32, tag: LevelTag) {
+    // `base_y` lifts the rig to its run level's floor; level 0 is `0.0`.
+    let parts = assets.brazier.spawn(commands, Transform::from_xyz(x, base_y, z), None, Some(tag));
+    // The bowl carries the `BrazierBowl` marker so the flicker system can find
+    // the shared glow material handle.
+    if let Some(bowl) = parts[GLOW] {
+        commands.entity(bowl).insert(BrazierBowl);
+    }
 }
 
 /// Modulates the shared brazier glow material's emissive each frame
@@ -155,7 +144,18 @@ pub(crate) fn brazier_flicker_system(
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_support::entities_spawned;
+    use super::super::build_common_object_assets;
     use super::*;
+
+    #[test]
+    fn a_brazier_costs_one_entity_per_material() {
+        let assets = build_common_object_assets(&mut None, &mut None);
+        let count = entities_spawned(|commands| {
+            spawn_brazier(commands, &assets, 0.0, 0.0, 0.0, LevelTag(0));
+        });
+        assert_eq!(count, 4, "column + bowl + halo + one outline shell");
+    }
 
     #[test]
     fn flicker_factor_stays_within_amplitude_envelope() {

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use maze_game_bevy::{
     DoorStyle, EnemyType, FinishType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks,
-    LayeredAlignment, LevelDifficultyChange, PendingLevels, SkyType, WallType,
+    LayeredAlignment, LevelDifficultyChange, LevelVisibility, PendingLevels, SkyType, WallType,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -20,8 +20,31 @@ fn make_app() -> App {
     app
 }
 
+/// Bytes currently allocated by the game and not yet freed.
+///
+/// Deliberately callable from JS rather than only shown in the in-game readout:
+/// if [`stop`] drops the app, the readout goes with it and cannot report its own
+/// funeral, whereas this survives to be read before and after.
+///
+/// Read it alongside the WebAssembly linear-memory size, which only ever grows —
+/// this is the figure that comes back down when memory is genuinely released.
+/// Returned as `f64` because that is what a JS number is.
+#[wasm_bindgen]
+pub fn live_bytes() -> f64 {
+    maze_game_bevy::live_bytes() as f64
+}
+
+/// Asks the running game to shut down and release its world, taking effect on
+/// the next frame. Until this existed the browser only reclaimed a game when the
+/// document itself was destroyed — asynchronous, and invisible to the app.
+#[wasm_bindgen]
+pub fn stop() {
+    maze_game_bevy::request_stop();
+}
+
 #[wasm_bindgen]
 pub fn start() {
+    maze_game_bevy::install_panic_hook();
     let mut app = make_app();
     maze_game_bevy::build_app(&mut app, None);
     app.run();
@@ -91,8 +114,11 @@ struct StartConfig {
     enemy_damage: u32,
     #[serde(default = "default_max_hp")]
     max_hp: u32,
-    #[serde(default = "default_starting_hp")]
-    starting_hp: u32,
+    /// Absent (the default) starts the player at full health, whatever `maxHp`
+    /// is — the maze crate's own rule, carried through rather than restated.
+    /// A value gives a damaged start and is clamped to `[1, maxHp]` there.
+    #[serde(default)]
+    starting_hp: Option<u32>,
     #[serde(default = "default_enemy_type")]
     enemy_type: String,
     #[serde(default = "default_health_style")]
@@ -118,6 +144,66 @@ struct StartConfig {
     /// subject. Drives the "Fastest Time" banner. Absent → an empty board.
     #[serde(default)]
     fastest_time_to_beat: Option<u64>,
+    /// Whether to show the developer diagnostics readout below the minimap. Set
+    /// by the host page from `?mem=1`; absent (the default) leaves a normal run
+    /// rendering exactly as it did before the readout existed.
+    #[serde(default)]
+    debug_memory: bool,
+    /// Developer override of the window's scale factor — physical pixels drawn
+    /// per logical pixel. Set by the host page from `?res=<fraction>`, which it
+    /// resolves against `window.devicePixelRatio` into the absolute value here.
+    /// Absent (the default) leaves the platform's own value.
+    #[serde(default)]
+    render_scale: Option<f32>,
+    /// Developer override of multisample anti-aliasing, in samples. Set by the
+    /// host page from `?msaa=<samples>`; absent leaves Bevy's own default.
+    #[serde(default)]
+    msaa_samples: Option<u32>,
+    /// Diagnostic: leave the finish orb unspawned. It is the game's only
+    /// shadow-casting light, and only the final level has one. Set by the host
+    /// page from `?orb=0`; absent (the default) draws it as always.
+    #[serde(default)]
+    hide_finish_orb: bool,
+    /// Diagnostic: keep the finish orb but stop its light casting shadows —
+    /// six scene passes fewer. Set by the host page from `?shadows=0`.
+    #[serde(default)]
+    disable_orb_shadows: bool,
+    /// Diagnostic: keep the finish orb but give it no light. The orb is
+    /// emissive so it still glows; the pool of light it casts does not. Set by
+    /// the host page from `?light=0`, and supersedes `disableOrbShadows`.
+    #[serde(default)]
+    disable_orb_light: bool,
+    /// Diagnostic: stop the water / lava pool wave rewriting a transform on
+    /// every surface and rock each frame. Set from `?wall_animation=0`.
+    #[serde(default)]
+    freeze_wall_animation: bool,
+    /// Diagnostic: drop the point light on every key holder and treasure — the
+    /// meshes are emissive, so they still glow. Set from `?glow=0`.
+    #[serde(default)]
+    disable_object_glow: bool,
+    /// Whether an interim level may finish with a ladder. Absent means yes, as
+    /// the game has always played. Set to `false` (from `?ladders=0`) the finish
+    /// type resolves to a portal, which takes the hatch above and the climb
+    /// animation with it — a ladder into a floor that is not drawn reads as
+    /// climbing into nothing.
+    #[serde(default = "default_allow_ladders")]
+    allow_ladders: bool,
+    /// Run with the settings a phone needs — set from `?mobile_mode=1`. One
+    /// policy rather than a handful of parameters: it turns on the individual
+    /// switches that measurement justified (own floor only, portals instead of
+    /// ladders, no key / treasure / orb lights) and leaves the ones that
+    /// measured null alone.
+    #[serde(default)]
+    mobile_mode: bool,
+}
+
+fn default_allow_ladders() -> bool {
+    true
+}
+
+/// Point lights reach the player's own floor and no further unless asked.
+fn default_lights_own_floor() -> Option<u32> {
+    Some(0)
 }
 
 /// Shape of the nested `levels` object in the host JSON payload — the
@@ -143,6 +229,22 @@ struct LevelsStartConfig {
     hide_completed_enemies: bool,
     #[serde(default)]
     perimeter_random: bool,
+    /// Levels below / above the player's own that stay drawn and animated.
+    /// Absent on either side (the default) draws every level, as before. Both
+    /// set — `0` and `0` being the tightest — bounds a tall stack's per-frame
+    /// cost to the floors near the player.
+    #[serde(default)]
+    visible_below: Option<u32>,
+    #[serde(default)]
+    visible_above: Option<u32>,
+    /// The same, for point lights alone — a floor stays drawn while its key,
+    /// treasure and orb glows go out. **Defaults to the player's own floor**,
+    /// which is where the measured cost is worth paying; an explicit `null` on
+    /// either side lights the whole stack again (`?lights=all`).
+    #[serde(default = "default_lights_own_floor")]
+    lights_below: Option<u32>,
+    #[serde(default = "default_lights_own_floor")]
+    lights_above: Option<u32>,
     #[serde(default)]
     top: Option<TopStartConfig>,
 }
@@ -168,6 +270,10 @@ impl Default for LevelsStartConfig {
             alignment: default_alignment(),
             taper: false,
             hide_completed_enemies: false,
+            visible_below: None,
+            visible_above: None,
+            lights_below: default_lights_own_floor(),
+            lights_above: default_lights_own_floor(),
             perimeter_random: false,
             top: None,
         }
@@ -210,8 +316,17 @@ fn default_max_hp() -> u32 {
     3
 }
 
-fn default_starting_hp() -> u32 {
-    3
+/// A usable maximum HP, treating `0` as unset.
+///
+/// The stored `config` is client-owned and never validated server-side, so a
+/// zero can reach here — an editor that stores a blank number field as `0` is
+/// the obvious way. It cannot be passed on: the game derives its starting HP as
+/// `starting_hp.unwrap_or(max_hp).clamp(1, max_hp)`, and `clamp` **panics** when
+/// `min > max`, killing the run on the countdown rather than degrading. Falling
+/// back to the default matches how the other unusable values crossing this seam
+/// are handled, and leaves a deliberate `1` alone.
+fn usable_max_hp(max_hp: u32) -> u32 {
+    if max_hp == 0 { default_max_hp() } else { max_hp }
 }
 
 fn default_enemy_type() -> String {
@@ -317,6 +432,9 @@ fn default_title() -> String {
 /// that was never inserted, and panic.
 #[wasm_bindgen]
 pub fn start_with_config(json: &str) -> Result<(), JsValue> {
+    // Before anything that can panic — generation and world spawn both run under
+    // this call, and a panic there is otherwise a bare `RuntimeError: unreachable`.
+    maze_game_bevy::install_panic_hook();
     let cfg: StartConfig = serde_json::from_str(json)
         .map_err(|err| JsValue::from_str(&format!("Invalid start_with_config payload: {err}")))?;
 
@@ -395,7 +513,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         key_holder: KeyHolderStyle::from_wire_str(&cfg.key_holder),
         enemy_move_period_ms: cfg.enemy_move_period_ms,
         enemy_damage: cfg.enemy_damage,
-        max_hp: cfg.max_hp,
+        max_hp: usable_max_hp(cfg.max_hp),
         starting_hp: cfg.starting_hp,
         enemy_type: EnemyType::from_wire_str(&cfg.enemy_type),
         health_style: HealthStyle::from_wire_str(&cfg.health_style),
@@ -416,6 +534,24 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         leaderboard_tracked: cfg.leaderboard_tracked,
         high_score_to_beat: cfg.high_score_to_beat,
         fastest_time_to_beat: cfg.fastest_time_to_beat,
+        debug_memory: cfg.debug_memory,
+        render_scale: cfg.render_scale,
+        level_visibility: LevelVisibility {
+            below: cfg.levels.visible_below,
+            above: cfg.levels.visible_above,
+        },
+        light_visibility: LevelVisibility {
+            below: cfg.levels.lights_below,
+            above: cfg.levels.lights_above,
+        },
+        msaa_samples: cfg.msaa_samples,
+        hide_finish_orb: cfg.hide_finish_orb,
+        disable_orb_shadows: cfg.disable_orb_shadows,
+        disable_orb_light: cfg.disable_orb_light,
+        freeze_wall_animation: cfg.freeze_wall_animation,
+        disable_object_glow: cfg.disable_object_glow,
+        allow_ladders: cfg.allow_ladders,
+        mobile_mode: cfg.mobile_mode,
     });
     // A multi-level run is fed in via `PendingLevels`, which `spawn_world` reads
     // ahead of the single `PendingMazeJson` — the same seam the native demos use.
@@ -466,7 +602,10 @@ mod tests {
         assert_eq!(cfg.enemy_move_period_ms, 1500.0);
         assert_eq!(cfg.enemy_damage, 1);
         assert_eq!(cfg.max_hp, 3);
-        assert_eq!(cfg.starting_hp, 3);
+        // Absent means full health, not a literal 3 — a curated preset or an
+        // authored game raising `maxHp` sends no starting value, and a fixed
+        // default here would begin every one of them at 3.
+        assert_eq!(cfg.starting_hp, None);
         assert_eq!(cfg.enemy_type, "goblin");
         assert_eq!(cfg.health_style, "heart");
         assert!(cfg.difficulty.is_none());
@@ -475,6 +614,11 @@ mod tests {
         assert!(!cfg.leaderboard_tracked);
         assert!(cfg.high_score_to_beat.is_none());
         assert!(cfg.fastest_time_to_beat.is_none());
+        // The diagnostics readout and the render-target overrides are all off
+        // unless the host asks for them.
+        assert!(!cfg.debug_memory);
+        assert!(cfg.render_scale.is_none());
+        assert!(cfg.msaa_samples.is_none());
         // The single landmark override must take effect; the rest fall
         // back to true.
         assert!(cfg.landmarks.wall_tint);
@@ -518,6 +662,106 @@ mod tests {
         assert!(empty.leaderboard_tracked);
         assert!(empty.high_score_to_beat.is_none());
         assert!(empty.fastest_time_to_beat.is_none());
+    }
+
+    #[test]
+    fn start_config_turns_the_diagnostics_readout_on_when_the_host_asks() {
+        // `/game/?mem=1` — a developer launch. The flag is the only thing that
+        // changes; everything else still takes its default.
+        let cfg: StartConfig =
+            serde_json::from_str(r#"{ "debugMemory": true }"#).expect("payload must parse");
+        assert!(cfg.debug_memory);
+        assert_eq!(cfg.timer_seconds, 60.0);
+    }
+
+    /// A stored config carrying `maxHp: 0` — an editor writing a blank number
+    /// field — must not reach the game: it derives its starting HP with
+    /// `clamp(1, max_hp)`, which panics when the cap is below 1, killing the run
+    /// on the countdown. A deliberate `1` is left alone.
+    #[test]
+    fn a_zero_max_hp_falls_back_to_the_default() {
+        assert_eq!(usable_max_hp(0), default_max_hp());
+        assert_eq!(usable_max_hp(1), 1, "a one-HP game is a choice, not a mistake");
+        assert_eq!(usable_max_hp(5), 5);
+    }
+
+    #[test]
+    fn start_config_can_drop_the_finish_orb() {
+        let cfg: StartConfig =
+            serde_json::from_str(r#"{ "hideFinishOrb": true }"#).expect("payload must parse");
+        assert!(cfg.hide_finish_orb);
+        // And it is in, with its shadows, by default — the orb is the finish
+        // marker and the shadows are what the game has always drawn.
+        let plain: StartConfig = serde_json::from_str("{}").expect("payload must parse");
+        assert!(!plain.hide_finish_orb);
+        assert!(!plain.disable_orb_shadows);
+        let unlit: StartConfig =
+            serde_json::from_str(r#"{ "disableOrbShadows": true }"#).expect("payload must parse");
+        assert!(unlit.disable_orb_shadows);
+        assert!(!unlit.hide_finish_orb, "the orb itself stays");
+        let dark: StartConfig =
+            serde_json::from_str(r#"{ "disableOrbLight": true }"#).expect("payload must parse");
+        assert!(dark.disable_orb_light);
+        assert!(!dark.hide_finish_orb, "the orb itself stays");
+        assert!(!plain.disable_orb_light);
+        assert!(!plain.freeze_wall_animation);
+        assert!(!plain.disable_object_glow);
+        assert!(plain.allow_ladders, "a game climbs ladders unless told not to");
+        assert!(!plain.mobile_mode);
+        let mobile: StartConfig =
+            serde_json::from_str(r#"{ "mobileMode": true }"#).expect("payload must parse");
+        assert!(mobile.mobile_mode);
+        let flat: StartConfig =
+            serde_json::from_str(r#"{ "allowLadders": false }"#).expect("payload must parse");
+        assert!(!flat.allow_ladders);
+        let still: StartConfig =
+            serde_json::from_str(r#"{ "freezeWallAnimation": true, "disableObjectGlow": true }"#)
+                .expect("payload must parse");
+        assert!(still.freeze_wall_animation);
+        assert!(still.disable_object_glow);
+    }
+
+    #[test]
+    fn start_config_bounds_the_levels_drawn_when_the_host_asks() {
+        // `/game/?floors=0,0` — the player's own floor and nothing else.
+        let cfg: StartConfig =
+            serde_json::from_str(r#"{ "levels": { "visibleBelow": 0, "visibleAbove": 1 } }"#)
+                .expect("payload must parse");
+        assert_eq!(cfg.levels.visible_below, Some(0));
+        assert_eq!(cfg.levels.visible_above, Some(1));
+        // The lights have their own range, defaulting to the player's own floor.
+        assert_eq!(cfg.levels.lights_below, Some(0));
+        let lit: StartConfig =
+            serde_json::from_str(r#"{ "levels": { "lightsBelow": 0, "lightsAbove": 0 } }"#)
+                .expect("payload must parse");
+        assert_eq!(lit.levels.lights_below, Some(0));
+        assert_eq!(lit.levels.lights_above, Some(0));
+        assert!(lit.levels.visible_below.is_none(), "the scene stays drawn");
+        // An explicit null is how `?lights=all` opens the range back up — the
+        // field defaults to narrow, so omitting it would keep the default.
+        let everything: StartConfig =
+            serde_json::from_str(r#"{ "levels": { "lightsBelow": null, "lightsAbove": null } }"#)
+                .expect("payload must parse");
+        assert!(everything.levels.lights_below.is_none());
+        assert!(everything.levels.lights_above.is_none());
+    }
+
+    #[test]
+    fn start_config_draws_every_level_by_default() {
+        let cfg: StartConfig = serde_json::from_str("{}").expect("payload must parse");
+        assert!(cfg.levels.visible_below.is_none());
+        assert!(cfg.levels.visible_above.is_none());
+    }
+
+    #[test]
+    fn start_config_carries_the_render_target_overrides() {
+        // `/game/?res=0.5&msaa=0` on a device pixel ratio of 3 — the host page
+        // resolves the fraction, so what arrives here is already absolute.
+        let cfg: StartConfig = serde_json::from_str(r#"{ "renderScale": 1.5, "msaaSamples": 1 }"#)
+            .expect("payload must parse");
+        assert_eq!(cfg.render_scale, Some(1.5));
+        assert_eq!(cfg.msaa_samples, Some(1));
+        assert_eq!(cfg.timer_seconds, 60.0);
     }
 
     #[test]

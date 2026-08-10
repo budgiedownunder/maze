@@ -12,7 +12,9 @@
 
 use super::rim::RECESS_DEPTH;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{lcg, LevelPlacement, CELL_SIZE};
+use crate::state::GameConfig;
+use crate::world::visibility::LevelWindow;
+use crate::world::{icosphere, lcg, CELL_SIZE, LevelPlacement, LevelTag};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
 use bevy::prelude::*;
@@ -56,7 +58,7 @@ const WAVE_SPEED: f32 = 1.1;
 
 /// Most dark rocks bobbing on a single lava cell. The actual per-cell count is
 /// scaled down from here by the global budget when a run holds a lot of lava — see
-/// [`rocks_per_lava_cell`].
+/// [`rocks_for_cell`].
 const ROCK_COUNT: usize = 2;
 
 /// Total animated lava rocks allowed across a whole run. Every lava cell on every
@@ -66,22 +68,46 @@ const ROCK_COUNT: usize = 2;
 /// sparkle-ray budget (`run_treasure_rays`).
 const MAX_TOTAL_ROCKS: usize = 200;
 
-/// Rocks each lava cell gets when a run holds `num_lava_cells` lava cells in
-/// total: `min(ROCK_COUNT, MAX_TOTAL_ROCKS / num_lava_cells)`. Falls to **0** — no
-/// rocks at all — once the lava is dense enough that even one rock per cell would
-/// blow the budget.
-pub(crate) fn rocks_per_lava_cell(num_lava_cells: usize) -> usize {
-    (MAX_TOTAL_ROCKS / num_lava_cells.max(1)).min(ROCK_COUNT)
+/// Rocks the lava cell at `(r, c)` on `level` gets, given how many lava cells
+/// the **whole run** holds.
+///
+/// The budget is a ceiling on rocks animated at once, and the way to respect it
+/// on a lava-dense run is to thin the cells out, not to empty them. Dividing the
+/// budget by the cell count instead — as this once did — falls off a cliff:
+/// 100 cells gave two rocks each, 200 gave one, and 201 gave **none anywhere**,
+/// so exactly the large multi-level lava worlds most worth looking at were the
+/// ones with no rocks at all.
+///
+/// Under budget every cell gets the full [`ROCK_COUNT`]; past it, one each;
+/// past that, one rock on every `stride`-th cell, chosen by hashing the cell so
+/// the survivors scatter rather than forming stripes. The total then lands near
+/// [`MAX_TOTAL_ROCKS`] rather than exactly on it, which is what a ceiling needs.
+pub(crate) fn rocks_for_cell(total_lava_cells: usize, r: usize, c: usize, level: usize) -> usize {
+    if total_lava_cells == 0 {
+        return ROCK_COUNT;
+    }
+    if total_lava_cells * ROCK_COUNT <= MAX_TOTAL_ROCKS {
+        return ROCK_COUNT;
+    }
+    if total_lava_cells <= MAX_TOTAL_ROCKS {
+        return 1;
+    }
+    let stride = total_lava_cells.div_ceil(MAX_TOTAL_ROCKS);
+    usize::from(lava_rock_hash(r, c, level).is_multiple_of(stride as u64))
 }
 
-/// Rocks each lava cell gets across a whole multi-level run, given the per-level
-/// lava-cell counts. Every level's lava bobs at once, so the [`MAX_TOTAL_ROCKS`]
-/// budget is global to the stack — bound by the **total** lava cells over all
-/// levels, not the per-level count. A single-level run is identical to
-/// [`rocks_per_lava_cell`] of that level's count.
-pub(crate) fn run_lava_rocks(level_lava_counts: impl IntoIterator<Item = usize>) -> usize {
-    rocks_per_lava_cell(level_lava_counts.into_iter().sum())
+/// Deterministic hash of a lava cell, so which cells keep a rock is stable for a
+/// maze and scattered rather than striped. Different constants from
+/// `dead_end_object_index` so the two choices do not correlate.
+fn lava_rock_hash(r: usize, c: usize, level: usize) -> u64 {
+    let mut h = (r as u64).wrapping_mul(0xA24B_AED4_963E_E407);
+    h = h.wrapping_add((c as u64).wrapping_mul(0x9FB2_1C65_1E98_DF25));
+    h = h.wrapping_add((level as u64).wrapping_mul(0xD6E8_FEB8_6659_FD93));
+    h ^= h >> 29;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^ (h >> 32)
 }
+
 /// Rock geometry: a cube of half-size [`ROCK_HALF`] with each corner sliced back
 /// by [`ROCK_CHAMFER`] (a truncated cube). The cuts add small corner + face facets
 /// where the cube's faces met, so it reads as a chunky rock rather than a plain
@@ -119,6 +145,9 @@ const ROCK_EMISSIVE: LinearRgba = LinearRgba::new(0.06, 0.02, 0.0, 1.0);
 #[derive(Component)]
 pub(crate) struct LavaSurface {
     base_y: f32,
+    /// The run level this pool sits on, so a steam wisp emitted from it can be
+    /// tagged with the level it belongs to.
+    level: usize,
 }
 
 /// Marker on a dark rock bobbing on a lava surface. [`lava_animation_system`]
@@ -266,7 +295,7 @@ pub(crate) fn build_lava_assets(
 /// Spawns the recessed lava pool surface for cell `(r, c)` at the caller-built
 /// `surface` transform (its free edges inset off the cell boundary — see
 /// [`super::pool_surface_transform`]), plus `rocks` bobbing rocks (`0..=ROCK_COUNT`,
-/// the global budget — see [`run_lava_rocks`]). The caller spawns the rim
+/// the global budget — see [`rocks_for_cell`]). The caller spawns the rim
 /// ([`super::rim`]); the cell has no floor tile.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_lava(
@@ -288,10 +317,10 @@ pub(crate) fn spawn_lava(
     let base_y = placement.base_y();
     match (assets.mesh.clone(), assets.material.clone()) {
         (Some(mesh), Some(mat)) => {
-            commands.spawn((LavaSurface { base_y }, surface, Mesh3d(mesh), MeshMaterial3d(mat)));
+            commands.spawn((LavaSurface { base_y, level: placement.level }, placement.tag(), surface, Mesh3d(mesh), MeshMaterial3d(mat)));
         }
         _ => {
-            commands.spawn((LavaSurface { base_y }, surface));
+            commands.spawn((LavaSurface { base_y, level: placement.level }, placement.tag(), surface));
         }
     }
     for (i, &(dx, dz)) in ROCK_OFFSETS.iter().take(rocks).enumerate() {
@@ -302,10 +331,10 @@ pub(crate) fn spawn_lava(
         let transform = Transform::from_translation(pos).with_scale(ROCK_SCALES[i]);
         match (assets.rock_mesh.clone(), assets.rock_material.clone()) {
             (Some(mesh), Some(mat)) => {
-                commands.spawn((LavaRock { base_y }, transform, Mesh3d(mesh), MeshMaterial3d(mat)));
+                commands.spawn((LavaRock { base_y }, placement.tag(), transform, Mesh3d(mesh), MeshMaterial3d(mat)));
             }
             _ => {
-                commands.spawn((LavaRock { base_y }, transform));
+                commands.spawn((LavaRock { base_y }, placement.tag(), transform));
             }
         };
     }
@@ -317,22 +346,36 @@ pub(crate) fn spawn_lava(
 /// cells. The two `&mut Transform` queries are kept disjoint by marker.
 pub(crate) fn lava_animation_system(
     time: Res<Time>,
+    config: Res<GameConfig>,
+    window: Res<LevelWindow>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut surfaces: Query<(&mut Transform, &LavaSurface), Without<LavaRock>>,
-    mut rocks: Query<(&mut Transform, &LavaRock), Without<LavaSurface>>,
+    mut rocks: Query<(&mut Transform, &LavaRock, &LevelTag), Without<LavaSurface>>,
     surface_mats: Query<&MeshMaterial3d<StandardMaterial>, With<LavaSurface>>,
 ) {
     let t = time.elapsed_secs();
+    // Frozen: the wave's whole cost is the per-surface transform write, so the
+    // ablation has to skip the loop rather than write the same value.
+    if !config.freeze_wall_animation {
     for (mut tr, surface) in surfaces.iter_mut() {
+        // A floor outside the window is neither drawn nor moved: the write alone
+        // would re-run transform propagation and re-upload the instance.
+        if !window.contains(surface.level) {
+            continue;
+        }
         let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
         tr.translation.y = surface.base_y + SURFACE_Y + dy;
         tr.rotation = rot;
     }
-    for (mut tr, rock) in rocks.iter_mut() {
+    for (mut tr, rock, tag) in rocks.iter_mut() {
+        if !window.contains(tag.0) {
+            continue;
+        }
         let phase = (tr.translation.x + tr.translation.z) * ROCK_K;
         tr.translation.y =
             rock.base_y + (SURFACE_Y - ROCK_SINK) + ROCK_AMP * (t * ROCK_SPEED + phase).sin();
         tr.rotation = Quat::from_rotation_y(t * ROCK_SPIN) * Quat::from_rotation_x(t * ROCK_SPIN * 0.6);
+    }
     }
     // Drift the shared ripple texture (one material across all lava tiles).
     if let (Some(materials), Some(handle)) = (materials.as_mut(), surface_mats.iter().next()) {
@@ -405,7 +448,9 @@ pub(crate) fn build_lava_steam_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> LavaSteamAssets {
-    let mesh = meshes.as_mut().map(|m| m.add(Sphere::new(STEAM_RADIUS)));
+    // A dot covers a couple of pixels at most, so the coarsest icosphere there
+    // is — and a lava game holds a hundred or so of them at once.
+    let mesh = meshes.as_mut().map(|m| m.add(icosphere(STEAM_RADIUS, 0)));
     let material = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             base_color: Color::srgba(0.88, 0.84, 0.80, STEAM_ALPHA),
@@ -427,19 +472,23 @@ fn steam_puff(p: f32) -> f32 {
 /// `Update` system: rises and dissipates existing steam wisps, and sparsely emits
 /// new ones scattered over the lava surfaces. Spawn positions are sampled from the
 /// live [`LavaSurface`] tiles, so steam only comes off actual lava.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn lava_steam_system(
     mut commands: Commands,
     time: Res<Time>,
+    window: Res<LevelWindow>,
     steam_assets: Option<Res<LavaSteamAssets>>,
     lava: Query<(&Transform, &LavaSurface)>,
-    mut wisps: Query<(Entity, &mut LavaSteam, &mut Transform), Without<LavaSurface>>,
+    mut wisps: Query<(Entity, &mut LavaSteam, &mut Transform, &LevelTag), Without<LavaSurface>>,
     mut rng: Local<u64>,
     mut timer: Local<f32>,
 ) {
     let dt = time.delta_secs();
 
     // Advance existing wisps.
-    for (entity, mut wisp, mut tr) in wisps.iter_mut() {
+    for (entity, mut wisp, mut tr, tag) in wisps.iter_mut() {
+        // Off-window wisps still age out — they are despawned on schedule rather
+        // than frozen, so returning to a floor does not find stale steam.
         wisp.age += dt;
         let p = wisp.age / wisp.lifetime;
         if p >= 1.0 {
@@ -450,6 +499,9 @@ pub(crate) fn lava_steam_system(
         // horizontal sway that grows with height.
         let rise = wisp.rise * (1.0 - (1.0 - p).powi(2));
         let wob = (p * wisp.sway_freq).sin() * p;
+        if !window.contains(tag.0) {
+            continue;
+        }
         tr.translation = wisp.base + Vec3::new(wisp.sway_x * wob, rise, wisp.sway_z * wob);
         tr.scale = Vec3::splat(steam_puff(p));
     }
@@ -460,9 +512,10 @@ pub(crate) fn lava_steam_system(
     };
     // The resting surface position of each lava cell (its level-correct Y, not the
     // bobbing Y), so a wisp sits on the pool at the right stacked height.
-    let cells: Vec<Vec3> = lava
+    let cells: Vec<(Vec3, usize)> = lava
         .iter()
-        .map(|(t, surface)| Vec3::new(t.translation.x, surface.base_y + SURFACE_Y, t.translation.z))
+        .filter(|(_, s)| window.contains(s.level))
+        .map(|(t, s)| (Vec3::new(t.translation.x, s.base_y + SURFACE_Y, t.translation.z), s.level))
         .collect();
     if cells.is_empty() {
         return;
@@ -475,7 +528,7 @@ pub(crate) fn lava_steam_system(
         *timer -= STEAM_INTERVAL;
         for _ in 0..STEAM_POINTS {
             let idx = (lcg(&mut rng) * cells.len() as f32) as usize % cells.len();
-            let cell = cells[idx];
+            let (cell, level) = cells[idx];
             // An emit point scattered within the cell (±0.6) at the resting
             // surface level (not the bobbing Y, so the wisp sits on the pool).
             let ox = (lcg(&mut rng) - 0.5) * 1.2;
@@ -499,13 +552,14 @@ pub(crate) fn lava_steam_system(
                     (Some(mesh), Some(mat)) => {
                         commands.spawn((
                             dot,
+                            LevelTag(level),
                             Transform::from_translation(base).with_scale(Vec3::ZERO),
                             Mesh3d(mesh),
                             MeshMaterial3d(mat),
                         ));
                     }
                     _ => {
-                        commands.spawn((dot, Transform::from_translation(base).with_scale(Vec3::ZERO)));
+                        commands.spawn((dot, LevelTag(level), Transform::from_translation(base).with_scale(Vec3::ZERO)));
                     }
                 };
             }
@@ -543,18 +597,43 @@ mod tests {
     }
 
     #[test]
-    fn run_lava_rocks_budgets_the_total_across_levels() {
-        // A single level of 40 lava cells is under budget → the full per-cell base.
-        assert_eq!(run_lava_rocks([40]), 2);
-        // The SAME 40 cells on each of three levels (120 total) still fit at 1 each
-        // (200 / 120 == 1) — fewer than the 2 the per-level path would give.
-        assert_eq!(run_lava_rocks([40, 40, 40]), 1);
-        assert!(run_lava_rocks([40, 40, 40]) < rocks_per_lava_cell(40));
-        // Once the lava is dense enough that even one rock per cell blows the
-        // budget, rocks fall away entirely.
-        assert_eq!(run_lava_rocks([100, 100, 100]), 0); // 200 / 300 == 0
+    fn a_run_under_budget_keeps_every_rock() {
+        // 40 cells x 2 rocks is well inside 200, so nothing is thinned.
+        for cell in [(0, 0), (3, 5), (9, 9)] {
+            assert_eq!(rocks_for_cell(40, cell.0, cell.1, 0), ROCK_COUNT);
+        }
         // Degenerate input must not divide by zero.
-        assert_eq!(rocks_per_lava_cell(0), 2);
+        assert_eq!(rocks_for_cell(0, 0, 0, 0), ROCK_COUNT);
+    }
+
+    #[test]
+    fn a_denser_run_drops_to_one_rock_each_before_thinning() {
+        // 120 cells would blow the budget at 2 each, but fit at 1.
+        assert_eq!(rocks_for_cell(120, 4, 4, 1), 1);
+    }
+
+    /// The behaviour this replaced: dividing the budget by the cell count gave
+    /// `200 / 300 == 0`, so a dense lava run showed no rocks at all. Thinning
+    /// keeps roughly the budget's worth instead of none.
+    #[test]
+    fn a_dense_run_thins_the_cells_rather_than_emptying_them() {
+        const TOTAL: usize = 1200;
+        let kept: usize = (0..40)
+            .flat_map(|r| (0..30).map(move |c| (r, c)))
+            .map(|(r, c)| rocks_for_cell(TOTAL, r, c, 0))
+            .sum();
+        assert!(kept > 0, "a dense run must still show rocks");
+        // Within a factor of two of the ceiling: a hashed stride approximates it.
+        assert!(
+            (MAX_TOTAL_ROCKS / 2..=MAX_TOTAL_ROCKS * 2).contains(&kept),
+            "kept {kept}, budget {MAX_TOTAL_ROCKS}",
+        );
+    }
+
+    #[test]
+    fn which_cells_keep_a_rock_is_stable_for_a_maze() {
+        let once = rocks_for_cell(1200, 7, 11, 2);
+        assert_eq!(once, rocks_for_cell(1200, 7, 11, 2));
     }
 
     #[test]

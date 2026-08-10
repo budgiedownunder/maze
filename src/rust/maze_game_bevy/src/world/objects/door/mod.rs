@@ -41,7 +41,7 @@ use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
 use crate::world::walls::{is_non_occluding_wall, wall_kind_for_cell, WallAssets, PANEL_W};
-use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL, LevelTag};
 use bevy::prelude::*;
 use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
@@ -269,6 +269,7 @@ fn spawn_leaf(
 
     let pivot = commands
         .spawn((
+            LevelTag(level),
             DoorMarker {
                 cell: (r, c),
                 level,
@@ -301,6 +302,7 @@ fn spawn_leaf(
     if spec.motion == DoorMotion::Portcullis {
         portcullis::spawn_frame(
             commands,
+            LevelTag(level),
             door_assets.cuboid.clone(),
             spec.panel_mat.clone(),
             spec.edge_centre,
@@ -502,9 +504,29 @@ fn smoothstep(t: f32) -> f32 {
 /// leaf's [`DoorMotion`] — swing rotates, slide / portcullis translate, dissolve
 /// fades its (own) material. A locked door sits closed; an opening one animates
 /// with its progress; an open (or `opened`-pinned) leaf stays fully open.
+/// Whether a door leaf is drawn.
+///
+/// A door is the one piece of world geometry with **two** reasons to be hidden,
+/// so both live here rather than in two systems writing the same component: a
+/// leaf on a floor the level window is not drawing, and a vertically-travelling
+/// leaf that has finished opening into the neighbouring level, where it would
+/// otherwise read as a phantom panel.
+pub(crate) fn door_visibility(
+    intrudes_when_open: bool,
+    fraction: f32,
+    level_drawn: bool,
+) -> Visibility {
+    if !level_drawn || (intrudes_when_open && fraction >= 0.999) {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    }
+}
+
 pub(crate) fn door_animation_system(
     state: Res<GameState>,
     run: Res<crate::state::MultiLevelRun>,
+    window: Res<crate::world::visibility::LevelWindow>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut doors: Query<(&DoorMarker, &mut Transform, &mut Visibility)>,
 ) {
@@ -517,11 +539,11 @@ pub(crate) fn door_animation_system(
         // Leaves on other levels keep their last pose (closed on a level not yet
         // reached; held open on a completed one below), preventing an upper
         // level's same-`(row, col)` door from sliding with the live one.
-        if marker.level != run.current_level {
-            continue;
-        }
+        let live = marker.level == run.current_level;
         let fraction = if marker.opened {
             1.0
+        } else if !live {
+            0.0
         } else {
             match states
                 .iter()
@@ -533,6 +555,33 @@ pub(crate) fn door_animation_system(
                 _ => 0.0,
             }
         };
+
+        // A vertically-travelling leaf, once open, ends up in the neighbouring
+        // level: a slid leaf below the floor (the level below), a raised portcullis
+        // above the ceiling (the level above). Hide it when fully open so it
+        // doesn't read as a phantom panel in that level. A bottom-level slide
+        // travels into open space (no level below), so it stays visible; a slide is
+        // never under a gap because the level below is always at least as large. A
+        // raised portcullis only intrudes when a cell actually sits above it — under
+        // taper a smaller upper level can leave a gap, where the grille rises into
+        // open air and must stay visible. Swing / dissolve don't leave their level.
+        let intrudes_when_open = match marker.motion {
+            DoorMotion::Slide => marker.level > 0,
+            DoorMotion::Portcullis => marker.has_cell_above,
+            DoorMotion::Swing | DoorMotion::Dissolve => false,
+        };
+        // Decided for every door, live or not: a leaf on a floor the window is
+        // not drawing has to be hidden whichever level it belongs to, and only
+        // this system writes a door's visibility.
+        let target = door_visibility(intrudes_when_open, fraction, window.contains(marker.level));
+        if *visibility != target {
+            *visibility = target;
+        }
+        // Everything below animates the live level's leaves; the rest hold their
+        // last pose.
+        if !live {
+            continue;
+        }
         *transform = match marker.motion {
             DoorMotion::Swing => {
                 swing::leaf_transform(marker.base_translation, marker.closed_yaw, fraction)
@@ -558,34 +607,41 @@ pub(crate) fn door_animation_system(
             }
         };
 
-        // A vertically-travelling leaf, once open, ends up in the neighbouring
-        // level: a slid leaf below the floor (the level below), a raised portcullis
-        // above the ceiling (the level above). Hide it when fully open so it
-        // doesn't read as a phantom panel in that level. A bottom-level slide
-        // travels into open space (no level below), so it stays visible; a slide is
-        // never under a gap because the level below is always at least as large. A
-        // raised portcullis only intrudes when a cell actually sits above it — under
-        // taper a smaller upper level can leave a gap, where the grille rises into
-        // open air and must stay visible. Swing / dissolve don't leave their level.
-        let intrudes_when_open = match marker.motion {
-            DoorMotion::Slide => marker.level > 0,
-            DoorMotion::Portcullis => marker.has_cell_above,
-            DoorMotion::Swing | DoorMotion::Dissolve => false,
-        };
-        let target = if intrudes_when_open && fraction >= 0.999 {
-            Visibility::Hidden
-        } else {
-            Visibility::Inherited
-        };
-        if *visibility != target {
-            *visibility = target;
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A door has two independent reasons to be hidden, and both have to be
+    /// honoured by the one system that owns its visibility. The level window
+    /// used to write this component too, which re-showed every open portcullis
+    /// the moment the window moved — visible, and walk-through, on the floor
+    /// above.
+    #[test]
+    fn a_door_is_hidden_when_its_floor_is_not_drawn() {
+        // Closed, on a floor nobody is drawing.
+        assert_eq!(door_visibility(false, 0.0, false), Visibility::Hidden);
+        // And still hidden when it is the kind that would intrude.
+        assert_eq!(door_visibility(true, 1.0, false), Visibility::Hidden);
+    }
+
+    #[test]
+    fn a_fully_open_intruding_leaf_stays_hidden_on_a_drawn_floor() {
+        // A raised portcullis with a cell above it has travelled into that
+        // level, where it would read as a phantom panel.
+        assert_eq!(door_visibility(true, 1.0, true), Visibility::Hidden);
+        // Part-way through the rise it is still in its own level.
+        assert_eq!(door_visibility(true, 0.5, true), Visibility::Inherited);
+    }
+
+    #[test]
+    fn an_ordinary_door_on_a_drawn_floor_is_visible() {
+        assert_eq!(door_visibility(false, 0.0, true), Visibility::Inherited);
+        // A swing or dissolve never leaves its level, so it stays visible open.
+        assert_eq!(door_visibility(false, 1.0, true), Visibility::Inherited);
+    }
 
     /// `corridor_axis` with no per-cell overrides — the common case in the
     /// topology tests (every `'W'` is a plain solid wall).

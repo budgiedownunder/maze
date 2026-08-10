@@ -63,6 +63,7 @@ pub(crate) fn spawn_capped_tile<M: Bundle>(
             let top_h = FLOOR_THICKNESS - cap_h;
             // Plain-stone underside cap — the bottom slice, what the level below sees.
             commands.spawn((
+                placement.tag(),
                 Transform::from_xyz(x, bottom + cap_h / 2.0, z)
                     .with_scale(Vec3::new(1.0, STONE_CAP_FRAC, 1.0)),
                 Mesh3d(mesh.clone()),
@@ -72,6 +73,7 @@ pub(crate) fn spawn_capped_tile<M: Bundle>(
             commands.spawn((
                 marker,
                 FloorCell,
+                placement.tag(),
                 Transform::from_xyz(x, bottom + cap_h + top_h / 2.0, z)
                     .with_scale(Vec3::new(1.0, 1.0 - STONE_CAP_FRAC, 1.0)),
                 Mesh3d(mesh),
@@ -79,7 +81,7 @@ pub(crate) fn spawn_capped_tile<M: Bundle>(
             ));
         }
         _ => {
-            commands.spawn((marker, FloorCell, Transform::from_xyz(x, y, z)));
+            commands.spawn((marker, FloorCell, placement.tag(), Transform::from_xyz(x, y, z)));
         }
     }
 }
@@ -196,20 +198,20 @@ pub(crate) fn spawn_pool_edge_seal(
     // Scale the (POOL_GAP-tall) mesh to this lift's gap, so it stays correct if the
     // gap ever differs from POOL_GAP.
     let scale_y = seal_h / (POOL_GAP - RECESS_DEPTH);
+    // The seal is spawned once and the render assets added to it, rather than
+    // built separately per branch: an entity assembled twice can have the two
+    // copies drift apart, and a level tag present on only the asset-less branch
+    // is invisible to every headless test while leaving the shipped geometry
+    // impossible to hide.
     let mut seal = |mesh: &Option<Handle<Mesh>>, pos: Vec3| {
-        match (mesh.clone(), assets.tile_mat.clone()) {
-            (Some(mesh), Some(mat)) => {
-                commands.spawn((
-                    PoolEdgeSeal,
-                    Transform::from_translation(pos).with_scale(Vec3::new(1.0, scale_y, 1.0)),
-                    Mesh3d(mesh),
-                    MeshMaterial3d(mat),
-                ));
-            }
-            _ => {
-                commands.spawn((PoolEdgeSeal, Transform::from_translation(pos)));
-            }
-        };
+        let mut entity = commands.spawn((
+            PoolEdgeSeal,
+            placement.tag(),
+            Transform::from_translation(pos).with_scale(Vec3::new(1.0, scale_y, 1.0)),
+        ));
+        if let (Some(mesh), Some(mat)) = (mesh.clone(), assets.tile_mat.clone()) {
+            entity.insert((Mesh3d(mesh), MeshMaterial3d(mat)));
+        }
     };
     if r == 0 {
         seal(&assets.pool_edge_ns_mesh, Vec3::new(x, centre_y, z - edge));

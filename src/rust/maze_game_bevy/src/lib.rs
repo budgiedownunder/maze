@@ -1,17 +1,21 @@
+mod alloc;
 mod hud;
 mod images;
 mod movement;
 mod outcome;
 mod overlays;
 mod palette;
+mod render;
 mod state;
 mod tick;
 mod transition;
 mod world;
 
+pub use alloc::{live_bytes, request_stop};
 pub use state::{
-    DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult, HealthStyle,
-    KeyHolderStyle, Landmarks, LayeredAlignment, PendingLevels, SkyType, TreasureStyle, WallType,
+    install_panic_hook, DoorStyle, EnemyType, FinishType, GameConfig, GameOutcome, GameResult,
+    HealthStyle, KeyHolderStyle, Landmarks, LayeredAlignment, LevelVisibility, PendingLevels,
+    SkyType, TreasureStyle, WallType,
 };
 pub use world::gallery::validate_demo_env;
 pub use world::{
@@ -21,8 +25,8 @@ pub use world::{
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{bag, clock, hp, level, minimap, score, statusbar, time_bonus};
-    use crate::movement::{movement_system, quit_system};
+    use crate::hud::{bag, clock, diagnostics, hp, level, minimap, score, statusbar, time_bonus};
+    use crate::movement::{movement_system, quit_system, stop_request_system};
     use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
@@ -54,6 +58,15 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .init_state::<AppState>()
         .insert_resource(TitleTimer(Timer::from_seconds(3.0, TimerMode::Once)))
         .insert_resource(ClearColor(Color::BLACK))
+        // Exists only to announce its own drop — see StopSignal.
+        .insert_resource(crate::state::StopSignal)
+        .add_systems(Startup, crate::render::apply_render_scale)
+        .add_systems(Startup, crate::render::apply_env_overrides)
+        .init_resource::<crate::world::visibility::LevelWindow>()
+        .add_systems(
+            Update,
+            crate::world::visibility::apply_level_window.run_if(in_state(AppState::Playing)),
+        )
         .add_systems(OnEnter(AppState::TitleScreen), title::setup_title)
         .add_systems(Update, title::tick_title.run_if(in_state(AppState::TitleScreen)))
         .add_systems(Update, title::update_title_countdown.run_if(in_state(AppState::TitleScreen)))
@@ -80,6 +93,16 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_dimensions_update_system.run_if(in_state(AppState::Playing)))
+        // Spawned at the title screen so the countdown shows the pre-world
+        // figures; the readout then carries through into play (it is not a
+        // TitleEntity, so teardown_title leaves it). The two systems are
+        // deliberately unconditional on state for the same reason — and both
+        // bail immediately unless the readout was spawned, so a normal run pays
+        // a single resource lookup per frame.
+        .add_systems(OnEnter(AppState::TitleScreen), diagnostics::setup_diagnostics)
+        .add_systems(OnEnter(AppState::Playing), diagnostics::reset_frame_estimate)
+        .add_systems(Update, diagnostics::diagnostics_update_system)
+        .add_systems(Update, diagnostics::diagnostics_resize_system)
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::portal::portal_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
@@ -112,7 +135,10 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::camera_fov_resize_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, quit_system);
+        .add_systems(Update, quit_system)
+        // Unconditional on state: a host tearing a session down must be obeyed
+        // whether the player is on the title screen, playing, or on a win screen.
+        .add_systems(Update, stop_request_system);
 }
 
 #[cfg(test)]
@@ -1675,6 +1701,40 @@ mod tests {
         assert_eq!(count, max_hp);
     }
 
+    /// Raising `max_hp` alone must start the player at full health. It did not:
+    /// `starting_hp` was a plain `u32` defaulting to a literal 3, so a game
+    /// configured for 5 HP began at 3 of 5 — and every curated preset and
+    /// authored game hits that path, because neither sends a starting value.
+    #[test]
+    fn a_raised_max_hp_starts_the_player_at_full_health() {
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+        let config = GameConfig { max_hp: 5, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+        let state = app.world().resource::<GameState>();
+        assert_eq!(state.game.max_hp(), 5);
+        assert_eq!(state.game.hp(), 5, "absent starting HP means full, not 3");
+
+        // The HUD is drawn from the game rather than the config, so it agrees.
+        let hearts = app
+            .world_mut()
+            .query::<&crate::hud::hp::HpHeartIcon>()
+            .iter(app.world())
+            .count();
+        assert_eq!(hearts, 5);
+    }
+
+    /// A concrete starting value still gives a damaged start — the point of
+    /// keeping it settable rather than always full.
+    #[test]
+    fn an_explicit_starting_hp_still_gives_a_damaged_start() {
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+        let config = GameConfig { max_hp: 5, starting_hp: Some(2), ..GameConfig::default() };
+        let app = make_playing_app_with_maze_and_config(MAZE, config);
+        let state = app.world().resource::<GameState>();
+        assert_eq!(state.game.max_hp(), 5);
+        assert_eq!(state.game.hp(), 2);
+    }
+
     #[test]
     fn demo_grid_is_well_formed_with_enemy_and_health() {
         // Extends `demo_grid_is_well_formed` for the new vocabulary —
@@ -2444,5 +2504,567 @@ mod tests {
         let mut app = make_playing_app_with(json);
         let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
         assert_eq!(rims, 8, "a water↔lava border is walled on both sides");
+    }
+
+    /// Every sky that has stars bakes them into exactly one entity, and the
+    /// skies without stars spawn none.
+    ///
+    /// The three counts (night 1000, sunrise 500, sunset 200) share one spawn
+    /// path, so a regression would restore per-star entities on all of them.
+    #[test]
+    fn every_starred_sky_bakes_its_field_into_one_entity() {
+        use crate::world::sky::stars::StarField;
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+
+        for sky in [SkyType::Night, SkyType::Sunrise, SkyType::Sunset] {
+            let config = GameConfig { sky_type: sky, ..GameConfig::default() };
+            let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+            assert_eq!(
+                count_with::<StarField>(&mut app),
+                1,
+                "{sky:?} must bake its whole field into one entity",
+            );
+        }
+
+        // Day is starless; the enclosed skies cap the maze with a ceiling and
+        // never show one at all.
+        for sky in [SkyType::Day, SkyType::Dungeon, SkyType::Chamber] {
+            let config = GameConfig { sky_type: sky, ..GameConfig::default() };
+            let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+            assert_eq!(count_with::<StarField>(&mut app), 0, "{sky:?} has no stars");
+        }
+    }
+
+    /// Counts entities carrying `T`, and how many of those also carry a
+    /// [`LevelTag`].
+    fn tagged_share<T: Component>(app: &mut App) -> (usize, usize) {
+        use crate::world::LevelTag;
+        let total = count_with::<T>(app);
+        let tagged = app
+            .world_mut()
+            .query_filtered::<Entity, (With<T>, With<LevelTag>)>()
+            .iter(app.world())
+            .count();
+        (total, tagged)
+    }
+
+    /// How many entities each level owns, by [`LevelTag`].
+    fn entities_per_level(app: &mut App) -> std::collections::BTreeMap<usize, usize> {
+        use crate::world::LevelTag;
+        let mut counts = std::collections::BTreeMap::new();
+        let mut query = app.world_mut().query::<&LevelTag>();
+        for tag in query.iter(app.world()) {
+            *counts.entry(tag.0).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// Every category of world geometry must carry the level it belongs to, or a
+    /// per-level policy silently leaves some of the floor behind when it hides
+    /// the rest of it.
+    #[test]
+    fn every_category_of_world_geometry_carries_its_level() {
+        use crate::world::decorations::floor::FloorAccent;
+        use crate::world::decorations::wall::WallDecoration;
+        use crate::world::floor::lines::FloorLine;
+        use crate::world::floor::FloorCell;
+        use crate::world::objects::dead_end::DeadEndObject;
+        use crate::world::walls::WallCell;
+
+        let mut app = make_playing_app();
+        for (name, (total, tagged)) in [
+            ("floor cells", tagged_share::<FloorCell>(&mut app)),
+            ("wall cells", tagged_share::<WallCell>(&mut app)),
+            ("floor lines", tagged_share::<FloorLine>(&mut app)),
+            ("wall decorations", tagged_share::<WallDecoration>(&mut app)),
+            ("floor accents", tagged_share::<FloorAccent>(&mut app)),
+            ("dead-end landmarks", tagged_share::<DeadEndObject>(&mut app)),
+        ] {
+            assert!(total > 0, "{name}: the demo grid should have some");
+            assert_eq!(tagged, total, "{name}: {} untagged", total - tagged);
+        }
+    }
+
+    /// The orb is the game's only shadow-casting light, and a point light's
+    /// shadow is a cube map — six extra scene passes, on the final level alone.
+    /// Dropping it is a diagnostic for how much that costs.
+    #[test]
+    fn the_finish_orb_can_be_left_out() {
+        use crate::world::objects::finish::orb::FinishOrb;
+        const MAZE: &str = r#"{"grid":[["S"," ","F"]]}"#;
+
+        let mut app = make_playing_app_with(MAZE);
+        assert_eq!(count_with::<FinishOrb>(&mut app), 1, "the orb is in by default");
+
+        let config = GameConfig { hide_finish_orb: true, ..GameConfig::default() };
+        let mut app = make_playing_app_with_maze_and_config(MAZE, config);
+        assert_eq!(count_with::<FinishOrb>(&mut app), 0);
+    }
+
+    /// A playing app **with asset stores**, so every spawn helper takes its
+    /// `Some(mesh)` branch — the one that actually ships.
+    ///
+    /// Without this a spawn written as two match arms can carry a `LevelTag` on
+    /// the asset-less arm alone, and no headless test can tell: they all take
+    /// that arm. That is exactly how an untagged pool edge seal reached a device
+    /// and hung, unhideable, over the player's head.
+    fn make_playing_app_with_assets(levels: &[&str], config: GameConfig) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin, AssetPlugin::default()));
+        app.init_asset::<Mesh>().init_asset::<StandardMaterial>().init_asset::<Image>();
+        app.init_asset::<ColorMaterial>();
+        app.insert_resource(config);
+        app.insert_resource(crate::state::PendingLevels(
+            levels.iter().map(|s| s.to_string()).collect(),
+        ));
+        build_app(&mut app, None);
+        app.update();
+        app.world_mut().resource_mut::<NextState<AppState>>().set(AppState::Playing);
+        app.update();
+        app
+    }
+
+    /// The same invariant as `every_root_of_world_geometry_carries_its_level`,
+    /// on the world that spawns the most: a multi-level pool-walled stack, which
+    /// adds rims, pool edge seals, undersides, support poles, hatches and a
+    /// transition rig that a single-level demo never builds.
+    #[test]
+    fn a_multi_level_pool_stack_tags_every_root_too() {
+        use crate::world::sky::SkyEntity;
+        use crate::world::LevelTag;
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," "," "],["W"," ","F"]]}"#,
+            r#"{"grid":[["S","W"," "],[" ","W","F"]]}"#,
+        ];
+        let config = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let mut app = make_playing_app_with_assets(&LEVELS, config);
+        let untagged: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, (
+                With<Transform>,
+                Without<LevelTag>,
+                Without<ChildOf>,
+                Without<Sprite>,
+                Without<Text2d>,
+                Without<Mesh2d>,
+                Without<Camera>,
+                Without<crate::hud::minimap::MinimapPlayer>,
+            )>()
+            .iter(app.world())
+            .collect();
+        for entity in untagged {
+            assert!(
+                app.world().entity(entity).contains::<SkyEntity>(),
+                "{entity} is untagged world geometry in a multi-level stack",
+            );
+        }
+    }
+
+    /// Turning ladders off resolves the finish type once, and everything that
+    /// reads it follows: the rig drawn, the hatch cut into the floor above, and
+    /// the hole in a roofed level's finish tile. This is the test that the claim
+    /// holds end to end rather than only at the value that was rewritten.
+    #[test]
+    fn disallowing_ladders_removes_the_climb_and_everything_built_for_it() {
+        use crate::world::floor::hatch::LevelHatch;
+        use crate::world::objects::finish::{ladder::FinishLadder, portal::FinishPortal};
+        // Level 1's start sits over level 0's finish, which is what a ladder
+        // needs; without that the choice would fall back to a portal anyway.
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," ","F"]]}"#,
+            r#"{"grid":[[" "," ","S"],[" "," ","F"]]}"#,
+        ];
+
+        let with_ladders = GameConfig { finish_type: FinishType::Ladder, ..GameConfig::default() };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, with_ladders);
+        assert!(count_with::<FinishLadder>(&mut app) > 0, "the ladder is the baseline");
+        assert!(count_with::<LevelHatch>(&mut app) > 0, "and it brings a hatch above it");
+
+        let without = GameConfig {
+            finish_type: FinishType::Ladder,
+            allow_ladders: false,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, without);
+        assert_eq!(count_with::<FinishLadder>(&mut app), 0, "no ladder");
+        assert_eq!(count_with::<LevelHatch>(&mut app), 0, "and so no hatch to climb through");
+        assert!(count_with::<FinishPortal>(&mut app) > 0, "a portal stands in its place");
+    }
+
+    /// A door on a floor the window is not drawing must be hidden like anything
+    /// else on it. Doors are the one thing the window pass does not own — the
+    /// door system does, because a leaf has a second reason to hide — and that
+    /// system skips levels other than the live one, so the hiding has to happen
+    /// before it does. Without that, every door on every hidden floor kept its
+    /// last visibility and floated there alone.
+    #[test]
+    fn a_closed_window_hides_doors_on_other_floors_too() {
+        use crate::world::objects::door::DoorMarker;
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," ","F"]]}"#,
+            r#"{"grid":[[" ","K","S"],["D"," ","F"]]}"#,
+        ];
+        let config = GameConfig {
+            level_visibility: LevelVisibility { below: Some(0), above: Some(0) },
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, config);
+        app.update();
+
+        let upper_doors_visible = app
+            .world_mut()
+            .query::<(&DoorMarker, &Visibility)>()
+            .iter(app.world())
+            .filter(|(marker, vis)| marker.level != 0 && **vis != Visibility::Hidden)
+            .count();
+        assert_eq!(upper_doors_visible, 0, "a door on a hidden floor floats alone");
+    }
+
+    /// With the window closed to the player's own floor, nothing belonging to
+    /// another floor may still be drawn — a stray visible entity is geometry
+    /// hanging in the air above the player.
+    #[test]
+    fn a_closed_window_hides_every_other_floor() {
+        use crate::world::LevelTag;
+        const LEVELS: [&str; 2] = [
+            r#"{"grid":[["S"," "," "],[" "," ","F"]]}"#,
+            r#"{"grid":[["S","W","W"],[" "," ","F"]]}"#,
+        ];
+        let config = GameConfig {
+            level_visibility: LevelVisibility { below: Some(0), above: Some(0) },
+            wall_type: WallType::Lava,
+            ..GameConfig::default()
+        };
+        let mut app = make_playing_app_with_levels_and_config(&LEVELS, config);
+        app.update();
+
+        let mut visible_elsewhere: Vec<usize> = app
+            .world_mut()
+            .query::<(&LevelTag, &Visibility)>()
+            .iter(app.world())
+            .filter(|(tag, vis)| tag.0 != 0 && **vis != Visibility::Hidden)
+            .map(|(tag, _)| tag.0)
+            .collect();
+        visible_elsewhere.sort_unstable();
+        visible_elsewhere.dedup();
+        assert!(
+            visible_elsewhere.is_empty(),
+            "levels {visible_elsewhere:?} still have visible geometry",
+        );
+    }
+
+    /// The sky follows the camera and is shared by every floor, so it belongs to
+    /// no level — hiding a floor must never take the sky with it.
+    #[test]
+    fn global_scenery_carries_no_level() {
+        use crate::world::sky::stars::StarField;
+        let mut app = make_playing_app();
+        let (total, tagged) = tagged_share::<StarField>(&mut app);
+        assert_eq!(total, 1, "the demo sky has a starfield");
+        assert_eq!(tagged, 0, "the starfield belongs to no level");
+    }
+
+    /// The invariant a per-level policy rests on: **every root of world geometry
+    /// carries its level**, and the only untagged roots are the sky's — the dome
+    /// and the two lights it brings, which are shared by every floor.
+    ///
+    /// Descendants are exempt by design: hiding a tagged root hides its children
+    /// through inherited visibility, so they need no tag of their own. The 2D
+    /// content — sprites, text, 2D meshes — and the cameras are the HUD and the
+    /// minimap, which are not world geometry.
+    ///
+    /// If this fails, a spawn site was added without a `LevelTag` — find it by
+    /// widening the query, and tag it rather than adding it here.
+    #[test]
+    fn every_root_of_world_geometry_carries_its_level() {
+        use crate::world::sky::SkyEntity;
+        use crate::world::LevelTag;
+
+        let mut app = make_playing_app();
+        let untagged: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, (
+                With<Transform>,
+                Without<LevelTag>,
+                Without<ChildOf>,
+                Without<Sprite>,
+                Without<Text2d>,
+                Without<Mesh2d>,
+                Without<Camera>,
+                // The minimap's player arrow spawns as a bare transform when
+                // there are no render assets, so it has no 2D component to
+                // recognise it by here.
+                Without<crate::hud::minimap::MinimapPlayer>,
+            )>()
+            .iter(app.world())
+            .collect();
+        assert!(!untagged.is_empty(), "the sky is always there");
+        for entity in untagged {
+            assert!(
+                app.world().entity(entity).contains::<SkyEntity>(),
+                "{entity} is untagged world geometry, not sky",
+            );
+        }
+    }
+
+    /// A stack tags every one of its levels, and a tapered one tags fewer
+    /// entities the higher it goes — the levels are distinguishable, which is
+    /// what a windowing policy needs.
+    #[test]
+    fn a_tapered_stack_tags_each_level_separately() {
+        const LEVELS: [&str; 3] = [
+            r#"{"grid":[["S"," "," "," "],[" "," "," "," "],[" "," "," ","F"]]}"#,
+            r#"{"grid":[["S"," "," "],[" "," ","F"]]}"#,
+            r#"{"grid":[["S"," ","F"]]}"#,
+        ];
+        let mut app = make_playing_app_with_levels(&LEVELS);
+        let counts = entities_per_level(&mut app);
+        assert_eq!(counts.keys().copied().collect::<Vec<_>>(), vec![0, 1, 2], "got {counts:?}");
+        assert!(counts[&0] > counts[&1], "got {counts:?}");
+        assert!(counts[&1] > counts[&2], "got {counts:?}");
+    }
+
+    /// Counts entities carrying a given marker component.
+    fn count_with<T: Component>(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<Entity, With<T>>()
+            .iter(app.world())
+            .count()
+    }
+
+    /// Reports where a scene's renderable entities are, by category.
+    ///
+    /// Prop sub-meshes and their outline siblings carry no marker of their own
+    /// (`DeadEndObject` tags the landmark *cell*, not its parts), so the
+    /// untagged residual is overwhelmingly prop geometry.
+    ///
+    /// Run with `cargo test -p maze_game_bevy entity_breakdown -- --nocapture`.
+    #[test]
+    fn entity_breakdown_by_category() {
+        use crate::world::decorations::floor::FloorAccent;
+        use crate::world::decorations::wall::WallDecoration;
+        use crate::world::floor::FloorCell;
+        use crate::world::objects::dead_end::DeadEndObject;
+        use crate::world::roof::RoofCell;
+        use crate::world::sky::stars::StarField;
+        use crate::world::walls::WallCell;
+
+        let mut app = make_playing_app();
+
+        // Counted via Transform, not Mesh3d: the headless harness has no
+        // `Assets<Mesh>`, so entities spawn without a mesh handle. Entity count
+        // is the figure that matters anyway — it is what drives draw calls.
+        let meshes = count_with::<Transform>(&mut app);
+        let floors = count_with::<FloorCell>(&mut app);
+        let walls = count_with::<WallCell>(&mut app);
+        let roofs = count_with::<RoofCell>(&mut app);
+        let wall_decorations = count_with::<WallDecoration>(&mut app);
+        let floor_accents = count_with::<FloorAccent>(&mut app);
+        let dead_end_cells = count_with::<DeadEndObject>(&mut app);
+        let star_fields = count_with::<StarField>(&mut app);
+        let tagged = floors + walls + roofs + wall_decorations + floor_accents + star_fields;
+
+        println!("--- entity breakdown (demo grid, single level) ---");
+        println!("world entities        {meshes}");
+        println!("  floor cells         {floors}");
+        println!("  wall cells          {walls}");
+        println!("  roof cells          {roofs}");
+        println!("  wall decorations    {wall_decorations}");
+        println!("  floor accents       {floor_accents}");
+        println!("  star fields         {star_fields} (whole field baked into one mesh)");
+        println!("  ---");
+        println!("  levelled            {:?} (entities per LevelTag)", entities_per_level(&mut app));
+        println!("  dead-end CELLS      {dead_end_cells} (landmarks, not sub-meshes)");
+        println!("  tagged subtotal     {tagged}");
+        println!("  UNTAGGED residual   {} (prop sub-meshes + outlines)", meshes.saturating_sub(tagged));
+
+        assert!(meshes > tagged, "the residual is the figure of interest");
+    }
+
+    /// Counts entities carrying a marker on one level of a stack.
+    fn count_on_level<T: Component>(app: &mut App, level: usize) -> usize {
+        use crate::world::LevelTag;
+        app.world_mut()
+            .query_filtered::<&LevelTag, With<T>>()
+            .iter(app.world())
+            .filter(|tag| tag.0 == level)
+            .count()
+    }
+
+    /// Reports how a stack divides into the floor's **fabric** — what a shell
+    /// option would keep drawing on every level — and its **content**, which
+    /// would follow the player.
+    ///
+    /// The split is the ceiling on what such an option could buy: keeping every
+    /// floor's fabric drawn keeps its cost, so the saving is bounded by the
+    /// content column and no design can better it.
+    ///
+    /// Pool surfaces count as fabric, not content. A lava or water cell has no
+    /// floor tile — the recessed surface *is* the bottom of the basin — so
+    /// hiding it opens a hole straight through the stack.
+    ///
+    /// Run with `cargo test -p maze_game_bevy shell_split -- --nocapture`.
+    #[test]
+    fn shell_split_by_level() {
+        use crate::world::floor::hatch::{HatchUnderside, LevelHatch};
+        use crate::world::floor::lines::FloorLine;
+        use crate::world::floor::PoolEdgeSeal;
+        use crate::world::support_pole::SupportPole;
+        use crate::world::walls::rim::PoolRim;
+        use crate::world::{grid_to_json, LevelTag, UndersideSeal};
+
+        const STACK: usize = 10;
+        let json = grid_to_json(&demo_grid());
+        let levels = vec![json.as_str(); STACK];
+        let config = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let mut app = make_playing_app_with_assets(&levels, config);
+
+        let total = entities_per_level(&mut app);
+        let mut fabric = std::collections::BTreeMap::new();
+        let mut query = app.world_mut().query_filtered::<&LevelTag, Or<(
+            With<FloorCell>,
+            With<FloorLine>,
+            With<PoolEdgeSeal>,
+            With<HatchUnderside>,
+            With<LevelHatch>,
+            With<RoofCell>,
+            With<WallCell>,
+            With<PoolRim>,
+            With<LavaSurface>,
+            With<WaterSurface>,
+            With<IronFenceBars>,
+            With<SupportPole>,
+            With<UndersideSeal>,
+            With<DoorMarker>,
+        )>>();
+        for tag in query.iter(app.world()) {
+            *fabric.entry(tag.0).or_insert(0usize) += 1;
+        }
+
+        println!("--- shell split ({STACK}-level lava stack, demo grid) ---");
+        println!("level    total   fabric  content   content %");
+        for (level, total) in &total {
+            let fabric = fabric.get(level).copied().unwrap_or(0);
+            let content = total.saturating_sub(fabric);
+            let share = 100.0 * content as f32 / *total as f32;
+            println!("{level:>5} {total:>8} {fabric:>8} {content:>8} {share:>10.0}%");
+        }
+
+        println!("  --- what the fabric is made of (level 5) ---");
+        for (name, count) in [
+            ("wall panels", count_on_level::<WallCell>(&mut app, 5)),
+            ("floor lines", count_on_level::<FloorLine>(&mut app, 5)),
+            ("floor cells", count_on_level::<FloorCell>(&mut app, 5)),
+            ("roof cells", count_on_level::<RoofCell>(&mut app, 5)),
+            ("pool rims", count_on_level::<PoolRim>(&mut app, 5)),
+            ("lava surfaces", count_on_level::<LavaSurface>(&mut app, 5)),
+            ("underside seals", count_on_level::<UndersideSeal>(&mut app, 5)),
+            ("pool edge seals", count_on_level::<PoolEdgeSeal>(&mut app, 5)),
+            ("support poles", count_on_level::<SupportPole>(&mut app, 5)),
+            ("doors", count_on_level::<DoorMarker>(&mut app, 5)),
+        ] {
+            println!("  {name:<20} {count:>5}");
+        }
+
+        let all: usize = total.values().sum();
+        let all_fabric: usize = fabric.values().sum();
+        let one_floor = total.values().next().copied().unwrap_or(0);
+        let one_content = one_floor - fabric.values().next().copied().unwrap_or(0);
+        println!("  ---");
+        println!("everything drawn        {all}");
+        println!("shell (fabric + 1 content) {}", all_fabric + one_content);
+        println!("one floor only          {one_floor}");
+
+        // The demo grid is sparse in objects. Repeat on a grid where every open
+        // cell carries one, to bound the content share from above.
+        let mut dense = demo_grid();
+        let fill = ['T', 'K', 'H', 'E'];
+        let mut n = 0;
+        for row in dense.iter_mut() {
+            for cell in row.iter_mut() {
+                if *cell == ' ' {
+                    *cell = fill[n % fill.len()];
+                    n += 1;
+                }
+            }
+        }
+        let dense_json = grid_to_json(&dense);
+        let dense_levels = vec![dense_json.as_str(); STACK];
+        let config = GameConfig { wall_type: WallType::Lava, ..GameConfig::default() };
+        let mut dense_app = make_playing_app_with_assets(&dense_levels, config);
+        let dense_total: usize = entities_per_level(&mut dense_app).values().sum();
+        let mut dense_fabric = 0usize;
+        let mut dense_query = dense_app.world_mut().query_filtered::<&LevelTag, Or<(
+            With<FloorCell>,
+            With<FloorLine>,
+            With<PoolEdgeSeal>,
+            With<HatchUnderside>,
+            With<LevelHatch>,
+            With<RoofCell>,
+            With<WallCell>,
+            With<PoolRim>,
+            With<LavaSurface>,
+            With<WaterSurface>,
+            With<IronFenceBars>,
+            With<SupportPole>,
+            With<UndersideSeal>,
+            With<DoorMarker>,
+        )>>();
+        for _ in dense_query.iter(dense_app.world()) {
+            dense_fabric += 1;
+        }
+        println!("  --- every open cell carrying an object ---");
+        println!("everything drawn        {dense_total}");
+        println!(
+            "  fabric                {dense_fabric} ({:.0}%)",
+            100.0 * dense_fabric as f32 / dense_total as f32
+        );
+
+        assert!(all_fabric > 0 && all > all_fabric, "both columns must be populated");
+    }
+
+    /// Counts the diagnostics readout's entities (background strip + text).
+    fn diagnostics_entities(app: &mut App) -> usize {
+        use crate::hud::diagnostics::DiagnosticsReadout;
+        app.world_mut()
+            .query::<&DiagnosticsReadout>()
+            .iter(app.world())
+            .count()
+    }
+
+    #[test]
+    fn the_diagnostics_readout_is_absent_unless_asked_for() {
+        // The default config leaves debug_memory off, so an ordinary run spawns
+        // nothing — neither at the title screen nor in play.
+        let mut app = make_title_app();
+        assert_eq!(diagnostics_entities(&mut app), 0);
+        let mut app = make_playing_app();
+        assert_eq!(diagnostics_entities(&mut app), 0);
+    }
+
+    #[test]
+    fn the_diagnostics_readout_appears_at_the_title_screen_and_survives_into_play() {
+        // It is spawned on entering the title screen so the countdown shows the
+        // pre-world figures, and it must carry through the transition rather than
+        // being torn down with the title — teardown_title despawns only
+        // TitleEntity, which the readout deliberately is not.
+        let config = GameConfig { debug_memory: true, ..GameConfig::default() };
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
+        build_app(&mut app, None);
+        app.update(); // OnEnter(TitleScreen)
+        let at_title = diagnostics_entities(&mut app);
+        assert!(at_title > 0, "readout must show during the countdown");
+
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update(); // OnExit(TitleScreen) + OnEnter(Playing)
+        assert_eq!(
+            diagnostics_entities(&mut app),
+            at_title,
+            "the same readout carries into play — not torn down, not spawned twice",
+        );
     }
 }

@@ -16,10 +16,11 @@ pub(crate) struct FinishAssets {
 pub(crate) fn build_finish_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    common: &CommonObjectAssets,
 ) -> FinishAssets {
     FinishAssets {
         orb: orb::build_orb_assets(meshes, materials),
-        ladder: ladder::build_ladder_assets(materials),
+        ladder: ladder::build_ladder_assets(meshes, materials, common),
         portal: portal::build_portal_assets(meshes, materials),
     }
 }
@@ -39,7 +40,6 @@ pub(crate) fn build_finish_assets(
 pub(crate) fn spawn_finish_for_cell(
     commands: &mut Commands,
     assets: &FinishAssets,
-    common: &CommonObjectAssets,
     grid: &[Vec<char>],
     cell: char,
     r: usize,
@@ -49,6 +49,9 @@ pub(crate) fn spawn_finish_for_cell(
     seed: u64,
     is_final: bool,
     ladder_allowed: bool,
+    hide_finish_orb: bool,
+    disable_orb_shadows: bool,
+    disable_orb_light: bool,
 ) {
     // 'F'-cell predicate is enforced once here; the per-object spawn
     // helpers below run unconditionally and assume a finish cell.
@@ -56,7 +59,16 @@ pub(crate) fn spawn_finish_for_cell(
         return;
     }
     if is_final {
-        orb::spawn_orb(commands, &assets.orb, r, c, placement);
+        orb::spawn_orb(
+            commands,
+            &assets.orb,
+            r,
+            c,
+            placement,
+            hide_finish_orb,
+            disable_orb_shadows,
+            disable_orb_light,
+        );
         return;
     }
     let rig = finish_type.concrete_for_cell(r, c, seed);
@@ -70,6 +82,6 @@ pub(crate) fn spawn_finish_for_cell(
         FinishType::Portal => portal::spawn_portal(commands, &assets.portal, r, c, placement),
         // `Ladder`; `Random` is already resolved, and a no-ladder cell became a
         // portal above.
-        _ => ladder::spawn_ladder(commands, common, &assets.ladder, grid, r, c, placement),
+        _ => ladder::spawn_ladder(commands, &assets.ladder, grid, r, c, placement),
     }
 }

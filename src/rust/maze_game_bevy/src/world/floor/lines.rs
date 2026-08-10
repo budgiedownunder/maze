@@ -1,5 +1,5 @@
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE, HALF_CELL};
+use crate::world::{LevelPlacement, LevelTag, CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -48,6 +48,7 @@ pub(crate) fn build_line_assets(
 
 fn spawn_line(
     commands: &mut Commands,
+    tag: LevelTag,
     mesh: Option<Handle<Mesh>>,
     mat: Option<Handle<StandardMaterial>>,
     pos: Vec3,
@@ -56,13 +57,14 @@ fn spawn_line(
         (Some(m), Some(mt)) => {
             commands.spawn((
                 FloorLine,
+                tag,
                 Transform::from_translation(pos),
                 Mesh3d(m),
                 MeshMaterial3d(mt),
             ));
         }
         _ => {
-            commands.spawn((FloorLine, Transform::from_translation(pos)));
+            commands.spawn((FloorLine, tag, Transform::from_translation(pos)));
         }
     }
 }
@@ -83,12 +85,14 @@ pub(crate) fn spawn_lines_for_cell(
     // when the neighbour in that direction is a wall or grid boundary.
     spawn_line(
         commands,
+        placement.tag(),
         assets.line_ew.clone(),
         assets.line_mat.clone(),
         Vec3::new(x, line_y,z + HALF_CELL),
     );
     spawn_line(
         commands,
+        placement.tag(),
         assets.line_ns.clone(),
         assets.line_mat.clone(),
         Vec3::new(x + HALF_CELL, line_y,z),
@@ -96,6 +100,7 @@ pub(crate) fn spawn_lines_for_cell(
     if r == 0 || grid[r - 1][c] == 'W' {
         spawn_line(
             commands,
+            placement.tag(),
             assets.line_ew.clone(),
             assets.line_mat.clone(),
             Vec3::new(x, line_y,z - HALF_CELL),
@@ -104,6 +109,7 @@ pub(crate) fn spawn_lines_for_cell(
     if c == 0 || grid[r][c - 1] == 'W' {
         spawn_line(
             commands,
+            placement.tag(),
             assets.line_ns.clone(),
             assets.line_mat.clone(),
             Vec3::new(x - HALF_CELL, line_y,z),

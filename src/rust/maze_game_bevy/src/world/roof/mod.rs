@@ -223,13 +223,14 @@ fn spawn_tile(
         (Some(mesh), Some(mat)) => {
             commands.spawn((
                 RoofCell,
+                placement.tag(),
                 Mesh3d(mesh),
                 MeshMaterial3d(mat),
                 Transform::from_xyz(x, roof_y, z),
             ));
         }
         _ => {
-            commands.spawn((RoofCell, Transform::from_xyz(x, roof_y, z)));
+            commands.spawn((RoofCell, placement.tag(), Transform::from_xyz(x, roof_y, z)));
         }
     }
 }

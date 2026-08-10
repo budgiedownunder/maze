@@ -1,3 +1,9 @@
 src/rust/target
 src/csharp/.vs
 src/.vs
+
+# wasm-pack build output — `--out-dir` also receives a copy of the crate's
+# README and an npm package.json. Only index.html in that directory is authored.
+src/react/maze_web_server/public/game/maze_game_bevy_wasm*
+src/react/maze_web_server/public/game/package.json
+src/react/maze_web_server/public/game/README.md

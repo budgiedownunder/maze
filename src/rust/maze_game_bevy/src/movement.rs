@@ -185,3 +185,14 @@ pub(crate) fn quit_system(
 /// [`crate::overlays::pause::pause_system`] instead, leaving this system a no-op.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn quit_system() {}
+
+/// Ends the game when the host asks, via [`crate::request_stop`].
+///
+/// Distinct from [`quit_system`]: that is a *player* action (Esc on desktop) and
+/// is deliberately inert in the browser. This is a *host* action — the page
+/// tearing a session down — and must work on wasm.
+pub(crate) fn stop_request_system(mut exit: bevy::ecs::message::MessageWriter<AppExit>) {
+    if crate::alloc::take_stop_request() {
+        exit.write(AppExit::Success);
+    }
+}

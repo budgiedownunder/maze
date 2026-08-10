@@ -48,9 +48,10 @@ pub(crate) mod gold;
 pub(crate) mod jewels;
 pub(crate) mod silver;
 
+use super::common::bake::{baked_handle, outline_scaled};
 use super::common::{self, CommonObjectAssets};
-use crate::state::TreasureStyle;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::state::{GameConfig, TreasureStyle};
+use crate::world::{GlowLight, LevelPlacement, CELL_SIZE};
 use bevy::mesh::VertexAttributeValues;
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
@@ -160,45 +161,6 @@ fn gem_transforms(pos: Vec3) -> [Transform; 2] {
             .with_rotation(Quat::from_rotation_x(PI))
             .with_scale(Vec3::new(GEM_SIZE, pavilion_h, GEM_SIZE)),
     ]
-}
-
-/// The inverted-hull outline transforms for a set of body transforms: each piece
-/// scaled up about its own centre by [`common::OUTLINE_SCALE`].
-fn outline_scaled(transforms: &[Transform]) -> Vec<Transform> {
-    transforms
-        .iter()
-        .map(|t| {
-            let mut o = *t;
-            o.scale *= common::OUTLINE_SCALE;
-            o
-        })
-        .collect()
-}
-
-/// Bakes one combined mesh from `base` stamped at every transform in
-/// `transforms` (assumed non-empty). Lets a whole loot pile become a single
-/// drawable mesh shared by every chest of that style.
-fn bake(base: &Mesh, transforms: &[Transform]) -> Mesh {
-    let mut iter = transforms.iter();
-    let first = iter.next().expect("a loot pile has at least one piece");
-    let mut acc = base.clone().transformed_by(*first);
-    for t in iter {
-        let _ = acc.merge(&base.clone().transformed_by(*t));
-    }
-    acc
-}
-
-/// Adds a baked mesh built from `base` at `transforms` to the asset store,
-/// returning its handle (or `None` headless / when there are no pieces).
-fn baked_handle(
-    meshes: &mut Option<ResMut<Assets<Mesh>>>,
-    base: &Mesh,
-    transforms: &[Transform],
-) -> Option<Handle<Mesh>> {
-    if transforms.is_empty() {
-        return None;
-    }
-    meshes.as_mut().map(|m| m.add(bake(base, transforms)))
 }
 
 /// Per-cell anchor for the collectible loot. One is spawned at each `'T'` cell,
@@ -441,6 +403,7 @@ pub(crate) fn spawn_treasure_for_cell(
     // Sparkle rays for this chest — uniform across the maze (see rays_per_treasure).
     ray_count: usize,
     placement: LevelPlacement,
+    config: &GameConfig,
 ) {
     if cell != 'T' {
         return;
@@ -452,7 +415,7 @@ pub(crate) fn spawn_treasure_for_cell(
 
     // The open chest stands free so it stays behind, emptied, after collection.
     // It takes the (already offset) world `x`/`z` and the level for its own Y.
-    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, base_y);
+    common::chest::spawn_chest(commands, common_assets, x, z, yaw, common::chest::ChestLid::Open, base_y, placement.tag());
 
     // Collectible loot root — positioned + yawed at the cell so its children use
     // the same local frame as the chest interior. The flourish rises/shrinks
@@ -460,14 +423,19 @@ pub(crate) fn spawn_treasure_for_cell(
     let root = commands
         .spawn((
             TreasureMarker { cell: (r, c), level: placement.level, base_y },
+            placement.tag(),
             Transform::from_xyz(x, placement.world_y(0.0), z).with_rotation(Quat::from_rotation_y(yaw)),
             Visibility::default(),
         ))
         .id();
 
-    // Style-tinted glow above the loot — one point light per chest.
+    // Style-tinted glow above the loot — one point light per chest. Skipped
+    // when the glow switch is on: the loot's own materials are emissive.
+    if !config.disable_object_glow {
     let glow = commands
         .spawn((
+            GlowLight,
+            placement.tag(),
             PointLight {
                 color: glow_color(style),
                 intensity: GLOW_INTENSITY,
@@ -479,6 +447,7 @@ pub(crate) fn spawn_treasure_for_cell(
         ))
         .id();
     commands.entity(root).add_child(glow);
+    }
 
     // Style-specific loot pile + matching sparkle ring inside the open trunk.
     let ctx = LootContext {

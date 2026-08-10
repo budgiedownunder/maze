@@ -47,6 +47,17 @@ struct DifficultyPreset {
     max_hp: u32,
     /// Number of stacked levels (1 = single level).
     level_count: u32,
+    /// Whether upper levels shrink over the one below, so the stack reads as a
+    /// tower from the ground floor. Inert on a single-level preset.
+    taper: bool,
+    /// How enemy density changes as the player climbs, as the wire value
+    /// (`easier` / `same` / `harder`). It scales the enemy count alone — every
+    /// other count is applied to each level unchanged — so it pairs with
+    /// [`Self::taper`]: a tapered stack wants `easier`, because its top floor is
+    /// only a few cells across and a full complement there is inescapable,
+    /// whereas a stack of equal floors wants `same`. Inert on a single-level
+    /// preset.
+    difficulty_change: &'static str,
 }
 
 const EASY: DifficultyPreset = DifficultyPreset {
@@ -67,46 +78,52 @@ const EASY: DifficultyPreset = DifficultyPreset {
     enemy_move_period_ms: 1800,
     max_hp: 3,
     level_count: 1,
+    taper: false,
+    difficulty_change: "easier",
 };
 
 const TRICKY: DifficultyPreset = DifficultyPreset {
     name: "Tricky",
     title: "TRICKY 3D",
     mode: "Tricky",
-    rows: 25,
-    cols: 25,
-    timer_seconds: 240,
+    rows: 20,
+    cols: 20,
+    timer_seconds: 600,
     seed: 15_151_515,
     min_solution_length: 35,
     door_count: 3,
     spare_doors: 2,
     spare_keys: 1,
-    enemy_count: 3,
-    health_count: 3,
+    enemy_count: 1,
+    health_count: 4,
     treasure_count: 5,
     enemy_move_period_ms: 1500,
-    max_hp: 3,
-    level_count: 2,
+    max_hp: 4,
+    level_count: 3,
+    taper: true,
+    difficulty_change: "easier",
 };
 
 const HARD: DifficultyPreset = DifficultyPreset {
     name: "Hard",
     title: "HARD 3D",
     mode: "Hard",
-    rows: 40,
-    cols: 40,
-    timer_seconds: 600,
+    rows: 20,
+    cols: 20,
+    timer_seconds: 900,
     seed: 25_252_525,
     min_solution_length: 45,
-    door_count: 4,
-    spare_doors: 3,
+    door_count: 3,
+    spare_doors: 2,
     spare_keys: 1,
-    enemy_count: 5,
-    health_count: 4,
-    treasure_count: 8,
-    enemy_move_period_ms: 1200,
-    max_hp: 3,
+    enemy_count: 2,
+    health_count: 5,
+    treasure_count: 5,
+    enemy_move_period_ms: 1500,
+    max_hp: 5,
     level_count: 3,
+    taper: false,
+    difficulty_change: "same",
 };
 
 /// The shipped presets, in the order they appear in the "Difficulty" collection.
@@ -138,6 +155,8 @@ const DAILY: DifficultyPreset = DifficultyPreset {
     enemy_move_period_ms: 1500,
     max_hp: 3,
     level_count: 1,
+    taper: false,
+    difficulty_change: "easier",
 };
 
 /// The name of the seeded curated daily-challenge collection.
@@ -185,10 +204,10 @@ fn curated_config(preset: &DifficultyPreset) -> serde_json::Value {
         "levels": {
             "count": preset.level_count,
             "finishType": "ladder",
-            "difficultyChange": "easier",
+            "difficultyChange": preset.difficulty_change,
             "resetBag": true,
             "alignment": "edge",
-            "taper": false,
+            "taper": preset.taper,
             "perimeterRandom": false,
             "hideCompletedEnemies": false,
             "top": null

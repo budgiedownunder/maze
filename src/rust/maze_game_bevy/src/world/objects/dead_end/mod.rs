@@ -65,9 +65,9 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     let base_y = placement.base_y();
     let kind = dead_end_object_index(r, c, config.seed);
     match kind {
-        0 => common::brazier::spawn_brazier(commands, assets, x, z, base_y),
-        1 => common::urn::spawn_urn(commands, assets, x, z, base_y),
-        2 => common::pillar::spawn_pillar(commands, assets, x, z, 1.0, base_y),
+        0 => common::brazier::spawn_brazier(commands, assets, x, z, base_y, placement.tag()),
+        1 => common::urn::spawn_urn(commands, assets, x, z, base_y, placement.tag()),
+        2 => common::pillar::spawn_pillar(commands, assets, x, z, 1.0, base_y, placement.tag()),
         _ => common::chest::spawn_chest(
             commands,
             assets,
@@ -76,10 +76,11 @@ pub(crate) fn spawn_dead_end_object_for_cell(
             common::yaw_toward_open_neighbour(grid, r, c),
             common::chest::ChestLid::Closed,
             base_y,
+            placement.tag(),
         ),
     }
     // Anchor entity tagging this cell as carrying a dead-end landmark.
-    commands.spawn((DeadEndObject, Transform::from_xyz(x, placement.world_y(0.0), z)));
+    commands.spawn((DeadEndObject, placement.tag(), Transform::from_xyz(x, placement.world_y(0.0), z)));
 }
 
 #[cfg(test)]

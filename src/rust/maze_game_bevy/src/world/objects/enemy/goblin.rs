@@ -5,7 +5,7 @@
 
 use crate::images::make_image;
 use crate::palette::EMISSIVE_ONLY_BASE;
-use crate::world::{LevelPlacement, CELL_SIZE};
+use crate::world::{icosphere, CELL_SIZE, LevelPlacement};
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
@@ -104,8 +104,8 @@ pub(crate) fn build_goblin_assets(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     images: &mut Option<ResMut<Assets<Image>>>,
 ) -> GoblinAssets {
-    let body_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(BODY_RADIUS)));
-    let eye_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(EYE_RADIUS)));
+    let body_mesh = meshes.as_mut().map(|m| m.add(icosphere(BODY_RADIUS, 3)));
+    let eye_mesh = meshes.as_mut().map(|m| m.add(icosphere(EYE_RADIUS, 2)));
     let tooth_mesh = meshes.as_mut().map(|m| {
         m.add(Cone {
             radius: TOOTH_RADIUS,
@@ -215,6 +215,7 @@ pub(crate) fn spawn_goblin(
     let body = match (assets.body_mesh.clone(), assets.body_mat.clone()) {
         (Some(mesh), Some(mat)) => commands
             .spawn((
+                placement.tag(),
                 super::EnemyMarker {
                     id,
                     spawn_cell: (r, c),
@@ -227,6 +228,7 @@ pub(crate) fn spawn_goblin(
             .id(),
         _ => commands
             .spawn((
+                placement.tag(),
                 super::EnemyMarker {
                     id,
                     spawn_cell: (r, c),

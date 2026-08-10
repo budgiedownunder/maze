@@ -8,9 +8,11 @@ namespace Maze.Maui.App
             {
                 if (handler is not GameWebViewHandler gameHandler) return;
 
-                if (IgnoreSslErrors)
-                    gameHandler.PlatformView.SetWebViewClient(
-                        new Platforms.Android.IgnoreSslWebViewClient(gameHandler));
+                // Always installed — the client carries the renderer-death
+                // handling that keeps Android from killing the whole app
+                // process, and applies the TLS bypass only when configured.
+                gameHandler.PlatformView.SetWebViewClient(
+                    new Platforms.Android.GameWebViewClient(gameHandler, IgnoreSslErrors));
 
                 // Bridge: the /game/ page posts GameResult JSON via
                 // window.MazeMauiHost.onGameResult(...). Re-adding with the same
@@ -23,7 +25,7 @@ namespace Maze.Maui.App
         /// <summary>
         /// JS-facing bridge object exposed as <c>window.MazeMauiHost</c>. The
         /// <c>onGameResult</c> callback runs on the WebView's JS-bridge thread —
-        /// <see cref="RaiseGameResult"/> subscribers must marshal to the UI thread.
+        /// <see cref="RaiseHostMessage"/> subscribers must marshal to the UI thread.
         /// </summary>
         private sealed class MazeMauiHostBridge : Java.Lang.Object
         {
@@ -32,7 +34,7 @@ namespace Maze.Maui.App
             [System.Diagnostics.CodeAnalysis.SuppressMessage(
                 "Performance", "CA1822:Mark members as static",
                 Justification = "Must be an instance method — invoked via JNI on the JavascriptInterface object.")]
-            public void OnGameResult(string json) => RaiseGameResult(json);
+            public void OnGameResult(string json) => RaiseHostMessage(json);
         }
     }
 }
