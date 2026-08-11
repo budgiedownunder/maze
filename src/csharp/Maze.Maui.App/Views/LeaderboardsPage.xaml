@@ -40,7 +40,7 @@
                 <Picker Grid.Column="0"
                         MinimumWidthRequest="110"
                         ItemsSource="{Binding GameTypes}"
-                        ItemDisplayBinding="{Binding Label}"
+                        ItemDisplayBinding="{Binding Label, x:DataType=viewmodel:GameTypeOption}"
                         SelectedItem="{Binding SelectedGameType}" />
                 <Label Grid.Column="1" Text="→" FontSize="18" VerticalOptions="Center" />
                 <!-- Mazes: cascading maze picker. -->
@@ -49,7 +49,7 @@
                         HorizontalOptions="Start"
                         MinimumWidthRequest="110"
                         ItemsSource="{Binding Games}"
-                        ItemDisplayBinding="{Binding Label}"
+                        ItemDisplayBinding="{Binding Label, x:DataType=viewmodel:GameOption}"
                         SelectedItem="{Binding SelectedGame}"
                         SelectedIndexChanged="OnGameSelectionChanged" />
                 <!-- 3D Games: picked-game summary (truncates in the remaining width). -->
@@ -89,7 +89,7 @@
             <HorizontalStackLayout IsVisible="{Binding IsDailyGame}" Spacing="8" VerticalOptions="Center">
                 <Label Text="Date" VerticalOptions="Center" />
                 <Picker ItemsSource="{Binding BoardDates}"
-                        ItemDisplayBinding="{Binding Label}"
+                        ItemDisplayBinding="{Binding Label, x:DataType=viewmodel:BoardDateOption}"
                         SelectedItem="{Binding SelectedBoardDate}"
                         MinimumWidthRequest="160" />
             </HorizontalStackLayout>
