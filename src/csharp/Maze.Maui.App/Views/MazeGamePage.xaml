@@ -100,7 +100,7 @@ x:DataType="viewmodel:MazeGameViewModel"
                     <DataTemplate x:DataType="viewmodel:BagChip">
                         <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
                             <Image Source="{Binding IconSource}"
-                                   AutomationProperties.Name="{Binding AltText}"
+                                   SemanticProperties.Description="{Binding AltText}"
                                    HeightRequest="24" WidthRequest="24" Aspect="AspectFit"/>
                             <Label Text="{Binding Count, StringFormat='×{0}'}"
                                    VerticalOptions="Center" FontSize="14" Opacity="0.9"/>

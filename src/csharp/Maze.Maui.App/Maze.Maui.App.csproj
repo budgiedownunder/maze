@@ -163,6 +163,16 @@
     <Error Text="Native library file not found: %(MissingNativeLibraries.Identity)" Condition="@(MissingNativeLibraries-&gt;Count()) &gt; 0" />
   </Target>
 
+  <!-- ProcessMauiSplashScreens both generates the Windows splash images and adds them to
+       ContentWithTargetPath, so whenever mauisplash.stamp makes it skip as up-to-date the
+       images are left out of the package layout. The manifest still points at them, so
+       packaging fails with DEP0700 - splashSplashScreen.png cannot be located. Drop the stamp
+       so the target runs on every Windows build. -->
+  <Target Name="EnsureMauiSplashAssets" BeforeTargets="ProcessMauiSplashScreens"
+          Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+    <Delete Files="$(IntermediateOutputPath)mauisplash.stamp" />
+  </Target>
+
   <Target Name="PrintAppxPackageDir" AfterTargets="Build">
     <Message Text="AppxPackageDir: $(AppxPackageDir)" Importance="High" />
   </Target>
