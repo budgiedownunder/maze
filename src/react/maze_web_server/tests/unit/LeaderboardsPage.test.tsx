@@ -115,9 +115,10 @@ function dailyDefaultHandlers(boardDates: string[] = ['2026-07-10', '2026-07-05'
   }
 }
 
-function renderPage() {
+// `url` carries the optional `?id=` / `?def=` preselect the page reads on mount.
+function renderPage(url = '/leaderboards') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <ThemeProvider>
         <LeaderboardsPage />
       </ThemeProvider>
@@ -186,6 +187,83 @@ describe('LeaderboardsPage', () => {
       ),
     )
     renderPage()
+
+    await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
+    expect((screen.getByLabelText('Game Type') as HTMLSelectElement).value).toBe('my-mazes')
+  })
+
+  it('opens the maze named by ?id, in preference to the most-recent run', async () => {
+    const requested: Array<string | null> = []
+    server.use(
+      // The most-recent run is on m1 — the preselect must win over it.
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 100, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([
+          { id: 'm1.json', name: 'My Maze', definition: null },
+          { id: 'm2.json', name: 'Other Maze', definition: null },
+        ]),
+      ),
+      http.get('/api/v1/scores', ({ request }) => {
+        requested.push(new URL(request.url).searchParams.get('maze_id'))
+        return HttpResponse.json({
+          scores: [row({ id: 's1', maze_id: 'm2.json', user_id: 'me', elapsed_ms: 42137 })],
+          limit: 20, offset: 0, has_more: false,
+        })
+      }),
+    )
+    renderPage('/leaderboards?id=m2.json')
+
+    await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
+    expect((screen.getByLabelText('Game Type') as HTMLSelectElement).value).toBe('my-mazes')
+    expect((screen.getByLabelText('Game') as HTMLSelectElement).value).toBe('m2.json')
+    expect(requested).toEqual(['m2.json'])
+  })
+
+  it('opens the stored game named by ?def, in preference to the most-recent run', async () => {
+    server.use(
+      // The most-recent run is on a maze — the preselect must win over it.
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 100, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      http.get('/api/v1/game-definitions/:id', ({ params }) =>
+        HttpResponse.json(playResponse(String(params.id), 'Tricky', 'owner-x')),
+      ),
+      http.get('/api/v1/scores', ({ request }) =>
+        HttpResponse.json({
+          scores: new URL(request.url).searchParams.get('challenge') === 'def:abc-123'
+            ? [row({ id: 's1', challenge: 'def:abc-123', user_id: 'me', username: 'bob', elapsed_ms: 42137 })]
+            : [],
+          limit: 20, offset: 0, has_more: false,
+        }),
+      ),
+    )
+    renderPage('/leaderboards?def=abc-123')
+
+    await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
+    expect((screen.getByLabelText('Game Type') as HTMLSelectElement).value).toBe('play3d')
+    expect(screen.getByText('Tricky')).toBeInTheDocument()
+  })
+
+  it('falls back to the usual default when the ?def game is gone', async () => {
+    server.use(
+      http.get('/api/v1/scores/me', () =>
+        HttpResponse.json({ scores: [row({ id: 'h1', maze_id: 'm1.json', user_id: 'me' })], limit: 100, offset: 0, has_more: false }),
+      ),
+      http.get('/api/v1/mazes', () =>
+        HttpResponse.json([{ id: 'm1.json', name: 'My Maze', definition: null }]),
+      ),
+      // Deleted, or no longer visible to the caller — the play-fetch 404s.
+      http.get('/api/v1/game-definitions/:id', () => new HttpResponse(null, { status: 404 })),
+      http.get('/api/v1/scores', () =>
+        HttpResponse.json({ scores: [row({ id: 's1', maze_id: 'm1.json', user_id: 'me', elapsed_ms: 42137 })], limit: 20, offset: 0, has_more: false }),
+      ),
+    )
+    renderPage('/leaderboards?def=abc-123')
 
     await waitFor(() => expect(screen.getByText('0:42.137')).toBeInTheDocument())
     expect((screen.getByLabelText('Game Type') as HTMLSelectElement).value).toBe('my-mazes')
