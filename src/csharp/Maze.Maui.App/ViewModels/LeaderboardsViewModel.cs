@@ -45,6 +45,10 @@ namespace Maze.Maui.App.ViewModels
         // the Leaderboards page is opened from a game card's Leaderboard button).
         private string? _preselectDefinitionId;
 
+        // A maze id to preselect (set by the page from a `?maze=` nav argument when
+        // the Leaderboards page is opened for a personal maze's board).
+        private string? _preselectMazeId;
+
         // The currently loaded board, so a redundant reselect is a no-op and
         // load-more knows the subject.
         private string? _loadedKey;
@@ -200,6 +204,10 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>Sets the game to preselect (from a card's Leaderboard button); applied on Initialize.</summary>
         /// <param name="definitionId">The game definition id, or <c>null</c></param>
         public void SetPreselectGame(string? definitionId) => _preselectDefinitionId = definitionId;
+
+        /// <summary>Sets the personal maze to preselect; applied on Initialize.</summary>
+        /// <param name="mazeId">The maze id, or <c>null</c></param>
+        public void SetPreselectMaze(string? mazeId) => _preselectMazeId = mazeId;
 
         // Repopulating the maze Game list is synchronous; the board reload is driven
         // by the page (picker change → ReloadBoardCommand) and InitializeAsync.
@@ -597,15 +605,27 @@ namespace Maze.Maui.App.ViewModels
             _mostRecent = history.Scores.FirstOrDefault();
         }
 
-        // The board to show first: a game preselected from its card, else the subject
-        // of the caller's most-recent run (their maze, or the 3D game behind a
-        // `def:<id>` challenge — resolved via the access-checked play-fetch so a
-        // gone / inaccessible game falls through), else their first maze, else
-        // 3D Games with no game picked.
+        // The board to show first: a game or maze preselected by the caller (a card's
+        // Leaderboard button, or the end of a 3D run), else the subject of the
+        // caller's most-recent run (their maze, or the 3D game behind a `def:<id>`
+        // challenge — resolved via the access-checked play-fetch so a gone /
+        // inaccessible game falls through), else their first maze, else 3D Games with
+        // no game picked. Every step falls through rather than failing, so a
+        // since-deleted subject still lands on a usable board.
         private async Task ApplyDefaultSelectionAsync()
         {
             if (!string.IsNullOrEmpty(_preselectDefinitionId) && await TrySelectGameByIdAsync(_preselectDefinitionId))
                 return;
+
+            if (!string.IsNullOrEmpty(_preselectMazeId))
+            {
+                string? preselected = ResolveMazeId(_preselectMazeId);
+                if (preselected is not null)
+                {
+                    SelectMaze(preselected);
+                    return;
+                }
+            }
 
             if (_mostRecent?.MazeId is not null)
             {
