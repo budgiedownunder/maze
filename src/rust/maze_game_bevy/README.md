@@ -11,7 +11,7 @@ The `maze_game_bevy` crate is written in `Rust` and provides the [Bevy](https://
 
 ### App flow
 
-1. **Title screen** — layered gold title text displayed for 3 seconds, with a "Starting..." subtitle counting the seconds down to the auto-transition into the playing state.
+1. **Title screen** — layered gold title text displayed for 3 seconds, with a "Starting in Ns..." subtitle counting the seconds down to the auto-transition into the playing state.
 2. **3D maze world** — first-person PBR renderer. Wall panels are spawned on the exposed faces of passable cells, ensuring boundary walls are always visible even when the maze data has no explicit outer wall row. N/S-facing panels are a lighter stone grey; E/W-facing panels are darker, providing a directional shading cue at junctions.
 3. **Finish orb** — an animated gold sphere hovers and bobs above the finish cell, illuminated by a shadow-casting point light that confines the glow to cells with line-of-sight to the orb.
 

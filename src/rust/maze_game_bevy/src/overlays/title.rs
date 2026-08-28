@@ -17,12 +17,12 @@ pub(crate) enum TitleTextKind {
 /// The splash subtitle text for the given time left on the start countdown.
 ///
 /// Whole seconds, rounded up, so each value is shown for a full second:
-/// "(3s)" while 2–3 s remain, "(2s)" while 1–2 s remain, "(1s)" for the final
-/// second. It never reads "(0s)" — the title tears down the instant the timer
-/// finishes.
+/// "Starting in 3s..." while 2–3 s remain, "2s" while 1–2 s remain, "1s" for
+/// the final second. It never reads "0s" — the title tears down the instant the
+/// timer finishes.
 pub(crate) fn countdown_label(remaining_secs: f32) -> String {
     let seconds_left = remaining_secs.max(0.0).ceil() as u32;
-    format!("Starting...({seconds_left}s)")
+    format!("Starting in {seconds_left}s...")
 }
 
 pub(crate) fn setup_title(
@@ -128,21 +128,21 @@ mod tests {
     #[test]
     fn countdown_label_rounds_each_second_up() {
         // Each whole-second value shows for its full second: the ceiling of the
-        // remaining time. A fresh 3 s timer reads "(3s)"; the final second reads
-        // "(1s)"; it never reaches "(0s)".
-        assert_eq!(countdown_label(3.0), "Starting...(3s)");
-        assert_eq!(countdown_label(2.5), "Starting...(3s)");
-        assert_eq!(countdown_label(2.0), "Starting...(2s)");
-        assert_eq!(countdown_label(1.01), "Starting...(2s)");
-        assert_eq!(countdown_label(1.0), "Starting...(1s)");
-        assert_eq!(countdown_label(0.01), "Starting...(1s)");
+        // remaining time. A fresh 3 s timer reads "3s"; the final second reads
+        // "1s"; it never reaches "0s".
+        assert_eq!(countdown_label(3.0), "Starting in 3s...");
+        assert_eq!(countdown_label(2.5), "Starting in 3s...");
+        assert_eq!(countdown_label(2.0), "Starting in 2s...");
+        assert_eq!(countdown_label(1.01), "Starting in 2s...");
+        assert_eq!(countdown_label(1.0), "Starting in 1s...");
+        assert_eq!(countdown_label(0.01), "Starting in 1s...");
     }
 
     #[test]
     fn countdown_label_clamps_non_positive_to_zero() {
         // A spent or slightly-negative remaining time must not underflow the
-        // unsigned cast — it floors at "(0s)".
-        assert_eq!(countdown_label(0.0), "Starting...(0s)");
-        assert_eq!(countdown_label(-1.0), "Starting...(0s)");
+        // unsigned cast — it floors at "0s".
+        assert_eq!(countdown_label(0.0), "Starting in 0s...");
+        assert_eq!(countdown_label(-1.0), "Starting in 0s...");
     }
 }
