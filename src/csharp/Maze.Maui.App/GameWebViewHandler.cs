@@ -36,6 +36,15 @@ namespace Maze.Maui.App
         internal static event Action? GameStoppedReceived;
 
         /// <summary>
+        /// Raised when the player asks for this run's leaderboard from the hosted
+        /// page's end-of-run overlay. Carries no payload: the page cannot navigate
+        /// to a native page, so all it does is ask, and the hosting page already
+        /// knows which board the run belongs to. Fires on the same threads as
+        /// <see cref="GameResultReceived"/>, so the subscriber marshals.
+        /// </summary>
+        internal static event Action? GameLeaderboardRequested;
+
+        /// <summary>
         /// Invoked by the per-platform handler code when a bridge message
         /// arrives. The page multiplexes results and failures over one channel,
         /// so the payload's envelope decides which event it becomes — see
@@ -49,6 +58,11 @@ namespace Maze.Maui.App
             if (kind == Models.HostMessageKind.Stopped)
             {
                 GameStoppedReceived?.Invoke();
+                return;
+            }
+            if (kind == Models.HostMessageKind.Leaderboard)
+            {
+                GameLeaderboardRequested?.Invoke();
                 return;
             }
             if (kind == Models.HostMessageKind.Failure)

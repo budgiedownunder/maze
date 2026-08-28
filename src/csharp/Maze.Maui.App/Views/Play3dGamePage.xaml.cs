@@ -32,6 +32,13 @@ namespace Maze.Maui.App.Views
         private bool _failureHandled;
 
         /// <summary>
+        /// Whether the leaderboard has already been opened for this run. The
+        /// end-of-run overlay stays on screen while the navigation runs, so a
+        /// second tap must not queue a second one.
+        /// </summary>
+        private bool _leaderboardRequested;
+
+        /// <summary>
         /// Longest to wait for the game to confirm it has torn down before
         /// giving up and destroying the document anyway. Only a fallback: the
         /// game reports completion, so this exists so an unresponsive page
@@ -88,6 +95,8 @@ namespace Maze.Maui.App.Views
             GameWebViewHandler.GameResultReceived += OnGameResultReceived;
             GameWebViewHandler.GameFailureReceived -= OnGameFailureReceived;
             GameWebViewHandler.GameFailureReceived += OnGameFailureReceived;
+            GameWebViewHandler.GameLeaderboardRequested -= OnGameLeaderboardRequested;
+            GameWebViewHandler.GameLeaderboardRequested += OnGameLeaderboardRequested;
         }
 
         protected override async void OnNavigatedTo(NavigatedToEventArgs args)
@@ -132,6 +141,7 @@ namespace Maze.Maui.App.Views
             base.OnDisappearing();
             GameWebViewHandler.GameResultReceived -= OnGameResultReceived;
             GameWebViewHandler.GameFailureReceived -= OnGameFailureReceived;
+            GameWebViewHandler.GameLeaderboardRequested -= OnGameLeaderboardRequested;
             MazeItem = null;
             DefinitionId = null;
             LaunchSettings = null;
@@ -222,6 +232,44 @@ namespace Maze.Maui.App.Views
 
                 await _dialogService.ShowAlert("Game stopped", Play3dFailureReport.AlertMessage(failure), "OK");
                 await _navigationService.GoBackAsync();
+            });
+        }
+
+        /// <summary>
+        /// Opens this run's leaderboard, asked for from the hosted page's end-of-run
+        /// overlay.
+        ///
+        /// The game page is <b>replaced</b> rather than left under the board: the run
+        /// is over, leaving tears the WebView down, and <c>_launchAttempted</c> means
+        /// coming back to this page would show a blank one — so this pops to wherever
+        /// the game was launched from and pushes the Leaderboards page there instead.
+        ///
+        /// The board is named from this page's own launch arguments — the same values
+        /// that built the game URL — read before the pop, which clears them. The
+        /// bridge may fire on a non-UI thread (Android), so this hops to the main
+        /// thread.
+        /// </summary>
+        private void OnGameLeaderboardRequested()
+        {
+            MainThread.BeginInvokeOnMainThread(async () =>
+            {
+                if (_leaderboardRequested) return;
+
+                string key = MazeItem is not null ? "maze" : "def";
+                string? subject = MazeItem is not null ? MazeItem.ID : DefinitionId;
+                if (string.IsNullOrEmpty(subject))
+                {
+                    // No stable subject → no board to open. The overlay only offers
+                    // the button when there is one, so this is belt and braces.
+                    _logger.LogWarning("Play3dGamePage: leaderboard requested for a run with no board subject");
+                    return;
+                }
+                _leaderboardRequested = true;
+
+                await _navigationService.GoBackAsync();
+                await _navigationService.GoToAsync(
+                    "LeaderboardsPage",
+                    new Dictionary<string, object> { { key, subject } });
             });
         }
 
