@@ -49,11 +49,16 @@
     }
     /* The end-of-run row: Play Again, plus a Leaderboard button when the run has
        a board. Positioned as one unit so the buttons stay centred together
-       however many of them there are. */
+       however many of them there are.
+
+       Centred at the TOP on every device: on touch the D-pad occupies the bottom
+       strip, and putting the row in the same place everywhere means the buttons
+       don't move between desktop and mobile. Centred rather than cornered so the
+       persistent pause button at the top-right can't collide with it. */
     #end-actions {
       position: fixed;
       left: 50%;
-      bottom: 24px;
+      top: 16px;
       transform: translateX(-50%);
       z-index: 20;
       display: flex;
@@ -150,19 +155,9 @@
         width: 24px;
         height: 24px;
       }
-      /* On touch devices the D-pad occupies the bottom strip — move the
-         end-of-run buttons to the top so they don't overlap the controls.
-         Sits centred at top so the persistent pause button at the
-         top-right doesn't collide with it. */
-      #end-actions {
-        top: 16px;
-        bottom: auto;
-      }
-      /* When the user has hidden the D-pad via the pause menu, the
-         #controls strip collapses and #end-actions returns to the bottom
-         where it sits on desktop. */
+      /* Hiding the D-pad via the pause menu collapses the bottom strip; the
+         end-of-run row is unaffected, sitting at the top on every device. */
       body.dpad-hidden #controls { display: none; }
-      body.dpad-hidden #end-actions { top: auto; bottom: 24px; }
       /* Bottom-right corner of #game-wrap, which sits ABOVE the D-pad
          strip in the flex column. Bottom-right is clear regardless of
          D-pad visibility, sits well clear of the Bevy HUD elements

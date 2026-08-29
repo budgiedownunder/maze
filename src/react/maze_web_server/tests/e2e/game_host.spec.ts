@@ -310,6 +310,16 @@ test.describe('Game host end-of-run buttons', () => {
     expect(new URL(page.url()).searchParams.get('id')).toBe(MAZE_ID)
   })
 
+  test('the buttons sit at the top of the page, clear of the lower half', async ({ page }) => {
+    // The row is at the top on every device — on touch because the D-pad owns the
+    // bottom strip, on desktop so the buttons are in the same place everywhere.
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    const row = await page.locator('#end-actions').boundingBox()
+    const viewport = page.viewportSize()
+    expect(row!.y + row!.height).toBeLessThan(viewport!.height / 2)
+  })
+
   test('inside a native host the leaderboard button asks the host instead of navigating', async ({ page }) => {
     // Stand in for the MAUI WebView2 bridge, which the page detects the same way
     // it does when forwarding results.
@@ -329,6 +339,39 @@ test.describe('Game host end-of-run buttons', () => {
     expect(posted.map((json) => JSON.parse(json))).toContainEqual({ kind: 'leaderboard' })
     // The host owns the navigation — the page stays put.
     expect(page.url()).toBe(gameUrl)
+  })
+})
+
+test.describe('Game host end-of-run buttons (touch)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
+  const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
+  test.use(pixel7)
+
+  test('the buttons stay at the top even when the D-pad is hidden', async ({ page }) => {
+    // Hiding the D-pad frees the bottom strip, but the row does not follow it
+    // down — its place is the same on every device.
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
+    await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
+    await page.route('**/api/v1/scores*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) }),
+    )
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    await expect(page.locator('#pause-menu')).toBeAttached()
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: true } }))
+    })
+    await page.locator('#pm-dpad-toggle').click()
+    await expect(page.locator('#controls')).toBeHidden()
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', {
+        detail: { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 },
+      }))
+    })
+    const row = await page.locator('#end-actions').boundingBox()
+    const viewport = page.viewportSize()
+    expect(row!.y + row!.height).toBeLessThan(viewport!.height / 2)
   })
 })
 
