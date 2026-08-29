@@ -33,7 +33,8 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   single-finger canvas gestures: swipe left / right to turn, swipe up / down
   to tilt, press-and-hold to move forward. Spacebar (desktop) or the on-screen
   pause button (bottom-right corner) toggles a "PAUSED" overlay that freezes
-  the timer and movement.
+  the timer and movement. A finished run — won or lost — offers "Play Again"
+  plus, when the run has a board, a "Leaderboard" button that opens it.
 - **Leaderboards** — a "Leaderboards" page (with a Home tile and nav entry) showing
   per-maze and per-3D-game boards over completed 3D runs, with fastest-time /
   highest-score tabs, your own runs highlighted, your personal score history, and a green

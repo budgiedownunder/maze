@@ -252,6 +252,86 @@ test.describe('Game host score submission (on win)', () => {
   })
 })
 
+test.describe('Game host end-of-run buttons', () => {
+  // Drives the same synthetic `maze-game-result` listener as the score tests,
+  // with the WASM aborted. A maze id carrying backslashes stands in for the
+  // FileStore ids that are really Windows paths.
+  const MAZE_ID = 'C:\\data\\users\\u1\\mazes\\Maze_1.json'
+
+  async function load(page: Page, params: Record<string, string>) {
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
+    await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
+    await page.route('**/api/v1/scores*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) }),
+    )
+    // Stub the SPA so a click that navigates settles here rather than booting
+    // the whole app — the assertion is on the URL the button chose.
+    await page.route('**/leaderboards*', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>board</body></html>' }),
+    )
+    await page.goto(`/game/index.html?${new URLSearchParams({ t: 'fake', ...params })}`)
+    await expect(page.locator('#pause-menu')).toBeAttached()
+  }
+
+  async function fireResult(page: Page, detail: Record<string, unknown>) {
+    await page.evaluate((d) => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', { detail: d }))
+    }, detail)
+  }
+
+  test('a won maze run offers Play Again and the leaderboard', async ({ page }) => {
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toBeVisible()
+  })
+
+  test('a lost maze run offers the leaderboard too', async ({ page }) => {
+    // A loss records no score, but the board is still what the player faced.
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'lose', score: 0, elapsedMs: 5000, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toBeVisible()
+  })
+
+  test('a run with no board offers Play Again alone', async ({ page }) => {
+    // No ?id and no ?def — the demo path, which records no score either.
+    await load(page, {})
+    await fireResult(page, { outcome: 'win', score: 4, elapsedMs: 1234, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toHaveCount(0)
+  })
+
+  test('in a browser tab the leaderboard button navigates to the maze board', async ({ page }) => {
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await page.locator('#leaderboard').click()
+    await page.waitForURL('**/leaderboards*')
+    expect(new URL(page.url()).searchParams.get('id')).toBe(MAZE_ID)
+  })
+
+  test('inside a native host the leaderboard button asks the host instead of navigating', async ({ page }) => {
+    // Stand in for the MAUI WebView2 bridge, which the page detects the same way
+    // it does when forwarding results.
+    await page.addInitScript(() => {
+      const posted: string[] = []
+      ;(window as unknown as { __posted: string[] }).__posted = posted
+      ;(window as unknown as { chrome: unknown }).chrome = {
+        webview: { postMessage: (json: string) => posted.push(json) },
+      }
+    })
+    await load(page, { id: MAZE_ID })
+    const gameUrl = page.url()
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await page.locator('#leaderboard').click()
+
+    const posted = await page.evaluate(() => (window as unknown as { __posted: string[] }).__posted)
+    expect(posted.map((json) => JSON.parse(json))).toContainEqual({ kind: 'leaderboard' })
+    // The host owns the navigation — the page stays put.
+    expect(page.url()).toBe(gameUrl)
+  })
+})
+
 test.describe('Game host user-edited maze launch (?id=...)', () => {
   // Common test setup: stub the wasm JS module so we can capture the
   // JSON payload start_with_config receives, fulfill the wasm binary
@@ -761,6 +841,26 @@ test.describe('Game host stored game-definition score submission (?def=)', () =>
     await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
     await page.waitForTimeout(200)
     expect(posted).toHaveLength(0)
+  })
+
+  test('offers the leaderboard for a published definition but not for a preview', async ({ page }) => {
+    await setup(page, { challengeKey: 'def:def-id', leaderboardTracked: true })
+    await page.waitForFunction(
+      () => (window as unknown as { __mazeDefChallenge?: string }).__mazeDefChallenge === 'def:def-id'
+    )
+    await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
+    await expect(page.locator('#leaderboard')).toBeVisible()
+  })
+
+  test('does not offer the leaderboard for an unpublished-definition preview', async ({ page }) => {
+    // No challenge stashed → no board to show, exactly as no score is recorded.
+    await setup(page, { challengeKey: 'def:def-id', leaderboardTracked: false })
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload === 'string'
+    )
+    await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toHaveCount(0)
   })
 })
 

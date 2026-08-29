@@ -47,23 +47,32 @@
       display: block;
       touch-action: none;
     }
-    #play-again {
+    /* The end-of-run row: Play Again, plus a Leaderboard button when the run has
+       a board. Positioned as one unit so the buttons stay centred together
+       however many of them there are. */
+    #end-actions {
       position: fixed;
       left: 50%;
       bottom: 24px;
       transform: translateX(-50%);
       z-index: 20;
+      display: flex;
+      gap: 12px;
+    }
+    #end-actions button {
       padding: 10px 24px;
       font-family: sans-serif;
       font-size: 1rem;
       color: #fff;
-      /* Deliberately not #ac99ea — that's the D-pad / spinner accent, and the
-         button would visually merge into the D-pad on touch devices. */
-      background: #2f9e44;
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      white-space: nowrap;
     }
+    /* Deliberately not #ac99ea — that's the D-pad / spinner accent, and either
+       button would visually merge into the D-pad on touch devices. */
+    #play-again { background: #2f9e44; }
+    #leaderboard { background: #7c3aed; }
     /* Bottom banner shown over an *unseeded* preview (an unsaved game
        definition launched from the editor). Informs that the previewed layout
        is indicative — a saved game regenerates from a fresh seed. */
@@ -142,18 +151,18 @@
         height: 24px;
       }
       /* On touch devices the D-pad occupies the bottom strip — move the
-         Play Again button to the top so it doesn't overlap the controls.
+         end-of-run buttons to the top so they don't overlap the controls.
          Sits centred at top so the persistent pause button at the
          top-right doesn't collide with it. */
-      #play-again {
+      #end-actions {
         top: 16px;
         bottom: auto;
       }
       /* When the user has hidden the D-pad via the pause menu, the
-         #controls strip collapses and #play-again returns to the bottom
+         #controls strip collapses and #end-actions returns to the bottom
          where it sits on desktop. */
       body.dpad-hidden #controls { display: none; }
-      body.dpad-hidden #play-again { top: auto; bottom: 24px; }
+      body.dpad-hidden #end-actions { top: auto; bottom: 24px; }
       /* Bottom-right corner of #game-wrap, which sits ABOVE the D-pad
          strip in the flex column. Bottom-right is clear regardless of
          D-pad visibility, sits well clear of the Bevy HUD elements
@@ -267,7 +276,7 @@
     body.game-ended canvas,
     body.game-ended #controls,
     body.game-ended #touch-pause-btn,
-    body.game-ended #play-again,
+    body.game-ended #end-actions,
     body.game-ended #pause-menu,
     body.run-stopped canvas,
     body.run-stopped #controls,
@@ -410,6 +419,18 @@
       } catch (err) {
         console.error('[host-bridge] forward failed', err);
       }
+    }
+
+    // Whether a native host is listening — the same three channels postToHost
+    // writes to. What the page can *do* differs between the two: in a browser
+    // tab it owns the whole window and may navigate; inside a host the window is
+    // the game, so anything leaving it has to be asked for over the bridge.
+    function hasNativeHost() {
+      return !!(
+        (window.chrome && window.chrome.webview && window.chrome.webview.postMessage)
+        || (window.MazeMauiHost && window.MazeMauiHost.onGameResult)
+        || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.MazeMauiHost)
+      );
     }
 
     // Shows a fatal message to the player. Writes into the loading panel
@@ -606,13 +627,12 @@
       postToHost(Object.assign({ kind: 'result' }, e.detail));
 
       // Record the run on the server when the player won. Fire-and-forget so a
-      // failed submit never blocks the Play Again affordance below.
+      // failed submit never blocks the end-of-run buttons below.
       submitScoreOnWin(e.detail);
 
-      // Offer a "Play Again" affordance — reloads /game/ with the same query
-      // string (?id / ?def preserved). Works in both the React browser tab and
-      // the MAUI WebView.
-      showPlayAgain();
+      // Offer the end-of-run buttons — Play Again, plus this run's leaderboard
+      // when it has one. Works in both the React browser tab and the MAUI WebView.
+      showEndActions();
     });
 
     // The game has finished tearing down and released its memory. Forwarded so a
@@ -636,15 +656,34 @@
       }, 0);
     });
 
-    // Records a won 3D run against the server leaderboard. Only wins are
-    // recorded (no loss/quit). The subject is the user maze (?id) when present,
-    // or a stored game definition's server-computed challengeKey (?def, published
-    // definitions only). Runs with no stable subject (the demo / no-config path,
-    // or an unpublished definition preview) are not recorded. Server-owned fields
-    // (the player and the record timestamp) are set by the endpoint, never sent
-    // from here.
+    // The leaderboard this run belongs to, or `null` when it has none: the demo /
+    // no-config path (neither ?id nor ?def) and an unpublished definition preview.
+    // Score submission and the Leaderboard button both read it, so what counts as
+    // a board cannot differ between recording a run and offering to show it.
+    function boardSubject() {
+      var params = new URLSearchParams(location.search);
+      var defId = params.get('def');
+      if (defId) {
+        // Stored game definition. `__mazeDefChallenge` is the server-computed
+        // challengeKey, stashed on window by the definition loader after its
+        // fetch, and only for a published (leaderboard-tracked) definition — its
+        // absence means an unpublished preview run.
+        return window.__mazeDefChallenge
+          ? { defId: defId, challenge: window.__mazeDefChallenge }
+          : null;
+      }
+      var mazeId = params.get('id');
+      return mazeId ? { mazeId: mazeId } : null;
+    }
+
+    // Records a won 3D run against the server leaderboard. Only wins are recorded
+    // (no loss/quit), and only runs with a board. Server-owned fields (the player
+    // and the record timestamp) are set by the endpoint, never sent from here.
     function submitScoreOnWin(detail) {
       if (!detail || detail.outcome !== 'win') return;
+
+      var subject = boardSubject();
+      if (!subject) return;
 
       var params = new URLSearchParams(location.search);
       var auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
@@ -652,18 +691,10 @@
       if (!token) return;
 
       var body = { score: detail.score, elapsed_ms: detail.elapsedMs };
-      var mazeId = params.get('id');
-      if (params.get('def')) {
-        // Stored game definition. The subject is the server-computed challengeKey,
-        // stashed on window by the definition loader after its fetch. It is only
-        // set for a published (leaderboard-tracked) definition, so its absence
-        // means an unpublished preview run — don't record.
-        if (!window.__mazeDefChallenge) return;
-        body.challenge = window.__mazeDefChallenge;
-      } else if (mazeId) {
-        body.maze_id = mazeId;
+      if (subject.challenge) {
+        body.challenge = subject.challenge;
       } else {
-        return; // no stable subject — nothing to record
+        body.maze_id = subject.mazeId;
       }
 
       fetch('/api/v1/scores', {
@@ -678,14 +709,48 @@
       });
     }
 
-    function showPlayAgain() {
-      if (document.getElementById('play-again')) return;
-      var btn = document.createElement('button');
-      btn.id = 'play-again';
-      btn.type = 'button';
-      btn.textContent = '↻ Play Again';
-      btn.addEventListener('click', function () { location.reload(); });
-      document.body.appendChild(btn);
+    // The end-of-run row: Play Again, and this run's leaderboard when it has one.
+    // Both show for a win and a loss alike — a lost run records no score, but the
+    // board is still what the player was up against.
+    function showEndActions() {
+      if (document.getElementById('end-actions')) return;
+      var row = document.createElement('div');
+      row.id = 'end-actions';
+
+      var again = document.createElement('button');
+      again.id = 'play-again';
+      again.type = 'button';
+      again.textContent = '↻ Play Again';
+      // Same query string, so the same maze or definition is replayed.
+      again.addEventListener('click', function () { location.reload(); });
+      row.appendChild(again);
+
+      var subject = boardSubject();
+      if (subject) {
+        var board = document.createElement('button');
+        board.id = 'leaderboard';
+        board.type = 'button';
+        board.textContent = '🏆 Leaderboard';
+        board.addEventListener('click', function () { openLeaderboard(subject); });
+        row.appendChild(board);
+      }
+
+      document.body.appendChild(row);
+    }
+
+    // Opens the board for `subject`. Inside a native host the window *is* the
+    // game, so leaving it is the host's to do — it is asked over the bridge, and
+    // resolves the board from the same subject it launched this run with. A
+    // browser tab owns its window and goes to the SPA route directly (maze ids
+    // are file paths, hence the encoding).
+    function openLeaderboard(subject) {
+      if (hasNativeHost()) {
+        postToHost({ kind: 'leaderboard' });
+        return;
+      }
+      location.href = subject.mazeId
+        ? '/leaderboards?id=' + encodeURIComponent(subject.mazeId)
+        : '/leaderboards?def=' + encodeURIComponent(subject.defId);
     }
 
     // Banner shown for any preview run — scores are never recorded. For an
