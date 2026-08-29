@@ -284,6 +284,9 @@ test.describe('Game host end-of-run buttons', () => {
     await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
     await expect(page.locator('#play-again')).toBeVisible()
     await expect(page.locator('#leaderboard')).toBeVisible()
+    // The app's leaderboard icon and label, as the SPA's own lists use.
+    await expect(page.locator('#leaderboard')).toHaveText('Leaderboard')
+    await expect(page.locator('#leaderboard img')).toHaveAttribute('src', '/images/icons/icon_leaderboard.svg')
   })
 
   test('a lost maze run offers the leaderboard too', async ({ page }) => {

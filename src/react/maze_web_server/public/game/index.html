@@ -65,6 +65,9 @@
       gap: 12px;
     }
     #end-actions button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       padding: 10px 24px;
       font-family: sans-serif;
       font-size: 1rem;
@@ -74,10 +77,22 @@
       cursor: pointer;
       white-space: nowrap;
     }
-    /* Deliberately not #ac99ea — that's the D-pad / spinner accent, and either
-       button would visually merge into the D-pad on touch devices. */
+    /* Green for Play, as everywhere else in the app. Deliberately not #ac99ea —
+       that's the D-pad / spinner accent, and the button would visually merge into
+       the D-pad on touch devices. */
     #play-again { background: #2f9e44; }
+    /* The app's leaderboard icon and name, as the SPA's lists and MAUI's game
+       rows use — on a mauve fill, which reads as a second action beside Play
+       Again on an overlay sitting over a live 3D frame, where the SPA's
+       flat-page neutral surface does not. */
     #leaderboard { background: #7c3aed; }
+    #leaderboard img {
+      width: 16px;
+      height: 16px;
+      /* The icon is drawn in black for the app's light theme — inverted here for
+         the same reason the SPA inverts it in dark mode. */
+      filter: invert(1);
+    }
     /* Bottom banner shown over an *unseeded* preview (an unsaved game
        definition launched from the editor). Informs that the previewed layout
        is indicative — a saved game regenerates from a fresh seed. */
@@ -725,7 +740,14 @@
         var board = document.createElement('button');
         board.id = 'leaderboard';
         board.type = 'button';
-        board.textContent = '🏆 Leaderboard';
+        // The same icon and label the SPA and MAUI use for a leaderboard, served
+        // from the app's own static assets (this page shares their origin).
+        var icon = document.createElement('img');
+        icon.src = '/images/icons/icon_leaderboard.svg';
+        icon.alt = '';
+        icon.setAttribute('aria-hidden', 'true');
+        board.appendChild(icon);
+        board.appendChild(document.createTextNode('Leaderboard'));
         board.addEventListener('click', function () { openLeaderboard(subject); });
         row.appendChild(board);
       }
