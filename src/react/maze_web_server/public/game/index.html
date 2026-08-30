@@ -431,6 +431,32 @@
       }
     }
 
+    // Puts keyboard input back on the game. Bevy's key listeners are on the
+    // canvas, and a key event fires at whatever holds focus and bubbles up from
+    // there — so unless the canvas is focused, Bevy sees nothing. Every on-screen
+    // control takes focus when clicked, and so does the host page's own chrome,
+    // which is why this is re-asserted rather than set once at startup.
+    //
+    // Declines while the pause menu is open, where the restart confirmation
+    // focuses its Cancel button deliberately, and once the run is over, when the
+    // end-of-run buttons are what the player needs to reach.
+    function focusGame() {
+      var menu = document.getElementById('pause-menu');
+      if (menu && !menu.hidden) return;
+      if (document.getElementById('end-actions')) return;
+      if (document.body.classList.contains('game-ended')
+        || document.body.classList.contains('run-stopped')) return;
+      var canvas = document.getElementById('bevy-canvas');
+      if (canvas) canvas.focus({ preventScroll: true });
+    }
+
+    // Coming back to the tab — or, in a native host, to the app — should not
+    // need a click on the canvas before the keys work again.
+    window.addEventListener('focus', focusGame);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) focusGame();
+    });
+
     // Whether a native host is listening — the same three channels postToHost
     // writes to. What the page can *do* differs between the two: in a browser
     // tab it owns the whole window and may navigate; inside a host the window is
@@ -849,6 +875,10 @@
           menu.hidden = false;
         } else {
           menu.hidden = true;
+          // Whatever unpaused — Resume, the corner button, Space — the click
+          // that did it left focus on a control. Hand it back now the menu is
+          // gone, which is also the point at which focusGame stops declining.
+          focusGame();
         }
         for (var i = 0; i < pauseButtonIds.length; i++) {
           var btn = document.getElementById(pauseButtonIds[i]);
@@ -860,13 +890,10 @@
       });
 
       resume.addEventListener('click', function () {
-        // Same code path as the corner pause button — Bevy
-        // toggles paused=false, the `maze-game-paused` listener above
-        // then hides the menu. Re-focus the canvas so subsequent
-        // keyboard input goes to Bevy rather than the (now hidden)
-        // Resume button.
+        // Same code path as the corner pause button — Bevy toggles
+        // paused=false, and the `maze-game-paused` listener above hides the
+        // menu and returns focus to the canvas.
         firePause();
-        canvas.focus({ preventScroll: true });
       });
 
       restart.addEventListener('click', function () {
@@ -1093,7 +1120,11 @@
       try {
         start_with_config(JSON.stringify(startConfig));
         document.getElementById('loading').remove();
-        canvas.focus({ preventScroll: true });
+        focusGame();
+        // Again once the browser has painted: `app.run()` returns before Bevy
+        // has built anything, so this first frame is the earliest point at which
+        // the canvas is set up as the game will actually use it.
+        requestAnimationFrame(focusGame);
         return true;
       } catch (err) {
         clearRunSentinel();
@@ -1324,7 +1355,9 @@
     for (const { label, key } of btnDefs) {
       const btn = document.querySelector(`[aria-label="${label}"]`);
       btn.addEventListener('pointerdown',   e => { e.preventDefault(); fire(key, 'keydown'); });
-      btn.addEventListener('pointerup',     e => { e.preventDefault(); fire(key, 'keyup'); });
+      // The tap focused the button; hand focus back, or the keyboard is dead for
+      // the rest of the run on a device that has both.
+      btn.addEventListener('pointerup',     e => { e.preventDefault(); fire(key, 'keyup'); focusGame(); });
       btn.addEventListener('pointerleave',  () => fire(key, 'keyup'));
       btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
       btn.addEventListener('contextmenu',   e => e.preventDefault());

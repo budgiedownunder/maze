@@ -378,6 +378,116 @@ test.describe('Game host end-of-run buttons (touch)', () => {
   })
 })
 
+// Keyboard events fire at whatever holds focus, so Bevy's canvas listeners only
+// see them while the canvas is focused. These drive the page's own focus wiring;
+// what Bevy does with the canvas afterwards is beyond a test without the real
+// binary (`public/game/` ships only index.html).
+async function loadStartedGame(page: Page) {
+  // The glue module is wasm-pack output and is not in the repo — a test that
+  // lets the module run has to supply its own or 404 on a clean checkout.
+  await page.route('**/maze_game_bevy_wasm.js**', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export default async function init() {}
+        export function start() {}
+        export function start_with_config() {}
+        export function stop() {}
+        export function live_bytes() { return 0 }
+      `,
+    }),
+  )
+  await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/wasm', body: '' }),
+  )
+  await page.route('**/api/v1/mazes/test-id*', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'test-id', name: 'M', definition: { grid: [['S', ' ', 'F']] } }),
+    }),
+  )
+  await page.route('**/api/v1/scores*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) }),
+  )
+  await page.goto('/game/index.html?t=fake&id=test-id')
+  // startGame removes the loading panel — its absence is the run having started.
+  await expect(page.locator('#loading')).toHaveCount(0)
+}
+
+const activeElementId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? '')
+
+test.describe('Game host keyboard focus', () => {
+  test('the canvas holds focus once the game starts', async ({ page }) => {
+    await loadStartedGame(page)
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+
+  test('returning to the tab restores focus without a click', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    expect(await activeElementId(page)).not.toBe('bevy-canvas')
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+
+  test('resuming from the pause menu returns focus to the canvas', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: true } }))
+    })
+    await page.locator('#pm-resume').focus()
+    await page.locator('#pm-resume').click()
+    // Bevy answers the synthesised Space by reporting the new state; that is
+    // what hides the menu and hands focus back.
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: false } }))
+    })
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+
+  test('an open pause menu keeps its own focus', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: true } }))
+    })
+    await page.locator('#pm-restart').focus()
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    // The restart confirmation focuses Cancel deliberately — nothing may take it.
+    expect(await activeElementId(page)).toBe('pm-restart')
+  })
+
+  test('the end-of-run buttons keep focus', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', {
+        detail: { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 },
+      }))
+    })
+    await expect(page.locator('#end-actions')).toBeVisible()
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    // The run is over; the buttons are what the player needs to reach.
+    expect(await activeElementId(page)).not.toBe('bevy-canvas')
+  })
+})
+
+test.describe('Game host keyboard focus (touch)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
+  const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
+  test.use(pixel7)
+
+  test('a D-pad tap hands focus back to the canvas', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.locator('[aria-label="Move forward"]').click()
+    // Without this the tap would leave focus on the button, and a device with
+    // both a D-pad and a keyboard would lose the keyboard for the rest of the run.
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+})
+
 test.describe('Game host user-edited maze launch (?id=...)', () => {
   // Common test setup: stub the wasm JS module so we can capture the
   // JSON payload start_with_config receives, fulfill the wasm binary
