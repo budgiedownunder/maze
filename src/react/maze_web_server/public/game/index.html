@@ -390,9 +390,9 @@
       <button id="pm-dpad-toggle" type="button" class="secondary">Hide D-pad</button>
     </div>
     <div id="pm-confirm" hidden>
-      <p>Restart from the beginning?</p>
-      <button id="pm-restart-confirm" type="button">Restart</button>
-      <button id="pm-restart-cancel" type="button" class="secondary">Cancel</button>
+      <p>Are you sure you want to restart the game?</p>
+      <button id="pm-restart-confirm" type="button">Yes</button>
+      <button id="pm-restart-cancel" type="button" class="secondary">No</button>
     </div>
   </div>
   <script>
@@ -899,7 +899,7 @@
       restart.addEventListener('click', function () {
         // Don't restart on the first tap — show an in-overlay confirmation so
         // a stray tap (easy on touch) can't reset the game. Default focus to
-        // Cancel, the safe choice.
+        // No, the safe choice.
         mainView.hidden = true;
         confirmView.hidden = false;
         restartCancel.focus({ preventScroll: true });

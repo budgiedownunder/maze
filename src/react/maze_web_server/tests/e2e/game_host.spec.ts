@@ -61,6 +61,9 @@ test.describe('Game host pause menu', () => {
     await page.locator('#pm-restart').click()
     await expect(page.locator('#pm-confirm')).toBeVisible()
     await expect(page.locator('#pm-main')).toBeHidden()
+    await expect(page.locator('#pm-confirm p')).toHaveText('Are you sure you want to restart the game?')
+    await expect(page.locator('#pm-restart-confirm')).toHaveText('Yes')
+    await expect(page.locator('#pm-restart-cancel')).toHaveText('No')
     // Confirming reloads the page.
     const reloadPromise = page.waitForEvent('load')
     await page.locator('#pm-restart-confirm').click()
