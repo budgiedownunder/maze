@@ -136,6 +136,27 @@ namespace Maze.Maui.App.Views
             MazeGameWebView.Source = new UrlWebViewSource { Url = gameUrl };
         }
 
+        /// <summary>
+        /// Gives the WebView the platform's keyboard focus once the game page has
+        /// loaded. The page focuses its own canvas — which is where Bevy listens —
+        /// but a native control that does not itself hold keyboard focus is sent
+        /// no keystrokes, so without this the player has to click the game before
+        /// it answers the keyboard.
+        ///
+        /// Dispatched rather than called inline so the native handlers are
+        /// attached by the time <c>Focus</c> runs, as the app's popups do. Skipped
+        /// for a failed load and for the teardown navigation to
+        /// <c>about:blank</c> — neither is a game to type into.
+        /// </summary>
+        /// <param name="sender">The WebView</param>
+        /// <param name="e">The navigation outcome and destination</param>
+        private void OnWebViewNavigated(object? sender, WebNavigatedEventArgs e)
+        {
+            if (e.Result != WebNavigationResult.Success) return;
+            if (string.IsNullOrEmpty(e.Url) || e.Url.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
+            Dispatcher.Dispatch(() => MazeGameWebView.Focus());
+        }
+
         protected override void OnDisappearing()
         {
             base.OnDisappearing();
