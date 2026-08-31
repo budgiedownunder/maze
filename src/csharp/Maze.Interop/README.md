@@ -193,7 +193,7 @@ The bundled `libwasmer.so` (under `runtimes/android-x64/native/`) was built from
     ```
     xcodebuild -version
     ```
-    Install the `XCode` command-lien tools if not already installed:
+    Install the `XCode` command-line tools if not already installed:
     ```
     xcode-select --install
     ```
