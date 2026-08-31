@@ -5,7 +5,8 @@ namespace Maze.Maui.App.Tests.Models
 {
     /// <summary>
     /// Tests for <see cref="HostMessage.KindOf"/> — the discriminator that routes
-    /// the single WebView bridge channel to either the result or the failure path.
+    /// the single WebView bridge channel to the result, failure, teardown or
+    /// leaderboard path.
     /// The critical guarantees are that a failure is never mistaken for a result
     /// (a failure payload is valid JSON against <see cref="GameResult"/> and would
     /// otherwise deserialise into a bogus win), and that an untagged payload still
@@ -41,6 +42,24 @@ namespace Maze.Maui.App.Tests.Models
             // host can wait for that instead of guessing at a delay.
             Assert.Equal(HostMessageKind.Stopped, HostMessage.KindOf("""{"kind":"stopped"}"""));
             Assert.Equal(HostMessageKind.Stopped, HostMessage.KindOf("""{"kind":"Stopped"}"""));
+        }
+
+        [Fact]
+        public void KindOf_TagsLeaderboardPayloadAsLeaderboard()
+        {
+            // The end-of-run overlay asking the host to open this run's board. It
+            // carries no payload, so misrouting it to the result path would produce
+            // an "unparseable payload" warning instead of a navigation.
+            Assert.Equal(HostMessageKind.Leaderboard, HostMessage.KindOf("""{"kind":"leaderboard"}"""));
+            Assert.Equal(HostMessageKind.Leaderboard, HostMessage.KindOf("""{"kind":"Leaderboard"}"""));
+        }
+
+        [Fact]
+        public void KindOf_TreatsAnUnknownKindAsResult()
+        {
+            // A tag from a newer host page than this app understands still routes
+            // to the result path rather than being dropped.
+            Assert.Equal(HostMessageKind.Result, HostMessage.KindOf("""{"kind":"something-new"}"""));
         }
 
         [Fact]

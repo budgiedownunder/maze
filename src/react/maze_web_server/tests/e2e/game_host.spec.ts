@@ -61,6 +61,9 @@ test.describe('Game host pause menu', () => {
     await page.locator('#pm-restart').click()
     await expect(page.locator('#pm-confirm')).toBeVisible()
     await expect(page.locator('#pm-main')).toBeHidden()
+    await expect(page.locator('#pm-confirm p')).toHaveText('Are you sure you want to restart the game?')
+    await expect(page.locator('#pm-restart-confirm')).toHaveText('Yes')
+    await expect(page.locator('#pm-restart-cancel')).toHaveText('No')
     // Confirming reloads the page.
     const reloadPromise = page.waitForEvent('load')
     await page.locator('#pm-restart-confirm').click()
@@ -249,6 +252,242 @@ test.describe('Game host score submission (on win)', () => {
     await fireResult(page, { outcome: 'win', score: 4, elapsedMs: 1234, rows: 3, cols: 3 })
     await page.waitForTimeout(200)
     expect(posted).toHaveLength(0)
+  })
+})
+
+test.describe('Game host end-of-run buttons', () => {
+  // Drives the same synthetic `maze-game-result` listener as the score tests,
+  // with the WASM aborted. A maze id carrying backslashes stands in for the
+  // FileStore ids that are really Windows paths.
+  const MAZE_ID = 'C:\\data\\users\\u1\\mazes\\Maze_1.json'
+
+  async function load(page: Page, params: Record<string, string>) {
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
+    await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
+    await page.route('**/api/v1/scores*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) }),
+    )
+    // Stub the SPA so a click that navigates settles here rather than booting
+    // the whole app — the assertion is on the URL the button chose.
+    await page.route('**/leaderboards*', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>board</body></html>' }),
+    )
+    await page.goto(`/game/index.html?${new URLSearchParams({ t: 'fake', ...params })}`)
+    await expect(page.locator('#pause-menu')).toBeAttached()
+  }
+
+  async function fireResult(page: Page, detail: Record<string, unknown>) {
+    await page.evaluate((d) => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', { detail: d }))
+    }, detail)
+  }
+
+  test('a won maze run offers Play Again and the leaderboard', async ({ page }) => {
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toBeVisible()
+    // The app's leaderboard icon and label, as the SPA's own lists use.
+    await expect(page.locator('#leaderboard')).toHaveText('Leaderboard')
+    await expect(page.locator('#leaderboard img')).toHaveAttribute('src', '/images/icons/icon_leaderboard.svg')
+  })
+
+  test('a lost maze run offers the leaderboard too', async ({ page }) => {
+    // A loss records no score, but the board is still what the player faced.
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'lose', score: 0, elapsedMs: 5000, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toBeVisible()
+  })
+
+  test('a run with no board offers Play Again alone', async ({ page }) => {
+    // No ?id and no ?def — the demo path, which records no score either.
+    await load(page, {})
+    await fireResult(page, { outcome: 'win', score: 4, elapsedMs: 1234, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toHaveCount(0)
+  })
+
+  test('in a browser tab the leaderboard button navigates to the maze board', async ({ page }) => {
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await page.locator('#leaderboard').click()
+    await page.waitForURL('**/leaderboards*')
+    expect(new URL(page.url()).searchParams.get('id')).toBe(MAZE_ID)
+  })
+
+  test('the buttons sit at the top of the page, clear of the lower half', async ({ page }) => {
+    // The row is at the top on every device — on touch because the D-pad owns the
+    // bottom strip, on desktop so the buttons are in the same place everywhere.
+    await load(page, { id: MAZE_ID })
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    const row = await page.locator('#end-actions').boundingBox()
+    const viewport = page.viewportSize()
+    expect(row!.y + row!.height).toBeLessThan(viewport!.height / 2)
+  })
+
+  test('inside a native host the leaderboard button asks the host instead of navigating', async ({ page }) => {
+    // Stand in for the MAUI WebView2 bridge, which the page detects the same way
+    // it does when forwarding results.
+    await page.addInitScript(() => {
+      const posted: string[] = []
+      ;(window as unknown as { __posted: string[] }).__posted = posted
+      ;(window as unknown as { chrome: unknown }).chrome = {
+        webview: { postMessage: (json: string) => posted.push(json) },
+      }
+    })
+    await load(page, { id: MAZE_ID })
+    const gameUrl = page.url()
+    await fireResult(page, { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 })
+    await page.locator('#leaderboard').click()
+
+    const posted = await page.evaluate(() => (window as unknown as { __posted: string[] }).__posted)
+    expect(posted.map((json) => JSON.parse(json))).toContainEqual({ kind: 'leaderboard' })
+    // The host owns the navigation — the page stays put.
+    expect(page.url()).toBe(gameUrl)
+  })
+})
+
+test.describe('Game host end-of-run buttons (touch)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
+  const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
+  test.use(pixel7)
+
+  test('the buttons stay at the top even when the D-pad is hidden', async ({ page }) => {
+    // Hiding the D-pad frees the bottom strip, but the row does not follow it
+    // down — its place is the same on every device.
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (r) => r.abort())
+    await page.route('**/maze_game_bevy_wasm.js**', (r) => r.abort())
+    await page.route('**/api/v1/scores*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) }),
+    )
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    await expect(page.locator('#pause-menu')).toBeAttached()
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: true } }))
+    })
+    await page.locator('#pm-dpad-toggle').click()
+    await expect(page.locator('#controls')).toBeHidden()
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', {
+        detail: { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 },
+      }))
+    })
+    const row = await page.locator('#end-actions').boundingBox()
+    const viewport = page.viewportSize()
+    expect(row!.y + row!.height).toBeLessThan(viewport!.height / 2)
+  })
+})
+
+// Keyboard events fire at whatever holds focus, so Bevy's canvas listeners only
+// see them while the canvas is focused. These drive the page's own focus wiring;
+// what Bevy does with the canvas afterwards is beyond a test without the real
+// binary (`public/game/` ships only index.html).
+async function loadStartedGame(page: Page) {
+  // The glue module is wasm-pack output and is not in the repo — a test that
+  // lets the module run has to supply its own or 404 on a clean checkout.
+  await page.route('**/maze_game_bevy_wasm.js**', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export default async function init() {}
+        export function start() {}
+        export function start_with_config() {}
+        export function stop() {}
+        export function live_bytes() { return 0 }
+      `,
+    }),
+  )
+  await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/wasm', body: '' }),
+  )
+  await page.route('**/api/v1/mazes/test-id*', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'test-id', name: 'M', definition: { grid: [['S', ' ', 'F']] } }),
+    }),
+  )
+  await page.route('**/api/v1/scores*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scores: [] }) }),
+  )
+  await page.goto('/game/index.html?t=fake&id=test-id')
+  // startGame removes the loading panel — its absence is the run having started.
+  await expect(page.locator('#loading')).toHaveCount(0)
+}
+
+const activeElementId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? '')
+
+test.describe('Game host keyboard focus', () => {
+  test('the canvas holds focus once the game starts', async ({ page }) => {
+    await loadStartedGame(page)
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+
+  test('returning to the tab restores focus without a click', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    expect(await activeElementId(page)).not.toBe('bevy-canvas')
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+
+  test('resuming from the pause menu returns focus to the canvas', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: true } }))
+    })
+    await page.locator('#pm-resume').focus()
+    await page.locator('#pm-resume').click()
+    // Bevy answers the synthesised Space by reporting the new state; that is
+    // what hides the menu and hands focus back.
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: false } }))
+    })
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
+  })
+
+  test('an open pause menu keeps its own focus', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-paused', { detail: { paused: true } }))
+    })
+    await page.locator('#pm-restart').focus()
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    // The restart confirmation focuses Cancel deliberately — nothing may take it.
+    expect(await activeElementId(page)).toBe('pm-restart')
+  })
+
+  test('the end-of-run buttons keep focus', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('maze-game-result', {
+        detail: { outcome: 'win', score: 7, elapsedMs: 42137, rows: 3, cols: 3 },
+      }))
+    })
+    await expect(page.locator('#end-actions')).toBeVisible()
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    // The run is over; the buttons are what the player needs to reach.
+    expect(await activeElementId(page)).not.toBe('bevy-canvas')
+  })
+})
+
+test.describe('Game host keyboard focus (touch)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
+  const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
+  test.use(pixel7)
+
+  test('a D-pad tap hands focus back to the canvas', async ({ page }) => {
+    await loadStartedGame(page)
+    await page.locator('[aria-label="Move forward"]').click()
+    // Without this the tap would leave focus on the button, and a device with
+    // both a D-pad and a keyboard would lose the keyboard for the rest of the run.
+    await expect.poll(() => activeElementId(page)).toBe('bevy-canvas')
   })
 })
 
@@ -761,6 +1000,26 @@ test.describe('Game host stored game-definition score submission (?def=)', () =>
     await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
     await page.waitForTimeout(200)
     expect(posted).toHaveLength(0)
+  })
+
+  test('offers the leaderboard for a published definition but not for a preview', async ({ page }) => {
+    await setup(page, { challengeKey: 'def:def-id', leaderboardTracked: true })
+    await page.waitForFunction(
+      () => (window as unknown as { __mazeDefChallenge?: string }).__mazeDefChallenge === 'def:def-id'
+    )
+    await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
+    await expect(page.locator('#leaderboard')).toBeVisible()
+  })
+
+  test('does not offer the leaderboard for an unpublished-definition preview', async ({ page }) => {
+    // No challenge stashed → no board to show, exactly as no score is recorded.
+    await setup(page, { challengeKey: 'def:def-id', leaderboardTracked: false })
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload === 'string'
+    )
+    await fireResult(page, { outcome: 'win', score: 5, elapsedMs: 12345, rows: 3, cols: 3 })
+    await expect(page.locator('#play-again')).toBeVisible()
+    await expect(page.locator('#leaderboard')).toHaveCount(0)
   })
 })
 

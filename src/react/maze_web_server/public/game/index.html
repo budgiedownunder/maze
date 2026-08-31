@@ -47,22 +47,51 @@
       display: block;
       touch-action: none;
     }
-    #play-again {
+    /* The end-of-run row: Play Again, plus a Leaderboard button when the run has
+       a board. Positioned as one unit so the buttons stay centred together
+       however many of them there are.
+
+       Centred at the TOP on every device: on touch the D-pad occupies the bottom
+       strip, and putting the row in the same place everywhere means the buttons
+       don't move between desktop and mobile. Centred rather than cornered so the
+       persistent pause button at the top-right can't collide with it. */
+    #end-actions {
       position: fixed;
       left: 50%;
-      bottom: 24px;
+      top: 16px;
       transform: translateX(-50%);
       z-index: 20;
+      display: flex;
+      gap: 12px;
+    }
+    #end-actions button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       padding: 10px 24px;
       font-family: sans-serif;
       font-size: 1rem;
       color: #fff;
-      /* Deliberately not #ac99ea — that's the D-pad / spinner accent, and the
-         button would visually merge into the D-pad on touch devices. */
-      background: #2f9e44;
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      white-space: nowrap;
+    }
+    /* Green for Play, as everywhere else in the app. Deliberately not #ac99ea —
+       that's the D-pad / spinner accent, and the button would visually merge into
+       the D-pad on touch devices. */
+    #play-again { background: #2f9e44; }
+    /* The app's leaderboard icon and name, as the SPA's lists and MAUI's game
+       rows use — on a mauve fill, which reads as a second action beside Play
+       Again on an overlay sitting over a live 3D frame, where the SPA's
+       flat-page neutral surface does not. */
+    #leaderboard { background: #7c3aed; }
+    #leaderboard img {
+      width: 16px;
+      height: 16px;
+      /* The icon is drawn in black for the app's light theme — inverted here for
+         the same reason the SPA inverts it in dark mode. */
+      filter: invert(1);
     }
     /* Bottom banner shown over an *unseeded* preview (an unsaved game
        definition launched from the editor). Informs that the previewed layout
@@ -141,19 +170,9 @@
         width: 24px;
         height: 24px;
       }
-      /* On touch devices the D-pad occupies the bottom strip — move the
-         Play Again button to the top so it doesn't overlap the controls.
-         Sits centred at top so the persistent pause button at the
-         top-right doesn't collide with it. */
-      #play-again {
-        top: 16px;
-        bottom: auto;
-      }
-      /* When the user has hidden the D-pad via the pause menu, the
-         #controls strip collapses and #play-again returns to the bottom
-         where it sits on desktop. */
+      /* Hiding the D-pad via the pause menu collapses the bottom strip; the
+         end-of-run row is unaffected, sitting at the top on every device. */
       body.dpad-hidden #controls { display: none; }
-      body.dpad-hidden #play-again { top: auto; bottom: 24px; }
       /* Bottom-right corner of #game-wrap, which sits ABOVE the D-pad
          strip in the flex column. Bottom-right is clear regardless of
          D-pad visibility, sits well clear of the Bevy HUD elements
@@ -267,7 +286,7 @@
     body.game-ended canvas,
     body.game-ended #controls,
     body.game-ended #touch-pause-btn,
-    body.game-ended #play-again,
+    body.game-ended #end-actions,
     body.game-ended #pause-menu,
     body.run-stopped canvas,
     body.run-stopped #controls,
@@ -371,9 +390,9 @@
       <button id="pm-dpad-toggle" type="button" class="secondary">Hide D-pad</button>
     </div>
     <div id="pm-confirm" hidden>
-      <p>Restart from the beginning?</p>
-      <button id="pm-restart-confirm" type="button">Restart</button>
-      <button id="pm-restart-cancel" type="button" class="secondary">Cancel</button>
+      <p>Are you sure you want to restart the game?</p>
+      <button id="pm-restart-confirm" type="button">Yes</button>
+      <button id="pm-restart-cancel" type="button" class="secondary">No</button>
     </div>
   </div>
   <script>
@@ -410,6 +429,44 @@
       } catch (err) {
         console.error('[host-bridge] forward failed', err);
       }
+    }
+
+    // Puts keyboard input back on the game. Bevy's key listeners are on the
+    // canvas, and a key event fires at whatever holds focus and bubbles up from
+    // there — so unless the canvas is focused, Bevy sees nothing. Every on-screen
+    // control takes focus when clicked, and so does the host page's own chrome,
+    // which is why this is re-asserted rather than set once at startup.
+    //
+    // Declines while the pause menu is open, where the restart confirmation
+    // focuses its Cancel button deliberately, and once the run is over, when the
+    // end-of-run buttons are what the player needs to reach.
+    function focusGame() {
+      var menu = document.getElementById('pause-menu');
+      if (menu && !menu.hidden) return;
+      if (document.getElementById('end-actions')) return;
+      if (document.body.classList.contains('game-ended')
+        || document.body.classList.contains('run-stopped')) return;
+      var canvas = document.getElementById('bevy-canvas');
+      if (canvas) canvas.focus({ preventScroll: true });
+    }
+
+    // Coming back to the tab — or, in a native host, to the app — should not
+    // need a click on the canvas before the keys work again.
+    window.addEventListener('focus', focusGame);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) focusGame();
+    });
+
+    // Whether a native host is listening — the same three channels postToHost
+    // writes to. What the page can *do* differs between the two: in a browser
+    // tab it owns the whole window and may navigate; inside a host the window is
+    // the game, so anything leaving it has to be asked for over the bridge.
+    function hasNativeHost() {
+      return !!(
+        (window.chrome && window.chrome.webview && window.chrome.webview.postMessage)
+        || (window.MazeMauiHost && window.MazeMauiHost.onGameResult)
+        || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.MazeMauiHost)
+      );
     }
 
     // Shows a fatal message to the player. Writes into the loading panel
@@ -606,13 +663,12 @@
       postToHost(Object.assign({ kind: 'result' }, e.detail));
 
       // Record the run on the server when the player won. Fire-and-forget so a
-      // failed submit never blocks the Play Again affordance below.
+      // failed submit never blocks the end-of-run buttons below.
       submitScoreOnWin(e.detail);
 
-      // Offer a "Play Again" affordance — reloads /game/ with the same query
-      // string (?id / ?def preserved). Works in both the React browser tab and
-      // the MAUI WebView.
-      showPlayAgain();
+      // Offer the end-of-run buttons — Play Again, plus this run's leaderboard
+      // when it has one. Works in both the React browser tab and the MAUI WebView.
+      showEndActions();
     });
 
     // The game has finished tearing down and released its memory. Forwarded so a
@@ -636,15 +692,34 @@
       }, 0);
     });
 
-    // Records a won 3D run against the server leaderboard. Only wins are
-    // recorded (no loss/quit). The subject is the user maze (?id) when present,
-    // or a stored game definition's server-computed challengeKey (?def, published
-    // definitions only). Runs with no stable subject (the demo / no-config path,
-    // or an unpublished definition preview) are not recorded. Server-owned fields
-    // (the player and the record timestamp) are set by the endpoint, never sent
-    // from here.
+    // The leaderboard this run belongs to, or `null` when it has none: the demo /
+    // no-config path (neither ?id nor ?def) and an unpublished definition preview.
+    // Score submission and the Leaderboard button both read it, so what counts as
+    // a board cannot differ between recording a run and offering to show it.
+    function boardSubject() {
+      var params = new URLSearchParams(location.search);
+      var defId = params.get('def');
+      if (defId) {
+        // Stored game definition. `__mazeDefChallenge` is the server-computed
+        // challengeKey, stashed on window by the definition loader after its
+        // fetch, and only for a published (leaderboard-tracked) definition — its
+        // absence means an unpublished preview run.
+        return window.__mazeDefChallenge
+          ? { defId: defId, challenge: window.__mazeDefChallenge }
+          : null;
+      }
+      var mazeId = params.get('id');
+      return mazeId ? { mazeId: mazeId } : null;
+    }
+
+    // Records a won 3D run against the server leaderboard. Only wins are recorded
+    // (no loss/quit), and only runs with a board. Server-owned fields (the player
+    // and the record timestamp) are set by the endpoint, never sent from here.
     function submitScoreOnWin(detail) {
       if (!detail || detail.outcome !== 'win') return;
+
+      var subject = boardSubject();
+      if (!subject) return;
 
       var params = new URLSearchParams(location.search);
       var auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
@@ -652,18 +727,10 @@
       if (!token) return;
 
       var body = { score: detail.score, elapsed_ms: detail.elapsedMs };
-      var mazeId = params.get('id');
-      if (params.get('def')) {
-        // Stored game definition. The subject is the server-computed challengeKey,
-        // stashed on window by the definition loader after its fetch. It is only
-        // set for a published (leaderboard-tracked) definition, so its absence
-        // means an unpublished preview run — don't record.
-        if (!window.__mazeDefChallenge) return;
-        body.challenge = window.__mazeDefChallenge;
-      } else if (mazeId) {
-        body.maze_id = mazeId;
+      if (subject.challenge) {
+        body.challenge = subject.challenge;
       } else {
-        return; // no stable subject — nothing to record
+        body.maze_id = subject.mazeId;
       }
 
       fetch('/api/v1/scores', {
@@ -678,14 +745,55 @@
       });
     }
 
-    function showPlayAgain() {
-      if (document.getElementById('play-again')) return;
-      var btn = document.createElement('button');
-      btn.id = 'play-again';
-      btn.type = 'button';
-      btn.textContent = '↻ Play Again';
-      btn.addEventListener('click', function () { location.reload(); });
-      document.body.appendChild(btn);
+    // The end-of-run row: Play Again, and this run's leaderboard when it has one.
+    // Both show for a win and a loss alike — a lost run records no score, but the
+    // board is still what the player was up against.
+    function showEndActions() {
+      if (document.getElementById('end-actions')) return;
+      var row = document.createElement('div');
+      row.id = 'end-actions';
+
+      var again = document.createElement('button');
+      again.id = 'play-again';
+      again.type = 'button';
+      again.textContent = '↻ Play Again';
+      // Same query string, so the same maze or definition is replayed.
+      again.addEventListener('click', function () { location.reload(); });
+      row.appendChild(again);
+
+      var subject = boardSubject();
+      if (subject) {
+        var board = document.createElement('button');
+        board.id = 'leaderboard';
+        board.type = 'button';
+        // The same icon and label the SPA and MAUI use for a leaderboard, served
+        // from the app's own static assets (this page shares their origin).
+        var icon = document.createElement('img');
+        icon.src = '/images/icons/icon_leaderboard.svg';
+        icon.alt = '';
+        icon.setAttribute('aria-hidden', 'true');
+        board.appendChild(icon);
+        board.appendChild(document.createTextNode('Leaderboard'));
+        board.addEventListener('click', function () { openLeaderboard(subject); });
+        row.appendChild(board);
+      }
+
+      document.body.appendChild(row);
+    }
+
+    // Opens the board for `subject`. Inside a native host the window *is* the
+    // game, so leaving it is the host's to do — it is asked over the bridge, and
+    // resolves the board from the same subject it launched this run with. A
+    // browser tab owns its window and goes to the SPA route directly (maze ids
+    // are file paths, hence the encoding).
+    function openLeaderboard(subject) {
+      if (hasNativeHost()) {
+        postToHost({ kind: 'leaderboard' });
+        return;
+      }
+      location.href = subject.mazeId
+        ? '/leaderboards?id=' + encodeURIComponent(subject.mazeId)
+        : '/leaderboards?def=' + encodeURIComponent(subject.defId);
     }
 
     // Banner shown for any preview run — scores are never recorded. For an
@@ -767,6 +875,10 @@
           menu.hidden = false;
         } else {
           menu.hidden = true;
+          // Whatever unpaused — Resume, the corner button, Space — the click
+          // that did it left focus on a control. Hand it back now the menu is
+          // gone, which is also the point at which focusGame stops declining.
+          focusGame();
         }
         for (var i = 0; i < pauseButtonIds.length; i++) {
           var btn = document.getElementById(pauseButtonIds[i]);
@@ -778,19 +890,16 @@
       });
 
       resume.addEventListener('click', function () {
-        // Same code path as the corner pause button — Bevy
-        // toggles paused=false, the `maze-game-paused` listener above
-        // then hides the menu. Re-focus the canvas so subsequent
-        // keyboard input goes to Bevy rather than the (now hidden)
-        // Resume button.
+        // Same code path as the corner pause button — Bevy toggles
+        // paused=false, and the `maze-game-paused` listener above hides the
+        // menu and returns focus to the canvas.
         firePause();
-        canvas.focus({ preventScroll: true });
       });
 
       restart.addEventListener('click', function () {
         // Don't restart on the first tap — show an in-overlay confirmation so
         // a stray tap (easy on touch) can't reset the game. Default focus to
-        // Cancel, the safe choice.
+        // No, the safe choice.
         mainView.hidden = true;
         confirmView.hidden = false;
         restartCancel.focus({ preventScroll: true });
@@ -816,7 +925,7 @@
   <script type="module">
     import { start, start_with_config, stop, live_bytes, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=163';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=165';
 
     let secs = 0;
     const timer = setInterval(() => {
@@ -1011,7 +1120,11 @@
       try {
         start_with_config(JSON.stringify(startConfig));
         document.getElementById('loading').remove();
-        canvas.focus({ preventScroll: true });
+        focusGame();
+        // Again once the browser has painted: `app.run()` returns before Bevy
+        // has built anything, so this first frame is the earliest point at which
+        // the canvas is set up as the game will actually use it.
+        requestAnimationFrame(focusGame);
         return true;
       } catch (err) {
         clearRunSentinel();
@@ -1242,7 +1355,9 @@
     for (const { label, key } of btnDefs) {
       const btn = document.querySelector(`[aria-label="${label}"]`);
       btn.addEventListener('pointerdown',   e => { e.preventDefault(); fire(key, 'keydown'); });
-      btn.addEventListener('pointerup',     e => { e.preventDefault(); fire(key, 'keyup'); });
+      // The tap focused the button; hand focus back, or the keyboard is dead for
+      // the rest of the run on a device that has both.
+      btn.addEventListener('pointerup',     e => { e.preventDefault(); fire(key, 'keyup'); focusGame(); });
       btn.addEventListener('pointerleave',  () => fire(key, 'keyup'));
       btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
       btn.addEventListener('contextmenu',   e => e.preventDefault());

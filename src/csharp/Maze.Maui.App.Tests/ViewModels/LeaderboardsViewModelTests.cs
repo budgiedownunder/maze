@@ -8,8 +8,8 @@ namespace Maze.Maui.App.Tests.ViewModels
 {
     /// <summary>
     /// Tests for the Leaderboards page logic: subject discovery, default selection
-    /// (maze basename resolution + most-recent stored-game via the play-fetch + a
-    /// card preselect), the Mazes / 3D-Games selection, board paging/append, the
+    /// (maze basename resolution + most-recent stored-game via the play-fetch + the
+    /// game / maze preselects), the Mazes / 3D-Games selection, board paging/append, the
     /// metric toggle, the 3D-only Player/highlight gating, the empty state, the Play
     /// button, and the owner/admin-gated Reset.
     /// </summary>
@@ -168,6 +168,80 @@ namespace Maze.Maui.App.Tests.ViewModels
             scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
             gameLib.Setup(g => g.GetGameDefinitionAsync("card")).ReturnsAsync(GameDef("card", name: "From Card"));
             vm.SetPreselectGame("card");
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.Equal(LeaderboardGameType.Play3d, vm.SelectedGameType!.Kind);
+            Assert.Equal("card", vm.PickedGame!.Id);
+        }
+
+        [Fact]
+        public async Task Initialize_PreselectMaze_WinsOverMostRecent()
+        {
+            var (vm, scores, _, mazes, _) = BuildVm();
+            // Most-recent is m1, but the caller asked for m2's board → m2 wins.
+            scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            mazes.Setup(m => m.GetMazeItems(false)).ReturnsAsync(new List<MazeItem>
+            {
+                MazeItem("m1", "Alpha"),
+                MazeItem("m2", "Beta"),
+            });
+            vm.SetPreselectMaze("m2");
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.Equal(LeaderboardGameType.MyMazes, vm.SelectedGameType!.Kind);
+            Assert.Equal("m2", vm.SelectedGame!.MazeId);
+            scores.Verify(s => s.GetLeaderboardAsync(It.Is<ScoreSubject>(x => x.MazeId == "m2"),
+                It.IsAny<ScoreMetric?>(), It.IsAny<SortDirection?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<bool?>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Initialize_PreselectMaze_ResolvesByBasename()
+        {
+            var (vm, _, _, mazes, _) = BuildVm();
+            // The launcher's id is the full FileStore path; the maze list carries
+            // whatever the current store returns — match on the filename, as the
+            // most-recent-run path does.
+            mazes.Setup(m => m.GetMazeItems(false)).ReturnsAsync(new List<MazeItem>
+            {
+                MazeItem(@"C:\data\users\u1\mazes\Maze_2.json", "Beta"),
+            });
+            vm.SetPreselectMaze(@"D:\elsewhere\Maze_2.json");
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.Equal(LeaderboardGameType.MyMazes, vm.SelectedGameType!.Kind);
+            Assert.Equal(@"C:\data\users\u1\mazes\Maze_2.json", vm.SelectedGame!.MazeId);
+        }
+
+        [Fact]
+        public async Task Initialize_PreselectMaze_UnknownId_FallsBackToMostRecent()
+        {
+            var (vm, scores, _, mazes, _) = BuildVm();
+            scores.Setup(s => s.GetScoreHistoryAsync(1, 0)).ReturnsAsync(Board(new[] { MazeRow("m1") }, false));
+            mazes.Setup(m => m.GetMazeItems(false)).ReturnsAsync(new List<MazeItem>
+            {
+                MazeItem("m1", "Alpha"),
+            });
+            vm.SetPreselectMaze("gone.json");
+
+            await vm.InitializeCommand.ExecuteAsync(null);
+
+            Assert.Equal(LeaderboardGameType.MyMazes, vm.SelectedGameType!.Kind);
+            Assert.Equal("m1", vm.SelectedGame!.MazeId);
+        }
+
+        [Fact]
+        public async Task Initialize_PreselectGame_WinsOverPreselectMaze()
+        {
+            var (vm, _, gameLib, mazes, _) = BuildVm();
+            mazes.Setup(m => m.GetMazeItems(false)).ReturnsAsync(new List<MazeItem> { MazeItem("m1", "Alpha") });
+            gameLib.Setup(g => g.GetGameDefinitionAsync("card")).ReturnsAsync(GameDef("card", name: "From Card"));
+            // Never both in practice — this fixes the precedence rather than leaving
+            // it to the order the two setters happen to be called in.
+            vm.SetPreselectGame("card");
+            vm.SetPreselectMaze("m1");
 
             await vm.InitializeCommand.ExecuteAsync(null);
 

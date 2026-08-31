@@ -118,7 +118,7 @@ jobs:
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: 10.0.300 # Match the version in global.json
+        dotnet-version: 10.0.400 # Match the version in global.json
 
     - name: Display active NET SDK version (Windows)
       if: runner.os == 'Windows'

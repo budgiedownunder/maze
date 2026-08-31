@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AppHeader } from '../components/AppHeader'
 import { SubjectSelector, type MazeOption, type SubjectSelection } from '../components/SubjectSelector'
 import { Leaderboard, type BoardSubject } from '../components/Leaderboard'
@@ -29,27 +30,53 @@ function resolveMazeId(historyId: string, mazes: MazeOption[]): string | undefin
   return mazes.find(m => basename(m.mazeId) === bn)?.mazeId
 }
 
-// The board to show first: the subject of the player's most recent run — their
-// maze, or the stored 3D game behind a `def:<id>` challenge (resolved through
-// the access-checked play-fetch, so a since-deleted or no-longer-visible game
-// falls through) — else their first maze, else nothing selected.
+// A board named in the URL by whoever linked here — `?id=<mazeId>` for a personal
+// maze, `?def=<gameId>` for a stored 3D game. Both keys mirror the game host's own
+// launch params, so the end-of-run Leaderboard button hands its subject straight
+// through.
+interface RequestedSubject {
+  mazeId: string | null
+  gameId: string | null
+}
+
+// Select a stored 3D game by id, through the access-checked play-fetch — `null`
+// when it is gone or no longer visible to the caller.
+async function selectGame(token: string, gameId: string): Promise<SubjectSelection | null> {
+  try {
+    const def = await getGameDefinition(token, gameId)
+    return { gameType: 'play3d', game: { id: def.id, name: def.name, ownerId: def.ownerId, rotation: def.rotation } }
+  } catch {
+    return null
+  }
+}
+
+// The board to show first: the subject asked for in the URL, else the subject of
+// the player's most recent run — their maze, or the stored 3D game behind a
+// `def:<id>` challenge — else their first maze, else nothing selected. Every step
+// falls through rather than failing, so a since-deleted subject still lands on a
+// usable page.
 async function defaultSelection(
   token: string,
+  requested: RequestedSubject,
   mostRecent: ScoreEntry | undefined,
   mazes: MazeOption[],
 ): Promise<SubjectSelection> {
+  if (requested.mazeId) {
+    const id = resolveMazeId(requested.mazeId, mazes)
+    if (id) return { gameType: 'my-mazes', mazeId: id }
+  }
+  if (requested.gameId) {
+    const selected = await selectGame(token, requested.gameId)
+    if (selected) return selected
+  }
   if (mostRecent?.maze_id) {
     const id = resolveMazeId(mostRecent.maze_id, mazes)
     if (id) return { gameType: 'my-mazes', mazeId: id }
   }
   const gameId = mostRecent?.challenge ? gameIdFromChallenge(mostRecent.challenge) : null
   if (gameId) {
-    try {
-      const def = await getGameDefinition(token, gameId)
-      return { gameType: 'play3d', game: { id: def.id, name: def.name, ownerId: def.ownerId, rotation: def.rotation } }
-    } catch {
-      // Gone or no longer accessible — fall through to a maze.
-    }
+    const selected = await selectGame(token, gameId)
+    if (selected) return selected
   }
   if (mazes.length > 0) return { gameType: 'my-mazes', mazeId: mazes[0].mazeId }
   return { gameType: 'play3d', game: null }
@@ -58,6 +85,9 @@ async function defaultSelection(
 export function LeaderboardsPage() {
   const token = useToken()
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
+  const requestedMazeId = searchParams.get('id')
+  const requestedGameId = searchParams.get('def')
 
   const [mazes, setMazes] = useState<MazeOption[]>([])
   // Full maze records (with game_settings) kept so the Play button can launch a
@@ -94,7 +124,7 @@ export function LeaderboardsPage() {
   useBusyCursor(isLoadingSubjects || isBoardLoading || isCheckingPlay)
 
   // List all the player's mazes (the Mazes dropdown shows every maze, scored or
-  // not) + pick the initial subject from their most-recent run.
+  // not) + pick the initial subject from the URL, else from their most-recent run.
   useEffect(() => {
     if (!token) return
     let cancelled = false
@@ -108,7 +138,12 @@ export function LeaderboardsPage() {
         const options: MazeOption[] = loaded
           .map(m => ({ mazeId: m.id, name: m.name }))
           .sort((a, b) => a.name.localeCompare(b.name))
-        const initial = await defaultSelection(token, history.scores[0], options)
+        const initial = await defaultSelection(
+          token,
+          { mazeId: requestedMazeId, gameId: requestedGameId },
+          history.scores[0],
+          options,
+        )
         if (cancelled) return
         setAllMazes(loaded)
         setMazes(options)
@@ -120,7 +155,7 @@ export function LeaderboardsPage() {
       }
     })()
     return () => { cancelled = true }
-  }, [token])
+  }, [token, requestedMazeId, requestedGameId])
 
   // The picked 3D game (null for a maze subject or before a game is chosen).
   const pickedGame = selection?.gameType === 'play3d' ? selection.game : null

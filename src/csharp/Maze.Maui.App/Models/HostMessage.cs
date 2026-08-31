@@ -12,6 +12,11 @@ namespace Maze.Maui.App.Models
         /// <summary>The game finished tearing down and released its memory.
         /// Carries no payload — the fact of it is the whole message.</summary>
         Stopped,
+        /// <summary>The player asked for this run's leaderboard from the end-of-run
+        /// overlay. Carries no payload — the host page cannot navigate to a native
+        /// page, and the page hosting it already knows which board the run belongs
+        /// to.</summary>
+        Leaderboard,
     }
 
     /// <summary>
@@ -51,6 +56,10 @@ namespace Maze.Maui.App.Models
                     if (string.Equals(tag, "stopped", StringComparison.OrdinalIgnoreCase))
                     {
                         return HostMessageKind.Stopped;
+                    }
+                    if (string.Equals(tag, "leaderboard", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return HostMessageKind.Leaderboard;
                     }
                 }
             }
