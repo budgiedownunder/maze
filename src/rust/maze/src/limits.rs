@@ -28,3 +28,10 @@ pub const MAX_HEALTH_COUNT: usize = 8;
 /// that exceed it, keeping a treasure-dense maze's in-game render cost (per-chest
 /// point light + sparkles) within a mobile GPU's budget.
 pub const MAX_TREASURE_COUNT: usize = 12;
+
+/// Maximum number of generation attempts a caller may request, and the default
+/// when none is given. Every attempt carves a whole maze and then solves it to
+/// measure the spine, so the attempt count multiplies the cost of one generate;
+/// left unbounded, a caller-supplied count occupies a request thread for as long
+/// as it likes. No supported caller asks for more than this.
+pub const MAX_GENERATION_RETRIES: usize = 100;
