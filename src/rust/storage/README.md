@@ -139,6 +139,8 @@ data_dir/
       user.json              user record (multi-email shape)
 ```
 
+A maze id is the maze's file name, and `get_maze_items` returns it as a full path, so ids in circulation are absolute. Every maze read and write resolves the id and requires the result to name a file directly inside that owner's `mazes/` directory — an id that resolves anywhere else (a `..` sequence, or another user's directory) is rejected with `MazeIdInvalid`, and a new maze whose name carries path characters is rejected with `MazeNameInvalid`. Callers depend on this: `reset_leaderboard` treats a successful `get_maze` as proof of ownership.
+
 `FileStore::new` runs two startup passes against `data_dir` in order:
 
 1. **`migrate_users_dir`** — a one-shot, idempotent rewrite of any pre-multi-email `user.json` files into the current shape. New-shape files parse straight through and are left alone; legacy single-email files are rewritten and the original kept alongside as `user.json.bak`. Runs unconditionally on every startup.

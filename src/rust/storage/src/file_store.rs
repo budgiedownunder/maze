@@ -3,7 +3,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
-use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
+use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR_STR};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use unicase::UniCase;
@@ -1352,6 +1352,21 @@ impl FileStore {
         format!("{name}.json")
     }
 
+    // Rejects a maze name that would steer its derived id out of the owner's
+    // mazes directory. `maze_path` would refuse the write anyway; failing on the
+    // name says which input was at fault. Applies to new mazes only, where
+    // there is no stored name to stay compatible with.
+    fn validate_maze_name_for_id(name: &str) -> Result<(), Error> {
+        let has_path_chars = name.contains(['/', '\\', ':'])
+            || Path::new(name)
+                .components()
+                .any(|component| matches!(component, Component::ParentDir | Component::CurDir));
+        if has_path_chars {
+            return Err(Error::MazeNameInvalid(name.to_string()));
+        }
+        Ok(())
+    }
+
     /// Returns the absolute path to `owner`'s mazes directory under the
     /// configured data directory. Used by callers that need to list /
     /// snapshot the on-disk maze files outside of the `MazeStore` trait
@@ -1409,17 +1424,47 @@ impl FileStore {
         dir_exists(&self.get_mazes_dir(owner))
     }
 
-    // Returns the maze file path for a given maze id
-    fn maze_path(&self, owner: &User, id: &str) -> String {
-        Path::new(&self.get_mazes_dir(owner))
-            .join(id)
-            .to_string_lossy()
-            .to_string()
+    // Returns the maze file path for a given maze id.
+    //
+    // Ids reach this point straight from the API, and `Path::join` gives away
+    // the owner's directory twice over: an absolute `id` discards the base
+    // entirely, and `..` components walk out of it. Ids *are* absolute paths
+    // today (`get_maze_items` hands them out that way), so the invariant worth
+    // enforcing is not the id's shape but where it lands — a maze id must name
+    // a file sitting directly in this owner's mazes directory. Callers rely on
+    // that: `reset_leaderboard` treats a successful `get_maze` as proof of
+    // ownership.
+    //
+    // `absolute` normalises without touching the filesystem, so the check
+    // behaves the same for a maze being created as for one being read. The
+    // directory comparison is case-insensitive for the same reason
+    // `find_maze_filename_ci` is: an id round-tripped through a client may come
+    // back differently cased, and on NTFS/APFS that is the same directory.
+    fn maze_path(&self, owner: &User, id: &str) -> Result<String, Error> {
+        let mazes_dir = self.get_mazes_dir(owner);
+        let candidate = Path::new(&mazes_dir).join(id);
+
+        let dir = std::path::absolute(&mazes_dir).map_err(|_| Error::MazeIdInvalid(id.to_string()))?;
+        let resolved = std::path::absolute(&candidate).map_err(|_| Error::MazeIdInvalid(id.to_string()))?;
+
+        let contained = resolved.file_name().is_some()
+            && resolved
+                .parent()
+                .is_some_and(|parent| {
+                    UniCase::new(parent.to_string_lossy()) == UniCase::new(dir.to_string_lossy())
+                });
+        if !contained {
+            return Err(Error::MazeIdInvalid(id.to_string()));
+        }
+
+        Ok(resolved.to_string_lossy().to_string())
     }
 
-    // Checks whether a given maze file exists
+    // Checks whether a given maze file exists. An id that does not resolve into
+    // the owner's mazes directory is reported as absent; callers that need to
+    // tell the two apart resolve the path themselves.
     fn maze_exists(&self, owner: &User, id: &str) -> bool {
-        file_exists(&self.maze_path(owner, id))
+        self.maze_path(owner, id).is_ok_and(|path| file_exists(&path))
     }
 
     // Counts the mazes `owner` currently owns (files in their mazes dir); 0 when
@@ -1474,7 +1519,7 @@ impl FileStore {
         }
 
         let s = maze.to_json()?;
-        let mut file = File::create(self.maze_path(owner, id))?;
+        let mut file = File::create(self.maze_path(owner, id)?)?;
         file.write_all(s.as_bytes())?;
         Ok(())
     }
@@ -3200,6 +3245,7 @@ impl MazeStore for FileStore {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
+        Self::validate_maze_name_for_id(&maze.name)?;
         validate_maze_cell_count(
             maze.definition.row_count(),
             maze.definition.col_count(),
@@ -3276,10 +3322,11 @@ impl MazeStore for FileStore {
         if id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
-        if !self.maze_exists(owner, id) {
+        let path = self.maze_path(owner, id)?;
+        if !file_exists(&path) {
             return Err(Error::MazeIdNotFound(id.to_string()));
         }
-        delete_file(&self.maze_path(owner, id));
+        delete_file(&path);
         self.delete_score_rows(None, &[id.to_string()])?;
         Ok(())
     }
@@ -3348,7 +3395,8 @@ impl MazeStore for FileStore {
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         validate_maze_object_counts(&maze.definition.grid)?;
-        if !self.maze_exists(owner, &maze.id) {
+        let path = self.maze_path(owner, &maze.id)?;
+        if !file_exists(&path) {
             return Err(Error::MazeIdNotFound(maze.id.to_string()));
         }
         self.write_maze_file(owner, maze, &maze.id.clone(), true)?;
@@ -3424,10 +3472,10 @@ impl MazeStore for FileStore {
     /// # });
     /// ```
     async fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, Error> {
-        if !self.maze_exists(owner, id) {
+        let path = self.maze_path(owner, id)?;
+        if !file_exists(&path) {
             return Err(Error::MazeIdNotFound(id.to_string()));
         }
-        let path = self.maze_path(owner, id);
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         match serde_json::from_reader::<BufReader<File>, Maze>(reader) {
@@ -7129,7 +7177,7 @@ mod tests {
             "password_hash",
         ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
-        let path = store.maze_path(&owner, &id);
+        let path = store.maze_path(&owner, &id).expect("id resolves inside the mazes dir");
         let mut _file = File::create(&path).expect("Failed to create file");
 
         match store.write_maze_file(&owner, &mut maze, &id, false) {
@@ -7156,13 +7204,111 @@ mod tests {
             "password_hash",
         ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
-        let path = store.maze_path(&owner, &id);
+        let path = store.maze_path(&owner, &id).expect("id resolves inside the mazes dir");
         let mut _file = File::create(&path).expect("Failed to create file");
 
         match store.write_maze_file(&owner, &mut maze, &id, true) {
             Ok(_) => {}
             Err(error) => {
                 panic!("{}", error);
+            }
+        }
+    }
+
+    // ─── Maze id containment ──────────────────────────────────────────
+    //
+    // A maze id must name a file directly inside its owner's mazes
+    // directory. Ids are absolute paths in normal use, so these tests pin
+    // both halves: the legitimate absolute id keeps working, and anything
+    // landing elsewhere is refused before it reaches the filesystem.
+
+    #[tokio::test]
+    async fn maze_path_accepts_an_absolute_id_for_the_owners_own_maze() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "hash").await;
+        let (_, mut maze) = init_test_maze(&store, "maze", false, true);
+        store.create_maze(&owner, &mut maze).await.expect("create");
+
+        // The id the API hands to clients, as `get_maze_items` builds it.
+        let items = store.get_maze_items(&owner, false).await.expect("list");
+        let absolute_id = items[0].id.clone();
+        assert!(Path::new(&absolute_id).is_absolute());
+
+        store.maze_path(&owner, &absolute_id).expect("own absolute id resolves");
+        let loaded = store.get_maze(&owner, &absolute_id).await.expect("own absolute id loads");
+        assert_eq!(loaded.name, "maze");
+    }
+
+    #[tokio::test]
+    async fn maze_path_rejects_parent_directory_traversal() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "hash").await;
+
+        match store.maze_path(&owner, "../../config.toml") {
+            Err(Error::MazeIdInvalid(_)) => {}
+            other => panic!("expected MazeIdInvalid, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn maze_path_rejects_another_owners_maze_file() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(&mut store, false, "owner", "", "owner@company.com", "hash").await;
+        let other = create_user(&mut store, false, "other", "", "other@company.com", "hash").await;
+        let (_, mut their_maze) = init_test_maze(&store, "secret", false, true);
+        store.create_maze(&other, &mut their_maze).await.expect("create");
+
+        let their_id = store
+            .get_maze_items(&other, false)
+            .await
+            .expect("list")[0]
+            .id
+            .clone();
+
+        // `reset_leaderboard` reads a successful `get_maze` as proof of
+        // ownership, so this must fail rather than resolve.
+        match store.maze_path(&owner, &their_id) {
+            Err(Error::MazeIdInvalid(_)) => {}
+            other => panic!("expected MazeIdInvalid, got {other:?}"),
+        }
+        assert!(store.get_maze(&owner, &their_id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn update_maze_cannot_overwrite_a_file_outside_the_mazes_directory() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "hash").await;
+        let outside = Path::new(&store.get_mazes_dir(&owner)).join("../outside.txt");
+        std::fs::write(&outside, "untouched").expect("seed file");
+
+        let (_, mut maze) = init_test_maze(&store, "maze", false, true);
+        maze.id = "../outside.txt".to_string();
+
+        assert!(store.update_maze(&owner, &mut maze).await.is_err());
+        assert_eq!(std::fs::read_to_string(&outside).expect("read"), "untouched");
+    }
+
+    #[tokio::test]
+    async fn delete_maze_cannot_delete_a_file_outside_the_mazes_directory() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "hash").await;
+        let outside = Path::new(&store.get_mazes_dir(&owner)).join("../outside.txt");
+        std::fs::write(&outside, "untouched").expect("seed file");
+
+        assert!(store.delete_maze(&owner, "../outside.txt").await.is_err());
+        assert!(outside.exists());
+    }
+
+    #[tokio::test]
+    async fn create_maze_rejects_a_name_carrying_path_characters() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "hash").await;
+
+        for name in ["../../pwned", "sub/maze", r"sub\maze", "C:maze"] {
+            let (_, mut maze) = init_test_maze(&store, name, false, true);
+            match store.create_maze(&owner, &mut maze).await {
+                Err(Error::MazeNameInvalid(_)) => {}
+                other => panic!("expected MazeNameInvalid for {name}, got {other:?}"),
             }
         }
     }
@@ -7182,7 +7328,7 @@ mod tests {
             "password_hash",
         ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
-        let path = store.maze_path(&owner, &id);
+        let path = store.maze_path(&owner, &id).expect("id resolves inside the mazes dir");
         let mut _file = File::create(&path).expect("Failed to create file");
 
         let result = store.create_maze(&owner, &mut maze).await;

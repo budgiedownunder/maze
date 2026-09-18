@@ -423,6 +423,12 @@ mod test_definitions {
         }
 
         async fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, StoreError> {
+            if std::path::Path::new(id)
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+            {
+                return Err(StoreError::MazeIdInvalid(id.to_string()));
+            }
             let mock_user = self.get_mock_user(owner.id)?;
             if let Some(mock_maze) = mock_user.mazes.get(id) {
                 return Ok(mock_maze.maze.clone());
@@ -2733,6 +2739,10 @@ mod test_definitions {
         run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), use_login, "does_not_exist.json", StatusCode::NOT_FOUND, None).await;
     }
 
+    async fn run_cannot_get_maze_with_an_out_of_bounds_id(use_login: bool) {
+        run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), use_login, "%2E%2E%2Fmaze_a.json", StatusCode::BAD_REQUEST, None).await;
+    }
+
     async fn run_can_update_maze_that_exists(use_login: bool) {
         let id = "maze_a.json";
         let name = "maze_a";
@@ -3682,6 +3692,16 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_get_maze_that_does_not_exist_with_login() {
         run_cannot_get_maze_that_does_not_exist(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_get_maze_with_an_out_of_bounds_id_with_api_key() {
+        run_cannot_get_maze_with_an_out_of_bounds_id(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_get_maze_with_an_out_of_bounds_id_with_login() {
+        run_cannot_get_maze_with_an_out_of_bounds_id(true).await;
     }
 
     // Update maze

@@ -229,6 +229,14 @@ fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
     ErrorBadRequest(format!("URL ID '{url_id}' and body maze ID '{maze_id}' do not match"))
 }
 
+fn get_maze_id_invalid_error(id: &str) -> Error {
+    ErrorBadRequest(format!("Maze id '{id}' is not a valid id"))
+}
+
+fn get_maze_name_invalid_error(name: &str) -> Error {
+    ErrorBadRequest(format!("Maze name '{name}' cannot contain path characters"))
+}
+
 fn get_maze_too_many_cells_error(rows: usize, cols: usize, max: usize) -> Error {
     ErrorUnprocessableEntity(format!(
         "Maze is too large: {rows}×{cols} = {n} cells exceeds the {max}-cell limit",
@@ -2082,6 +2090,7 @@ pub async fn create_maze(
         Err(err) => {
             match err {
                 StoreError::MazeIdExists(id) => Err(get_maze_exists_error(&id)),
+                StoreError::MazeNameInvalid(name) => Err(get_maze_name_invalid_error(&name)),
                 StoreError::MazeHasTooManyCells { rows, cols, max } =>
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
                 StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
@@ -2135,6 +2144,7 @@ pub async fn get_maze(
         Err(err) => {
             match err {
                StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdInvalid(id) => Err(get_maze_id_invalid_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }    
         }
@@ -2186,6 +2196,7 @@ pub async fn update_maze(
         Err(err) => {
             match err {
                StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdInvalid(id) => Err(get_maze_id_invalid_error(&id)),
                StoreError::MazeHasTooManyCells { rows, cols, max } =>
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
                StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
@@ -2239,6 +2250,7 @@ pub async fn delete_maze(
         Err(err) => {
             match err {
                 StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdInvalid(id) => Err(get_maze_id_invalid_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }
         }
@@ -2287,6 +2299,7 @@ pub async fn get_maze_solution(
         Err(err) => {
             match err {
                StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdInvalid(id) => Err(get_maze_id_invalid_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }    
         }

@@ -29,7 +29,9 @@ pub enum Error {
     MazeIdMissing(),
     MazeIdNotFound(String),
     MazeIdExists(String),
+    MazeIdInvalid(String),
     MazeNameMissing(),
+    MazeNameInvalid(String),
     MazeNameNotFound(String),
     MazeNameAlreadyExists(String),
     MazeHasTooManyCells { rows: usize, cols: usize, max: usize },
@@ -80,7 +82,13 @@ impl std::fmt::Display for Error {
             Error::MazeIdMissing() => write!(f, "No id provided for the maze"),
             Error::MazeIdNotFound(id) => write!(f, "A maze with id '{id}' was not found"),
             Error::MazeIdExists(id) => write!(f, "A maze with id '{id}' already exists"),
+            Error::MazeIdInvalid(id) => {
+                write!(f, "The maze id '{id}' does not name a file in the owner's mazes directory")
+            }
             Error::MazeNameMissing() => write!(f, "No name provided for the maze"),
+            Error::MazeNameInvalid(name) => {
+                write!(f, "The maze name '{name}' contains path characters")
+            }
             Error::MazeNameNotFound(name) => write!(f, "A maze with the name '{name}' was not found"),
             Error::MazeNameAlreadyExists(name) => {
                 write!(f, "A maze with the name '{name}' already exists")
