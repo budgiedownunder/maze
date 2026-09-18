@@ -2569,6 +2569,15 @@ mod test_definitions {
             StatusCode::OK).await;
     }
 
+    // Demotion is the third way to leave a store with no admins; the two
+    // delete paths already refuse it.
+    async fn run_cannot_demote_last_admin_user(use_login: bool) {
+        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1,
+            &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
+            StatusCode::CONFLICT).await;
+    }
+
     async fn run_cannot_update_admin_user_with_non_admin_caller(use_login: bool) {
         run_update_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), 
             Some(VALID_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1, 
@@ -2632,10 +2641,12 @@ mod test_definitions {
             StatusCode::OK).await;
     }
 
+    // Two admins, so the downgrade leaves one behind — a lone admin cannot be
+    // downgraded (see run_cannot_demote_last_admin_user).
     async fn run_can_downgrade_admin_user_to_non_admin_with_admin_caller(use_login: bool) {
-        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), 
-            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1, 
-            &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
+        run_update_user_test(&CreateUsersDef::new(2, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_2,
+            &new_update_user_request(false, VALID_ADMIN_USERNAME_2, None),
             StatusCode::OK).await;
     }
 
@@ -3320,6 +3331,16 @@ mod test_definitions {
     #[actix_web::test]
     async fn can_update_admin_user_with_admin_caller_with_login() {
         run_can_update_admin_user_with_admin_caller(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_demote_last_admin_user_with_api_key() {
+        run_cannot_demote_last_admin_user(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_demote_last_admin_user_with_login() {
+        run_cannot_demote_last_admin_user(true).await;
     }
 
     #[actix_web::test]

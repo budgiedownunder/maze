@@ -199,6 +199,10 @@ fn get_cannot_delete_last_admin_error() -> Error {
     ErrorConflict("Cannot delete the last admin account".to_string())
 }
 
+fn get_cannot_demote_last_admin_error() -> Error {
+    ErrorConflict("Cannot remove admin rights from the last admin account".to_string())
+}
+
 async fn is_last_admin(store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>, user_id: Uuid) -> Result<bool, Error> {
     let admins = store_lock.get_admin_users().await.map_err(|err| get_users_fetch_internal_error(&err))?;
     Ok(admins.len() == 1 && admins[0].id == user_id)
@@ -1922,7 +1926,7 @@ impl UpdateUserRequest {
         (status = 400, description = "Invalid request"),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "User not found"),
-        (status = 409, description = "User with the given username or email already exists")
+        (status = 409, description = "User with the given username or email already exists, or the update would remove admin rights from the last admin account")
     ),
     security(
         ("api_key" = []),
@@ -1944,6 +1948,15 @@ pub async fn update_user(
 
     match store_lock.get_user(id).await {
         Ok(mut user) => {
+            // Demotion removes the last admin as surely as deletion does, which
+            // both delete paths already refuse. Checked under the write lock
+            // already held, so the count cannot change underneath it.
+            if !update_req_data.is_admin
+                && user.is_admin
+                && is_last_admin(&store_lock, id).await?
+            {
+                return Err(get_cannot_demote_last_admin_error());
+            }
             update_req_data.apply_to_store_user(&mut user);
             update_store_user(store_lock, &mut user, |err| {
                 get_user_update_internal_error(err)
