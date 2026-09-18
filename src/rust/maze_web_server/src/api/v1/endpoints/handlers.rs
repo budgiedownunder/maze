@@ -1330,6 +1330,12 @@ pub async fn change_password_me(
 
     let mut store_lock = get_store_write_lock(&store).await;
     user.password_hash = new_hash;
+    // A password change is how someone evicts an intruder, so every session but
+    // the caller's own goes; keeping theirs means changing a password does not
+    // sign them out of the app they are using. An `X-API-KEY` caller has no
+    // session to keep, so all of them go.
+    let caller_login_id = req.extensions().get::<LoginId>().map(|id| id.0);
+    user.logins.retain(|session| Some(session.id) == caller_login_id);
 
     match store_lock.update_user(&mut user).await {
         Ok(_) => {

@@ -452,6 +452,8 @@ The server supports two authentication mechanisms:
 | Static API key | `X-API-Key: <key>` | API access; key is a UUID stored per user in the data store |
 | Bearer token | `Authorization: Bearer <token>` | Per-user login; token obtained via `POST /api/v1/login` |
 
+A password change signs out every session except the one that made the request — a change made with `X-API-Key` keeps no session, so all of them go — and a password *reset* signs out every session. The API key is unaffected by either: it is minted once per user and has no rotation path, so it is not a credential an account compromise can be recovered from.
+
 The following endpoints manage user identity:
 
 | Method | Path | Auth required | Description |

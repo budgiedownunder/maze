@@ -2954,6 +2954,80 @@ mod test_definitions {
         ).await;
     }
 
+    /// A password change signs out the account's other sessions but keeps the
+    /// one that made the request. Driven end-to-end through `/login` so the
+    /// sessions are real ones.
+    #[actix_web::test]
+    async fn change_password_evicts_other_sessions() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // Two sessions for the same user, as two devices would produce.
+        let mut tokens: Vec<Uuid> = Vec::new();
+        for _ in 0..2 {
+            let req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = test::read_body(resp).await;
+            let login: LoginResponse = serde_json::from_slice(&body).expect("deserialize login");
+            tokens.push(login.login_token_id);
+        }
+        let (other_session, caller_session) = (tokens[0], tokens[1]);
+
+        let change_req = ChangePasswordRequest {
+            current_password: Some(VALID_USER_PASSWORD.to_string()),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_put_request("/api/v1/users/me/password", None, Some(caller_session), &change_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // The caller keeps the session it changed the password with.
+        let req = create_test_get_request("/api/v1/users/me", None, Some(caller_session));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK, "the caller's own session must survive");
+
+        // The other device is signed out. The auth middleware rejects with an
+        // error rather than a response, so `try_call_service` is what surfaces it.
+        let req = create_test_get_request("/api/v1/users/me", None, Some(other_session));
+        assert!(test::try_call_service(&app, req).await.is_err(), "other sessions must be evicted");
+    }
+
+    /// An `X-API-KEY` caller has no session to preserve, so every session goes.
+    #[actix_web::test]
+    async fn change_password_by_api_key_evicts_every_session() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, mock_users, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let api_key = MockStore::find_user_by_name_in_map(&mock_users, VALID_USERNAME_1, Uuid::nil())
+            .expect("test user must exist")
+            .api_key;
+
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+        let req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let session: LoginResponse = serde_json::from_slice(&body).expect("deserialize login");
+
+        let change_req = ChangePasswordRequest {
+            current_password: Some(VALID_USER_PASSWORD.to_string()),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_put_request("/api/v1/users/me/password", Some(api_key), None, &change_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        let req = create_test_get_request("/api/v1/users/me", None, Some(session.login_token_id));
+        assert!(test::try_call_service(&app, req).await.is_err(), "sessions must be evicted");
+    }
+
     /// Two consecutive logins with the same credentials: the second response
     /// must carry `is_first_sign_in = false` because `User::create_login` on
     /// the first login set `last_sign_in_at = Some(now)` (sticky).
