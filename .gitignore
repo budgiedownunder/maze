@@ -8,10 +8,7 @@ src/react/maze_web_server/public/game/maze_game_bevy_wasm*
 src/react/maze_web_server/public/game/package.json
 src/react/maze_web_server/public/game/README.md
 
-# maze_web_server developer environment. The launch scripts set real OAuth,
-# Mailgun, SMTP and database credentials as environment variables, so they must
-# never be committed; the data directory, SQLite files and logs are local
-# runtime state (the logs record reset and verification links in full).
+# Ignore local maze_web_server developer environment scripts/data
 src/rust/maze_web_server/*.bat
 src/rust/maze_web_server/data/
 src/rust/maze_web_server/logs/
