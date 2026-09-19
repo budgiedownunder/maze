@@ -60,6 +60,42 @@ In addition, the following files are included for development/testing purposes:
 | `empty_cert.pem`  | Empty certficate file   | `Text`
 | `empty_key.pem`   | Empty private key file  | `Text`
 
+### Production deployment
+
+`cargo run` binds TLS directly, which is the right shape for development and for
+a single-instance deployment. Production is expected to place a reverse proxy in
+front, and — beyond one instance — a load balancer in front of that.
+
+**Reverse proxy.** The proxy owns request rate limiting; the server implements
+none. Suggested per-client limits, keyed on the real client IP:
+
+| Endpoint class | Endpoints | Burst | Sustained |
+|:---|:---|--:|--:|
+| Credential check | `POST /api/v1/login` | 10 | 10/min |
+| Account creation / password set | `POST /api/v1/signup`, `POST /api/v1/password-reset/confirm` | 5 | 2/min |
+| Email dispatch | `POST /api/v1/password-reset/request`, `POST /api/v1/email-verifications/request`, `POST /api/v1/users/me/emails` | 3 | 1/min |
+
+Password verification is deliberately expensive in both CPU and memory — that is
+what the Argon2 parameters in `[security.password_hash]` buy, and raising them
+raises the cost further. It runs synchronously on a worker thread, so these
+limits are what stops a burst of sign-in attempts from occupying every worker.
+
+**Load balancing.** Instances hold no per-session state, so they can sit behind a
+load balancer without sticky sessions:
+
+- Bearer tokens, API keys, avatars and game content all live in the store, so
+  every instance sees them. This requires the `sql` backend — `file` is
+  single-instance only (see **Storage Backend**).
+- OAuth flow state travels in a client-side cookie rather than server memory, so
+  a callback may land on a different instance than the one that started the flow.
+
+Two caveats for multi-instance deployments:
+
+- `PUT /api/v1/admin/features` updates the receiving instance's in-memory flags
+  and rewrites that instance's `config.toml` only — it does not propagate. Change
+  feature flags in each instance's config and restart instead.
+- Each instance writes its own log directory; logs are not aggregated.
+
 ### Benchmarking
 No benchmarking tests are currently implemented for the crate
 
