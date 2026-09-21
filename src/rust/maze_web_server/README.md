@@ -509,7 +509,7 @@ The following endpoints manage user identity:
 | `DELETE` | `/api/v1/users/me/emails/{email}` | Either | Remove an email; rejects with 409 if the address is the user's only email or their primary |
 | `PUT` | `/api/v1/users/me/emails/{email}/primary` | Either | Promote an email to primary; rejects with 409 if the target is unverified |
 | `POST` | `/api/v1/users/me/emails/{email}/verify` | Either | **Stub** — returns `501 Not Implemented` until the email-verification flow ships |
-| `POST` | `/api/v1/users/me/avatar` | Either | Upload/replace the caller's avatar (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB). The server centre-crops + resizes to a 256×256 PNG; returns `{ "avatar_updated_at": <timestamp> }` |
+| `POST` | `/api/v1/users/me/avatar` | Either | Upload/replace the caller's avatar (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB and ≤ 4096×4096). The server centre-crops + resizes to a 256×256 PNG; returns `{ "avatar_updated_at": <timestamp> }` |
 | `DELETE` | `/api/v1/users/me/avatar` | Either | Remove the caller's avatar (idempotent — `204` even if none was set) |
 | `GET` | `/api/v1/users/{id}/avatar` | Either | Serve a user's avatar as `image/png`, or `404` when none. Requires auth, but readable for **any** user id (not just the caller) so a signed-in viewer sees other players' avatars on boards/headers; cache-bust with `?v=<avatar_updated_at>` |
 
@@ -547,7 +547,7 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 | `DELETE` | `/api/v1/game-definitions/{id}` | Either | Delete a definition the caller owns, removing its shares and resetting its leaderboard(s). |
 | `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view) — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
 | `PUT`    | `/api/v1/game-definitions/{id}/shares` | Either | **Set** the definition's share list to the supplied set (body `{ "userIds": [ … ] }`) — anyone not listed is revoked, any new id granted, in one operation. Owner-only; the owner's own id is ignored. Returns the updated grantee list. |
-| `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB and ≤ 4096×4096; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
 | `DELETE` | `/api/v1/game-definitions/{id}/image` | Either | Remove the game's image (idempotent). Owner-only. |
 | `GET`    | `/api/v1/game-definitions/{id}/image` | Either | Serve the game's image as `image/png`, or `404`. **Access-checked** like the play-fetch (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 
@@ -569,7 +569,7 @@ On first launch the server seeds two curated collections owned by the default ad
 | `PUT`    | `/api/v1/game-collections/{id}/items` | Either | **Set** the collection's whole membership to the supplied ordered list (body `{ "definitionIds": [definitionId, …] }`) — reconciles in one operation (drop absent, add new, reorder; duplicates collapse). The owner may edit it, or an **admin** may edit a **Featured** (curated) collection they don't own (admin-override, ownership preserved); any other non-owner gets `404`. Returns the updated collection. |
 | `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
 | `PUT`    | `/api/v1/game-collections/{id}/shares` | Either | **Set** the collection's share list to the supplied set (body `{ "userIds": [ … ] }`) — reconciles in one operation. Owner-only; the owner's own id is ignored. Returns the updated grantee list. |
-| `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB and ≤ 4096×4096 → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
 | `DELETE` | `/api/v1/game-collections/{id}/image` | Either | Remove the collection's image (idempotent). Owner-only. |
 | `GET`    | `/api/v1/game-collections/{id}/image` | Either | Serve the collection's image as `image/png`, or `404`. Access-checked (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 

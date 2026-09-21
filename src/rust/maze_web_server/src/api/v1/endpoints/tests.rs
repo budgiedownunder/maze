@@ -9526,6 +9526,46 @@ mod test_definitions {
         );
     }
 
+    /// Pins the *order* of the two checks on an image upload. The body is not a
+    /// decodable image and the caller is not the owner, so the two failures
+    /// return different statuses: `404` can only come from the ownership check,
+    /// `400` only from the decode. Asserting `404` therefore proves the decode
+    /// — the expensive half — never ran for a caller with no claim on the
+    /// definition. Same reasoning for the collection case below.
+    #[actix_web::test]
+    async fn game_definition_image_upload_checks_ownership_before_decoding() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let def = seed_game_definition(&store, &owner, "Ordered", Visibility::Public, Rotation::Static).await;
+        let url = format!("/api/v1/game-definitions/{}/image", def.id);
+
+        let (body, boundary) = multipart_file_body("x.png", "image/png", b"not an image");
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, other.api_key, &boundary, body)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[actix_web::test]
+    async fn game_collection_image_upload_checks_ownership_before_decoding() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let col = seed_game_collection(&store, &owner, "Ordered", Visibility::Public).await;
+        let url = format!("/api/v1/game-collections/{}/image", col.meta.id);
+
+        let (body, boundary) = multipart_file_body("x.png", "image/png", b"not an image");
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, other.api_key, &boundary, body)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
     #[actix_web::test]
     async fn game_collection_image_upload_serve_and_delete() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));

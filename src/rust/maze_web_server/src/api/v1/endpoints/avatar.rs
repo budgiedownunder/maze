@@ -29,7 +29,7 @@ use actix_web::{
 };
 use chrono::{DateTime, Utc};
 use data_model::User;
-use image::{imageops::FilterType, ImageFormat};
+use image::{imageops::FilterType, ImageError, ImageFormat, ImageReader, Limits};
 use serde::{Deserialize, Serialize};
 use storage::{Error as StoreError, SharedStore};
 use std::io::Cursor;
@@ -38,6 +38,17 @@ use uuid::Uuid;
 
 /// Canonical avatar edge length, in pixels (square).
 const AVATAR_SIZE: u32 = 256;
+
+/// Largest edge, in pixels, accepted from an upload before it is canonicalised.
+///
+/// The multipart limit bounds *bytes*, not pixels, and a smooth image
+/// compresses hard — so without this a file well inside the size limit can
+/// still declare tens of megapixels and buy a long decode and a large buffer.
+/// The decoders check this against the header, so an oversize image costs a
+/// header parse rather than an allocation. The byte limit is the binding
+/// constraint for real photographs (a genuine image at this many pixels does
+/// not fit inside it), so this mainly closes the gap the byte limit leaves.
+const MAX_UPLOAD_EDGE: u32 = 4096;
 
 /// Multipart upload form. The client sends a single file part named `file`;
 /// the `#[multipart(limit)]` attribute rejects an oversize part during
@@ -77,10 +88,23 @@ fn map_store_err(err: StoreError) -> Error {
 /// Decodes an uploaded image and produces the canonical 256×256 PNG. Decoding
 /// is the real validation step — only the PNG and JPEG decoders are compiled
 /// in, so any other (or corrupt) input fails here with a `400`, regardless of
-/// the client-supplied content-type.
+/// the client-supplied content-type. An image declaring an edge longer than
+/// [`MAX_UPLOAD_EDGE`] is rejected against the header, before its pixels are
+/// allocated.
 pub(crate) fn canonicalise_to_png(input: &[u8]) -> Result<Vec<u8>, Error> {
-    let img = image::load_from_memory(input)
+    let mut reader = ImageReader::new(Cursor::new(input))
+        .with_guessed_format()
         .map_err(|e| ErrorBadRequest(format!("unsupported or invalid image: {e}")))?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_UPLOAD_EDGE);
+    limits.max_image_height = Some(MAX_UPLOAD_EDGE);
+    reader.limits(limits);
+    let img = reader.decode().map_err(|e| match e {
+        ImageError::Limits(_) => ErrorBadRequest(format!(
+            "image is larger than {MAX_UPLOAD_EDGE}x{MAX_UPLOAD_EDGE} pixels"
+        )),
+        other => ErrorBadRequest(format!("unsupported or invalid image: {other}")),
+    })?;
     // Centre-crop to the largest centred square, then resize to the canonical
     // edge so non-square uploads aren't distorted.
     let (w, h) = (img.width(), img.height());
@@ -99,16 +123,16 @@ pub(crate) fn canonicalise_to_png(input: &[u8]) -> Result<Vec<u8>, Error> {
 #[utoipa::path(
     summary = "Upload or replace the caller's avatar",
     description = "Accepts a multipart/form-data upload with a single `file` part (PNG or JPEG, \
-                   up to 2 MiB). The server decodes it (validating by decode), centre-crops to a \
-                   square, resizes to 256x256, and stores it as PNG, stamping the caller's \
-                   avatar_updated_at. Returns the new avatar_updated_at so the client can refresh \
-                   its avatar without re-fetching the profile.",
+                   up to 2 MiB and 4096x4096 pixels). The server decodes it (validating by \
+                   decode), centre-crops to a square, resizes to 256x256, and stores it as PNG, \
+                   stamping the caller's avatar_updated_at. Returns the new avatar_updated_at so \
+                   the client can refresh its avatar without re-fetching the profile.",
     post,
     path = "/api/v1/users/me/avatar",
-    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB"),
+    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB and <= 4096x4096"),
     responses(
         (status = 200, description = "Avatar stored", body = AvatarUpdatedResponse),
-        (status = 400, description = "Missing/invalid image, or upload exceeds the size limit"),
+        (status = 400, description = "Missing/invalid image, or upload exceeds the size or dimension limit"),
         (status = 401, description = "Unauthorized request")
     ),
     security(
@@ -228,4 +252,99 @@ pub async fn get_avatar(
         builder.insert_header(ETag(EntityTag::new_strong(ts.timestamp_millis().to_string())));
     }
     Ok(builder.body(data))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// PNG chunk CRC-32 (IEEE, reflected). Written out rather than pulled from
+    /// a crate so the test fixture below needs no extra dependency.
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xFFFF_FFFFu32;
+        for &b in bytes {
+            crc ^= u32::from(b);
+            for _ in 0..8 {
+                crc = if crc & 1 != 0 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+            }
+        }
+        !crc
+    }
+
+    /// A PNG that is nothing but a signature and an IHDR declaring `width` x
+    /// `height`. It carries no pixel data at all, so anything that decodes it
+    /// far enough to complain about the *size* must have done so from the
+    /// header — which is the property under test.
+    fn png_header_declaring(width: u32, height: u32) -> Vec<u8> {
+        let mut ihdr = Vec::from(b"IHDR".as_slice());
+        ihdr.extend_from_slice(&width.to_be_bytes());
+        ihdr.extend_from_slice(&height.to_be_bytes());
+        ihdr.extend_from_slice(&[8, 2, 0, 0, 0]); // 8bpc, truecolour, no interlace
+
+        let mut png = Vec::from(b"\x89PNG\r\n\x1a\n".as_slice());
+        png.extend_from_slice(&13u32.to_be_bytes());
+        png.extend_from_slice(&ihdr);
+        png.extend_from_slice(&crc32(&ihdr).to_be_bytes());
+        png
+    }
+
+    fn encode_png(width: u32, height: u32) -> Vec<u8> {
+        let mut out = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::new(width, height))
+            .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
+            .expect("encoding the fixture must succeed");
+        out
+    }
+
+    #[test]
+    fn oversize_declared_dimensions_are_rejected_from_the_header() {
+        let err = canonicalise_to_png(&png_header_declaring(MAX_UPLOAD_EDGE + 1, 8))
+            .expect_err("an over-cap image must not decode");
+
+        assert_eq!(err.as_response_error().status_code(), 400);
+        assert!(
+            err.to_string().contains("larger than"),
+            "expected a dimension-limit message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn an_oversize_height_is_rejected_too() {
+        let err = canonicalise_to_png(&png_header_declaring(8, MAX_UPLOAD_EDGE + 1))
+            .expect_err("an over-cap image must not decode");
+
+        assert_eq!(err.as_response_error().status_code(), 400);
+        assert!(
+            err.to_string().contains("larger than"),
+            "expected a dimension-limit message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn an_image_at_the_cap_still_canonicalises() {
+        // Encoded at the cap rather than near it: the limit is inclusive, so
+        // the largest accepted image is the one most likely to be rejected by
+        // an off-by-one.
+        let png = canonicalise_to_png(&encode_png(MAX_UPLOAD_EDGE, 8))
+            .expect("an image at the cap must be accepted");
+
+        let decoded = image::load_from_memory(&png).expect("output must be a PNG");
+        assert_eq!((decoded.width(), decoded.height()), (AVATAR_SIZE, AVATAR_SIZE));
+    }
+
+    #[test]
+    fn a_small_image_still_canonicalises_to_the_avatar_size() {
+        let png = canonicalise_to_png(&encode_png(8, 8)).expect("a small image must be accepted");
+
+        let decoded = image::load_from_memory(&png).expect("output must be a PNG");
+        assert_eq!((decoded.width(), decoded.height()), (AVATAR_SIZE, AVATAR_SIZE));
+    }
+
+    #[test]
+    fn a_non_image_is_still_a_bad_request() {
+        let err = canonicalise_to_png(b"not an image at all")
+            .expect_err("garbage must not decode");
+
+        assert_eq!(err.as_response_error().status_code(), 400);
+    }
 }
