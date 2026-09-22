@@ -637,7 +637,37 @@ impl AppConfig {
             .resolve_and_validate()
             .map(|_| ())
             .map_err(config::ConfigError::Message)?;
+        cfg.validate_cross_section()
+            .map_err(config::ConfigError::Message)?;
         Ok(cfg)
+    }
+
+    /// Checks rules that span more than one config section.
+    ///
+    /// OAuth requires comms: with comms disabled, sign-up and add-email mark
+    /// any address verified on the caller's say-so, and a first-time OAuth
+    /// sign-in auto-links to whichever account holds that verified address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze_web_server::config::app::AppConfig;
+    /// let mut cfg = AppConfig::default();
+    /// cfg.oauth.enabled = true;
+    /// assert!(cfg.validate_cross_section().is_err());
+    /// cfg.comms.enabled = true;
+    /// assert!(cfg.validate_cross_section().is_ok());
+    /// ```
+    pub fn validate_cross_section(&self) -> Result<(), String> {
+        if self.oauth.enabled && !self.comms.enabled {
+            return Err(
+                "[oauth] enabled = true requires [comms] enabled = true: without email \
+                 verification, any user can claim an address that a later OAuth sign-in \
+                 would link to"
+                    .to_string(),
+            );
+        }
+        Ok(())
     }
 
     /// Logs the configuration using the `log` crate at `info` level.
@@ -896,6 +926,28 @@ mod tests {
         );
         // client_secret is never read from toml
         assert!(google.client_secret.is_empty());
+    }
+
+    #[test]
+    fn validate_cross_section_rejects_oauth_without_comms() {
+        let mut cfg = AppConfig::default();
+        cfg.oauth.enabled = true;
+        cfg.comms.enabled = false;
+        let err = cfg.validate_cross_section().unwrap_err();
+        assert!(err.contains("[comms] enabled = true"), "got: {err}");
+    }
+
+    #[test]
+    fn validate_cross_section_accepts_other_combinations() {
+        for (oauth, comms) in [(false, false), (false, true), (true, true)] {
+            let mut cfg = AppConfig::default();
+            cfg.oauth.enabled = oauth;
+            cfg.comms.enabled = comms;
+            assert!(
+                cfg.validate_cross_section().is_ok(),
+                "oauth={oauth} comms={comms} should be accepted"
+            );
+        }
     }
 
     #[test]
