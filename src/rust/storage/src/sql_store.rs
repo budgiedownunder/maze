@@ -4784,7 +4784,7 @@ impl ScoreStore for SqlStore {
         if entry.id.is_nil() {
             return Err(Error::Other("score entry id must not be nil".to_string()));
         }
-        crate::store::validate_score_subject(entry)?;
+        crate::store::validate_score_entry(entry)?;
         sqlx::query(&q(
             self.kind,
             "INSERT INTO score_history \

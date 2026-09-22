@@ -2120,6 +2120,36 @@ pub async fn score_record_rejects_invalid_subject(store: &mut Box<dyn Store>) {
     assert!(store.record_score(&neither).await.is_err());
 }
 
+pub async fn score_record_rejects_values_outside_the_columns(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let max = i64::MAX as u64;
+    let challenge_64 = "c".repeat(64);
+
+    // Largest values that fit are accepted and round-trip unchanged.
+    store
+        .record_score(&score_entry(alice.id, None, Some(&challenge_64), max, max))
+        .await
+        .expect("values at the column limits");
+    let board = store
+        .challenge_leaderboard(&challenge_64, FASTEST, 10, 0, false)
+        .await
+        .expect("board");
+    assert_eq!(board.len(), 1);
+    assert_eq!((board[0].entry.score, board[0].entry.elapsed_ms), (max, max));
+
+    // One past each limit is rejected, and nothing is stored.
+    let too_long = "c".repeat(65);
+    for entry in [
+        score_entry(alice.id, None, Some(&too_long), 1, 100),
+        score_entry(alice.id, None, Some("c:1"), max + 1, 100),
+        score_entry(alice.id, None, Some("c:1"), 1, max + 1),
+    ] {
+        assert!(matches!(store.record_score(&entry).await, Err(Error::Other(_))));
+    }
+    let history = store.user_history(alice.id, 10, 0).await.expect("history");
+    assert_eq!(history.len(), 1);
+}
+
 pub async fn score_maze_leaderboard_orders_by_metric_and_direction(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "alice", "alice@example.com").await;
     let maze_id = fixture_maze(store, &alice, "board-maze").await;

@@ -7543,6 +7543,63 @@ mod test_definitions {
     }
 
     #[tokio::test]
+    async fn record_score_with_value_beyond_the_column_is_bad_request() {
+        // A real store, not the mock: the bound lives in the stores' shared
+        // validator, and this checks it reaches the client as a 400.
+        let mut store = storage::get_store(storage::StoreConfig::Sql(storage::SqlStoreConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            auto_create_database: true,
+            ..storage::SqlStoreConfig::default()
+        }))
+        .await
+        .expect("in-memory SqlStore");
+        let mut user = User {
+            id: Uuid::nil(),
+            is_admin: false,
+            username: "player".into(),
+            full_name: "Player".into(),
+            emails: vec![data_model::UserEmail::new_primary_verified("player@example.com")],
+            password_hash: "hash".into(),
+            api_key: Uuid::nil(),
+            logins: vec![],
+            oauth_identities: vec![],
+            deleted_at: None,
+            created_at: Utc::now(),
+            last_sign_in_at: None,
+            avatar_updated_at: None,
+        };
+        store.create_user(&mut user).await.expect("create_user");
+        let shared: SharedStore = Arc::new(AsyncRwLock::new(store));
+
+        let app_config = AppConfig::default();
+        let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
+        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
+        let app = test::init_service(
+            create_app(&app_config.security.password_hash, web::Data::new(shared), web::Data::new(features), web::Data::new(connector), comms, ".".to_string())
+                .app_data(web::Data::new(app_config)),
+        )
+        .await;
+
+        for (score, elapsed_ms, expected) in [
+            (1, i64::MAX as u64, StatusCode::CREATED),
+            (1, i64::MAX as u64 + 1, StatusCode::BAD_REQUEST),
+            (i64::MAX as u64 + 1, 1, StatusCode::BAD_REQUEST),
+        ] {
+            let body = RecordScoreRequest {
+                maze_id: None,
+                challenge: Some("easy:1".to_string()),
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", Some(user.api_key), None, Some(&body));
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), expected, "score={score} elapsed_ms={elapsed_ms}");
+        }
+    }
+
+    #[tokio::test]
     async fn record_score_with_no_subject_is_bad_request() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
         let (app, _, _, api_key, login_id) =

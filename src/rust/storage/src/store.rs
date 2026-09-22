@@ -483,15 +483,37 @@ pub trait ScoreStore {
     async fn clear_challenge_scores_prefix(&mut self, prefix: &str) -> Result<u64, Error>;
 }
 
-/// Enforces the dual-keyed subject invariant for a [`ScoreEntry`]: exactly one
-/// of `maze_id` / `challenge` must be set. Shared by every [`ScoreStore`]
-/// backend's `record_score` (there is no portable cross-column CHECK).
-pub(crate) fn validate_score_subject(entry: &ScoreEntry) -> Result<(), Error> {
+/// Character cap on a score's `challenge`, matching the
+/// `score_history.challenge VARCHAR(64)` column width.
+const MAX_SCORE_CHALLENGE_CHARS: usize = 64;
+
+/// Validates a [`ScoreEntry`] before it is stored. Shared by every
+/// [`ScoreStore`] backend's `record_score` so they all accept the same input:
+///   * exactly one of `maze_id` / `challenge` is set (there is no portable
+///     cross-column CHECK);
+///   * `challenge` fits its column — SQLite would otherwise accept a longer
+///     key that PostgreSQL and MySQL reject;
+///   * `score` and `elapsed_ms` fit the signed `BIGINT` columns — a larger
+///     value would wrap negative and sort as the best time on a board.
+pub(crate) fn validate_score_entry(entry: &ScoreEntry) -> Result<(), Error> {
     // `is_some() == is_some()` is true when both are set or both are unset.
     if entry.maze_id.is_some() == entry.challenge.is_some() {
         return Err(Error::Other(
             "score entry must set exactly one of maze_id / challenge".to_string(),
         ));
+    }
+    if let Some(challenge) = &entry.challenge
+        && challenge.chars().count() > MAX_SCORE_CHALLENGE_CHARS
+    {
+        return Err(Error::Other(format!(
+            "challenge must be at most {MAX_SCORE_CHALLENGE_CHARS} characters"
+        )));
+    }
+    if i64::try_from(entry.score).is_err() || i64::try_from(entry.elapsed_ms).is_err() {
+        return Err(Error::Other(format!(
+            "score and elapsed_ms must be at most {}",
+            i64::MAX
+        )));
     }
     Ok(())
 }

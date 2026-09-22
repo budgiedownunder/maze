@@ -821,6 +821,12 @@ async fn score_record_rejects_invalid_subject() {
 }
 
 #[tokio::test]
+async fn score_record_rejects_values_outside_the_columns() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::score_record_rejects_values_outside_the_columns(&mut s).await;
+}
+
+#[tokio::test]
 async fn score_maze_leaderboard_orders_by_metric_and_direction() {
     let (mut s, _temp) = fresh_store().await;
     contract::score_maze_leaderboard_orders_by_metric_and_direction(&mut s).await;
