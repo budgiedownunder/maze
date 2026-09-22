@@ -7,7 +7,7 @@ use crate::service::auth::AuthService;
 use crate::SharedFeatures;
 
 
-use data_model::{Maze, User};
+use data_model::{Maze, User, UserLogin};
 use maze::{Error as MazeError, Generator, GeneratorOptions, MazeSolution, MazeSolver};
 use storage::{Error as StoreError, MazeItem, Store, SharedStore};
 
@@ -309,6 +309,72 @@ where
             }
         }
     }
+}
+
+/// Loads the caller's current record under the write lock. A handler that
+/// changes the caller applies its change to this record, never to the snapshot
+/// the auth middleware took before the lock, so it cannot overwrite a write
+/// made in between. A caller deleted in the meantime is unauthorised.
+async fn reload_caller(
+    store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>,
+    id: Uuid,
+) -> Result<User, Error> {
+    store_lock.get_user(id).await.map_err(|err| match err {
+        StoreError::UserIdNotFound(_) => ErrorUnauthorized("Unauthorized request"),
+        other => get_user_fetch_internal_error(id, &other),
+    })
+}
+
+/// Records a new session for a user whose password was verified before the
+/// write lock was taken (Argon2 is too slow to run under it). Re-reads the user
+/// under the lock and refuses if the password changed meanwhile: the
+/// verification no longer holds, and writing the verified copy back would
+/// restore the old password and sessions. Returns the new session and whether
+/// this is the user's first sign-in.
+pub(crate) async fn commit_login(
+    store_lock: RwLockWriteGuard<'_, Box<dyn Store>>,
+    verified: &User,
+    expiry_hours: u32,
+    ip_address: Option<String>,
+    device_info: Option<String>,
+) -> Result<(UserLogin, bool), Error> {
+    let mut user = match store_lock.get_user(verified.id).await {
+        Ok(user) if user.password_hash == verified.password_hash => user,
+        Ok(_) | Err(StoreError::UserIdNotFound(_)) => {
+            return Err(ErrorUnauthorized("Invalid email or password"));
+        }
+        Err(err) => return Err(get_user_fetch_internal_error(verified.id, &err)),
+    };
+    // Captured before `create_login` because the latter flips
+    // `last_sign_in_at` to `Some(now)`.
+    let is_first_sign_in = user.is_first_sign_in();
+    let new_login = user.create_login(expiry_hours, ip_address, device_info);
+    update_store_user(store_lock, &mut user, get_user_update_internal_error).await?;
+    Ok((new_login, is_first_sign_in))
+}
+
+/// Stores a new password hash for a user whose current password (or lack of
+/// one) was checked before the write lock was taken. Re-reads the user under
+/// the lock and refuses with 409 if the password changed meanwhile, since the
+/// check that authorised this change no longer holds. Every session except
+/// `keep_login_id` is removed. Returns the updated user.
+pub(crate) async fn commit_password_change(
+    mut store_lock: RwLockWriteGuard<'_, Box<dyn Store>>,
+    checked: &User,
+    new_hash: String,
+    keep_login_id: Option<Uuid>,
+) -> Result<User, Error> {
+    let mut user = reload_caller(&store_lock, checked.id).await?;
+    if user.password_hash != checked.password_hash {
+        return Err(ErrorConflict("The password was changed by another request; please try again"));
+    }
+    user.password_hash = new_hash;
+    user.logins.retain(|session| Some(session.id) == keep_login_id);
+    store_lock
+        .update_user(&mut user)
+        .await
+        .map_err(|err| get_user_update_internal_error(&err))?;
+    Ok(user)
 }
 
 /// Contains the summary details for a user
@@ -1289,7 +1355,7 @@ pub async fn change_password_me(
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
-    let mut user = get_authorized_user(&req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let change_req_data = change_req.into_inner();
     let user_has_password = !user.password_hash.is_empty();
 
@@ -1328,38 +1394,32 @@ pub async fn change_password_me(
         .hash_password(&change_req_data.new_password)
         .map_err(|err| get_hash_password_internal_error(&err))?;
 
-    let mut store_lock = get_store_write_lock(&store).await;
-    user.password_hash = new_hash;
+    let store_lock = get_store_write_lock(&store).await;
     // A password change is how someone evicts an intruder, so every session but
     // the caller's own goes; keeping theirs means changing a password does not
     // sign them out of the app they are using. An `X-API-KEY` caller has no
     // session to keep, so all of them go.
     let caller_login_id = req.extensions().get::<LoginId>().map(|id| id.0);
-    user.logins.retain(|session| Some(session.id) == caller_login_id);
 
-    match store_lock.update_user(&mut user).await {
-        Ok(_) => {
-            // Defence-in-depth audit log for both branches: a session-
-            // hijacker that successfully sets/rotates a password leaves a
-            // trace here. When email-send-support ships, this is where
-            // the notification mail to the primary email gets fired.
-            if user_has_password {
-                log::info!(
-                    "password changed for user {} (primary email: {})",
-                    user.id,
-                    user.email()
-                );
-            } else {
-                log::info!(
-                    "initial password set for user {} (primary email: {})",
-                    user.id,
-                    user.email()
-                );
-            }
-            Ok(HttpResponse::NoContent().finish())
-        }
-        Err(err) => Err(get_user_update_internal_error(&err)),
+    let user = commit_password_change(store_lock, &user, new_hash, caller_login_id).await?;
+    // Defence-in-depth audit log for both branches: a session-
+    // hijacker that successfully sets/rotates a password leaves a
+    // trace here. When email-send-support ships, this is where
+    // the notification mail to the primary email gets fired.
+    if user_has_password {
+        log::info!(
+            "password changed for user {} (primary email: {})",
+            user.id,
+            user.email()
+        );
+    } else {
+        log::info!(
+            "initial password set for user {} (primary email: {})",
+            user.id,
+            user.email()
+        );
     }
+    Ok(HttpResponse::NoContent().finish())
 }
 // **************************************************************************************************
 // Endpoint: PUT /api/v1/users/me/profile
@@ -1417,8 +1477,9 @@ pub async fn update_profile_me(
     store: web::Data<SharedStore>,
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
-    let mut user = get_authorized_user(&req, false)?;
+    let caller = get_authorized_user(&req, false)?;
     let store_lock = get_store_write_lock(&store).await;
+    let mut user = reload_caller(&store_lock, caller.id).await?;
     update_req.into_inner().apply_to_store_user(&mut user);
     update_store_user(store_lock, &mut user, get_user_update_internal_error).await
 }
@@ -1470,16 +1531,16 @@ pub async fn login(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut user = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password).await?;
-    // Captured before `create_login` because the latter flips
-    // `last_sign_in_at` to `Some(now)`.
-    let is_first_sign_in = user.is_first_sign_in();
-    let login_expiry_hours = config.security.login_expiry_hours;
-    let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
+    let verified = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password).await?;
     let store_lock = get_store_write_lock(&store).await;
-    update_store_user(store_lock, &mut user, |err| {
-        get_user_update_internal_error(err)
-    }).await?;
+    let (login, is_first_sign_in) = commit_login(
+        store_lock,
+        &verified,
+        config.security.login_expiry_hours,
+        get_caller_ip_address(&req),
+        get_caller_device_info(&req),
+    )
+    .await?;
 
     Ok(HttpResponse::Ok().json(LoginResponse {
         login_token_id: login.id,
@@ -1510,8 +1571,9 @@ pub async fn logout(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let (mut user, login_id) = get_logout_details(&req)?;
+    let (caller, login_id) = get_logout_details(&req)?;
     let store_lock = get_store_write_lock(&store).await;
+    let mut user = reload_caller(&store_lock, caller.id).await?;
 
     user.remove_login(login_id);
 
@@ -1560,11 +1622,12 @@ pub async fn renew(
         .get::<LoginId>()
         .copied()
         .ok_or_else(|| ErrorUnauthorized("Unauthorized request"))?;
-    let mut user = get_authorized_user(&req, false)?;
+    let caller = get_authorized_user(&req, false)?;
+    let store_lock = get_store_write_lock(&store).await;
+    let mut user = reload_caller(&store_lock, caller.id).await?;
     let login_expiry_hours = config.security.login_expiry_hours;
     let renewed = user.renew_login(login_id.0, login_expiry_hours)
         .ok_or_else(|| ErrorUnauthorized("Unauthorized request"))?;
-    let store_lock = get_store_write_lock(&store).await;
     update_store_user(store_lock, &mut user, |err| {
         get_user_update_internal_error(err)
     }).await?;

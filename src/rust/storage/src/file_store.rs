@@ -1924,9 +1924,10 @@ impl UserStore for FileStore {
         if user.id == Uuid::nil() {
             return Err(Error::UserIdMissing());
         }
-        if !self.user_exists(user.id) {
-            return Err(Error::UserIdNotFound(user.id.to_string()));
-        }
+        // A soft-deleted user is not found (as SqlStore's `deleted_at IS NULL`),
+        // so a stale write cannot restore the account by writing back its
+        // `deleted_at = None`.
+        self.read_user(user.id)?;
         self.validate_user(user, user.id)?;
         self.write_user_file(user, true)?;
         Ok(())

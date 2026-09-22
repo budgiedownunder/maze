@@ -135,6 +135,12 @@ async fn update_user_returns_not_found_for_unknown_id() {
 }
 
 #[tokio::test]
+async fn update_user_rejects_soft_deleted_user() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::update_user_rejects_soft_deleted_user(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_user_rejects_username_case_collision() {
     let (mut s, _temp) = fresh_store().await;
     contract::update_user_rejects_username_case_collision(&mut s).await;

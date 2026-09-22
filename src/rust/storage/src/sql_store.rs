@@ -29,7 +29,7 @@ use data_model::{
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
-use sqlx::{AnyPool, Row};
+use sqlx::{AnyConnection, AnyPool, Row};
 use uuid::Uuid;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1105,7 +1105,7 @@ fn validate_user_for_store(user: &User) -> Result<(), Error> {
 }
 
 async fn insert_user_emails(
-    pool: &AnyPool,
+    conn: &mut AnyConnection,
     kind: SqlBackend,
     user_id: Uuid,
     emails: &[UserEmail],
@@ -1121,7 +1121,7 @@ async fn insert_user_emails(
         .bind(bool_to_int(row.is_primary))
         .bind(bool_to_int(row.verified))
         .bind(row.verified_at.map(datetime_to_sql))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(map_sqlx_err)?;
     }
@@ -1129,7 +1129,7 @@ async fn insert_user_emails(
 }
 
 async fn insert_user_logins(
-    pool: &AnyPool,
+    conn: &mut AnyConnection,
     kind: SqlBackend,
     user_id: Uuid,
     logins: &[UserLogin],
@@ -1146,7 +1146,7 @@ async fn insert_user_logins(
         .bind(datetime_to_sql(login.expires_at))
         .bind(login.ip_address.clone())
         .bind(login.device_info.clone())
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(map_sqlx_err)?;
     }
@@ -1154,7 +1154,7 @@ async fn insert_user_logins(
 }
 
 async fn insert_user_oauth_identities(
-    pool: &AnyPool,
+    conn: &mut AnyConnection,
     kind: SqlBackend,
     user_id: Uuid,
     identities: &[OAuthIdentity],
@@ -1172,7 +1172,7 @@ async fn insert_user_oauth_identities(
         .bind(identity.provider_email.clone())
         .bind(datetime_to_sql(identity.linked_at))
         .bind(datetime_to_sql(identity.last_seen_at))
-        .execute(pool)
+        .execute(&mut *conn)
         .await
         .map_err(map_sqlx_err)?;
     }
@@ -1324,9 +1324,10 @@ impl UserStore for SqlStore {
         .await
         .map_err(map_sqlx_err)?;
 
-        insert_user_emails(&self.pool, self.kind, user.id, &user.emails).await?;
-        insert_user_logins(&self.pool, self.kind, user.id, &user.logins).await?;
-        insert_user_oauth_identities(&self.pool, self.kind, user.id, &user.oauth_identities).await?;
+        let mut conn = self.pool.acquire().await.map_err(map_sqlx_err)?;
+        insert_user_emails(&mut conn, self.kind, user.id, &user.emails).await?;
+        insert_user_logins(&mut conn, self.kind, user.id, &user.logins).await?;
+        insert_user_oauth_identities(&mut conn, self.kind, user.id, &user.oauth_identities).await?;
         Ok(())
     }
 
@@ -1709,11 +1710,16 @@ impl UserStore for SqlStore {
         validate_user_for_store(user)?;
         check_user_unique_fields(&self.pool, self.kind, &user.username, &user.emails, user.id).await?;
 
+        // One transaction, so a failure part-way through never leaves the user
+        // with some of its child rows deleted and not yet re-inserted.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        // `deleted_at IS NULL`: a soft-deleted user is not found, so a stale
+        // write cannot re-insert the child rows `delete_user` removed.
         let result = sqlx::query(&q(
             self.kind,
             "UPDATE users SET is_admin = ?, username = ?, full_name = ?, \
                               password_hash = ?, api_key = ?, last_sign_in_at = ? \
-             WHERE id = ?",
+             WHERE id = ? AND deleted_at IS NULL",
         ))
         .bind(bool_to_int(user.is_admin))
         .bind(&user.username)
@@ -1722,7 +1728,7 @@ impl UserStore for SqlStore {
         .bind(user.api_key.to_string())
         .bind(user.last_sign_in_at.map(datetime_to_sql))
         .bind(user.id.to_string())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
         if result.rows_affected() == 0 {
@@ -1733,23 +1739,24 @@ impl UserStore for SqlStore {
         // semantics callers use against the trait. Far simpler than diffing.
         sqlx::query(&q(self.kind, "DELETE FROM user_emails WHERE user_id = ?"))
             .bind(user.id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM user_logins WHERE user_id = ?"))
             .bind(user.id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM oauth_identities WHERE user_id = ?"))
             .bind(user.id.to_string())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
 
-        insert_user_emails(&self.pool, self.kind, user.id, &user.emails).await?;
-        insert_user_logins(&self.pool, self.kind, user.id, &user.logins).await?;
-        insert_user_oauth_identities(&self.pool, self.kind, user.id, &user.oauth_identities).await?;
+        insert_user_emails(&mut tx, self.kind, user.id, &user.emails).await?;
+        insert_user_logins(&mut tx, self.kind, user.id, &user.logins).await?;
+        insert_user_oauth_identities(&mut tx, self.kind, user.id, &user.oauth_identities).await?;
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -8844,6 +8851,26 @@ mod tests {
         let mut neither = challenge_score(user.id, "easy:1", 1, 100);
         neither.challenge = None; // neither subject set → rejected
         assert!(store.record_score(&neither).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn update_user_failure_leaves_the_stored_user_unchanged() {
+        let (mut store, mut user) = mem_store_with_user().await;
+        let kept = UserLogin::new(24, None, None);
+        user.logins.push(kept.clone());
+        store.update_user(&mut user).await.expect("update_user");
+
+        // A duplicate login id fails the `user_logins` primary key after the
+        // child rows have already been deleted and the emails re-inserted.
+        let duplicate = UserLogin::new(24, None, None);
+        user.logins = vec![duplicate.clone(), duplicate];
+        user.full_name = "Changed".into();
+        assert!(store.update_user(&mut user).await.is_err());
+
+        let loaded = store.get_user(user.id).await.expect("get_user");
+        assert_eq!(loaded.full_name, "Alice");
+        assert_eq!(loaded.logins.iter().map(|l| l.id).collect::<Vec<_>>(), vec![kept.id]);
+        assert_eq!(loaded.emails.len(), 1);
     }
 
     #[tokio::test]

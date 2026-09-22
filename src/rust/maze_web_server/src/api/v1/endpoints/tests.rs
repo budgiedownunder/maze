@@ -7,7 +7,7 @@ mod test_definitions {
     use crate::api::v1::endpoints::email_verification::{
         EmailVerificationConfirmRequest, EmailVerificationRequest,
     };
-    use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
+    use crate::api::v1::endpoints::handlers::{commit_login, commit_password_change, get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse, UsersListResponse};
     use crate::api::v1::endpoints::scores::{BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
@@ -7542,10 +7542,9 @@ mod test_definitions {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[tokio::test]
-    async fn record_score_with_value_beyond_the_column_is_bad_request() {
-        // A real store, not the mock: the bound lives in the stores' shared
-        // validator, and this checks it reaches the client as a 400.
+    /// A real in-memory SQLite store holding one user, for tests whose subject
+    /// is the store's own behaviour rather than the mock's.
+    async fn sql_store_with_user(is_admin: bool) -> (SharedStore, User) {
         let mut store = storage::get_store(storage::StoreConfig::Sql(storage::SqlStoreConfig {
             url: "sqlite::memory:".to_string(),
             max_connections: 1,
@@ -7556,7 +7555,7 @@ mod test_definitions {
         .expect("in-memory SqlStore");
         let mut user = User {
             id: Uuid::nil(),
-            is_admin: false,
+            is_admin,
             username: "player".into(),
             full_name: "Player".into(),
             emails: vec![data_model::UserEmail::new_primary_verified("player@example.com")],
@@ -7570,7 +7569,83 @@ mod test_definitions {
             avatar_updated_at: None,
         };
         store.create_user(&mut user).await.expect("create_user");
-        let shared: SharedStore = Arc::new(AsyncRwLock::new(store));
+        (Arc::new(AsyncRwLock::new(store)), user)
+    }
+
+    /// Applies `change` to the stored copy of `id`, standing in for a write
+    /// another request made after a handler took its own copy.
+    async fn change_stored_user(store: &SharedStore, id: Uuid, change: impl FnOnce(&mut User)) {
+        let mut lock = store.write().await;
+        let mut user = lock.get_user(id).await.expect("get_user");
+        change(&mut user);
+        lock.update_user(&mut user).await.expect("update_user");
+    }
+
+    #[tokio::test]
+    async fn commit_login_refuses_when_the_password_changed_after_verification() {
+        let (store, verified) = sql_store_with_user(false).await;
+        change_stored_user(&store, verified.id, |u| u.password_hash = "new-hash".into()).await;
+
+        let err = commit_login(store.write().await, &verified, 24, None, None)
+            .await
+            .expect_err("a stale verification must not sign in");
+        assert_eq!(err.as_response_error().status_code(), StatusCode::UNAUTHORIZED);
+        let stored = store.read().await.get_user(verified.id).await.expect("get_user");
+        assert_eq!(stored.password_hash, "new-hash");
+        assert!(stored.logins.is_empty());
+    }
+
+    #[tokio::test]
+    async fn commit_login_keeps_a_change_made_after_verification() {
+        let (store, verified) = sql_store_with_user(true).await;
+        change_stored_user(&store, verified.id, |u| u.is_admin = false).await;
+
+        let (login, _) = commit_login(store.write().await, &verified, 24, None, None)
+            .await
+            .expect("commit_login");
+        let stored = store.read().await.get_user(verified.id).await.expect("get_user");
+        assert!(!stored.is_admin, "the demotion must survive the login");
+        assert_eq!(stored.logins.iter().map(|l| l.id).collect::<Vec<_>>(), vec![login.id]);
+    }
+
+    #[tokio::test]
+    async fn commit_password_change_refuses_when_the_password_changed_after_the_check() {
+        let (store, checked) = sql_store_with_user(false).await;
+        change_stored_user(&store, checked.id, |u| u.password_hash = "other-hash".into()).await;
+
+        let err = commit_password_change(store.write().await, &checked, "new-hash".into(), None)
+            .await
+            .expect_err("a stale check must not change the password");
+        assert_eq!(err.as_response_error().status_code(), StatusCode::CONFLICT);
+        let stored = store.read().await.get_user(checked.id).await.expect("get_user");
+        assert_eq!(stored.password_hash, "other-hash");
+    }
+
+    #[tokio::test]
+    async fn commit_password_change_keeps_a_change_made_after_the_check() {
+        let (store, checked) = sql_store_with_user(true).await;
+        let kept = UserLogin::new(24, None, None);
+        let kept_id = kept.id;
+        change_stored_user(&store, checked.id, |u| {
+            u.is_admin = false;
+            u.logins = vec![kept, UserLogin::new(24, None, None)];
+        })
+        .await;
+
+        commit_password_change(store.write().await, &checked, "new-hash".into(), Some(kept_id))
+            .await
+            .expect("commit_password_change");
+        let stored = store.read().await.get_user(checked.id).await.expect("get_user");
+        assert_eq!(stored.password_hash, "new-hash");
+        assert!(!stored.is_admin, "the demotion must survive the password change");
+        assert_eq!(stored.logins.iter().map(|l| l.id).collect::<Vec<_>>(), vec![kept_id]);
+    }
+
+    #[tokio::test]
+    async fn record_score_with_value_beyond_the_column_is_bad_request() {
+        // A real store, not the mock: the bound lives in the stores' shared
+        // validator, and this checks it reaches the client as a 400.
+        let (shared, user) = sql_store_with_user(false).await;
 
         let app_config = AppConfig::default();
         let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));

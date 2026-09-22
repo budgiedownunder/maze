@@ -291,6 +291,27 @@ pub async fn update_user_returns_not_found_for_unknown_id(store: &mut Box<dyn St
     assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
 }
 
+pub async fn update_user_rejects_soft_deleted_user(store: &mut Box<dyn Store>) {
+    // A copy of the user taken before the delete must not bring any of it back.
+    let mut alice = fixture_user(store, "alice", "alice@example.com").await;
+    let login = UserLogin::new(24, None, None);
+    let login_id = login.id;
+    alice.logins.push(login);
+    store.update_user(&mut alice).await.expect("update_user");
+    let mut stale = store.get_user(alice.id).await.expect("get_user");
+
+    store.delete_user(alice.id).await.expect("delete_user");
+
+    let err = store.update_user(&mut stale).await.expect_err("stale write must fail");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+    let err = store.get_user(alice.id).await.expect_err("user must stay deleted");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+    let err = store.find_user_by_login_id(login_id).await.expect_err("login must stay gone");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+    let mut reborn = make_user("bob", "alice@example.com");
+    store.create_user(&mut reborn).await.expect("email must stay free");
+}
+
 pub async fn update_user_rejects_username_case_collision(store: &mut Box<dyn Store>) {
     let _ = fixture_user(store, "alice", "alice@example.com").await;
     let mut bob = fixture_user(store, "bob", "bob@example.com").await;
