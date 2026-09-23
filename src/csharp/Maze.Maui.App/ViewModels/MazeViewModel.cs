@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Messages;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
+using Maze.Maui.App.Utils;
 using Maze.Maui.Services;
 using Maze.Maui.App.Extensions;
 using Microsoft.Maui.Controls;
@@ -589,6 +590,7 @@ namespace Maze.Maui.App.ViewModels
         {
             bool created = false;
             string? name = await _dialogService.DisplayPrompt("Create Maze", "Name", "Name", "OK", "Cancel", "Enter maze name",
+                                                maxlength: FieldLimits.Name,
                                                 keyboard: Keyboard.Text, allowEmpty: false, trimResult: true);
             if (name is not null)
             {

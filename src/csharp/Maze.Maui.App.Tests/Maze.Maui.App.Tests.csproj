@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Plain net10.0 — no MAUI Sdk, no WindowsAppSDK. Tests pull the
@@ -49,6 +49,8 @@
              Link="LinkedSource\Extensions\StringExtensions.cs" />
     <Compile Include="..\Maze.Maui.App\Utils\MazeCellCap.cs"
              Link="LinkedSource\Utils\MazeCellCap.cs" />
+    <Compile Include="..\Maze.Maui.App\Utils\FieldLimits.cs"
+             Link="LinkedSource\Utils\FieldLimits.cs" />
     <Compile Include="..\Maze.Maui.App\Utils\MazeCellCounter.cs"
              Link="LinkedSource\Utils\MazeCellCounter.cs" />
     <Compile Include="..\Maze.Maui.App\Utils\GenerateMazeOptionsParser.cs"
