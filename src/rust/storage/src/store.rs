@@ -498,19 +498,19 @@ const MAX_SCORE_CHALLENGE_CHARS: usize = 64;
 pub(crate) fn validate_score_entry(entry: &ScoreEntry) -> Result<(), Error> {
     // `is_some() == is_some()` is true when both are set or both are unset.
     if entry.maze_id.is_some() == entry.challenge.is_some() {
-        return Err(Error::Other(
+        return Err(Error::Invalid(
             "score entry must set exactly one of maze_id / challenge".to_string(),
         ));
     }
     if let Some(challenge) = &entry.challenge
         && challenge.chars().count() > MAX_SCORE_CHALLENGE_CHARS
     {
-        return Err(Error::Other(format!(
+        return Err(Error::Invalid(format!(
             "challenge must be at most {MAX_SCORE_CHALLENGE_CHARS} characters"
         )));
     }
     if i64::try_from(entry.score).is_err() || i64::try_from(entry.elapsed_ms).is_err() {
-        return Err(Error::Other(format!(
+        return Err(Error::Invalid(format!(
             "score and elapsed_ms must be at most {}",
             i64::MAX
         )));

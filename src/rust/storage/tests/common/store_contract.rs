@@ -312,6 +312,71 @@ pub async fn update_user_rejects_soft_deleted_user(store: &mut Box<dyn Store>) {
     store.create_user(&mut reborn).await.expect("email must stay free");
 }
 
+pub async fn over_long_fields_are_rejected_naming_their_limit(store: &mut Box<dyn Store>) {
+    fn chars(n: usize) -> String {
+        "a".repeat(n)
+    }
+    // A syntactically valid address of exactly `len` characters.
+    fn email_of(len: usize, tag: &str) -> String {
+        let local = format!("{tag}{}", chars(10));
+        format!("{local}@{}.com", chars(len - local.len() - 5))
+    }
+    fn assert_invalid(result: Result<impl std::fmt::Debug, Error>, expected: &str) {
+        match result {
+            Err(Error::Invalid(msg)) => assert_eq!(msg, expected),
+            other => panic!("expected Invalid({expected:?}), got {other:?}"),
+        }
+    }
+
+    // Users: every limit is accepted exactly, and one past it is refused.
+    let mut at_limits = make_user(&chars(64), &email_of(254, "u1"));
+    at_limits.full_name = chars(255);
+    store.create_user(&mut at_limits).await.expect("fields at their limits");
+
+    let mut long_username = make_user(&chars(65), &email_of(40, "u2"));
+    assert_invalid(store.create_user(&mut long_username).await, "Username must be at most 64 characters");
+    let mut long_name = make_user("bob", &email_of(40, "u3"));
+    long_name.full_name = chars(256);
+    assert_invalid(store.create_user(&mut long_name).await, "Full name must be at most 255 characters");
+    let mut long_email = make_user("carol", &email_of(255, "u4"));
+    assert_invalid(store.create_user(&mut long_email).await, "Email address must be at most 254 characters");
+    assert_invalid(
+        store.add_user_email(at_limits.id, &email_of(255, "u5"), false).await.map(|_| ()),
+        "Email address must be at most 254 characters",
+    );
+
+    // Mazes, games and collections: on create and on update. The FileStore
+    // names each maze file after the maze, so a name at the full limit can
+    // exceed the OS path length there; the maze boundary itself is checked
+    // against the SQL store only (`sql_store_contract.rs`).
+    let mut maze = make_maze("short");
+    store.create_maze(&at_limits, &mut maze).await.expect("create_maze");
+    maze.name = chars(256);
+    assert_invalid(store.update_maze(&at_limits, &mut maze).await, "Maze name must be at most 255 characters");
+    let mut long_maze = make_maze(&chars(256));
+    assert_invalid(store.create_maze(&at_limits, &mut long_maze).await, "Maze name must be at most 255 characters");
+
+    let mut game = make_game_definition(&chars(255), Visibility::Private);
+    store.create_game_definition(&at_limits, &mut game).await.expect("game name at its limit");
+    game.name = chars(256);
+    assert_invalid(store.update_game_definition(&at_limits, &mut game).await, "Game name must be at most 255 characters");
+    let mut long_game = make_game_definition(&chars(256), Visibility::Private);
+    assert_invalid(store.create_game_definition(&at_limits, &mut long_game).await, "Game name must be at most 255 characters");
+
+    let mut collection = make_game_collection(&chars(255), Visibility::Private);
+    store.create_game_collection(&at_limits, &mut collection).await.expect("collection name at its limit");
+    collection.meta.name = chars(256);
+    assert_invalid(
+        store.update_game_collection(&at_limits, &mut collection).await,
+        "Collection name must be at most 255 characters",
+    );
+    let mut long_collection = make_game_collection(&chars(256), Visibility::Private);
+    assert_invalid(
+        store.create_game_collection(&at_limits, &mut long_collection).await,
+        "Collection name must be at most 255 characters",
+    );
+}
+
 pub async fn update_user_rejects_username_case_collision(store: &mut Box<dyn Store>) {
     let _ = fixture_user(store, "alice", "alice@example.com").await;
     let mut bob = fixture_user(store, "bob", "bob@example.com").await;
@@ -2165,7 +2230,7 @@ pub async fn score_record_rejects_values_outside_the_columns(store: &mut Box<dyn
         score_entry(alice.id, None, Some("c:1"), max + 1, 100),
         score_entry(alice.id, None, Some("c:1"), 1, max + 1),
     ] {
-        assert!(matches!(store.record_score(&entry).await, Err(Error::Other(_))));
+        assert!(matches!(store.record_score(&entry).await, Err(Error::Invalid(_))));
     }
     let history = store.user_history(alice.id, 10, 0).await.expect("history");
     assert_eq!(history.len(), 1);

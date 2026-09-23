@@ -23,7 +23,7 @@ use crate::store::{
 };
 use crate::{
     file_store_migration,
-    validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
+    validation::{validate_email_format, validate_field_length, MAX_NAME_CHARS, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
     Error, MazeItem, Store, MAX_GAME_DEFINITION_CONFIG_BYTES,
 };
 
@@ -3246,6 +3246,7 @@ impl MazeStore for FileStore {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
+        validate_field_length("Maze name", &maze.name, MAX_NAME_CHARS)?;
         Self::validate_maze_name_for_id(&maze.name)?;
         validate_maze_cell_count(
             maze.definition.row_count(),
@@ -3389,6 +3390,7 @@ impl MazeStore for FileStore {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
+        validate_field_length("Maze name", &maze.name, MAX_NAME_CHARS)?;
         validate_maze_cell_count(
             maze.definition.row_count(),
             maze.definition.col_count(),
@@ -4804,6 +4806,7 @@ impl GameStore for FileStore {
         if definition.name.trim().is_empty() {
             return Err(Error::GameDefinitionNameMissing());
         }
+        validate_field_length("Game name", &definition.name, MAX_NAME_CHARS)?;
         let config_json = serde_json::to_string(&definition.config)?;
         validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
         if self
@@ -4925,6 +4928,7 @@ impl GameStore for FileStore {
         if definition.name.trim().is_empty() {
             return Err(Error::GameDefinitionNameMissing());
         }
+        validate_field_length("Game name", &definition.name, MAX_NAME_CHARS)?;
         let config_json = serde_json::to_string(&definition.config)?;
         validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
         if let Some(other) = self.find_owner_definition_id_by_name(owner.id, &definition.name)?
@@ -5746,6 +5750,7 @@ impl GameStore for FileStore {
         if collection.meta.name.trim().is_empty() {
             return Err(Error::GameCollectionNameMissing());
         }
+        validate_field_length("Collection name", &collection.meta.name, MAX_NAME_CHARS)?;
         if self
             .find_owner_collection_id_by_name(owner.id, &collection.meta.name)?
             .is_some()
@@ -5868,6 +5873,7 @@ impl GameStore for FileStore {
         if collection.meta.name.trim().is_empty() {
             return Err(Error::GameCollectionNameMissing());
         }
+        validate_field_length("Collection name", &collection.meta.name, MAX_NAME_CHARS)?;
         if let Some(other) = self.find_owner_collection_id_by_name(owner.id, &collection.meta.name)?
             && other != collection.meta.id
         {

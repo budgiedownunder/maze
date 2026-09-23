@@ -141,6 +141,12 @@ async fn update_user_rejects_soft_deleted_user() {
 }
 
 #[tokio::test]
+async fn over_long_fields_are_rejected_naming_their_limit() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::over_long_fields_are_rejected_naming_their_limit(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_user_rejects_username_case_collision() {
     let (mut s, _temp) = fresh_store().await;
     contract::update_user_rejects_username_case_collision(&mut s).await;

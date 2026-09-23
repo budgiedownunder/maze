@@ -116,7 +116,10 @@ pub(crate) fn canonicalise_to_png(input: &[u8]) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     resized
         .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
-        .map_err(|e| ErrorInternalServerError(format!("failed to encode avatar PNG: {e}")))?;
+        .map_err(|e| {
+            log::error!("failed to encode avatar PNG: {e}");
+            ErrorInternalServerError("failed to encode avatar PNG")
+        })?;
     Ok(out)
 }
 

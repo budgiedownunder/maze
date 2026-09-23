@@ -69,6 +69,7 @@ fn map_store_error(err: StoreError) -> Error {
         StoreError::UserEmailNotFound(email) => {
             ErrorNotFound(format!("Email '{email}' is not registered for this user"))
         }
+        StoreError::Invalid(msg) => ErrorBadRequest(msg),
         StoreError::UserEmailMissing() | StoreError::UserEmailInvalid() => {
             ErrorBadRequest(format!("Invalid email address: {err}"))
         }

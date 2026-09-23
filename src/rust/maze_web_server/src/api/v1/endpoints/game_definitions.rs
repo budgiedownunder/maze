@@ -278,6 +278,7 @@ fn map_write_error(err: StoreError) -> Error {
         StoreError::GameDefinitionNameMissing() => {
             ErrorBadRequest("Game definition name must not be empty")
         }
+        StoreError::Invalid(msg) => ErrorBadRequest(msg),
         StoreError::GameDefinitionNameAlreadyExists(name) => {
             ErrorConflict(format!("A game definition named '{name}' already exists"))
         }

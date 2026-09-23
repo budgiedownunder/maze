@@ -163,6 +163,12 @@ async fn update_user_rejects_soft_deleted_user() {
 }
 
 #[tokio::test]
+async fn over_long_fields_are_rejected_naming_their_limit() {
+    let mut s = fresh_store().await;
+    contract::over_long_fields_are_rejected_naming_their_limit(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_user_rejects_username_case_collision() {
     let mut s = fresh_store().await;
     contract::update_user_rejects_username_case_collision(&mut s).await;
@@ -1238,4 +1244,17 @@ async fn featured_game_items_reorder_in_one_and_rejects_non_curated() {
 async fn featured_game_items_reconcile_backfills_curated() {
     let mut s = fresh_store().await;
     contract::featured_game_items_reconcile_backfills_curated(&mut s).await;
+}
+
+#[tokio::test]
+async fn maze_name_at_its_limit_round_trips() {
+    // The shared length test cannot check this boundary: the FileStore names
+    // each maze file after the maze, so a full-length name can exceed the OS
+    // path limit there.
+    let mut s = fresh_store().await;
+    let owner = contract::fixture_user(&mut s, "alice", "alice@example.com").await;
+    let mut maze = contract::make_maze(&"a".repeat(255));
+    s.create_maze(&owner, &mut maze).await.expect("maze name at its limit");
+    let loaded = s.get_maze(&owner, &maze.id).await.expect("get_maze");
+    assert_eq!(loaded.name.chars().count(), 255);
 }

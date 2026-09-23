@@ -178,6 +178,7 @@ fn map_write_error(err: StoreError) -> Error {
         StoreError::GameCollectionNameMissing() => {
             ErrorBadRequest("Game collection name must not be empty")
         }
+        StoreError::Invalid(msg) => ErrorBadRequest(msg),
         StoreError::GameCollectionNameAlreadyExists(name) => {
             ErrorConflict(format!("A game collection named '{name}' already exists"))
         }

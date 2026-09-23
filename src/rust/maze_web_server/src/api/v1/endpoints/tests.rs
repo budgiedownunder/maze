@@ -876,7 +876,7 @@ mod test_definitions {
             // maze_id / challenge) so the handler's 400 path is exercised.
             // `is_some() == is_some()` is true when both or neither are set.
             if entry.maze_id.is_some() == entry.challenge.is_some() {
-                return Err(StoreError::Other(
+                return Err(StoreError::Invalid(
                     "score entry must set exactly one of maze_id / challenge".to_string(),
                 ));
             }
@@ -7641,21 +7641,60 @@ mod test_definitions {
         assert_eq!(stored.logins.iter().map(|l| l.id).collect::<Vec<_>>(), vec![kept_id]);
     }
 
+    /// The full app over `store`, for tests that need the real store's behaviour.
+    async fn create_test_app_on_store(
+        store: SharedStore,
+    ) -> impl Service<actix_http::Request, Response = ServiceResponse, Error = Error> {
+        let app_config = AppConfig::default();
+        let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
+        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
+        test::init_service(
+            create_app(&app_config.security.password_hash, web::Data::new(store), web::Data::new(features), web::Data::new(connector), comms, ".".to_string())
+                .app_data(web::Data::new(app_config)),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn over_long_username_is_bad_request_naming_the_limit() {
+        let (store, user) = sql_store_with_user(false).await;
+        let app = create_test_app_on_store(store).await;
+
+        let body = UpdateProfileRequest { username: "a".repeat(65), full_name: "Player".into() };
+        let req = create_test_put_request("/api/v1/users/me/profile", Some(user.api_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let text = String::from_utf8(test::read_body(resp).await.to_vec()).unwrap();
+        assert_eq!(text, "Username must be at most 64 characters");
+    }
+
+    #[tokio::test]
+    async fn store_failure_text_does_not_reach_the_response() {
+        // A score for a maze that does not exist fails the database's foreign
+        // key; the database's own error text must stay in the log.
+        let (store, user) = sql_store_with_user(false).await;
+        let app = create_test_app_on_store(store).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("no-such-maze".to_string()),
+            challenge: None,
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", Some(user.api_key), None, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let text = String::from_utf8(test::read_body(resp).await.to_vec()).unwrap();
+        assert_eq!(text, "Failed to record score");
+    }
+
     #[tokio::test]
     async fn record_score_with_value_beyond_the_column_is_bad_request() {
         // A real store, not the mock: the bound lives in the stores' shared
         // validator, and this checks it reaches the client as a 400.
         let (shared, user) = sql_store_with_user(false).await;
-
-        let app_config = AppConfig::default();
-        let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
-        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
-        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
-        let app = test::init_service(
-            create_app(&app_config.security.password_hash, web::Data::new(shared), web::Data::new(features), web::Data::new(connector), comms, ".".to_string())
-                .app_data(web::Data::new(app_config)),
-        )
-        .await;
+        let app = create_test_app_on_store(shared).await;
 
         for (score, elapsed_ms, expected) in [
             (1, i64::MAX as u64, StatusCode::CREATED),

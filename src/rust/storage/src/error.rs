@@ -52,6 +52,10 @@ pub enum Error {
     DataModelError(DataModelError),
     Io(std::io::Error),
     SerdeJson(serde_json::Error),
+    /// The input failed validation. The message says what to fix and is
+    /// safe to show to the client, unlike [`Error::Other`], which can carry
+    /// backend detail.
+    Invalid(String),
     Other(String),
 }
 
@@ -152,6 +156,7 @@ impl std::fmt::Display for Error {
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),
             Error::SerdeJson(error) => write!(f, "{error}"),
+            Error::Invalid(msg) => write!(f, "{msg}"),
             Error::Other(msg) => write!(f, "Error: {msg}"),
         }
     }

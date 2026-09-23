@@ -127,21 +127,37 @@ fn user_id_from_str(value: &str) -> Result<Uuid, Error> {
     }
 }
 
+/// Maps a store error that no more specific arm handled. A validation failure
+/// ([`StoreError::Invalid`]) is the client's to fix, so it becomes a 400 with
+/// its message; anything else is logged and becomes a 500 whose body is only
+/// `context`, since a store error can carry backend detail such as database
+/// error text.
+fn store_error_response(context: &str, err: &StoreError) -> Error {
+    match err {
+        StoreError::Invalid(msg) => ErrorBadRequest(msg.clone()),
+        other => {
+            log::error!("{context}: {other}");
+            ErrorInternalServerError(context.to_string())
+        }
+    }
+}
+
 // Password-related errors
 fn get_hash_password_internal_error(err: &argon2::password_hash::Error) -> Error {
-    ErrorInternalServerError(format!("Error hashing password: {err}"))
+    log::error!("Error hashing password: {err}");
+    ErrorInternalServerError("Error hashing password")
 }
 
 // User-related errors
 fn get_users_fetch_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching users: {err}"))
+    store_error_response("Error fetching users", err)
 }
 fn get_user_create_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error creating user: {err}"))
+    store_error_response("Error creating user", err)
 }
 
 fn get_user_update_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error updating user: {err}"))
+    store_error_response("Error updating user", err)
 }
 
 fn get_user_not_found_error(id: String) -> Error {
@@ -192,7 +208,7 @@ fn get_missing_email_request_error() -> Error {
 }
 
 fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching user item with id '{id}': {err}"))
+    store_error_response(&format!("Error fetching user item with id '{id}'"), err)
 }
 
 fn get_cannot_delete_last_admin_error() -> Error {
@@ -210,11 +226,11 @@ async fn is_last_admin(store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>, user_i
 
 // Maze-related errors
 fn get_mazes_fetch_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching maze items: {err}"))
+    store_error_response("Error fetching maze items", err)
 }
 
 fn get_maze_create_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error creating maze: {err}"))
+    store_error_response("Error creating maze", err)
 }
 
 fn get_maze_not_found_error(id: &str) -> Error {
@@ -226,7 +242,7 @@ fn get_maze_exists_error(id: &str) -> Error {
 }
 
 fn get_maze_fetch_internal_error(id: &str, err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching maze item with id '{id}': {err}"))
+    store_error_response(&format!("Error fetching maze item with id '{id}'"), err)
 }
 
 fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
@@ -514,14 +530,16 @@ pub async fn get_features(
 fn update_features_in_config(config_path: &str, new_features: &AppFeaturesResponse) -> Result<(), Error> {
     let content = std::fs::read_to_string(config_path).unwrap_or_default();
     let mut doc = content.parse::<toml_edit::DocumentMut>().map_err(|e| {
-        ErrorInternalServerError(format!("Failed to parse config file: {e}"))
+        log::error!("Failed to parse config file: {e}");
+        ErrorInternalServerError("Failed to parse config file")
     })?;
     if doc.get("features").is_none() {
         doc["features"] = toml_edit::table();
     }
     doc["features"]["allow_signup"] = toml_edit::value(new_features.allow_signup);
     std::fs::write(config_path, doc.to_string()).map_err(|e| {
-        ErrorInternalServerError(format!("Failed to write config file: {e}"))
+        log::error!("Failed to write config file: {e}");
+        ErrorInternalServerError("Failed to write config file")
     })?;
     Ok(())
 }
@@ -686,9 +704,10 @@ pub async fn signup(
         let mut outcome: Result<(), StoreError> = Ok(());
         for attempt in 0u8..=5 {
             store_user.username = if attempt == 0 {
-                base_username.clone()
+                account::fit_username(&base_username, "")
             } else {
-                format!("{}_{}", base_username, &Uuid::new_v4().to_string().replace('-', "")[..6])
+                let suffix = format!("_{}", &Uuid::new_v4().to_string().replace('-', "")[..6]);
+                account::fit_username(&base_username, &suffix)
             };
             match store_lock.create_user(&mut store_user).await {
                 Ok(()) => break,
@@ -993,7 +1012,10 @@ pub async fn oauth_start(
     // WebAuthenticator on Windows needs this for activation correlation.
     begin.persisted.client_state = query.state.clone();
     let cookie_value = oauth_state::encode(&begin.persisted)
-        .map_err(|e| ErrorInternalServerError(format!("oauth state encode: {e}")))?;
+        .map_err(|e| {
+            log::error!("oauth state encode: {e}");
+            ErrorInternalServerError("Failed to start sign-in")
+        })?;
     let cookie = build_state_cookie(cookie_value);
 
     Ok(HttpResponse::Found()

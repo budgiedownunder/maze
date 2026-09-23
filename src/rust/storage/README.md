@@ -272,6 +272,8 @@ Independently of the *size* caps above, both stores also cap the **number of ite
 | Game definitions | `MAX_DEFINITIONS_PER_USER` | 500 | `GameStore::max_definitions_per_user` | `create_game_definition` | `GameDefinitionCountLimitReached` |
 | Game collections | `MAX_COLLECTIONS_PER_USER` | 100 | `GameStore::max_collections_per_user` | `create_game_collection` | `GameCollectionCountLimitReached` |
 
+Text fields are length-capped the same way on every backend, so an over-long value fails identically everywhere instead of being accepted by SQLite and rejected by a PostgreSQL or MySQL column: a username at most `MAX_USERNAME_CHARS` (64), an email address at most `MAX_EMAIL_CHARS` (254), and a full name or maze, game or collection name at most `MAX_NAME_CHARS` (255), all counted in characters (`validation.rs`). An over-long value is refused with `Error::Invalid`, whose message names the field and its limit, and the server returns it as HTTP 400.
+
 
 ## Maze object-count caps
 

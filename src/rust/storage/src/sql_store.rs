@@ -17,7 +17,7 @@ use crate::store::{
     normalize_grantees, normalize_item_order,
 };
 use crate::{
-    validation::{validate_email_format, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
+    validation::{validate_email_format, validate_field_length, MAX_NAME_CHARS, validate_game_definition_config_size, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_maze_object_counts, validate_user_fields},
     Error, MazeItem, Store, MAX_GAME_DEFINITION_CONFIG_BYTES,
 };
 use async_trait::async_trait;
@@ -3358,6 +3358,7 @@ impl MazeStore for SqlStore {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
+        validate_field_length("Maze name", &maze.name, MAX_NAME_CHARS)?;
 
         validate_maze_cell_count(
             maze.definition.row_count(),
@@ -3555,6 +3556,7 @@ impl MazeStore for SqlStore {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
+        validate_field_length("Maze name", &maze.name, MAX_NAME_CHARS)?;
         validate_maze_cell_count(
             maze.definition.row_count(),
             maze.definition.col_count(),
@@ -5687,6 +5689,7 @@ impl GameStore for SqlStore {
         if definition.name.trim().is_empty() {
             return Err(Error::GameDefinitionNameMissing());
         }
+        validate_field_length("Game name", &definition.name, MAX_NAME_CHARS)?;
         let config_json = serde_json::to_string(&definition.config)?;
         validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
 
@@ -5873,6 +5876,7 @@ impl GameStore for SqlStore {
         if definition.name.trim().is_empty() {
             return Err(Error::GameDefinitionNameMissing());
         }
+        validate_field_length("Game name", &definition.name, MAX_NAME_CHARS)?;
         let config_json = serde_json::to_string(&definition.config)?;
         validate_game_definition_config_size(config_json.len(), MAX_GAME_DEFINITION_CONFIG_BYTES)?;
 
@@ -7030,6 +7034,7 @@ impl GameStore for SqlStore {
         if collection.meta.name.trim().is_empty() {
             return Err(Error::GameCollectionNameMissing());
         }
+        validate_field_length("Collection name", &collection.meta.name, MAX_NAME_CHARS)?;
         let existing = sqlx::query(&q(
             self.kind,
             "SELECT id FROM game_collections WHERE owner_id = ? AND LOWER(name) = LOWER(?)",
@@ -7220,6 +7225,7 @@ impl GameStore for SqlStore {
         if collection.meta.name.trim().is_empty() {
             return Err(Error::GameCollectionNameMissing());
         }
+        validate_field_length("Collection name", &collection.meta.name, MAX_NAME_CHARS)?;
         let clash = sqlx::query(&q(
             self.kind,
             "SELECT id FROM game_collections WHERE owner_id = ? AND LOWER(name) = LOWER(?) AND id <> ?",
