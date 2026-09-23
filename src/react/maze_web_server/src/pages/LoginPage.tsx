@@ -5,8 +5,10 @@ import { useTheme } from '../context/ThemeContext'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { PasswordInput } from '../components/PasswordInput'
 import { OAuthButtons } from '../components/OAuthButtons'
+import { getLoginFlashMessage } from '../utils/loginFlash'
 import { getOAuthErrorMessage } from '../utils/oauth'
 import appIcon from '../assets/app.png'
+import { MAX_EMAIL_CHARS } from '../utils/validation'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -23,12 +25,12 @@ export function LoginPage() {
   // Surface OAuth-flow errors that the server (or the OAuthCallbackPage)
   // delivers via `?error=<code>` on this URL. Strip the query param after
   // reading so a refresh or a follow-up successful sign-in doesn't keep the
-  // stale error visible. The same channel carries `?message=` flashes from
-  // sibling pages (e.g. successful password reset).
+  // stale error visible. The same channel carries `?message=<code>` flashes
+  // from sibling pages (e.g. successful password reset).
   useEffect(() => {
     const code = searchParams.get('error')
     const message = getOAuthErrorMessage(code)
-    const flashMessage = searchParams.get('message')
+    const flashMessage = getLoginFlashMessage(searchParams.get('message'))
     if (message || flashMessage) {
       if (message) setError(message)
       if (flashMessage) setFlash(flashMessage)
@@ -87,6 +89,7 @@ export function LoginPage() {
           onChange={e => setEmail(e.target.value)}
           disabled={isBusy}
           autoComplete="email"
+          maxLength={MAX_EMAIL_CHARS}
         />
 
         <label htmlFor="password">Password</label>

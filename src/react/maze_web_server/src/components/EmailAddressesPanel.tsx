@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
 import type { UserEmail } from '../types/api'
-import { isValidEmail } from '../utils/validation'
+import { isValidEmail, MAX_EMAIL_CHARS } from '../utils/validation'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { ConfirmModal } from './ConfirmModal'
 
@@ -202,6 +202,7 @@ export function EmailAddressesPanel({ token }: Props) {
             value={newEmail}
             onChange={e => setNewEmail(e.target.value)}
             disabled={isAdding}
+            maxLength={MAX_EMAIL_CHARS}
           />
           <button
             type="submit"

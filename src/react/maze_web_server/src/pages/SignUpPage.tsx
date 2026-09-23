@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
-import { isValidEmail, validateSignupForm } from '../utils/validation'
+import { isValidEmail, validateSignupForm, MAX_EMAIL_CHARS } from '../utils/validation'
+import type { LoginFlashCode } from '../utils/loginFlash'
 import { useTheme } from '../context/ThemeContext'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { PasswordInput } from '../components/PasswordInput'
@@ -37,13 +38,8 @@ export function SignUpPage() {
       // and the primary email lands unverified — direct the user to their
       // inbox. When email is disabled the server has marked the primary
       // verified at creation, so the user can sign in immediately.
-      const message = email_enabled
-        ? 'Account created. Check your inbox for a verification email before signing in.'
-        : 'Account created. You can sign in now.'
-      navigate(
-        `/login?message=${encodeURIComponent(message)}`,
-        { replace: true },
-      )
+      const message: LoginFlashCode = email_enabled ? 'signup_check_inbox' : 'signup_ready'
+      navigate(`/login?message=${message}`, { replace: true })
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       setError(status === 409 ? 'Email already in use' : 'Sign up failed. Please try again.')
@@ -68,7 +64,7 @@ export function SignUpPage() {
 
       <form onSubmit={handleSubmit} className="auth-form">
         <label htmlFor="su-email">Email</label>
-        <input id="su-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isLoading} autoComplete="email" />
+        <input id="su-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isLoading} autoComplete="email" maxLength={MAX_EMAIL_CHARS} />
 
         <label htmlFor="su-password">Password</label>
         <PasswordInput id="su-password" value={password} onChange={setPassword} disabled={isLoading} />

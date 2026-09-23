@@ -24,10 +24,13 @@ export function getOAuthErrorMessage(code: string | null): string | null {
   if (!code) return null
   // Provider-side errors arrive as `provider_error:<provider-code>` (e.g.
   // `provider_error:access_denied` when the user declines consent at Google).
+  // The code after the colon is whatever the provider sent, and `/login?error=`
+  // is reachable by anyone, so only the one we have a message for is named —
+  // echoing the rest would put arbitrary text on the real login page.
   if (code.startsWith('provider_error:')) {
     const detail = code.slice('provider_error:'.length)
     if (detail === 'access_denied') return 'Sign-in was cancelled at the provider.'
-    return `The provider reported an error (${detail}). Please try again.`
+    return 'The provider reported an error. Please try again.'
   }
   switch (code) {
     case 'signup_disabled':

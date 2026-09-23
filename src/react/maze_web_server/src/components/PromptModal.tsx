@@ -5,6 +5,7 @@ interface Props {
   label: string
   initialValue: string
   confirmLabel: string
+  maxLength?: number
   validate?: (value: string) => string | null
   isLoading?: boolean
   error?: string | null
@@ -17,6 +18,7 @@ export function PromptModal({
   label,
   initialValue,
   confirmLabel,
+  maxLength,
   validate,
   isLoading = false,
   error,
@@ -55,6 +57,7 @@ export function PromptModal({
               type="text"
               className="input"
               value={value}
+              maxLength={maxLength}
               onChange={e => { setValue(e.target.value); setValidationError(null) }}
               autoFocus
             />

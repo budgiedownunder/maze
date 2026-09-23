@@ -2,6 +2,14 @@ export function isValidEmail(email: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
 }
 
+// Field-length caps, mirroring `MAX_USERNAME_CHARS` / `MAX_NAME_CHARS` /
+// `MAX_EMAIL_CHARS` in `src/rust/storage/src/validation.rs`. The server
+// rejects an over-long value with a 400 naming the limit; the inputs carry
+// the same caps so the limit is reached in the field rather than on submit.
+export const MAX_USERNAME_CHARS = 64
+export const MAX_NAME_CHARS = 255
+export const MAX_EMAIL_CHARS = 254
+
 // Maximum number of doors a generated maze may be seeded with. Mirrors
 // `MAX_AUTO_DOORS` in `src/rust/maze/src/generator.rs` (kept at 8 so keys+doors
 // stay within the key-aware solver's verification bound). The generator clamps

@@ -21,6 +21,7 @@ import { launchDefinitionPreview } from '../utils/definitionPreview'
 import { launchDefinition } from '../utils/play3dLaunch'
 import { accessLabel, reshuffleConfirmMessage, type Visibility } from '../utils/gameDefinitions'
 import type { GameDefinition, GameDefinitionRequest, GamePlayResponse } from '../types/api'
+import { MAX_NAME_CHARS } from '../utils/validation'
 
 // A one-line game summary — level count, rotation, and access tier — shown under
 // the name. Level count lives in the opaque config; missing/≤1 reads as single.
@@ -257,6 +258,7 @@ export function WorkshopGamesPage() {
       )}
       {duplicating && (
         <PromptModal
+          maxLength={MAX_NAME_CHARS}
           title="Duplicate Game"
           label="Name"
           initialValue={`Copy of ${duplicating.source.name}`}

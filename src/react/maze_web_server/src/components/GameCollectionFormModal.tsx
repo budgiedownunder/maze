@@ -6,6 +6,7 @@ import { GameImageEditor } from './GameImageEditor'
 import { getGameCollection, listGameDefinitions } from '../api/client'
 import type { GameDefinition, PlayMode } from '../types/api'
 import { PLAY_MODES, playModeDescription, playModeLabel } from '../utils/gameDefinitions'
+import { MAX_NAME_CHARS } from '../utils/validation'
 
 // The Add picker loads the owner's whole game set once (in the background, paged)
 // on open, then filters + excludes already-added members entirely in memory — so
@@ -203,6 +204,7 @@ export function GameCollectionFormModal({
                 type="text"
                 className="input"
                 value={name}
+                maxLength={MAX_NAME_CHARS}
                 onChange={e => { setName(e.target.value); setValidationError(null) }}
                 autoFocus
               />

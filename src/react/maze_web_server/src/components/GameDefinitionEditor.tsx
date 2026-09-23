@@ -17,7 +17,7 @@ import { AdvancedFields, type AdvancedFieldsValue } from './AdvancedFields'
 import type { DefinitionLevelsFormValue } from '../utils/definitionConfig'
 import { modalTabPanelProps, type WizardStep } from '../utils/modalTabs'
 import { useAppFeatures } from '../context/AppFeaturesContext'
-import { MAX_GAME_MAZE_DIMENSION, validateHpFields, validateMazeGenerationFields } from '../utils/validation'
+import { MAX_GAME_MAZE_DIMENSION, MAX_NAME_CHARS, validateHpFields, validateMazeGenerationFields } from '../utils/validation'
 import { MAX_LEVEL_COUNT, FINISH_TYPES, ROTATIONS, isGameplayChange, reshuffleConfirmMessage, rotationLabel, rotationDescription, type FinishType, type Rotation } from '../utils/gameDefinitions'
 import { titleCaseWire } from '../utils/cellEntityStyles'
 import { buildDefinitionConfig, type DefinitionFormState } from '../utils/definitionConfig'
@@ -239,6 +239,7 @@ export function GameDefinitionEditor({
               type="text"
               className="input"
               value={form.name}
+              maxLength={MAX_NAME_CHARS}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
             />
           </label>

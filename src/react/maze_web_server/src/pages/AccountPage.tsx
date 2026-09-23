@@ -8,6 +8,7 @@ import { ChangePasswordModal } from '../components/ChangePasswordModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { EmailAddressesPanel } from '../components/EmailAddressesPanel'
 import type { UserProfile } from '../types/api'
+import { MAX_NAME_CHARS, MAX_USERNAME_CHARS } from '../utils/validation'
 
 type View = 'account' | 'changePassword'
 
@@ -224,10 +225,10 @@ export function AccountPage() {
         ) : (
           <form onSubmit={handleSave} className="account-form">
             <label htmlFor="acc-username">Username</label>
-            <input id="acc-username" value={username} onChange={e => setUsername(e.target.value)} disabled={isSaving} />
+            <input id="acc-username" value={username} onChange={e => setUsername(e.target.value)} disabled={isSaving} maxLength={MAX_USERNAME_CHARS} />
 
             <label htmlFor="acc-fullname">Full Name</label>
-            <input id="acc-fullname" value={fullName} onChange={e => setFullName(e.target.value)} disabled={isSaving} />
+            <input id="acc-fullname" value={fullName} onChange={e => setFullName(e.target.value)} disabled={isSaving} maxLength={MAX_NAME_CHARS} />
 
             {saved?.is_admin && (
               <span className="badge-admin">Administrator</span>
