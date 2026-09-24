@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 /// Configuration for Argon2 password hashing parameters.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct PasswordHashConfig {
     /// Memory cost in kibibytes (1 KiB = 1024 bytes). Higher values increase resistance to brute-force attacks.
     /// Recommended: at least 65536 (64 MiB) in production environments.

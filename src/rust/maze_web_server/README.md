@@ -328,7 +328,7 @@ scopes    = ["https://mail.google.com/"]   # required for SMTP — gmail.send is
 Notes:
 
 - Any environment variable values will take precedence over their corresponding configuration file values.
-- `config.toml` is optional — with no file present the server starts on the defaults above. A file that *is* present must be usable in full: a value the loader cannot apply (a non-numeric string where a number belongs, an unknown enum value) stops the server at startup with the offending key, rather than falling back to the defaults and quietly running on a different storage backend, port and sign-up policy than the file asks for.
+- `config.toml` is optional — with no file present the server starts on the defaults above. A file that *is* present must be usable in full: a value the loader cannot apply (a non-numeric string where a number belongs, an unknown enum value) or a key it does not recognise stops the server at startup, naming the key and, for an unrecognised one, the keys that are valid there.
 - `log_dir` is relative to the server working directory. Log files are named `{log_file_prefix}{YYYY-MM-DD}.log` and a new file is started each calendar day. Old log files are not deleted automatically.
 - `log_file_prefix` is used verbatim — include any desired separator as the final character (e.g. `"maze_web_server_"` produces `maze_web_server_2026-04-09.log`, while `"my-app-"` produces `my-app-2026-04-09.log`).
 - Valid `log_level` values are: `error`, `warn`, `info`, `debug`, `trace`.

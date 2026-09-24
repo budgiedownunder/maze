@@ -8,6 +8,7 @@ use crate::config::comms::{self, CommsAppConfig};
 
 /// Security configuration including TLS certificate paths and password hashing parameters.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     /// Path to the TLS certificate file.
     /// Can be overridden with `MAZE_WEB_SERVER_SECURITY_CERT_FILE`.
@@ -44,6 +45,7 @@ impl Default for SecurityConfig {
 
 /// Logging configuration controlling log file output.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct LoggingConfig {
     /// Directory to write log files to (relative to the server working directory).
     /// Can be overridden with `MAZE_WEB_SERVER_LOGGING_LOG_DIR`.
@@ -80,6 +82,7 @@ impl Default for LoggingConfig {
 /// For future per-user feature gating, a separate `UserFeaturesConfig` type
 /// should be added (stored per user in the data store, not in `config.toml`).
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AppFeaturesConfig {
     /// Whether new users can self-register via the signup endpoint.
     /// Can be overridden with `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`.
@@ -111,6 +114,7 @@ pub enum ConnectorKind {
 /// from the environment variable named by `client_secret_env`. This keeps the
 /// secret out of any committed file.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct InternalProviderConfig {
     /// Whether this provider is enabled. Disabled providers are not surfaced
     /// to the front end and the server will not initiate a flow against them.
@@ -145,6 +149,7 @@ pub struct InternalProviderConfig {
 /// Configuration for the built-in OAuth connector that speaks OAuth/OIDC
 /// directly to each provider.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct InternalConnectorConfig {
     /// Per-provider configuration keyed by canonical provider name
     /// ("google", "github", etc.).
@@ -156,6 +161,7 @@ pub struct InternalConnectorConfig {
 /// `Option<Auth0ConnectorConfig>` on `OAuthConfig` so that the section can be
 /// present in `config.toml` without forcing the connector to exist yet.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Auth0ConnectorConfig {
     #[serde(default)]
     pub domain: String,
@@ -172,6 +178,7 @@ pub struct Auth0ConnectorConfig {
 /// OAuth configuration. The top-level `[oauth]` table selects which connector
 /// implementation is used and is the entry point for everything else.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct OAuthConfig {
     /// Master switch. When false, OAuth buttons are hidden in the front ends
     /// regardless of any per-provider config below, and no validation is run
@@ -328,6 +335,7 @@ pub enum StorageKind {
 
 /// File-backed storage configuration.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct FileStorageConfig {
     /// Directory under which user/maze data is stored (relative to the working
     /// directory or absolute). Can be overridden with
@@ -352,6 +360,7 @@ impl Default for FileStorageConfig {
 /// startup from these discrete fields plus any TLS query parameters required
 /// by `require_tls` / `ca_cert_path`.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SqlStorageConfig {
     /// Driver name: `"postgres"`, `"mysql"`, or `"sqlite"`.
     #[serde(default = "default_storage_sql_driver")]
@@ -446,6 +455,7 @@ impl Default for SqlStorageConfig {
 /// Top-level storage configuration. Selects between the file-backed and
 /// SQL-backed implementations of the [`storage::Store`] trait.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct StorageConfig {
     /// Which backend to use: `"file"` or `"sql"`.
     #[serde(default, rename = "type")]
@@ -491,6 +501,7 @@ impl StorageConfig {
 
 /// Application configuration settings loaded from config.toml or environment variables.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     /// Port to bind the server to (e.g., 8443 for HTTPS).
     /// Can be overridden with `MAZE_WEB_SERVER_PORT`.
@@ -1192,6 +1203,61 @@ mod tests {
         .expect_err("an uncoercible value must refuse to start");
         assert!(
             err.to_string().contains("allow_signup"),
+            "the error must name the offending key: {err}"
+        );
+    }
+
+    #[test]
+    fn load_rejects_an_unknown_key() {
+        // A mistyped key is silently ignored by the config crate, which
+        // leaves the operator with a setting they believe they applied.
+        let err = load_from_toml("porrt = 9443\n")
+            .expect_err("a mistyped top-level key must refuse to start");
+        assert!(
+            err.to_string().contains("porrt"),
+            "the error must name the offending key: {err}"
+        );
+
+        let err = load_from_toml(
+            r#"
+            [features]
+            allow_signupp = false
+            "#,
+        )
+        .expect_err("a mistyped key in a section must refuse to start");
+        assert!(
+            err.to_string().contains("allow_signupp"),
+            "the error must name the offending key: {err}"
+        );
+    }
+
+    #[test]
+    fn load_rejects_an_unknown_key_in_a_nested_table() {
+        let err = load_from_toml(
+            r#"
+            [storage.sql]
+            max_connectionss = 9
+            "#,
+        )
+        .expect_err("a mistyped key in a nested table must refuse to start");
+        assert!(
+            err.to_string().contains("max_connectionss"),
+            "the error must name the offending key: {err}"
+        );
+
+        // `[security.password_hash]` deserializes into the auth crate's
+        // `PasswordHashConfig`, so it needs the same treatment there —
+        // a typo here would otherwise leave the Argon2 parameters on
+        // their defaults without saying so.
+        let err = load_from_toml(
+            r#"
+            [security.password_hash]
+            mem_costt = 1024
+            "#,
+        )
+        .expect_err("a mistyped password-hash key must refuse to start");
+        assert!(
+            err.to_string().contains("mem_costt"),
             "the error must name the offending key: {err}"
         );
     }
