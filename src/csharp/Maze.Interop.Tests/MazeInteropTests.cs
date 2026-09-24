@@ -1,4 +1,4 @@
-using Xunit;
+﻿using Xunit;
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Maze.Interop.Tests
@@ -782,6 +782,42 @@ namespace Maze.Interop.Tests
             FreeMaze(mazePtr);
             Assert.Equal(json, expected);
         }
+        /// <summary>
+        /// Confirms that a maze name containing non-ASCII characters survives a
+        /// <see cref="Maze.Interop.MazeInterop.MazeFromJson"/> /
+        /// <see cref="Maze.Interop.MazeInterop.MazeToJson"/> round trip. Strings cross into
+        /// WebAssembly as UTF-8, where an accented character occupies more bytes than it does
+        /// .NET chars.
+        /// </summary>
+        [Fact]
+        public void MazeFromJson_ShouldRoundTripAnAccentedName()
+        {
+            MazeInterop interop = GetInterop();
+            var jsonStr = "{\"id\":\"x\",\"name\":\"Caf\u00e9\",\"definition\":{\"grid\":[]}}";
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
+            var json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
+            Assert.Equal(jsonStr, json);
+        }
+
+        /// <summary>
+        /// Confirms the same for a name written in a script where every character occupies
+        /// three UTF-8 bytes, so the byte count runs well ahead of the char count.
+        /// </summary>
+        [Fact]
+        public void MazeFromJson_ShouldRoundTripAMultiByteName()
+        {
+            MazeInterop interop = GetInterop();
+            var name = new string('\u8ff7', 20);
+            var jsonStr = "{\"id\":\"x\",\"name\":\"" + name + "\",\"definition\":{\"grid\":[]}}";
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
+            var json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
+            Assert.Equal(jsonStr, json);
+        }
+
         /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeFromJson"/> fails when presented with invalid JSON
         /// </summary>

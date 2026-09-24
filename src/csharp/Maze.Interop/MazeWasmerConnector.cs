@@ -1,4 +1,4 @@
-#if !IOS
+﻿#if !IOS
 namespace Maze.Interop
 {
     using System.Runtime.InteropServices;
@@ -463,8 +463,7 @@ hasResult)
         /// <returns>Value</returns>
         public UInt32 ReadUInt32(UInt32 ptrOffset)
         {
-            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
-            IntPtr valuePtr = IntPtr.Add(memoryBase, (int)ptrOffset);
+            IntPtr valuePtr = Resolve(ptrOffset, sizeof(UInt32));
             return (UInt32)Marshal.ReadInt32(valuePtr);
         }
         /// <summary>
@@ -476,8 +475,7 @@ hasResult)
         /// <returns>Value</returns>
         public void WriteBytes(UInt32 ptrTargetOffset, byte[] bytes)
         {
-            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
-            IntPtr bytesPtr = IntPtr.Add(memoryBase, (int)ptrTargetOffset);
+            IntPtr bytesPtr = Resolve(ptrTargetOffset, bytes.Length);
             Marshal.Copy(bytes, 0, bytesPtr, bytes.Length);
         }
         /// <summary>
@@ -487,8 +485,7 @@ hasResult)
         /// <returns>`MazeWasmResult` value</returns>
         public MazeInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
         {
-            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
-            IntPtr resultPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
+            IntPtr resultPtr = Resolve(ptrOffset, Marshal.SizeOf<MazeInterop.MazeWasmResult>());
             return Marshal.PtrToStructure<MazeInterop.MazeWasmResult>(resultPtr);
         }
         /// <summary>
@@ -498,8 +495,7 @@ hasResult)
         /// <returns>`MazeWasmResult` value</returns>
         public MazeInterop.MazePoint ReadMazePoint(UInt32 ptrOffset)
         {
-            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
-            IntPtr pointPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
+            IntPtr pointPtr = Resolve(ptrOffset, Marshal.SizeOf<MazeInterop.MazePoint>());
             return Marshal.PtrToStructure<MazeInterop.MazePoint>(pointPtr);
         }
         /// <summary>
@@ -509,8 +505,7 @@ hasResult)
         /// <returns>`MazeWasmResult` value</returns>
         public MazeInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
         {
-            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
-            IntPtr errorPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
+            IntPtr errorPtr = Resolve(ptrOffset, Marshal.SizeOf<MazeInterop.MazeWasmError>());
             return Marshal.PtrToStructure<MazeInterop.MazeWasmError>(errorPtr);
         }
         /// <summary>
@@ -521,18 +516,39 @@ hasResult)
         /// <returns>String value if successful</returns>
         public string StringPtrToString(UInt32 ptrOffset)
         {
-            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
-            uint memorySize = WasmerInterop.wasm_memory_data_size(_wasmMemoryPtr);
-            if (ptrOffset > memorySize)
-            {
-                throw new Exception($"string pointer offset {ptrOffset} is out of bounds (memory size = {memorySize})");
-            }
-            IntPtr lengthStart = memoryBase + (int)ptrOffset;
+            IntPtr lengthStart = Resolve(ptrOffset, sizeof(UInt32));
             Int32 length = Marshal.ReadInt32(lengthStart);
-            IntPtr stringPointer = IntPtr.Add(memoryBase, (int)ptrOffset + 4);
+            if (length < 0)
+            {
+                throw new Exception($"string length prefix at offset {ptrOffset} is negative ({length})");
+            }
+            IntPtr stringPointer = Resolve(ptrOffset + sizeof(UInt32), length);
             byte[] buffer = new byte[length];
             Marshal.Copy(stringPointer, buffer, 0, length);
             return Encoding.UTF8.GetString(buffer);
+        }
+        /// <summary>
+        /// Resolves a WebAssembly memory offset to a host address, after checking that the
+        /// whole span lies inside the module's linear memory.
+        /// </summary>
+        /// <remarks>
+        /// Unlike the Wasmtime binding, which bounds-checks every access itself, this
+        /// connector reaches into linear memory with raw pointer arithmetic — an offset the
+        /// module never produced would otherwise be read from, or written to, host process
+        /// memory outside the sandbox.
+        /// </remarks>
+        /// <param name="ptrOffset">Memory pointer offset</param>
+        /// <param name="length">Number of bytes the caller will access from that offset</param>
+        /// <returns>Host address of the offset</returns>
+        private IntPtr Resolve(UInt32 ptrOffset, int length)
+        {
+            uint memorySize = WasmerInterop.wasm_memory_data_size(_wasmMemoryPtr);
+            if (length < 0 || ptrOffset > memorySize || (uint)length > memorySize - ptrOffset)
+            {
+                throw new Exception($"WebAssembly memory access of {length} bytes at offset {ptrOffset} is out of bounds (memory size = {memorySize})");
+            }
+            IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
+            return IntPtr.Add(memoryBase, (int)ptrOffset);
         }
     };
     /// <summary>

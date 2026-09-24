@@ -1,4 +1,4 @@
-namespace Maze.Interop
+﻿namespace Maze.Interop
 {
     using System.Reflection;
     using System.Runtime.InteropServices;
@@ -319,26 +319,30 @@ namespace Maze.Interop
         /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the default location.</param>
         private MazeInterop(string wasmPathOrName, ConnectionType connectionType = ConnectionType.Wasmtime, byte[]? wasmBytes = null)
         {
+            IMazeConnector created;
             switch (connectionType)
             {
 #if !IOS && !ANDROID
                 case ConnectionType.Wasmtime:
-                    connector = new MazeWasmtimeConnector(wasmPathOrName, wasmBytes);
+                    created = new MazeWasmtimeConnector(wasmPathOrName, wasmBytes);
                     break;
 #endif
 #if !IOS
                 case ConnectionType.Wasmer:
-                    connector = new MazeWasmerConnector(wasmPathOrName, wasmBytes);
+                    created = new MazeWasmerConnector(wasmPathOrName, wasmBytes);
                     break;
 #endif
 #if IOS
                 case ConnectionType.Native:
-                    connector = new MazeNativeConnector();
+                    created = new MazeNativeConnector();
                     break;
 #endif
                 default:
                     throw new InvalidOperationException($"Unsupported connection type: {connectionType}");
             }
+            // Handles are also released from finalizers, which run on the
+            // garbage collector's own thread — see SynchronizedMazeConnector.
+            connector = new SynchronizedMazeConnector(created);
         }
         /// <summary>
         /// Handles object finalization (deletion)
