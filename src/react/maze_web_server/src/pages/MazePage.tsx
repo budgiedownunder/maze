@@ -23,7 +23,7 @@ import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
 import { normalizeMazeGameSettings, type MazeGameSettings } from '../utils/mazeGameSettings'
-import { countKeysAndDoors, exceedsKeyDoorCap, MAX_TOTAL_FEATURES } from '../utils/validation'
+import { countKeysAndDoors, exceedsKeyDoorCap, MAX_NAME_CHARS, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
 
@@ -521,6 +521,7 @@ export function MazePage() {
     <div className="maze-page">
       {showSaveNameModal && (
         <PromptModal
+          maxLength={MAX_NAME_CHARS}
           title="Save Maze"
           label="Name"
           initialValue=""
@@ -557,6 +558,7 @@ export function MazePage() {
       )}
       {blocker.state === 'blocked' && showBlockerSaveModal && (
         <PromptModal
+          maxLength={MAX_NAME_CHARS}
           title="Save Maze"
           label="Name"
           initialValue=""

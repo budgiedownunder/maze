@@ -2,6 +2,14 @@ export function isValidEmail(email: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
 }
 
+// Field-length caps, mirroring `MAX_USERNAME_CHARS` / `MAX_NAME_CHARS` /
+// `MAX_EMAIL_CHARS` in `src/rust/storage/src/validation.rs`. The server
+// rejects an over-long value with a 400 naming the limit; the inputs carry
+// the same caps so the limit is reached in the field rather than on submit.
+export const MAX_USERNAME_CHARS = 64
+export const MAX_NAME_CHARS = 255
+export const MAX_EMAIL_CHARS = 254
+
 // Maximum number of doors a generated maze may be seeded with. Mirrors
 // `MAX_AUTO_DOORS` in `src/rust/maze/src/generator.rs` (kept at 8 so keys+doors
 // stay within the key-aware solver's verification bound). The generator clamps
@@ -48,11 +56,12 @@ export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
 // Set above the largest shipped preset rather than at it, so a curated game is
 // not the ceiling an authored one is measured against.
 //
-// Deliberately has no Rust twin. `GameDefinition.config` is opaque to the server,
-// and clamping rows/cols at generation time would change what a given seed
-// produces, silently altering a shared game's layout and invalidating its
-// leaderboard — unlike `MAX_LEVEL_COUNT`, where clamping merely plays fewer
-// levels. Existing over-cap definitions therefore keep their size until edited.
+// `MAX_GAME_MAZE_DIMENSION` in `maze_game_bevy_wasm` mirrors this number and
+// refuses a game whose config exceeds it, because a definition reaches a player
+// from whoever authored it. It refuses rather than clamps: clamping rows/cols at
+// generation time would change what a given seed produces, silently altering a
+// shared game's layout and invalidating its leaderboard — unlike `MAX_LEVEL_COUNT`,
+// where clamping merely plays fewer levels.
 export const MAX_GAME_MAZE_DIMENSION = 30
 
 // The advanced HP pair, as raw input strings.

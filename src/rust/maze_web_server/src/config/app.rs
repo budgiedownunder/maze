@@ -8,6 +8,7 @@ use crate::config::comms::{self, CommsAppConfig};
 
 /// Security configuration including TLS certificate paths and password hashing parameters.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SecurityConfig {
     /// Path to the TLS certificate file.
     /// Can be overridden with `MAZE_WEB_SERVER_SECURITY_CERT_FILE`.
@@ -44,6 +45,7 @@ impl Default for SecurityConfig {
 
 /// Logging configuration controlling log file output.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct LoggingConfig {
     /// Directory to write log files to (relative to the server working directory).
     /// Can be overridden with `MAZE_WEB_SERVER_LOGGING_LOG_DIR`.
@@ -80,6 +82,7 @@ impl Default for LoggingConfig {
 /// For future per-user feature gating, a separate `UserFeaturesConfig` type
 /// should be added (stored per user in the data store, not in `config.toml`).
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AppFeaturesConfig {
     /// Whether new users can self-register via the signup endpoint.
     /// Can be overridden with `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`.
@@ -111,6 +114,7 @@ pub enum ConnectorKind {
 /// from the environment variable named by `client_secret_env`. This keeps the
 /// secret out of any committed file.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct InternalProviderConfig {
     /// Whether this provider is enabled. Disabled providers are not surfaced
     /// to the front end and the server will not initiate a flow against them.
@@ -145,6 +149,7 @@ pub struct InternalProviderConfig {
 /// Configuration for the built-in OAuth connector that speaks OAuth/OIDC
 /// directly to each provider.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct InternalConnectorConfig {
     /// Per-provider configuration keyed by canonical provider name
     /// ("google", "github", etc.).
@@ -156,6 +161,7 @@ pub struct InternalConnectorConfig {
 /// `Option<Auth0ConnectorConfig>` on `OAuthConfig` so that the section can be
 /// present in `config.toml` without forcing the connector to exist yet.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Auth0ConnectorConfig {
     #[serde(default)]
     pub domain: String,
@@ -172,6 +178,7 @@ pub struct Auth0ConnectorConfig {
 /// OAuth configuration. The top-level `[oauth]` table selects which connector
 /// implementation is used and is the entry point for everything else.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct OAuthConfig {
     /// Master switch. When false, OAuth buttons are hidden in the front ends
     /// regardless of any per-provider config below, and no validation is run
@@ -328,6 +335,7 @@ pub enum StorageKind {
 
 /// File-backed storage configuration.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct FileStorageConfig {
     /// Directory under which user/maze data is stored (relative to the working
     /// directory or absolute). Can be overridden with
@@ -352,6 +360,7 @@ impl Default for FileStorageConfig {
 /// startup from these discrete fields plus any TLS query parameters required
 /// by `require_tls` / `ca_cert_path`.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SqlStorageConfig {
     /// Driver name: `"postgres"`, `"mysql"`, or `"sqlite"`.
     #[serde(default = "default_storage_sql_driver")]
@@ -446,6 +455,7 @@ impl Default for SqlStorageConfig {
 /// Top-level storage configuration. Selects between the file-backed and
 /// SQL-backed implementations of the [`storage::Store`] trait.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct StorageConfig {
     /// Which backend to use: `"file"` or `"sql"`.
     #[serde(default, rename = "type")]
@@ -491,6 +501,7 @@ impl StorageConfig {
 
 /// Application configuration settings loaded from config.toml or environment variables.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct AppConfig {
     /// Port to bind the server to (e.g., 8443 for HTTPS).
     /// Can be overridden with `MAZE_WEB_SERVER_PORT`.
@@ -574,8 +585,28 @@ fn default_storage_sql_acquire_timeout_secs() -> u64 { 30 }
 
 /// Application Configuration
 impl AppConfig {
-     pub fn load() -> Result<Self, config::ConfigError> {
-        let mut builder = Config::builder()
+    /// Loads the configuration from the defaults, `config.toml` (optional),
+    /// and the environment, in that precedence order.
+    ///
+    /// A `config.toml` that is present but unusable is a hard failure: the
+    /// `config` crate merges every source into one value tree, so a single
+    /// value it cannot coerce — a non-numeric string for a number, an unknown
+    /// enum variant — would otherwise discard the *whole* file and start the
+    /// server on defaults, which means the dev file store, public sign-up on,
+    /// and the operator's port ignored. An absent `config.toml` is a
+    /// supported case and still loads the defaults.
+    pub fn load() -> Result<Self, config::ConfigError> {
+        let builder = Self::builder_with_defaults()?
+            .add_source(File::with_name("config.toml").required(false));
+        let builder = set_env_overrides(builder)?;
+        Self::from_settings(builder.build()?)
+    }
+
+    /// Seeds a builder with every default `load` applies, with no file or
+    /// environment source attached. Split out so tests can deserialize
+    /// inline TOML against the same defaults the server uses.
+    fn builder_with_defaults() -> Result<ConfigBuilder<DefaultState>, config::ConfigError> {
+        let builder = Config::builder()
             .set_default("port", 8443)?
             .set_default("security.cert_file", default_security_cert_file())?
             .set_default("security.key_file", default_security_key_file())?
@@ -619,14 +650,14 @@ impl AppConfig {
             .set_default(
                 "comms.email.mailgun.region",
                 comms::default_comms_email_mailgun_region(),
-            )?
-            .add_source(File::with_name("config.toml").required(false));
+            )?;
+        Ok(builder)
+    }
 
-        builder = set_env_overrides(builder)?;
-        let settings = builder.build()?;
-        let mut cfg: AppConfig = settings
-            .try_deserialize()
-            .or_else(|_| Ok::<_, config::ConfigError>(AppConfig::default()))?;
+    /// Deserializes and validates a built settings tree. Deserialization
+    /// failures propagate — see [`AppConfig::load`].
+    fn from_settings(settings: Config) -> Result<Self, config::ConfigError> {
+        let mut cfg: AppConfig = settings.try_deserialize()?;
         cfg.oauth
             .resolve_and_validate()
             .map_err(config::ConfigError::Message)?;
@@ -637,7 +668,37 @@ impl AppConfig {
             .resolve_and_validate()
             .map(|_| ())
             .map_err(config::ConfigError::Message)?;
+        cfg.validate_cross_section()
+            .map_err(config::ConfigError::Message)?;
         Ok(cfg)
+    }
+
+    /// Checks rules that span more than one config section.
+    ///
+    /// OAuth requires comms: with comms disabled, sign-up and add-email mark
+    /// any address verified on the caller's say-so, and a first-time OAuth
+    /// sign-in auto-links to whichever account holds that verified address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze_web_server::config::app::AppConfig;
+    /// let mut cfg = AppConfig::default();
+    /// cfg.oauth.enabled = true;
+    /// assert!(cfg.validate_cross_section().is_err());
+    /// cfg.comms.enabled = true;
+    /// assert!(cfg.validate_cross_section().is_ok());
+    /// ```
+    pub fn validate_cross_section(&self) -> Result<(), String> {
+        if self.oauth.enabled && !self.comms.enabled {
+            return Err(
+                "[oauth] enabled = true requires [comms] enabled = true: without email \
+                 verification, any user can claim an address that a later OAuth sign-in \
+                 would link to"
+                    .to_string(),
+            );
+        }
+        Ok(())
     }
 
     /// Logs the configuration using the `log` crate at `info` level.
@@ -899,6 +960,28 @@ mod tests {
     }
 
     #[test]
+    fn validate_cross_section_rejects_oauth_without_comms() {
+        let mut cfg = AppConfig::default();
+        cfg.oauth.enabled = true;
+        cfg.comms.enabled = false;
+        let err = cfg.validate_cross_section().unwrap_err();
+        assert!(err.contains("[comms] enabled = true"), "got: {err}");
+    }
+
+    #[test]
+    fn validate_cross_section_accepts_other_combinations() {
+        for (oauth, comms) in [(false, false), (false, true), (true, true)] {
+            let mut cfg = AppConfig::default();
+            cfg.oauth.enabled = oauth;
+            cfg.comms.enabled = comms;
+            assert!(
+                cfg.validate_cross_section().is_ok(),
+                "oauth={oauth} comms={comms} should be accepted"
+            );
+        }
+    }
+
+    #[test]
     fn resolve_and_validate_is_noop_when_oauth_disabled() {
         let mut cfg = OAuthConfig::default();
         // No internal section at all — validation must still pass because
@@ -1062,5 +1145,147 @@ mod tests {
         };
         let err = cfg.resolve_and_validate().unwrap_err();
         assert!(err.contains("client_id is empty"), "got: {err}");
+    }
+
+    /// Runs the real load pipeline — the same defaults, deserialization and
+    /// validation `AppConfig::load` uses — against inline TOML, so the
+    /// fail-closed behaviour can be asserted without touching the process
+    /// working directory or a real `config.toml`.
+    fn load_from_toml(toml: &str) -> Result<AppConfig, config::ConfigError> {
+        let builder = AppConfig::builder_with_defaults()
+            .expect("seed defaults")
+            .add_source(config::File::from_str(toml, config::FileFormat::Toml));
+        AppConfig::from_settings(builder.build()?)
+    }
+
+    #[test]
+    fn load_applies_values_from_a_valid_config() {
+        let cfg = load_from_toml(
+            r#"
+            port = 9443
+
+            [features]
+            allow_signup = false
+
+            [storage]
+            type = "sql"
+            "#,
+        )
+        .expect("a valid config must load");
+        assert_eq!(cfg.port, 9443);
+        assert!(!cfg.features.allow_signup);
+        assert_eq!(cfg.storage.kind, StorageKind::Sql);
+    }
+
+    #[test]
+    fn load_applies_defaults_when_the_config_file_is_absent() {
+        // `config.toml` is optional by design, so the defaults-only tree
+        // must still deserialize now that unusable values are hard failures.
+        let cfg = load_from_toml("").expect("an absent config must load defaults");
+        assert_eq!(cfg.port, 8443);
+        assert!(cfg.features.allow_signup);
+        assert_eq!(cfg.storage.kind, StorageKind::File);
+    }
+
+    #[test]
+    fn load_rejects_a_value_of_the_wrong_type() {
+        // Numeric strings coerce (`port = "8443"` is accepted), so the
+        // fail-closed case is a value the config crate cannot convert.
+        let err = load_from_toml(
+            r#"
+            [features]
+            allow_signup = "maybe"
+
+            [storage]
+            type = "sql"
+            "#,
+        )
+        .expect_err("an uncoercible value must refuse to start");
+        assert!(
+            err.to_string().contains("allow_signup"),
+            "the error must name the offending key: {err}"
+        );
+    }
+
+    #[test]
+    fn load_rejects_an_unknown_key() {
+        // A mistyped key is silently ignored by the config crate, which
+        // leaves the operator with a setting they believe they applied.
+        let err = load_from_toml("porrt = 9443\n")
+            .expect_err("a mistyped top-level key must refuse to start");
+        assert!(
+            err.to_string().contains("porrt"),
+            "the error must name the offending key: {err}"
+        );
+
+        let err = load_from_toml(
+            r#"
+            [features]
+            allow_signupp = false
+            "#,
+        )
+        .expect_err("a mistyped key in a section must refuse to start");
+        assert!(
+            err.to_string().contains("allow_signupp"),
+            "the error must name the offending key: {err}"
+        );
+    }
+
+    #[test]
+    fn load_rejects_an_unknown_key_in_a_nested_table() {
+        let err = load_from_toml(
+            r#"
+            [storage.sql]
+            max_connectionss = 9
+            "#,
+        )
+        .expect_err("a mistyped key in a nested table must refuse to start");
+        assert!(
+            err.to_string().contains("max_connectionss"),
+            "the error must name the offending key: {err}"
+        );
+
+        // `[security.password_hash]` deserializes into the auth crate's
+        // `PasswordHashConfig`, so it needs the same treatment there —
+        // a typo here would otherwise leave the Argon2 parameters on
+        // their defaults without saying so.
+        let err = load_from_toml(
+            r#"
+            [security.password_hash]
+            mem_costt = 1024
+            "#,
+        )
+        .expect_err("a mistyped password-hash key must refuse to start");
+        assert!(
+            err.to_string().contains("mem_costt"),
+            "the error must name the offending key: {err}"
+        );
+    }
+
+    #[test]
+    fn load_rejects_an_unknown_enum_value() {
+        let err = load_from_toml(
+            r#"
+            [storage]
+            type = "sqll"
+            "#,
+        )
+        .expect_err("an unknown storage type must refuse to start");
+        assert!(
+            err.to_string().contains("sqll"),
+            "the error must name the offending value: {err}"
+        );
+
+        let err = load_from_toml(
+            r#"
+            [comms.email]
+            provider = "mailgunn"
+            "#,
+        )
+        .expect_err("an unknown comms provider must refuse to start");
+        assert!(
+            err.to_string().contains("mailgunn"),
+            "the error must name the offending value: {err}"
+        );
     }
 }

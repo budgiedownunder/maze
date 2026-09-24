@@ -178,6 +178,7 @@ fn map_write_error(err: StoreError) -> Error {
         StoreError::GameCollectionNameMissing() => {
             ErrorBadRequest("Game collection name must not be empty")
         }
+        StoreError::Invalid(msg) => ErrorBadRequest(msg),
         StoreError::GameCollectionNameAlreadyExists(name) => {
             ErrorConflict(format!("A game collection named '{name}' already exists"))
         }
@@ -759,12 +760,12 @@ pub async fn set_game_collection_shares(
 #[utoipa::path(
     summary = "Upload or replace a collection's image",
     description = "Accepts a multipart/form-data upload with a single `file` part (PNG or JPEG, up \
-                   to 2 MiB), canonicalised to a 256x256 PNG. Owner-only. Returns the new \
-                   image_updated_at.",
+                   to 2 MiB and 4096x4096 pixels), canonicalised to a 256x256 PNG. Owner-only. \
+                   Returns the new image_updated_at.",
     post,
     path = "/api/v1/game-collections/{id}/image",
     params(("id" = String, Path, description = "Collection id")),
-    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB"),
+    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB and <= 4096x4096"),
     responses(
         (status = 200, description = "Image stored", body = ImageUpdatedResponse),
         (status = 400, description = "Missing/invalid image or over the size limit"),
@@ -783,6 +784,17 @@ pub async fn upload_game_collection_image(
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
+
+    // Ownership first, and the guard released before the decode below:
+    // decoding is by far the most expensive part of this handler, and someone
+    // who does not own the collection should not be able to spend it.
+    // `set_game_collection_image` re-checks ownership itself, so this is not
+    // the authority on access — it only stops the work happening.
+    {
+        let store_lock = store.read().await;
+        owned_collection(&**store_lock, &user, id).await?;
+    }
+
     let png = canonicalise_to_png(&form.file.data)?;
 
     let mut store_lock = store.write().await;

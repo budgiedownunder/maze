@@ -178,7 +178,7 @@ pub async fn record_score(
     }
     match store_lock.record_score(&entry).await {
         Ok(_) => Ok(HttpResponse::Created().json(ScoreResponse::from(entry))),
-        Err(StoreError::Other(msg)) => Err(ErrorBadRequest(msg)),
+        Err(StoreError::Invalid(msg)) => Err(ErrorBadRequest(msg)),
         Err(err) => {
             log::warn!("record_score store error: {err}");
             Err(ErrorInternalServerError("Failed to record score"))

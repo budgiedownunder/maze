@@ -1,6 +1,36 @@
 use data_model::{is_valid_email_format, Error as DataModelError, User, UserValidationError};
 use crate::Error;
 
+/// Longest username, in characters (the `users.username` column width).
+pub const MAX_USERNAME_CHARS: usize = 64;
+/// Longest full name or maze, game or collection name, in characters (the
+/// width of each of those columns).
+pub const MAX_NAME_CHARS: usize = 255;
+/// Longest email address, in characters (RFC 5321's limit, and the
+/// `user_emails.email` column width).
+pub const MAX_EMAIL_CHARS: usize = 254;
+
+/// Rejects `value` if it is longer than `max` characters, naming `field` and
+/// the limit in the error. Every backend applies the same limits, so an
+/// over-long value fails the same way everywhere instead of being accepted
+/// by one backend and rejected by another's column width.
+///
+/// # Examples
+///
+/// ```
+/// use storage::validation::{validate_field_length, MAX_USERNAME_CHARS};
+///
+/// assert!(validate_field_length("Username", "alice", MAX_USERNAME_CHARS).is_ok());
+/// let err = validate_field_length("Username", &"a".repeat(65), MAX_USERNAME_CHARS).unwrap_err();
+/// assert_eq!(err.to_string(), "Username must be at most 64 characters");
+/// ```
+pub fn validate_field_length(field: &str, value: &str, max: usize) -> Result<(), Error> {
+    if value.chars().count() > max {
+        return Err(Error::Invalid(format!("{field} must be at most {max} characters")));
+    }
+    Ok(())
+}
+
 /// Validates a single email address for storage operations that take only
 /// the address (no surrounding `User`). Centralises the "is it empty? does
 /// it match the data-model regex?" pair that every email-management
@@ -29,7 +59,7 @@ pub fn validate_email_format(email: &str) -> Result<(), Error> {
     if !is_valid_email_format(email) {
         return Err(Error::UserEmailInvalid());
     }
-    Ok(())
+    validate_field_length("Email address", email, MAX_EMAIL_CHARS)
 }
 
 /// Validates the fields within a user object for create/update within a store
@@ -66,6 +96,11 @@ pub fn validate_user_fields(user: &User) -> Result<(), Error> {
             UserValidationError::PasswordMissing => return Err(Error::UserPasswordMissing()),
             UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
         }
+    }
+    validate_field_length("Username", &user.username, MAX_USERNAME_CHARS)?;
+    validate_field_length("Full name", &user.full_name, MAX_NAME_CHARS)?;
+    for row in &user.emails {
+        validate_field_length("Email address", &row.email, MAX_EMAIL_CHARS)?;
     }
     Ok(())
 }

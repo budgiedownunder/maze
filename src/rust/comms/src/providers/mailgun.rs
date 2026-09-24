@@ -251,15 +251,78 @@ impl EmailProvider for MailgunProvider {
     }
 }
 
-/// Format an `EmailAddress` in RFC 5322 mailbox form. Display names are
-/// passed through unquoted — callers are responsible for not putting RFC
-/// 5322 specials in their display names. (The common cases — "Maze",
-/// "Acme Inc." — are well-formed without quoting.)
+/// Format an `EmailAddress` in RFC 5322 mailbox form, quoting the display
+/// name where the standard requires it.
+///
+/// Mailgun parses `to`, `cc` and `bcc` as address *lists*, and the recipient
+/// display name is the user's own `full_name`, so an unquoted name carrying
+/// a comma or angle brackets would add recipients of that user's choosing.
 fn format_address(addr: &EmailAddress) -> String {
     match &addr.display_name {
-        Some(name) if !name.is_empty() => format!("{name} <{}>", addr.address),
+        Some(name) if !name.is_empty() => {
+            format!("{} <{}>", quote_display_name(name), addr.address)
+        }
         _ => addr.address.clone(),
     }
+}
+
+/// Render a display name as an RFC 5322 `word`: left as it stands when
+/// every character is atom-safe, otherwise wrapped in a quoted string with
+/// `\` and `"` escaped. These are the rules lettre's `Mailbox` applies on
+/// the SMTP path, so both providers put the same bytes on the wire.
+///
+/// CR and LF are the one case with no encoding — a quoted string cannot
+/// carry them and neither can a quoted pair — so they become spaces, which
+/// keeps the rest of a name that contains one rather than dropping it.
+fn quote_display_name(name: &str) -> String {
+    let name: String = name
+        .chars()
+        .map(|c| if c == '\r' || c == '\n' { ' ' } else { c })
+        .collect();
+    if name.chars().all(is_atom_char) {
+        return name;
+    }
+    let mut quoted = String::with_capacity(name.len() + 2);
+    quoted.push('"');
+    for c in name.chars() {
+        if c == '\\' || c == '"' {
+            quoted.push('\\');
+        }
+        quoted.push(c);
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// RFC 5322 atom characters, plus the space and tab that separate atoms
+/// within a display name. Non-ASCII is left unquoted: it is not a special,
+/// and the provider applies the transfer encoding it needs.
+fn is_atom_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+        || !c.is_ascii()
+        || matches!(
+            c,
+            ' ' | '\t'
+                | '!'
+                | '#'
+                | '$'
+                | '%'
+                | '&'
+                | '\''
+                | '*'
+                | '+'
+                | '-'
+                | '/'
+                | '='
+                | '?'
+                | '^'
+                | '_'
+                | '`'
+                | '{'
+                | '|'
+                | '}'
+                | '~'
+        )
 }
 
 #[cfg(test)]
@@ -331,6 +394,99 @@ mod tests {
             provider.endpoint_url(),
             "http://localhost:8080/v3/mg.example.com/messages"
         );
+    }
+
+    #[test]
+    fn format_address_leaves_an_atom_safe_display_name_unquoted() {
+        let addr = EmailAddress::with_name("alice@example.com", "Alice Smith");
+        assert_eq!(format_address(&addr), "Alice Smith <alice@example.com>");
+    }
+
+    #[test]
+    fn format_address_omits_an_empty_display_name() {
+        assert_eq!(
+            format_address(&EmailAddress::new("alice@example.com")),
+            "alice@example.com"
+        );
+        assert_eq!(
+            format_address(&EmailAddress::with_name("alice@example.com", "")),
+            "alice@example.com"
+        );
+    }
+
+    #[test]
+    fn format_address_quotes_a_display_name_holding_a_comma() {
+        let addr = EmailAddress::with_name("alice@example.com", "Smith, Alice");
+        assert_eq!(format_address(&addr), "\"Smith, Alice\" <alice@example.com>");
+    }
+
+    #[test]
+    fn format_address_quotes_a_display_name_that_would_add_a_recipient() {
+        // The display name is the user's own `full_name`; unquoted, this
+        // one parses as a second mailbox in Mailgun's address list.
+        let addr = EmailAddress::with_name(
+            "alice@example.com",
+            "x <victim@example.com>,",
+        );
+        assert_eq!(
+            format_address(&addr),
+            "\"x <victim@example.com>,\" <alice@example.com>"
+        );
+    }
+
+    #[test]
+    fn format_address_escapes_quotes_and_backslashes() {
+        let addr = EmailAddress::with_name("alice@example.com", r#"Alice "Ace" \ Smith"#);
+        assert_eq!(
+            format_address(&addr),
+            r#""Alice \"Ace\" \\ Smith" <alice@example.com>"#
+        );
+    }
+
+    #[test]
+    fn format_address_turns_line_breaks_into_spaces() {
+        let addr = EmailAddress::with_name(
+            "alice@example.com",
+            "Alice\r\nBcc: attacker@example.com",
+        );
+        assert_eq!(
+            format_address(&addr),
+            "\"Alice  Bcc: attacker@example.com\" <alice@example.com>"
+        );
+    }
+
+    #[test]
+    fn format_address_leaves_non_ascii_names_unquoted() {
+        let addr = EmailAddress::with_name("zoe@example.com", "Zoë Müller");
+        assert_eq!(format_address(&addr), "Zoë Müller <zoe@example.com>");
+    }
+
+    #[tokio::test]
+    async fn send_email_posts_one_recipient_for_a_crafted_display_name() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/v3/mg.example.com/messages"))
+            // `"x <victim@example.com>," <alice@example.com>`, form-encoded.
+            .and(body_string_contains(
+                "to=%22x+%3Cvictim%40example.com%3E%2C%22+%3Calice%40example.com%3E",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "<20260504.abc@mg.example.com>",
+                "message": "Queued. Thank you."
+            })))
+            .mount(&server)
+            .await;
+
+        let mut msg = sample_message();
+        msg.to = vec![EmailAddress::with_name(
+            "alice@example.com",
+            "x <victim@example.com>,",
+        )];
+        let provider = provider_against(&server.uri());
+        provider.send_email(&msg).await.expect("send");
+
+        // One request, and its `to` matched the single-recipient body above.
+        assert_eq!(server.received_requests().await.expect("requests").len(), 1);
     }
 
     #[test]

@@ -37,6 +37,10 @@ on:
       - '**.html'
       - '**.css'
 
+permissions:
+    # Read-only by default
+  contents: read
+
 defaults:
   run:
     working-directory: ./

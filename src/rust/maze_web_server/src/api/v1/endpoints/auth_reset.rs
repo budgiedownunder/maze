@@ -278,6 +278,25 @@ pub async fn confirm_password_reset(
     })?;
 
     let mut store_lock = store.write().await;
+    // Check the purpose before consuming: a verification token posted here
+    // is someone's own valid token, and burning it on the way to rejecting
+    // it would make them request a fresh link for no reason. Single use is
+    // still enforced atomically by `consume_token` below, under the same
+    // write lock this read runs under.
+    let token = store_lock.find_token(token_id).await.map_err(|err| match err {
+        StoreError::TokenIdNotFound(_)
+        | StoreError::TokenAlreadyConsumed()
+        | StoreError::TokenExpired() => ErrorBadRequest("Invalid or expired reset token"),
+        other => {
+            warn!("password-reset confirm: find_token failed: {other}");
+            ErrorInternalServerError("Failed to consume reset token")
+        }
+    })?;
+
+    if token.purpose != TokenPurpose::PasswordReset {
+        return Err(ErrorBadRequest("Invalid or expired reset token"));
+    }
+
     let consumed = store_lock.consume_token(token_id).await.map_err(|err| match err {
         StoreError::TokenIdNotFound(_)
         | StoreError::TokenAlreadyConsumed()
@@ -287,10 +306,6 @@ pub async fn confirm_password_reset(
             ErrorInternalServerError("Failed to consume reset token")
         }
     })?;
-
-    if consumed.purpose != TokenPurpose::PasswordReset {
-        return Err(ErrorBadRequest("Invalid or expired reset token"));
-    }
 
     // Load the user, rotate the password, and clear every active login.
     // A reset is a "this account may be compromised" signal — preserving

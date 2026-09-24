@@ -82,7 +82,7 @@ describe('SignUpPage', () => {
     await fillForm()
     await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(
-      `/login?message=${encodeURIComponent('Account created. Check your inbox for a verification email before signing in.')}`,
+      '/login?message=signup_check_inbox',
       { replace: true },
     ))
   })
@@ -92,7 +92,7 @@ describe('SignUpPage', () => {
     await fillForm()
     await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(
-      `/login?message=${encodeURIComponent('Account created. You can sign in now.')}`,
+      '/login?message=signup_ready',
       { replace: true },
     ))
   })

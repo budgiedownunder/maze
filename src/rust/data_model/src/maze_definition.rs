@@ -1146,19 +1146,25 @@ impl MazeDefinition {
                 "invalid 'start_col' index ({start_col})"
             )));
         }
-        if start_col + count > self.col_count() {
-            return Err(Error::MazeValidation(format!(
-                "invalid 'count' ({count}) - too large"
-            )));
-        }
+        // `start_col + count` is caller-supplied and both are `usize`, which is
+        // 32 bits on wasm32 — wide enough for the sum to wrap and turn this
+        // bounds check into a pass, leaving `drain` with an inverted range.
+        let end_col = match start_col.checked_add(count) {
+            Some(end) if end <= self.col_count() => end,
+            _ => {
+                return Err(Error::MazeValidation(format!(
+                    "invalid 'count' ({count}) - too large"
+                )))
+            }
+        };
         for row in &mut self.grid {
-            row.drain(start_col..(start_col + count));
+            row.drain(start_col..end_col);
         }
         // Drop overrides in the deleted columns; shift those to the right back by `count`.
         self.remap_cell_entities(|row, col| {
-            if col >= start_col && col < start_col + count {
+            if col >= start_col && col < end_col {
                 None
-            } else if col >= start_col + count {
+            } else if col >= end_col {
                 Some((row, col - count))
             } else {
                 Some((row, col))
@@ -1249,17 +1255,21 @@ impl MazeDefinition {
                 "invalid 'start_row' index ({start_row})"
             )));
         }
-        if start_row + count > self.row_count() {
-            return Err(Error::MazeValidation(format!(
-                "invalid 'count' ({count}) - too large"
-            )));
-        }
-        self.grid.drain(start_row..(start_row + count));
+        // See `delete_cols`: the sum can wrap where `usize` is 32 bits.
+        let end_row = match start_row.checked_add(count) {
+            Some(end) if end <= self.row_count() => end,
+            _ => {
+                return Err(Error::MazeValidation(format!(
+                    "invalid 'count' ({count}) - too large"
+                )))
+            }
+        };
+        self.grid.drain(start_row..end_row);
         // Drop overrides in the deleted rows; shift those below back by `count`.
         self.remap_cell_entities(|row, col| {
-            if row >= start_row && row < start_row + count {
+            if row >= start_row && row < end_row {
                 None
-            } else if row >= start_row + count {
+            } else if row >= end_row {
                 Some((row - count, col))
             } else {
                 Some((row, col))
@@ -1584,6 +1594,35 @@ impl MazeDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// `start + count` is caller-supplied, and `usize` is 32 bits on wasm32,
+    /// so the sum can wrap past the bounds check. Rejecting it keeps the
+    /// error a validation failure instead of an inverted `drain` range.
+    #[test]
+    fn delete_rows_rejects_a_count_that_overflows_the_start_index() {
+        let mut definition = MazeDefinition::new(4, 4);
+        let error = definition
+            .delete_rows(2, usize::MAX)
+            .expect_err("an overflowing count must be rejected");
+        assert!(
+            format!("{error}").contains("too large"),
+            "expected a validation error, got: {error}"
+        );
+        assert_eq!(definition.row_count(), 4, "the grid must be left alone");
+    }
+
+    #[test]
+    fn delete_cols_rejects_a_count_that_overflows_the_start_index() {
+        let mut definition = MazeDefinition::new(4, 4);
+        let error = definition
+            .delete_cols(2, usize::MAX)
+            .expect_err("an overflowing count must be rejected");
+        assert!(
+            format!("{error}").contains("too large"),
+            "expected a validation error, got: {error}"
+        );
+        assert_eq!(definition.col_count(), 4, "the grid must be left alone");
+    }
+
     use pretty_assertions::assert_eq;    
 
     #[test]

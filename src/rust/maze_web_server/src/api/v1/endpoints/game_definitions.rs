@@ -278,6 +278,7 @@ fn map_write_error(err: StoreError) -> Error {
         StoreError::GameDefinitionNameMissing() => {
             ErrorBadRequest("Game definition name must not be empty")
         }
+        StoreError::Invalid(msg) => ErrorBadRequest(msg),
         StoreError::GameDefinitionNameAlreadyExists(name) => {
             ErrorConflict(format!("A game definition named '{name}' already exists"))
         }
@@ -872,12 +873,13 @@ pub async fn set_game_definition_shares(
 #[utoipa::path(
     summary = "Upload or replace a definition's image",
     description = "Accepts a multipart/form-data upload with a single `file` part (PNG or JPEG, up \
-                   to 2 MiB). The server canonicalises it to a 256x256 PNG and stamps the \
-                   definition's image_updated_at. Owner-only. Returns the new image_updated_at.",
+                   to 2 MiB and 4096x4096 pixels). The server canonicalises it to a 256x256 PNG \
+                   and stamps the definition's image_updated_at. Owner-only. Returns the new \
+                   image_updated_at.",
     post,
     path = "/api/v1/game-definitions/{id}/image",
     params(("id" = String, Path, description = "Definition id")),
-    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB"),
+    request_body(content_type = "multipart/form-data", description = "A single `file` part: PNG or JPEG, <= 2 MiB and <= 4096x4096"),
     responses(
         (status = 200, description = "Image stored", body = ImageUpdatedResponse),
         (status = 400, description = "Missing/invalid image or over the size limit"),
@@ -896,6 +898,26 @@ pub async fn upload_game_definition_image(
 ) -> Result<HttpResponse, Error> {
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
+
+    // Ownership first, and the guard released before the decode below:
+    // decoding is by far the most expensive part of this handler, and someone
+    // who does not own the definition should not be able to spend it.
+    // `set_game_definition_image` re-checks ownership itself, so this is not
+    // the authority on access — it only stops the work happening.
+    {
+        let store_lock = store.read().await;
+        match store_lock.get_game_definition(id).await {
+            Ok(def) if def.owner_id == user.id => {}
+            Ok(_) | Err(StoreError::GameDefinitionIdNotFound(_)) => {
+                return Err(ErrorNotFound(format!("Game definition '{id}' not found")))
+            }
+            Err(err) => {
+                log::warn!("get definition for image upload: {err}");
+                return Err(ErrorInternalServerError("Failed to store image"));
+            }
+        }
+    }
+
     let png = canonicalise_to_png(&form.file.data)?;
 
     let mut store_lock = store.write().await;

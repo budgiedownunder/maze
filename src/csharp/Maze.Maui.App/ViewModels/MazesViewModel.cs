@@ -1,6 +1,7 @@
 ﻿using Maze.Maui.App.Messages;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
+using Maze.Maui.App.Utils;
 using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
@@ -258,6 +259,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 string? name = await _dialogService.DisplayPrompt("Rename Maze", "Name", "Name",
                                             "OK", "Cancel", "Enter new maze name",
+                                            maxlength: FieldLimits.Name,
                                             keyboard: Keyboard.Text, initialValue: initialName,
                                             allowEmpty: false, trimResult: true);
 
@@ -292,6 +294,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 string? name = await _dialogService.DisplayPrompt("Duplicate Maze", "Name", "Name",
                                             "OK", "Cancel", "Enter new maze name",
+                                            maxlength: FieldLimits.Name,
                                             keyboard: Keyboard.Text, initialValue: initialName,
                                             allowEmpty: false, trimResult: true);
                 if (name is not null)

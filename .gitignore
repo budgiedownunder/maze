@@ -7,3 +7,9 @@ src/.vs
 src/react/maze_web_server/public/game/maze_game_bevy_wasm*
 src/react/maze_web_server/public/game/package.json
 src/react/maze_web_server/public/game/README.md
+
+# Ignore local maze_web_server developer environment scripts/data
+src/rust/maze_web_server/*.bat
+src/rust/maze_web_server/data/
+src/rust/maze_web_server/logs/
+src/rust/maze_web_server/maze.db*

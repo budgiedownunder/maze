@@ -60,6 +60,42 @@ In addition, the following files are included for development/testing purposes:
 | `empty_cert.pem`  | Empty certficate file   | `Text`
 | `empty_key.pem`   | Empty private key file  | `Text`
 
+### Production deployment
+
+`cargo run` binds TLS directly, which is the right shape for development and for
+a single-instance deployment. Production is expected to place a reverse proxy in
+front, and — beyond one instance — a load balancer in front of that.
+
+**Reverse proxy.** The proxy owns request rate limiting; the server implements
+none. Suggested per-client limits, keyed on the real client IP:
+
+| Endpoint class | Endpoints | Burst | Sustained |
+|:---|:---|--:|--:|
+| Credential check | `POST /api/v1/login` | 10 | 10/min |
+| Account creation / password set | `POST /api/v1/signup`, `POST /api/v1/password-reset/confirm` | 5 | 2/min |
+| Email dispatch | `POST /api/v1/password-reset/request`, `POST /api/v1/email-verifications/request`, `POST /api/v1/users/me/emails` | 3 | 1/min |
+
+Password verification is deliberately expensive in both CPU and memory — that is
+what the Argon2 parameters in `[security.password_hash]` buy, and raising them
+raises the cost further. It runs synchronously on a worker thread, so these
+limits are what stops a burst of sign-in attempts from occupying every worker.
+
+**Load balancing.** Instances hold no per-session state, so they can sit behind a
+load balancer without sticky sessions:
+
+- Bearer tokens, API keys, avatars and game content all live in the store, so
+  every instance sees them. This requires the `sql` backend — `file` is
+  single-instance only (see **Storage Backend**).
+- OAuth flow state travels in a client-side cookie rather than server memory, so
+  a callback may land on a different instance than the one that started the flow.
+
+Two caveats for multi-instance deployments:
+
+- `PUT /api/v1/admin/features` updates the receiving instance's in-memory flags
+  and rewrites that instance's `config.toml` only — it does not propagate. Change
+  feature flags in each instance's config and restart instead.
+- Each instance writes its own log directory; logs are not aggregated.
+
 ### Benchmarking
 No benchmarking tests are currently implemented for the crate
 
@@ -292,15 +328,16 @@ scopes    = ["https://mail.google.com/"]   # required for SMTP — gmail.send is
 Notes:
 
 - Any environment variable values will take precedence over their corresponding configuration file values.
+- `config.toml` is optional — with no file present the server starts on the defaults above. A file that *is* present must be usable in full: a value the loader cannot apply (a non-numeric string where a number belongs, an unknown enum value) or a key it does not recognise stops the server at startup, naming the key and, for an unrecognised one, the keys that are valid there.
 - `log_dir` is relative to the server working directory. Log files are named `{log_file_prefix}{YYYY-MM-DD}.log` and a new file is started each calendar day. Old log files are not deleted automatically.
 - `log_file_prefix` is used verbatim — include any desired separator as the final character (e.g. `"maze_web_server_"` produces `maze_web_server_2026-04-09.log`, while `"my-app-"` produces `my-app-2026-04-09.log`).
 - Valid `log_level` values are: `error`, `warn`, `info`, `debug`, `trace`.
 - `allow_signup` controls whether new users can self-register. Set to `false` to disable public registration.
-- `oauth.enabled` is the master switch — when `false`, no OAuth buttons render in any client and the per-provider sections below are not validated.
+- `oauth.enabled` is the master switch — when `false`, no OAuth buttons render in any client and the per-provider sections below are not validated. Enabling it also requires `comms.enabled = true`, and the server refuses to start otherwise: without email verification, any user could claim an address that a later OAuth sign-in would link to.
 - `oauth.connector` selects the implementation. `internal` ships in v1; `auth0` is reserved for a future drop-in and will error with a clear "not yet implemented" message at startup.
 - OAuth client secrets are **always** read from the environment variable named in `client_secret_env`, never from `config.toml`. On startup the server walks every enabled provider and reports *all* misconfigurations in one error (empty `client_id`, missing env var, etc.) rather than fix-restart-fix-restart looping. See the **OAuth Sign-In** subsection below for full setup steps.
 - The `[storage]` section selects between the file-backed (`type = "file"`, the default) and SQL-backed (`type = "sql"`) implementations. The SQL backend supports SQLite, PostgreSQL, and MySQL via SQLx's `Any` driver — all three engines are compiled into the same binary; selection happens at runtime via `storage.sql.driver` and the connection details. See **Storage Backend** below for setup recipes per backend.
-- The `[comms]` section configures outbound email — provider settings, templated-message branding, and template-source paths. `comms.enabled = false` (the default) skips the per-provider env-var checks at startup. Provider secrets — currently `comms.email.mailgun.api_key` — are **environment-only**: read from `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY` at startup and never from `config.toml`. Unlike `[oauth]`, missing comms secrets are **soft warnings**: the server still starts and logs a warning naming each unset env var so the operator can see the full set of misconfigurations in one log pass. Setting `comms.email.provider` to a value other than `"stub"` or `"mailgun"` is a hard deserialisation error at startup, not a runtime panic.
+- The `[comms]` section configures outbound email — provider settings, templated-message branding, and template-source paths. `comms.enabled = false` (the default) skips the per-provider env-var checks at startup. Provider secrets — currently `comms.email.mailgun.api_key` — are **environment-only**: read from `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY` at startup and never from `config.toml`. Unlike `[oauth]`, missing comms secrets are **soft warnings**: the server still starts and logs a warning naming each unset env var so the operator can see the full set of misconfigurations in one log pass. Setting `comms.email.provider` to a value other than `"stub"`, `"mailgun"` or `"smtp_oauth2"` is a hard deserialisation error at startup, not a runtime panic.
 - `comms.email.audit.record_unknown_password_reset_requests` (default `false`) controls whether `/password-reset/request` writes an anti-enumeration "recon row" to the email audit log when the supplied email doesn't match a verified user. Off by default so small / dev installs don't accumulate one audit-log entry per typo or probe; flip on for rate-limit / abuse forensics. The 200 response and timing floor are unaffected either way.
 
 ## Storage Backend
@@ -452,6 +489,8 @@ The server supports two authentication mechanisms:
 | Static API key | `X-API-Key: <key>` | API access; key is a UUID stored per user in the data store |
 | Bearer token | `Authorization: Bearer <token>` | Per-user login; token obtained via `POST /api/v1/login` |
 
+A password change signs out every session except the one that made the request — a change made with `X-API-Key` keeps no session, so all of them go — and a password *reset* signs out every session. The API key is unaffected by either: it is minted once per user and has no rotation path, so it is not a credential an account compromise can be recovered from.
+
 The following endpoints manage user identity:
 
 | Method | Path | Auth required | Description |
@@ -471,7 +510,7 @@ The following endpoints manage user identity:
 | `DELETE` | `/api/v1/users/me/emails/{email}` | Either | Remove an email; rejects with 409 if the address is the user's only email or their primary |
 | `PUT` | `/api/v1/users/me/emails/{email}/primary` | Either | Promote an email to primary; rejects with 409 if the target is unverified |
 | `POST` | `/api/v1/users/me/emails/{email}/verify` | Either | **Stub** — returns `501 Not Implemented` until the email-verification flow ships |
-| `POST` | `/api/v1/users/me/avatar` | Either | Upload/replace the caller's avatar (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB). The server centre-crops + resizes to a 256×256 PNG; returns `{ "avatar_updated_at": <timestamp> }` |
+| `POST` | `/api/v1/users/me/avatar` | Either | Upload/replace the caller's avatar (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB and ≤ 4096×4096). The server centre-crops + resizes to a 256×256 PNG; returns `{ "avatar_updated_at": <timestamp> }` |
 | `DELETE` | `/api/v1/users/me/avatar` | Either | Remove the caller's avatar (idempotent — `204` even if none was set) |
 | `GET` | `/api/v1/users/{id}/avatar` | Either | Serve a user's avatar as `image/png`, or `404` when none. Requires auth, but readable for **any** user id (not just the caller) so a signed-in viewer sees other players' avatars on boards/headers; cache-bust with `?v=<avatar_updated_at>` |
 
@@ -509,7 +548,7 @@ A **game definition** is a stored, parametric 3D game: it holds no maze grid, on
 | `DELETE` | `/api/v1/game-definitions/{id}` | Either | Delete a definition the caller owns, removing its shares and resetting its leaderboard(s). |
 | `GET`    | `/api/v1/game-definitions/{id}/shares` | Either | List the grantees of a definition the caller owns (manage-shares view) — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
 | `PUT`    | `/api/v1/game-definitions/{id}/shares` | Either | **Set** the definition's share list to the supplied set (body `{ "userIds": [ … ] }`) — anyone not listed is revoked, any new id granted, in one operation. Owner-only; the owner's own id is ignored. Returns the updated grantee list. |
-| `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `POST`   | `/api/v1/game-definitions/{id}/image` | Either | Upload/replace the game's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB and ≤ 4096×4096; centre-cropped + resized to a 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
 | `DELETE` | `/api/v1/game-definitions/{id}/image` | Either | Remove the game's image (idempotent). Owner-only. |
 | `GET`    | `/api/v1/game-definitions/{id}/image` | Either | Serve the game's image as `image/png`, or `404`. **Access-checked** like the play-fetch (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 
@@ -531,7 +570,7 @@ On first launch the server seeds two curated collections owned by the default ad
 | `PUT`    | `/api/v1/game-collections/{id}/items` | Either | **Set** the collection's whole membership to the supplied ordered list (body `{ "definitionIds": [definitionId, …] }`) — reconciles in one operation (drop absent, add new, reorder; duplicates collapse). The owner may edit it, or an **admin** may edit a **Featured** (curated) collection they don't own (admin-override, ownership preserved); any other non-owner gets `404`. Returns the updated collection. |
 | `GET`    | `/api/v1/game-collections/{id}/shares` | Either | List the grantees of a collection the caller owns — each resolved to `{ id, username, avatar_updated_at? }` (the marker present only when the grantee has an avatar), ordered by username. |
 | `PUT`    | `/api/v1/game-collections/{id}/shares` | Either | **Set** the collection's share list to the supplied set (body `{ "userIds": [ … ] }`) — reconciles in one operation. Owner-only; the owner's own id is ignored. Returns the updated grantee list. |
-| `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
+| `POST`   | `/api/v1/game-collections/{id}/image` | Either | Upload/replace the collection's image (`multipart/form-data`, single `file` part: PNG or JPEG, ≤ 2 MiB and ≤ 4096×4096 → 256×256 PNG). Owner-only. Returns `{ imageUpdatedAt }`. |
 | `DELETE` | `/api/v1/game-collections/{id}/image` | Either | Remove the collection's image (idempotent). Owner-only. |
 | `GET`    | `/api/v1/game-collections/{id}/image` | Either | Serve the collection's image as `image/png`, or `404`. Access-checked (owner ∨ curated ∨ public ∨ granted); cache-bust with `?v=<imageUpdatedAt>`. |
 

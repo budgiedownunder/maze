@@ -139,6 +139,8 @@ data_dir/
       user.json              user record (multi-email shape)
 ```
 
+A maze id is the maze's file name, and `get_maze_items` returns it as a full path, so ids in circulation are absolute. Every maze read and write resolves the id and requires the result to name a file directly inside that owner's `mazes/` directory — an id that resolves anywhere else (a `..` sequence, or another user's directory) is rejected with `MazeIdInvalid`, and a new maze whose name carries path characters is rejected with `MazeNameInvalid`. Callers depend on this: `reset_leaderboard` treats a successful `get_maze` as proof of ownership.
+
 `FileStore::new` runs two startup passes against `data_dir` in order:
 
 1. **`migrate_users_dir`** — a one-shot, idempotent rewrite of any pre-multi-email `user.json` files into the current shape. New-shape files parse straight through and are left alone; legacy single-email files are rewritten and the original kept alongside as `user.json.bak`. Runs unconditionally on every startup.
@@ -189,7 +191,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 | `mazes` | Maze definitions (JSON), FK to owner `users`. The `definition` column holds the whole serialised `Maze`, which may carry an optional `game_settings` object. |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
 | `one_time_tokens` | Single-use, time-bounded tokens for password-reset / invite / email-verification flows (added in `0005_one_time_tokens.sql`). FK to `users` with `ON DELETE CASCADE`. Single-use enforcement is application-driven via `UPDATE ... WHERE consumed_at IS NULL`. |
-| `score_history` | One row per completed 3D run (added in `0009_score_history.sql`); serves the leaderboards (per-maze, per-curated-challenge) and personal history. Dual-keyed subject — exactly one of `maze_id` (FK `mazes`, `ON DELETE CASCADE`) or `challenge` (a `"<difficulty>:<seed>"` string, no FK) — plus `user_id` (the *player*, FK `users`, `ON DELETE CASCADE`). Both FK cascades are also enforced in app code (the delete paths `DELETE FROM score_history` explicitly, mirroring FileStore). |
+| `score_history` | One row per completed 3D run (added in `0009_score_history.sql`); serves the leaderboards (per-maze, per-curated-challenge) and personal history. Dual-keyed subject — exactly one of `maze_id` (FK `mazes`, `ON DELETE CASCADE`) or `challenge` (a `"<difficulty>:<seed>"` string, no FK) — plus `user_id` (the *player*, FK `users`, `ON DELETE CASCADE`). Both FK cascades are also enforced in app code (the delete paths `DELETE FROM score_history` explicitly, mirroring FileStore). Every backend's `record_score` rejects a `challenge` longer than the 64-character column and a `score` / `elapsed_ms` above `i64::MAX`, which would otherwise wrap negative in the signed `BIGINT` columns. |
 | `user_avatars` | One row per user holding the avatar image bytes (`image_data` BLOB) keyed by `user_id` (PK + FK `users`, `ON DELETE CASCADE`). The companion marker `users.avatar_updated_at` (added in `0010_user_avatars.sql`) is both the "has an avatar" signal and the cache-buster. **Not created by a migration file** — its binary column type has no portable spelling across the three backends (PostgreSQL `BYTEA`, MySQL `LONGBLOB`, SQLite `BLOB`), so it is created per-backend in `create_user_avatars_table` (`sql_store.rs`), run from `SqlStore::new` after the portable migrations — the same pattern `retire_legacy_users_email_column` uses. The avatar *value* round-trips uniformly through SQLx-Any (`Vec<u8>` ⇄ blob on every driver); only the table DDL is per-backend. The FK cascade is also issued explicitly in `empty`, matching the `score_history` backstop. The leaderboard reads (`maze_leaderboard` / `challenge_leaderboard`) resolve each player's `avatar_updated_at` alongside `username` via the same `users` lookup, so `ScoreboardEntry` carries it and a board row can show the player's avatar or the placeholder without an extra round-trip. |
 | `user_emails` | Email addresses attached to a user — `email`, `is_primary`, `verified`, `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
@@ -220,7 +222,7 @@ The migration files in [`migrations/`](./migrations/):
 
 ### Soft-delete behaviour
 
-`UserStore::delete_user(id)` performs a **soft-delete**: the `users` row is kept (so audit-log foreign keys stay valid) with `deleted_at` populated and `username` rewritten to `deleted-<uuid>` to free the original handle for reuse. Related rows that have no audit value are hard-deleted in the same call: `user_logins`, `oauth_identities`, `user_emails`, and the user's `mazes`. After the call, every read path (`get_user`, `get_users`, `get_admin_users`, `has_users`, `find_user_by_name`, `find_user_by_verified_email`, `find_user_by_api_key`, `find_user_by_login_id`, `find_user_by_oauth_identity`) treats the user as if it never existed by applying a `deleted_at IS NULL` filter.
+`UserStore::delete_user(id)` performs a **soft-delete**: the `users` row is kept (so audit-log foreign keys stay valid) with `deleted_at` populated and `username` rewritten to `deleted-<uuid>` to free the original handle for reuse. Related rows that have no audit value are hard-deleted in the same call: `user_logins`, `oauth_identities`, `user_emails`, and the user's `mazes`. After the call, every read path (`get_user`, `get_users`, `get_admin_users`, `has_users`, `find_user_by_name`, `find_user_by_verified_email`, `find_user_by_api_key`, `find_user_by_login_id`, `find_user_by_oauth_identity`) treats the user as if it never existed by applying a `deleted_at IS NULL` filter. `update_user` applies the same filter and returns `UserIdNotFound`, so a copy of the user taken before the delete cannot restore any of it.
 
 Two additional methods round out the surface:
 
@@ -269,6 +271,8 @@ Independently of the *size* caps above, both stores also cap the **number of ite
 | Mazes | `MAX_MAZES_PER_USER` | 500 | `MazeStore::max_mazes_per_user` | `create_maze` | `MazeCountLimitReached` |
 | Game definitions | `MAX_DEFINITIONS_PER_USER` | 500 | `GameStore::max_definitions_per_user` | `create_game_definition` | `GameDefinitionCountLimitReached` |
 | Game collections | `MAX_COLLECTIONS_PER_USER` | 100 | `GameStore::max_collections_per_user` | `create_game_collection` | `GameCollectionCountLimitReached` |
+
+Text fields are length-capped the same way on every backend, so an over-long value fails identically everywhere instead of being accepted by SQLite and rejected by a PostgreSQL or MySQL column: a username at most `MAX_USERNAME_CHARS` (64), an email address at most `MAX_EMAIL_CHARS` (254), and a full name or maze, game or collection name at most `MAX_NAME_CHARS` (255), all counted in characters (`validation.rs`). An over-long value is refused with `Error::Invalid`, whose message names the field and its limit, and the server returns it as HTTP 400.
 
 
 ## Maze object-count caps

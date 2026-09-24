@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useTheme } from '../context/ThemeContext'
 import { useAppFeatures } from '../context/AppFeaturesContext'
-import { isValidEmail } from '../utils/validation'
+import { isValidEmail, MAX_EMAIL_CHARS } from '../utils/validation'
 import appIcon from '../assets/app.png'
 
 const SUCCESS_COPY = "If that email is registered, we've sent a password reset link. Check your inbox."
@@ -78,6 +78,7 @@ export function ForgotPasswordPage() {
             onChange={e => setEmail(e.target.value)}
             disabled={isSubmitting}
             autoComplete="email"
+            maxLength={MAX_EMAIL_CHARS}
           />
 
           {error && <p role="alert" className="error-msg">{error}</p>}

@@ -51,9 +51,13 @@ uint8_t maze_c_maze_game_get_tick_event_payload(MazeGameC* ptr, int32_t index,
                                                 uint32_t* payload_out);
                                                         // enemy id / hp_after / reason code; 0 for DoorOpened
 uint8_t maze_c_maze_game_get_tick_event_string_payload(MazeGameC* ptr, int32_t index,
-                                                       uint8_t* buf_out, uint32_t* len_out);
+                                                       uint8_t* buf_out, uint32_t buf_capacity,
+                                                       uint32_t* len_out);
                                                         // PlayerNotHealed message; two-call protocol
-                                                        // (buf_out=null reads len_out, then re-call to copy)
+                                                        // (buf_out=null reads len_out, then re-call to copy).
+                                                        // At most buf_capacity bytes are written; len_out is
+                                                        // always the full length, so len_out > buf_capacity
+                                                        // means the copy was truncated
 
 // HP / enemies / health pickups (valid pointer assumed; out parameters may be null)
 uint32_t maze_c_maze_game_hp(MazeGameC* ptr);
@@ -156,7 +160,7 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 
-**Error handling:** `maze_c_new_maze_game` returns `null` on failure (invalid JSON or no start cell); call `maze_c_get_last_error()` to retrieve the message. Getter functions assume a valid (non-null) pointer, matching the existing `maze_c` convention.
+**Error handling:** `maze_c_new_maze_game` returns `null` on failure (invalid JSON or no start cell); call `maze_c_get_last_error()` to retrieve the message. Getter functions require a valid (non-null) handle: passing `null` aborts with a message naming the export. `free` functions remain null-safe, and out parameters may still be `null`.
 
 ## Error Handling
 

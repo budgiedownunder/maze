@@ -32,7 +32,7 @@ namespace Maze.Maui.App.Services
         /// Represents whether strict server TLS certificate validation is disabled
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool DisableStrictTLSCertificateValidation { get; set; } = true;
+        public bool DisableStrictTLSCertificateValidation { get; set; } = false;
 
         /// <summary>
         /// The number of minutes remaining on the login token lifetime below which a renewal

@@ -18,6 +18,7 @@
 use crate::oauth::NormalisedIdentity;
 use chrono::Utc;
 use data_model::{OAuthIdentity, User};
+use storage::validation::{MAX_NAME_CHARS, MAX_USERNAME_CHARS};
 use storage::{Error as StoreError, UserStore};
 
 /// Outcome of [`resolve`]: either a returning user signed in (possibly with a
@@ -180,7 +181,11 @@ pub async fn resolve(
         id: User::new_id(),
         is_admin: false,
         username,
-        full_name: identity.display_name.clone().unwrap_or_default(),
+        full_name: identity
+            .display_name
+            .as_deref()
+            .map(|name| name.chars().take(MAX_NAME_CHARS).collect())
+            .unwrap_or_default(),
         emails: vec![data_model::UserEmail::new_primary_verified(&email)],
         password_hash: String::new(), // OAuth-only account; verify_password hardens against this
         api_key: User::new_api_key(),
@@ -215,13 +220,23 @@ fn refresh_identity(user: &mut User, identity: &NormalisedIdentity) {
 /// with `_2`, `_3`, … until it is not already taken.
 async fn unique_username_from_email(store: &dyn UserStore, email: &str) -> String {
     let base = sanitize_username(email.split('@').next().unwrap_or("user"));
-    let mut candidate = base.clone();
+    let mut candidate = fit_username(&base, "");
     let mut counter: u32 = 2;
     while store.find_user_by_name(&candidate).await.is_ok() {
-        candidate = format!("{base}_{counter}");
+        candidate = fit_username(&base, &format!("_{counter}"));
         counter = counter.saturating_add(1);
     }
     candidate
+}
+
+/// Joins `base` and `suffix` into a username of at most [`MAX_USERNAME_CHARS`]
+/// characters. A default username comes from an email's local part, which can
+/// be longer than a username, so `base` is shortened to leave room for the
+/// collision suffix; an underscore the cut leaves at the end is dropped.
+pub(crate) fn fit_username(base: &str, suffix: &str) -> String {
+    let room = MAX_USERNAME_CHARS.saturating_sub(suffix.chars().count());
+    let cut: String = base.chars().take(room).collect();
+    format!("{}{suffix}", cut.trim_end_matches('_'))
 }
 
 fn sanitize_username(local: &str) -> String {
@@ -784,6 +799,32 @@ mod tests {
             other => panic!("expected Created, got {other:?}"),
         };
         assert_eq!(user.username, "alice_2", "should disambiguate against existing 'alice'");
+    }
+
+    #[test]
+    fn fit_username_keeps_the_suffix_within_the_limit() {
+        let long = "a".repeat(70);
+        assert_eq!(fit_username(&long, ""), "a".repeat(64));
+        assert_eq!(fit_username(&long, "_2"), format!("{}_2", "a".repeat(62)));
+        assert_eq!(fit_username(&long, "_1a2b3c"), format!("{}_1a2b3c", "a".repeat(57)));
+        // An underscore the cut leaves at the end is dropped.
+        let cut_at_underscore = format!("{}_b", "a".repeat(61));
+        assert_eq!(fit_username(&cut_at_underscore, "_12"), format!("{}_12", "a".repeat(61)));
+        assert_eq!(fit_username("alice", "_2"), "alice_2");
+    }
+
+    #[tokio::test]
+    async fn branch_3_fits_a_long_local_part_and_display_name() {
+        let mut store = MemStore::default();
+        let email = format!("{}@example.com", "a".repeat(70));
+        let mut identity = ident("google", "sub-long", Some(&email), true);
+        identity.display_name = Some("n".repeat(300));
+        let user = match resolve(&mut store, &identity, true).await.expect("ok") {
+            ResolveOutcome::Created(u) => u,
+            other => panic!("expected Created, got {other:?}"),
+        };
+        assert_eq!(user.username, "a".repeat(64));
+        assert_eq!(user.full_name.chars().count(), 255);
     }
 
     #[test]

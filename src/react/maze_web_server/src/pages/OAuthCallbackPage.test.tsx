@@ -45,9 +45,12 @@ describe('getOAuthErrorMessage', () => {
       .toMatch(/cancel/i)
   })
 
-  it('echoes other provider_error codes back in a friendly wrapper', () => {
+  it('does not echo other provider_error codes', () => {
+    // The text after the colon comes from the provider, and `/login?error=` is
+    // reachable by anyone, so it must not reach the page.
     const msg = getOAuthErrorMessage('provider_error:something_unexpected')!
-    expect(msg).toMatch(/something_unexpected/)
+    expect(msg).not.toMatch(/something_unexpected/)
+    expect(msg).toMatch(/provider reported an error/i)
   })
 
   it('falls back to a generic message for unknown codes', () => {

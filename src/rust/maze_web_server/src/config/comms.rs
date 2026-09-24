@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 /// consulted; secrets (api keys etc.) are read from the environment, never
 /// from this config.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct CommsAppConfig {
     /// Master switch. When false, no provider is contacted; sends are
     /// captured by an in-memory stub and logged. Useful for dev and CI.
@@ -92,6 +93,7 @@ impl CommsAppConfig {
 /// on when forensics across enumeration attempts matter more than
 /// log volume.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CommsEmailAuditConfig {
     /// When `true`, every `/password-reset/request` hit with an email
     /// that doesn't match a verified user creates a recon row in the
@@ -109,6 +111,7 @@ pub struct CommsEmailAuditConfig {
 /// `[comms.branding]` sub-table. Values are surfaced verbatim in the
 /// branding partial templates.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CommsBrandingConfig {
     /// Company / brand name. Substituted into `{{ header }}` and `{{ footer }}`.
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME`.
@@ -153,6 +156,7 @@ pub struct CommsBrandingConfig {
 /// time but accepted at parse time so an operator can keep them as
 /// commented-out reference templates.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct CommsEmailConfig {
     /// Active email provider for this deployment.
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`.
@@ -237,6 +241,7 @@ pub enum CommsEmailProvider {
 /// from `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY` so secrets never land
 /// in committed files or container images.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct MailgunAppConfig {
     /// Sending domain registered with Mailgun (e.g. `mg.example.com`).
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`.
@@ -271,6 +276,7 @@ impl Default for MailgunAppConfig {
 /// per-vendor sub-table; only the one matching `vendor` is consulted at
 /// dispatch time.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SmtpOauth2AppConfig {
     /// SMTP relay hostname (e.g. `smtp.office365.com`, `smtp.gmail.com`).
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST`.
@@ -355,6 +361,7 @@ pub enum SmtpOauth2Vendor {
 /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET` so
 /// secrets never land in committed files or container images.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SmtpOauth2MicrosoftConfig {
     /// Azure AD tenant identifier (a UUID, or `common` / `organizations`).
     /// Can be overridden with
@@ -398,6 +405,7 @@ impl Default for SmtpOauth2MicrosoftConfig {
 /// keep in the config file; the key material lives on disk and is access-
 /// controlled via the deployment's filesystem permissions.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SmtpOauth2GoogleConfig {
     /// Filesystem path to the GCP service-account JSON key file.
     /// Can be overridden with
@@ -443,6 +451,7 @@ impl Default for SmtpOauth2GoogleConfig {
 /// and `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN`
 /// so secrets never land in committed files or container images.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SmtpOauth2GooglePersonalConfig {
     /// OAuth client identifier issued by the Google Cloud Console for a
     /// Web-application client. Can be overridden with

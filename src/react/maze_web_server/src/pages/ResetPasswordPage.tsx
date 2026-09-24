@@ -30,7 +30,7 @@ export function ResetPasswordPage() {
       // The token rides in the JSON body — no URL-encoding required.
       // useSearchParams already decoded any percent-escapes from the link.
       await api.confirmPasswordReset(token, newPassword)
-      navigate('/login?message=Password+reset+successful.+Sign+in+with+your+new+password.', { replace: true })
+      navigate('/login?message=password_reset', { replace: true })
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       setError(status === 400

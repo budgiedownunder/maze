@@ -105,8 +105,23 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
-  it('surfaces the ?message= flash and clears it from the URL', async () => {
-    renderLoginPage('/login?message=Password+reset+successful')
+  it('surfaces a known ?message= code and clears it from the URL', async () => {
+    renderLoginPage('/login?message=password_reset')
     expect(await screen.findByRole('status')).toHaveTextContent(/password reset successful/i)
+  })
+
+  it('shows nothing for a ?message= that carries its own text', async () => {
+    // A crafted link must not be able to put its words on the real login page.
+    renderLoginPage('/login?message=Your+account+is+locked.+Call+555-0100.')
+    expect(await screen.findByRole('button', { name: /^sign in$/i })).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText(/555-0100/)).not.toBeInTheDocument()
+  })
+
+  it('does not echo the provider detail of an error code', async () => {
+    renderLoginPage('/login?error=provider_error:Call+555-0100+to+unlock')
+    const alert = await screen.findByRole('alert')
+    expect(alert).not.toHaveTextContent(/555-0100/)
+    expect(alert).toHaveTextContent(/provider reported an error/i)
   })
 })

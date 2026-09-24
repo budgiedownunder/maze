@@ -135,6 +135,18 @@ async fn update_user_returns_not_found_for_unknown_id() {
 }
 
 #[tokio::test]
+async fn update_user_rejects_soft_deleted_user() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::update_user_rejects_soft_deleted_user(&mut s).await;
+}
+
+#[tokio::test]
+async fn over_long_fields_are_rejected_naming_their_limit() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::over_long_fields_are_rejected_naming_their_limit(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_user_rejects_username_case_collision() {
     let (mut s, _temp) = fresh_store().await;
     contract::update_user_rejects_username_case_collision(&mut s).await;
@@ -818,6 +830,12 @@ async fn score_record_round_trips_for_both_subjects() {
 async fn score_record_rejects_invalid_subject() {
     let (mut s, _temp) = fresh_store().await;
     contract::score_record_rejects_invalid_subject(&mut s).await;
+}
+
+#[tokio::test]
+async fn score_record_rejects_values_outside_the_columns() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::score_record_rejects_values_outside_the_columns(&mut s).await;
 }
 
 #[tokio::test]

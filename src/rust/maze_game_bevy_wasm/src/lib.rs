@@ -430,6 +430,30 @@ fn default_title() -> String {
 /// as a `JsValue` error the HTML host can render in `#loading`. Doing it
 /// inside Bevy would leave the rest of the schedule expecting a `GameState`
 /// that was never inserted, and panic.
+/// Largest number of rows or columns a 3D game may be started with.
+///
+/// Mirrors `MAX_GAME_MAZE_DIMENSION` in the React editor, which bounds the same
+/// two fields when a game definition is authored. Enforced here as a refusal
+/// rather than a clamp: clamping would change what a given seed produces, so a
+/// shared game would render differently for the player who received it than for
+/// the author, and its leaderboard would no longer describe one maze.
+const MAX_GAME_MAZE_DIMENSION: u32 = 30;
+
+/// Rejects dimensions past [`MAX_GAME_MAZE_DIMENSION`].
+///
+/// The dimensions come from a game definition's config, which may have been
+/// authored by someone else and reaches this tab unvalidated, so the editor's
+/// bound is re-checked rather than trusted. Split out from `start_with_config`
+/// because that function starts a renderer and cannot be called from a test.
+fn check_dimensions(rows: u32, cols: u32) -> Result<(), String> {
+    if rows > MAX_GAME_MAZE_DIMENSION || cols > MAX_GAME_MAZE_DIMENSION {
+        return Err(format!(
+            "Game dimensions {rows}x{cols} exceed the {MAX_GAME_MAZE_DIMENSION}-per-side limit"
+        ));
+    }
+    Ok(())
+}
+
 #[wasm_bindgen]
 pub fn start_with_config(json: &str) -> Result<(), JsValue> {
     // Before anything that can panic — generation and world spawn both run under
@@ -448,6 +472,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
     if let Some(json) = cfg.maze_json.clone() {
         maze_json = Some(json);
     } else if cfg.rows > 0 && cfg.cols > 0 {
+        check_dimensions(cfg.rows, cfg.cols).map_err(|err| JsValue::from_str(&err))?;
         if cfg.levels.count > 1 {
             pending_levels = Some(
                 maze_game_bevy::generate_level_maze_jsons(
@@ -566,6 +591,27 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A received game definition may carry dimensions past the editor's bound,
+    /// so the bound is re-checked before generation rather than trusted.
+    #[test]
+    fn over_sized_dimensions_are_refused() {
+        let over = MAX_GAME_MAZE_DIMENSION + 1;
+        let error = check_dimensions(over, 4).expect_err("an over-sized row count must be refused");
+        assert!(error.contains(&over.to_string()), "the error must state the value: {error}");
+        assert!(
+            error.contains(&MAX_GAME_MAZE_DIMENSION.to_string()),
+            "the error must state the limit: {error}"
+        );
+        check_dimensions(4, over).expect_err("an over-sized column count must be refused");
+    }
+
+    /// The editor's own maximum must still start.
+    #[test]
+    fn dimensions_at_the_limit_are_accepted() {
+        check_dimensions(MAX_GAME_MAZE_DIMENSION, MAX_GAME_MAZE_DIMENSION)
+            .expect("the editor's maximum must remain playable");
+    }
 
     #[test]
     fn start_config_omitted_fields_take_defaults() {

@@ -7,6 +7,21 @@ use std::ptr;
 use crate::wasm_common::{to_generation_algorithm, GenerationAlgorithmWasm};
 #[cfg(feature = "wasm-lite")]
 use maze::{Generator, GeneratorOptions};
+/// Rejects a null handle at an FFI entry point.
+///
+/// The exports take raw handles the caller is trusted to have obtained from a
+/// matching constructor. A null one is a caller bug, and on `wasm32` it is a
+/// silent one: address 0 is ordinary linear memory holding zeros, which reads
+/// back as a perfectly valid *empty* maze — counts of zero, `is_empty` true, a
+/// well-formed JSON document — so a mistake surfaces as plausible data rather
+/// than as a failure. Failing here turns that into a trap on wasm and an abort
+/// with a message on native, both of which say which export was called.
+macro_rules! require_handle {
+    ($ptr:expr, $func:expr) => {
+        assert!(!$ptr.is_null(), concat!($func, ": null handle"));
+    };
+}
+
 /// Creates a new, empty `MazeWasm`
 ///
 /// # Returns
@@ -44,6 +59,7 @@ pub extern "C" fn free_maze_wasm(maze_wasm: *mut MazeWasm) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_row_count(maze_wasm: *mut MazeWasm) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_get_row_count");
     let maze_wasm = unsafe { &*maze_wasm };
     maze_wasm.maze.definition.row_count() as u32
 }
@@ -56,6 +72,7 @@ pub extern "C" fn maze_wasm_get_row_count(maze_wasm: *mut MazeWasm) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_col_count(maze_wasm: *mut MazeWasm) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_get_col_count");
     let maze_wasm = unsafe { &*maze_wasm };
     maze_wasm.maze.definition.col_count() as u32
 }
@@ -68,6 +85,7 @@ pub extern "C" fn maze_wasm_get_col_count(maze_wasm: *mut MazeWasm) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_cell_type(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_get_cell_type");
     let maze_wasm = unsafe { &*maze_wasm };
     let row = row as usize;
     let col = col as usize;
@@ -94,6 +112,7 @@ pub extern "C" fn maze_wasm_set_start_cell(
     start_row: u32,
     start_col: u32,
 ) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_set_start_cell");
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
     if let Err(error) = maze_wasm.maze.definition.set_start(Some(MazePoint {
@@ -113,6 +132,7 @@ pub extern "C" fn maze_wasm_set_start_cell(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_start_cell(maze_wasm: *mut MazeWasm) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_get_start_cell");
     let maze_wasm = unsafe { &*maze_wasm };
     if let Some(start) = maze_wasm.maze.definition.get_start() {
         return create_maze_wasm_point_result(&start);
@@ -132,6 +152,7 @@ pub extern "C" fn maze_wasm_set_finish_cell(
     finish_row: u32,
     finish_col: u32,
 ) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_set_finish_cell");
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
     if let Err(error) = maze_wasm.maze.definition.set_finish(Some(MazePoint {
@@ -152,6 +173,7 @@ pub extern "C" fn maze_wasm_set_finish_cell(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_finish_cell(maze_wasm: *mut MazeWasm) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_get_finish_cell");
     let maze_wasm = unsafe { &*maze_wasm };
     if let Some(finish) = maze_wasm.maze.definition.get_finish() {
         return create_maze_wasm_point_result(&finish);
@@ -325,6 +347,7 @@ pub extern "C" fn maze_wasm_resize(
     new_row_count: u32,
     new_col_count: u32,
 ) {
+    require_handle!(maze_wasm, "maze_wasm_resize");
     let maze_wasm = unsafe { &mut *maze_wasm };
     maze_wasm
         .maze
@@ -340,6 +363,7 @@ pub extern "C" fn maze_wasm_resize(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_reset(maze_wasm: *mut MazeWasm) {
+    require_handle!(maze_wasm, "maze_wasm_reset");
     let maze_wasm = unsafe { &mut *maze_wasm };
     maze_wasm.maze.definition.reset();
 }
@@ -382,6 +406,7 @@ pub extern "C" fn maze_wasm_insert_rows(
     start_row: u32,
     count: u32,
 ) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_insert_rows");
     let mut error_ptr: u32 = 0;
     let maze_wasm = unsafe { &mut *maze_wasm };
     if let Err(error) = maze_wasm
@@ -406,6 +431,7 @@ pub extern "C" fn maze_wasm_delete_rows(
     start_row: u32,
     count: u32,
 ) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_delete_rows");
     let mut error_ptr: u32 = 0;
     let maze_wasm = unsafe { &mut *maze_wasm };
     if let Err(error) = maze_wasm
@@ -425,7 +451,8 @@ pub extern "C" fn maze_wasm_delete_rows(
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub fn maze_wasm_insert_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u32) -> u32 {
+pub extern "C" fn maze_wasm_insert_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u32) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_insert_cols");
     let mut error_ptr: u32 = 0;
     let maze_wasm = unsafe { &mut *maze_wasm };
     if let Err(error) = maze_wasm
@@ -445,7 +472,8 @@ pub fn maze_wasm_insert_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u3
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub fn maze_wasm_delete_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u32) -> u32 {
+pub extern "C" fn maze_wasm_delete_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u32) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_delete_cols");
     let mut error_ptr: u32 = 0;
     let maze_wasm = unsafe { &mut *maze_wasm };
     if let Err(error) = maze_wasm
@@ -465,7 +493,8 @@ pub fn maze_wasm_delete_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u3
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub fn maze_wasm_is_empty(maze_wasm: *mut MazeWasm) -> bool {
+pub extern "C" fn maze_wasm_is_empty(maze_wasm: *mut MazeWasm) -> bool {
+    require_handle!(maze_wasm, "maze_wasm_is_empty");
     let maze_wasm = unsafe { &mut *maze_wasm };
     maze_wasm.maze.definition.is_empty()
 }
@@ -477,10 +506,13 @@ pub fn maze_wasm_is_empty(maze_wasm: *mut MazeWasm) -> bool {
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub fn maze_wasm_from_json(maze_wasm: *mut MazeWasm, json_string_ptr: *mut u8) -> u32 {
+pub extern "C" fn maze_wasm_from_json(maze_wasm: *mut MazeWasm, json_string_ptr: *mut u8) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_from_json");
     let mut error_ptr: u32 = 0;
     let maze_wasm = unsafe { &mut *maze_wasm };
-    let json_str = ptr_to_string(json_string_ptr);
+    let Some(json_str) = ptr_to_string(json_string_ptr) else {
+        return create_maze_wasm_error_ptr("json string pointer is null or not UTF-8");
+    };
 
     if let Err(error) = maze_wasm.maze.from_json(&json_str) {
         error_ptr = create_maze_wasm_error_ptr(error.to_string().as_str());
@@ -641,6 +673,7 @@ pub extern "C" fn free_maze_wasm_result(result_ptr: u32, free_value_ptr: bool) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_to_json(maze_wasm: *mut MazeWasm) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_to_json");
     let maze_wasm = unsafe { &mut *maze_wasm };
 
     match maze_wasm.maze.to_json() {
@@ -659,6 +692,7 @@ pub extern "C" fn maze_wasm_to_json(maze_wasm: *mut MazeWasm) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_cell_entity(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_get_cell_entity");
     let maze_wasm = unsafe { &mut *maze_wasm };
     let entity = maze_wasm
         .maze
@@ -690,8 +724,11 @@ pub extern "C" fn maze_wasm_set_cell_entity(
     col: u32,
     json_string_ptr: *mut u8,
 ) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_set_cell_entity");
     let maze_wasm = unsafe { &mut *maze_wasm };
-    let json_str = ptr_to_string(json_string_ptr);
+    let Some(json_str) = ptr_to_string(json_string_ptr) else {
+        return create_maze_wasm_error_ptr("json string pointer is null or not UTF-8");
+    };
     let entity: CellEntity = match serde_json::from_str(&json_str) {
         Ok(entity) => entity,
         Err(error) => return create_maze_wasm_error_ptr(error.to_string().as_str()),
@@ -724,6 +761,7 @@ pub extern "C" fn maze_wasm_set_cell_entity(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_clear_cell_entity(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_clear_cell_entity");
     let maze_wasm = unsafe { &mut *maze_wasm };
     maze_wasm
         .maze
@@ -742,6 +780,7 @@ pub extern "C" fn maze_wasm_clear_cell_entity(maze_wasm: *mut MazeWasm, row: u32
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_solve(maze_wasm: *mut MazeWasm) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_solve");
     let maze_wasm = unsafe { &mut *maze_wasm };
 
     match maze_wasm.maze.solve() {
@@ -762,10 +801,18 @@ pub extern "C" fn maze_wasm_solve(maze_wasm: *mut MazeWasm) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut MazeSolution) -> u32 {
+    require_handle!(solution, "maze_wasm_solution_get_path_points");
     let solution = unsafe { &mut *solution };
     let num_points = solution.path.points.len();
-    let length = 4 + num_points * 8;
+    let length = num_points
+        .checked_mul(8)
+        .and_then(|points_bytes| points_bytes.checked_add(4))
+        .expect("maze_wasm_solution_get_path_points: path point count overflows the buffer size");
     let mem_ptr = allocate_sized_memory(length);
+    assert!(
+        !mem_ptr.is_null(),
+        "maze_wasm_solution_get_path_points: out of WebAssembly memory"
+    );
     unsafe {
         let mut points_data_ptr = mem_ptr.add(4);
         ptr::write(points_data_ptr as *mut u32, num_points as u32);
@@ -797,6 +844,10 @@ fn create_maze_wasm_error_ptr(error_str: &str) -> u32 {
 fn to_string_ptr(str: &str) -> u32 {
     let length = str.len();
     let string_ptr = allocate_sized_memory(length);
+    // The module has no way to report its own allocator running dry, and
+    // writing at offset 4 of a null block would corrupt low linear memory
+    // instead of failing.
+    assert!(!string_ptr.is_null(), "to_string_ptr: out of WebAssembly memory");
     unsafe {
         let string_data_ptr = string_ptr.add(4);
         ptr::copy_nonoverlapping(str.as_ptr(), string_data_ptr, length);
@@ -810,6 +861,7 @@ fn to_string_ptr(str: &str) -> u32 {
 /// Pointer to point
 fn to_point_ptr(point: &MazePoint) -> u32 {
     let point_ptr = allocate_sized_memory(8);
+    assert!(!point_ptr.is_null(), "to_point_ptr: out of WebAssembly memory");
     unsafe {
         let point_data_ptr = point_ptr.add(4);
         let _ = write_point(point_data_ptr, point);
@@ -875,17 +927,25 @@ fn ptr_length(ptr: *const u8) -> usize {
 ///
 /// String
 ///
-fn ptr_to_string(ptr: *const u8) -> String {
+/// Reads a string from a string memory pointer, or `None` when the pointer is
+/// null or the bytes behind it are not UTF-8.
+///
+/// The bytes are written by the host, which may mis-size them — that is a
+/// caller error rather than a reason to tear the module down, and every
+/// caller here has an error channel to report it through.
+fn ptr_to_string(ptr: *const u8) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
     // Read the length of the string from the first 4 bytes (u32)
     let length = ptr_length(ptr);
 
     // Convert the pointer to the string data (after the first 4 bytes)
-    let string_slice = unsafe {
+    let slice = unsafe {
         let data_ptr = ptr.add(4); // Skip the first 4 bytes (u32 for length)
-        let slice = std::slice::from_raw_parts(data_ptr, length);
-        std::str::from_utf8(slice).unwrap()
+        std::slice::from_raw_parts(data_ptr, length)
     };
-    string_slice.to_string()
+    std::str::from_utf8(slice).ok().map(|s| s.to_string())
 }
 
 /// Options controlling maze generation.
@@ -961,6 +1021,7 @@ pub extern "C" fn new_generator_options_wasm(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_start(ptr: *mut GeneratorOptionsWasm, row: u32, col: u32) {
+    require_handle!(ptr, "generator_options_set_start");
     let opts = unsafe { &mut *ptr };
     opts.start_row = row;
     opts.start_col = col;
@@ -970,6 +1031,7 @@ pub extern "C" fn generator_options_set_start(ptr: *mut GeneratorOptionsWasm, ro
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_finish(ptr: *mut GeneratorOptionsWasm, row: u32, col: u32) {
+    require_handle!(ptr, "generator_options_set_finish");
     let opts = unsafe { &mut *ptr };
     opts.finish_row = row;
     opts.finish_col = col;
@@ -979,6 +1041,7 @@ pub extern "C" fn generator_options_set_finish(ptr: *mut GeneratorOptionsWasm, r
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_min_spine_length(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_min_spine_length");
     let opts = unsafe { &mut *ptr };
     opts.min_spine_length = value;
 }
@@ -987,6 +1050,7 @@ pub extern "C" fn generator_options_set_min_spine_length(ptr: *mut GeneratorOpti
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_max_retries(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_max_retries");
     let opts = unsafe { &mut *ptr };
     opts.max_retries = value;
 }
@@ -995,6 +1059,7 @@ pub extern "C" fn generator_options_set_max_retries(ptr: *mut GeneratorOptionsWa
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_branch_from_finish(ptr: *mut GeneratorOptionsWasm, value: u8) {
+    require_handle!(ptr, "generator_options_set_branch_from_finish");
     let opts = unsafe { &mut *ptr };
     opts.branch_from_finish = value;
 }
@@ -1004,6 +1069,7 @@ pub extern "C" fn generator_options_set_branch_from_finish(ptr: *mut GeneratorOp
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_door_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_door_count");
     let opts = unsafe { &mut *ptr };
     opts.door_count = value;
 }
@@ -1013,6 +1079,7 @@ pub extern "C" fn generator_options_set_door_count(ptr: *mut GeneratorOptionsWas
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_spare_doors(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_spare_doors");
     let opts = unsafe { &mut *ptr };
     opts.spare_doors = value;
 }
@@ -1022,6 +1089,7 @@ pub extern "C" fn generator_options_set_spare_doors(ptr: *mut GeneratorOptionsWa
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_spare_keys(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_spare_keys");
     let opts = unsafe { &mut *ptr };
     opts.spare_keys = value;
 }
@@ -1032,6 +1100,7 @@ pub extern "C" fn generator_options_set_spare_keys(ptr: *mut GeneratorOptionsWas
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_enemy_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_enemy_count");
     let opts = unsafe { &mut *ptr };
     opts.enemy_count = value;
 }
@@ -1042,6 +1111,7 @@ pub extern "C" fn generator_options_set_enemy_count(ptr: *mut GeneratorOptionsWa
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_health_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_health_count");
     let opts = unsafe { &mut *ptr };
     opts.health_count = value;
 }
@@ -1052,6 +1122,7 @@ pub extern "C" fn generator_options_set_health_count(ptr: *mut GeneratorOptionsW
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn generator_options_set_treasure_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    require_handle!(ptr, "generator_options_set_treasure_count");
     let opts = unsafe { &mut *ptr };
     opts.treasure_count = value;
 }
@@ -1067,6 +1138,7 @@ pub extern "C" fn maze_wasm_generate(
     maze_wasm: *mut MazeWasm,
     options: *mut GeneratorOptionsWasm,
 ) -> u32 {
+    require_handle!(maze_wasm, "maze_wasm_generate");
     let maze_wasm = unsafe { &mut *maze_wasm };
     let opts = unsafe { &*options };
 
@@ -1182,7 +1254,9 @@ fn game_direction_to_i32(dir: maze::Direction) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn new_maze_game_wasm(json_string_ptr: *const u8) -> *mut MazeGameWasm {
-    let json_str = ptr_to_string(json_string_ptr);
+    let Some(json_str) = ptr_to_string(json_string_ptr) else {
+        return ptr::null_mut();
+    };
     match new_maze_game(&json_str) {
         Ok(maze_game_wasm) => {
             let boxed = Box::new(maze_game_wasm);
@@ -1659,6 +1733,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event_string_payload(
     maze_game_wasm: *mut MazeGameWasm,
     index: i32,
     out_buf: *mut u8,
+    out_buf_capacity: u32,
     out_len: *mut u32,
 ) -> i32 {
     if maze_game_wasm.is_null() {
@@ -1675,10 +1750,13 @@ pub extern "C" fn maze_game_wasm_get_tick_event_string_payload(
     let bytes = message.as_bytes();
     unsafe {
         if !out_len.is_null() {
+            // Always the full length, so a caller that passed a short buffer
+            // can tell, and one that passed none can size the next call.
             *out_len = bytes.len() as u32;
         }
         if !out_buf.is_null() {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+            let copy_len = bytes.len().min(out_buf_capacity as usize);
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, copy_len);
         }
     }
     0
@@ -2094,9 +2172,16 @@ pub extern "C" fn get_sized_memory_used() -> i64 {
 ///
 #[no_mangle]
 pub extern "C" fn allocate_sized_memory(size: usize) -> *mut u8 {
-    // Allocate enough memory for the length (u32) + string data
-    let total_size = size + 4;
-    let layout = Layout::from_size_align(total_size, 1).unwrap();
+    // Allocate enough memory for the length (u32) + string data. The caller
+    // supplies `size`, and `usize` is 32 bits on wasm32, so the header cannot
+    // be added blind: a wrapped total would under-allocate a block whose own
+    // length prefix then claims the original size.
+    let Some(total_size) = size.checked_add(4) else {
+        return std::ptr::null_mut();
+    };
+    let Ok(layout) = Layout::from_size_align(total_size, 1) else {
+        return std::ptr::null_mut();
+    };
     let ptr = unsafe { alloc(layout) };
     if ptr.is_null() {
         return std::ptr::null_mut();
@@ -2121,8 +2206,15 @@ pub extern "C" fn free_sized_memory(ptr: *mut u8) {
     if !ptr.is_null() {
         unsafe {
             let size = ptr::read(ptr as *const u32) as usize;
-            let total_size = size + 4;
-            let layout = Layout::from_size_align(total_size, 1).unwrap();
+            // Mirror the allocation arithmetic exactly. A prefix that cannot
+            // be turned back into a layout was never handed out by
+            // `allocate_sized_memory`, so there is nothing safe to free.
+            let Some(total_size) = size.checked_add(4) else {
+                return;
+            };
+            let Ok(layout) = Layout::from_size_align(total_size, 1) else {
+                return;
+            };
             dealloc(ptr, layout);
             TOTAL_SIZED_MEM_USED -= total_size as i64;
         }
@@ -2162,5 +2254,147 @@ fn increment_num_objects_allocated() {
 fn decrement_num_objects_allocated() {
     unsafe {
         TOTAL_NUM_OBJECTS_ALLOCATED -= 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The allocator adds a 4-byte length prefix to the caller's size. On
+    /// wasm32 that sum can wrap, which would under-allocate a block whose own
+    /// prefix still claims the original size.
+    #[test]
+    fn allocate_sized_memory_refuses_a_size_that_overflows_the_header() {
+        let ptr = allocate_sized_memory(usize::MAX);
+        assert!(ptr.is_null(), "an unrepresentable size must not allocate");
+        let ptr = allocate_sized_memory(usize::MAX - 3);
+        assert!(ptr.is_null(), "a size within 4 of the maximum must not allocate");
+    }
+
+    /// The host writes the bytes behind a string pointer and can mis-size
+    /// them. Invalid UTF-8 is a caller error for the exports to report, not a
+    /// reason to tear the module down, so the read yields `None` rather than
+    /// panicking.
+    ///
+    /// This exercises `ptr_to_string` directly: the exports report the failure
+    /// through `MazeWasmError` pointers, whose `u32` representation truncates
+    /// a real 64-bit heap pointer and so cannot be round-tripped in a native
+    /// test.
+    #[test]
+    fn ptr_to_string_returns_none_for_non_utf8_bytes() {
+        // A lone 0xC3 is a truncated two-byte sequence.
+        let bytes: &[u8] = &[b'{', 0xC3];
+        let block = allocate_sized_memory(bytes.len());
+        assert!(!block.is_null());
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), block.add(4), bytes.len());
+        }
+        assert!(
+            ptr_to_string(block).is_none(),
+            "invalid UTF-8 must be reported, not unwrapped"
+        );
+        free_sized_memory(block);
+    }
+
+    /// A null string pointer is the same class of caller error.
+    #[test]
+    fn ptr_to_string_returns_none_for_a_null_pointer() {
+        assert!(ptr_to_string(std::ptr::null()).is_none());
+    }
+
+    /// A well-formed block still reads back verbatim.
+    #[test]
+    fn ptr_to_string_reads_a_valid_block() {
+        let text = "caf\u{e9}";
+        let block = allocate_sized_memory(text.len());
+        assert!(!block.is_null());
+        unsafe {
+            std::ptr::copy_nonoverlapping(text.as_ptr(), block.add(4), text.len());
+        }
+        assert_eq!(ptr_to_string(block).as_deref(), Some(text));
+        free_sized_memory(block);
+    }
+
+    /// The string-payload getter writes at most the capacity it is given, and
+    /// reports the full length so the caller can tell it was truncated.
+    #[test]
+    fn tick_event_string_payload_truncates_to_the_buffer_capacity() {
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let block = allocate_sized_memory(json.len());
+        assert!(!block.is_null());
+        unsafe {
+            std::ptr::copy_nonoverlapping(json.as_ptr(), block.add(4), json.len());
+        }
+        let game = new_maze_game_wasm(block);
+        free_sized_memory(block);
+        assert!(!game.is_null(), "game must be created");
+
+        maze_game_wasm_move_player(game, 4); // Right, onto the 'H' at full HP
+        maze_game_wasm_tick(game, 0.0);
+
+        let mut len: u32 = 0;
+        let rc = maze_game_wasm_get_tick_event_string_payload(
+            game,
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut len,
+        );
+        assert_eq!(rc, 0);
+        assert!(len > 5, "the message must be longer than the small buffer");
+
+        // Slack past the capacity, so an overrun shows up as changed bytes
+        // rather than as a corrupted stack.
+        let mut buffer = vec![0xAAu8; 64];
+        let rc = maze_game_wasm_get_tick_event_string_payload(
+            game,
+            0,
+            buffer.as_mut_ptr(),
+            5,
+            &mut len,
+        );
+        assert_eq!(rc, 0);
+        assert_eq!(
+            &buffer[5..], &vec![0xAAu8; 59][..],
+            "bytes past the capacity must be untouched"
+        );
+        assert!(len > 5, "out_len must report the full length, not the copied length");
+
+        free_maze_game_wasm(game);
+    }
+
+    /// A null handle must fail loudly rather than be read as a valid object.
+    ///
+    /// The guard panics, and a panic crossing an `extern "C"` boundary aborts
+    /// the process, so the call is made in a child: the parent asserts the
+    /// child died *and* said which export it refused. An unguarded build dies
+    /// silently instead — on `wasm32` it would not die at all, since address 0
+    /// reads back as a valid empty maze.
+    #[test]
+    fn null_handle_fails_loudly_and_names_the_export() {
+        const CHILD_ENV: &str = "MAZE_NULL_HANDLE_CHILD";
+        if std::env::var(CHILD_ENV).is_ok() {
+            maze_wasm_get_row_count(std::ptr::null_mut());
+            unreachable!("the guard must not let the call return");
+        }
+        // `module_path!` carries the crate name, which the test filter does not.
+        let module = module_path!().split_once("::").map_or("", |(_, rest)| rest);
+        let test_name = format!("{module}::null_handle_fails_loudly_and_names_the_export");
+        let exe = std::env::current_exe().expect("test binary path");
+        let output = std::process::Command::new(exe)
+            .args([test_name.as_str(), "--exact", "--nocapture"])
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("run the child test process");
+        assert!(
+            !output.status.success(),
+            "a null handle must not be accepted; child exited cleanly"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("maze_wasm_get_row_count: null handle"),
+            "the child must name the export it refused; stderr was: {stderr}"
+        );
     }
 }

@@ -1,4 +1,4 @@
-#if !IOS
+﻿#if !IOS
 using System.Text;
 using static Maze.Interop.MazeInterop;
 
@@ -807,8 +807,17 @@ namespace Maze.Interop
         /// <returns>String memory pointer offset if successful</returns>
         protected UInt32 ToStringPtr(string value)
         {
-            UInt32 strPtrOffset = AllocateSizedMemory((UInt32)value.Length);
+            // Size the allocation in UTF-8 bytes rather than .NET chars. The
+            // allocator stores the requested size as the block's length
+            // prefix, and that prefix is what the Rust side reads the string
+            // back with, so a char count both overruns the block and hands
+            // Rust a truncated slice for any non-ASCII input.
             byte[] utf8Bytes = Encoding.UTF8.GetBytes(value);
+            UInt32 strPtrOffset = AllocateSizedMemory((UInt32)utf8Bytes.Length);
+            if (strPtrOffset == 0)
+            {
+                throw new Exception($"Failed to allocate {utf8Bytes.Length} bytes of WebAssembly memory for a string argument");
+            }
             memory.WriteBytes(strPtrOffset + 4, utf8Bytes);
             return strPtrOffset;
         }

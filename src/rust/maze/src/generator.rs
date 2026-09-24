@@ -189,6 +189,43 @@ impl Generator {
                 "start and finish must be different cells".to_string(),
             ));
         }
+        // Both of the following bound the work one call can ask for. Each
+        // attempt carves a whole maze and solves it, so `max_retries`
+        // multiplies that cost, and a `min_spine_length` longer than the grid
+        // can hold is unsatisfiable — every attempt would fail the spine check
+        // and the loop would run to exhaustion before reporting it.
+        if let Some(retries) = opts.max_retries {
+            if retries > crate::MAX_GENERATION_RETRIES {
+                return Err(Error::Generate(format!(
+                    "max_retries ({retries}) exceeds the maximum of {}",
+                    crate::MAX_GENERATION_RETRIES
+                )));
+            }
+        }
+        // `saturating_mul` keeps the comparison meaningful for pathological
+        // inputs: the product clamps to `usize::MAX` rather than wrapping to a
+        // small number that would pass the check.
+        let cells = opts.row_count.saturating_mul(opts.col_count);
+        if cells > crate::MAX_MAZE_CELLS {
+            return Err(Error::Generate(format!(
+                "maze is too large: {rows}x{cols} = {cells} cells exceeds the \
+                 {max}-cell limit",
+                rows = opts.row_count,
+                cols = opts.col_count,
+                max = crate::MAX_MAZE_CELLS,
+            )));
+        }
+        if let Some(min_spine) = opts.min_spine_length {
+            let cells = opts.row_count.saturating_mul(opts.col_count);
+            if min_spine > cells {
+                return Err(Error::Generate(format!(
+                    "min_spine_length ({min_spine}) cannot exceed the {cells} cells of a \
+                     {rows}×{cols} maze",
+                    rows = opts.row_count,
+                    cols = opts.col_count,
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -205,7 +242,7 @@ impl Generator {
             col: cols - 1,
         });
         let min_spine = opts.min_spine_length.unwrap_or((rows + cols) / 2);
-        let max_retries = opts.max_retries.unwrap_or(100);
+        let max_retries = opts.max_retries.unwrap_or(crate::MAX_GENERATION_RETRIES);
         let branch_from_finish = opts.branch_from_finish.unwrap_or(false);
         let door_count = opts.door_count.unwrap_or(0);
         let spare_doors = opts.spare_doors.unwrap_or(0);
@@ -214,7 +251,13 @@ impl Generator {
         let health_count = opts.health_count.unwrap_or(0).min(MAX_HEALTH_COUNT);
         let treasure_count = opts.treasure_count.unwrap_or(0).min(MAX_TREASURE_COUNT);
 
-        let total_features = 2 * door_count + spare_doors + spare_keys;
+        // Checked, because these are caller-supplied: a wrapping sum would land
+        // back under the cap and wave the request through.
+        let total_features = door_count
+            .checked_mul(2)
+            .and_then(|doors| doors.checked_add(spare_doors))
+            .and_then(|sum| sum.checked_add(spare_keys))
+            .unwrap_or(usize::MAX);
         if total_features > crate::MAX_TOTAL_FEATURES {
             return Err(Error::Generate(format!(
                 "requested keys + doors ({total_features}) exceeds the cap ({}): \
@@ -949,6 +992,42 @@ fn place_treasure_cells(
 
 #[cfg(test)]
 mod tests {
+
+    /// Dimensions reach generation from callers the engine does not control —
+    /// a request body, a shared game definition's config — so a few bytes must
+    /// not be able to ask for a grid of billions of cells.
+    #[test]
+    fn generate_rejects_a_maze_over_the_cell_cap() {
+        let error = make_generator(1_000, 1_000)
+            .generate()
+            .expect_err("a million cells must be refused");
+        let text = format!("{error}");
+        assert!(text.contains("1000000"), "the error must state the cell count: {text}");
+        assert!(
+            text.contains(&crate::MAX_MAZE_CELLS.to_string()),
+            "the error must state the limit: {text}"
+        );
+    }
+
+    /// The product is what matters, not either side on its own.
+    #[test]
+    fn generate_rejects_an_oblong_maze_over_the_cell_cap() {
+        let error = make_generator(4, crate::MAX_MAZE_CELLS)
+            .generate()
+            .expect_err("an oblong over the cap must be refused");
+        assert!(format!("{error}").contains("exceeds"), "got: {error}");
+    }
+
+    /// A maze at the cap still generates — the number is the store's, so
+    /// anything savable must remain generatable.
+    #[test]
+    fn generate_accepts_a_maze_at_the_cell_cap() {
+        assert_eq!(100 * 100, crate::MAX_MAZE_CELLS);
+        let maze = make_generator(100, 100)
+            .generate()
+            .expect("a maze at the cap must still generate");
+        assert_eq!(maze.definition.row_count(), 100);
+    }
     use super::*;
     use crate::{GenerationAlgorithm, Solver};
     use pretty_assertions::assert_eq;
@@ -1218,7 +1297,7 @@ mod tests {
     // --- Options ---
 
     #[test]
-    fn impossible_min_spine_length_exhausts_retries_and_errors() {
+    fn min_spine_length_longer_than_the_grid_is_rejected() {
         let gen = Generator {
             options: GeneratorOptions {
                 row_count: 3,
@@ -1233,6 +1312,106 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
+                treasure_count: None,
+            },
+        };
+        assert!(matches!(gen.generate(), Err(Error::Generate(_))));
+    }
+
+    // An unsatisfiable spine used to be discovered only by exhausting every
+    // attempt; a spine that merely *seldom* occurs still is. A fixed seed keeps
+    // the single attempt deterministic.
+    #[test]
+    fn a_spine_the_grid_can_hold_but_rarely_produces_still_exhausts_retries() {
+        let gen = Generator {
+            options: GeneratorOptions {
+                row_count: 3,
+                col_count: 3,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: Some(9),
+                max_retries: Some(1),
+                branch_from_finish: None,
+                seed: Some(1),
+                door_count: None,
+                spare_doors: None,
+                spare_keys: None,
+                enemy_count: None,
+                health_count: None,
+                treasure_count: None,
+            },
+        };
+        assert!(matches!(gen.generate(), Err(Error::Generate(_))));
+    }
+
+    #[test]
+    fn max_retries_above_the_cap_is_rejected() {
+        let gen = Generator {
+            options: GeneratorOptions {
+                row_count: 5,
+                col_count: 5,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: Some(crate::MAX_GENERATION_RETRIES + 1),
+                branch_from_finish: None,
+                seed: None,
+                door_count: None,
+                spare_doors: None,
+                spare_keys: None,
+                enemy_count: None,
+                health_count: None,
+                treasure_count: None,
+            },
+        };
+        assert!(matches!(gen.generate(), Err(Error::Generate(_))));
+    }
+
+    #[test]
+    fn max_retries_at_the_cap_is_accepted() {
+        let gen = Generator {
+            options: GeneratorOptions {
+                row_count: 5,
+                col_count: 5,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: Some(crate::MAX_GENERATION_RETRIES),
+                branch_from_finish: None,
+                seed: Some(1),
+                door_count: None,
+                spare_doors: None,
+                spare_keys: None,
+                enemy_count: None,
+                health_count: None,
+                treasure_count: None,
+            },
+        };
+        assert!(gen.generate().is_ok());
+    }
+
+    // A wrapping sum would land back under MAX_TOTAL_FEATURES and pass.
+    #[test]
+    fn feature_counts_that_would_overflow_are_rejected() {
+        let gen = Generator {
+            options: GeneratorOptions {
+                row_count: 5,
+                col_count: 5,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(1),
+                door_count: Some(usize::MAX),
+                spare_doors: Some(usize::MAX),
+                spare_keys: Some(usize::MAX),
                 enemy_count: None,
                 health_count: None,
                 treasure_count: None,

@@ -7,7 +7,7 @@ mod test_definitions {
     use crate::api::v1::endpoints::email_verification::{
         EmailVerificationConfirmRequest, EmailVerificationRequest,
     };
-    use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
+    use crate::api::v1::endpoints::handlers::{commit_login, commit_password_change, get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest, UserLookupResponse, UsersListResponse};
     use crate::api::v1::endpoints::scores::{BoardDatesResponse, CompletedChallengesRequest, CompletedChallengesResponse, RecordScoreRequest, ResetScoresResponse, ScoreboardResponse, ScoreResponse};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
@@ -423,6 +423,12 @@ mod test_definitions {
         }
 
         async fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, StoreError> {
+            if std::path::Path::new(id)
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+            {
+                return Err(StoreError::MazeIdInvalid(id.to_string()));
+            }
             let mock_user = self.get_mock_user(owner.id)?;
             if let Some(mock_maze) = mock_user.mazes.get(id) {
                 return Ok(mock_maze.maze.clone());
@@ -870,7 +876,7 @@ mod test_definitions {
             // maze_id / challenge) so the handler's 400 path is exercised.
             // `is_some() == is_some()` is true when both or neither are set.
             if entry.maze_id.is_some() == entry.challenge.is_some() {
-                return Err(StoreError::Other(
+                return Err(StoreError::Invalid(
                     "score entry must set exactly one of maze_id / challenge".to_string(),
                 ));
             }
@@ -2563,6 +2569,15 @@ mod test_definitions {
             StatusCode::OK).await;
     }
 
+    // Demotion is the third way to leave a store with no admins; the two
+    // delete paths already refuse it.
+    async fn run_cannot_demote_last_admin_user(use_login: bool) {
+        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1,
+            &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
+            StatusCode::CONFLICT).await;
+    }
+
     async fn run_cannot_update_admin_user_with_non_admin_caller(use_login: bool) {
         run_update_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), 
             Some(VALID_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1, 
@@ -2626,10 +2641,12 @@ mod test_definitions {
             StatusCode::OK).await;
     }
 
+    // Two admins, so the downgrade leaves one behind — a lone admin cannot be
+    // downgraded (see run_cannot_demote_last_admin_user).
     async fn run_can_downgrade_admin_user_to_non_admin_with_admin_caller(use_login: bool) {
-        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), 
-            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1, 
-            &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
+        run_update_user_test(&CreateUsersDef::new(2, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_2,
+            &new_update_user_request(false, VALID_ADMIN_USERNAME_2, None),
             StatusCode::OK).await;
     }
 
@@ -2731,6 +2748,10 @@ mod test_definitions {
 
     async fn run_cannot_get_maze_that_does_not_exist(use_login: bool) {
         run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), use_login, "does_not_exist.json", StatusCode::NOT_FOUND, None).await;
+    }
+
+    async fn run_cannot_get_maze_with_an_out_of_bounds_id(use_login: bool) {
+        run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), use_login, "%2E%2E%2Fmaze_a.json", StatusCode::BAD_REQUEST, None).await;
     }
 
     async fn run_can_update_maze_that_exists(use_login: bool) {
@@ -2931,6 +2952,80 @@ mod test_definitions {
             true,
             Some(StatusCode::NO_CONTENT)
         ).await;
+    }
+
+    /// A password change signs out the account's other sessions but keeps the
+    /// one that made the request. Driven end-to-end through `/login` so the
+    /// sessions are real ones.
+    #[actix_web::test]
+    async fn change_password_evicts_other_sessions() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // Two sessions for the same user, as two devices would produce.
+        let mut tokens: Vec<Uuid> = Vec::new();
+        for _ in 0..2 {
+            let req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), StatusCode::OK);
+            let body = test::read_body(resp).await;
+            let login: LoginResponse = serde_json::from_slice(&body).expect("deserialize login");
+            tokens.push(login.login_token_id);
+        }
+        let (other_session, caller_session) = (tokens[0], tokens[1]);
+
+        let change_req = ChangePasswordRequest {
+            current_password: Some(VALID_USER_PASSWORD.to_string()),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_put_request("/api/v1/users/me/password", None, Some(caller_session), &change_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // The caller keeps the session it changed the password with.
+        let req = create_test_get_request("/api/v1/users/me", None, Some(caller_session));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK, "the caller's own session must survive");
+
+        // The other device is signed out. The auth middleware rejects with an
+        // error rather than a response, so `try_call_service` is what surfaces it.
+        let req = create_test_get_request("/api/v1/users/me", None, Some(other_session));
+        assert!(test::try_call_service(&app, req).await.is_err(), "other sessions must be evicted");
+    }
+
+    /// An `X-API-KEY` caller has no session to preserve, so every session goes.
+    #[actix_web::test]
+    async fn change_password_by_api_key_evicts_every_session() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, mock_users, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let api_key = MockStore::find_user_by_name_in_map(&mock_users, VALID_USERNAME_1, Uuid::nil())
+            .expect("test user must exist")
+            .api_key;
+
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+        let req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let session: LoginResponse = serde_json::from_slice(&body).expect("deserialize login");
+
+        let change_req = ChangePasswordRequest {
+            current_password: Some(VALID_USER_PASSWORD.to_string()),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_put_request("/api/v1/users/me/password", Some(api_key), None, &change_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        let req = create_test_get_request("/api/v1/users/me", None, Some(session.login_token_id));
+        assert!(test::try_call_service(&app, req).await.is_err(), "sessions must be evicted");
     }
 
     /// Two consecutive logins with the same credentials: the second response
@@ -3313,6 +3408,16 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn cannot_demote_last_admin_user_with_api_key() {
+        run_cannot_demote_last_admin_user(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_demote_last_admin_user_with_login() {
+        run_cannot_demote_last_admin_user(true).await;
+    }
+
+    #[actix_web::test]
     async fn cannot_update_admin_user_with_non_admin_caller_with_api_key() {
         run_cannot_update_admin_user_with_non_admin_caller(false).await;
     }
@@ -3682,6 +3787,16 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_get_maze_that_does_not_exist_with_login() {
         run_cannot_get_maze_that_does_not_exist(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_get_maze_with_an_out_of_bounds_id_with_api_key() {
+        run_cannot_get_maze_with_an_out_of_bounds_id(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_get_maze_with_an_out_of_bounds_id_with_login() {
+        run_cannot_get_maze_with_an_out_of_bounds_id(true).await;
     }
 
     // Update maze
@@ -5019,6 +5134,113 @@ mod test_definitions {
         assert_eq!(
             test::call_service(&app, req).await.status(),
             StatusCode::BAD_REQUEST
+        );
+    }
+
+    /// Seeds a token directly in the store and returns its id.
+    async fn seed_token(
+        shared_store: &SharedStore,
+        username: &str,
+        purpose: data_model::TokenPurpose,
+    ) -> Uuid {
+        let (user_id, email) = {
+            let store_lock = shared_store.read().await;
+            let user = store_lock.find_user_by_name(username).await.expect("seeded user");
+            (user.id, user.email().to_string())
+        };
+        let target_email = match purpose {
+            data_model::TokenPurpose::EmailVerification => Some(email),
+            _ => None,
+        };
+        let token = OneTimeToken::new(user_id, purpose, target_email, 1);
+        let mut store_lock = shared_store.write().await;
+        store_lock.create_token(&token).await.expect("create token");
+        token.id
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_leaves_a_verification_token_usable() {
+        // Posting a token to the wrong endpoint is a mis-pasted link or a
+        // client bug, so the rejection must not burn the user's token.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let token_id = seed_token(
+            &shared_store,
+            VALID_USERNAME_1,
+            data_model::TokenPurpose::EmailVerification,
+        )
+        .await;
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&PasswordResetConfirmRequest {
+                token: token_id.to_string(),
+                new_password: "NewPassword1!".to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST,
+            "a verification token must not be accepted as a reset token"
+        );
+
+        let req = create_test_post_request(
+            "/api/v1/email-verifications/confirm",
+            None,
+            None,
+            Some(&EmailVerificationConfirmRequest {
+                token: token_id.to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT,
+            "the token must survive the rejection and still work at its own endpoint"
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_confirm_leaves_a_reset_token_usable() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let token_id = seed_token(
+            &shared_store,
+            VALID_USERNAME_1,
+            data_model::TokenPurpose::PasswordReset,
+        )
+        .await;
+
+        let req = create_test_post_request(
+            "/api/v1/email-verifications/confirm",
+            None,
+            None,
+            Some(&EmailVerificationConfirmRequest {
+                token: token_id.to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST,
+            "a reset token must not be accepted as a verification token"
+        );
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&PasswordResetConfirmRequest {
+                token: token_id.to_string(),
+                new_password: "NewPassword1!".to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT,
+            "the token must survive the rejection and still work at its own endpoint"
         );
     }
 
@@ -7427,6 +7649,177 @@ mod test_definitions {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
+    /// A real in-memory SQLite store holding one user, for tests whose subject
+    /// is the store's own behaviour rather than the mock's.
+    async fn sql_store_with_user(is_admin: bool) -> (SharedStore, User) {
+        let mut store = storage::get_store(storage::StoreConfig::Sql(storage::SqlStoreConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            auto_create_database: true,
+            ..storage::SqlStoreConfig::default()
+        }))
+        .await
+        .expect("in-memory SqlStore");
+        let mut user = User {
+            id: Uuid::nil(),
+            is_admin,
+            username: "player".into(),
+            full_name: "Player".into(),
+            emails: vec![data_model::UserEmail::new_primary_verified("player@example.com")],
+            password_hash: "hash".into(),
+            api_key: Uuid::nil(),
+            logins: vec![],
+            oauth_identities: vec![],
+            deleted_at: None,
+            created_at: Utc::now(),
+            last_sign_in_at: None,
+            avatar_updated_at: None,
+        };
+        store.create_user(&mut user).await.expect("create_user");
+        (Arc::new(AsyncRwLock::new(store)), user)
+    }
+
+    /// Applies `change` to the stored copy of `id`, standing in for a write
+    /// another request made after a handler took its own copy.
+    async fn change_stored_user(store: &SharedStore, id: Uuid, change: impl FnOnce(&mut User)) {
+        let mut lock = store.write().await;
+        let mut user = lock.get_user(id).await.expect("get_user");
+        change(&mut user);
+        lock.update_user(&mut user).await.expect("update_user");
+    }
+
+    #[tokio::test]
+    async fn commit_login_refuses_when_the_password_changed_after_verification() {
+        let (store, verified) = sql_store_with_user(false).await;
+        change_stored_user(&store, verified.id, |u| u.password_hash = "new-hash".into()).await;
+
+        let err = commit_login(store.write().await, &verified, 24, None, None)
+            .await
+            .expect_err("a stale verification must not sign in");
+        assert_eq!(err.as_response_error().status_code(), StatusCode::UNAUTHORIZED);
+        let stored = store.read().await.get_user(verified.id).await.expect("get_user");
+        assert_eq!(stored.password_hash, "new-hash");
+        assert!(stored.logins.is_empty());
+    }
+
+    #[tokio::test]
+    async fn commit_login_keeps_a_change_made_after_verification() {
+        let (store, verified) = sql_store_with_user(true).await;
+        change_stored_user(&store, verified.id, |u| u.is_admin = false).await;
+
+        let (login, _) = commit_login(store.write().await, &verified, 24, None, None)
+            .await
+            .expect("commit_login");
+        let stored = store.read().await.get_user(verified.id).await.expect("get_user");
+        assert!(!stored.is_admin, "the demotion must survive the login");
+        assert_eq!(stored.logins.iter().map(|l| l.id).collect::<Vec<_>>(), vec![login.id]);
+    }
+
+    #[tokio::test]
+    async fn commit_password_change_refuses_when_the_password_changed_after_the_check() {
+        let (store, checked) = sql_store_with_user(false).await;
+        change_stored_user(&store, checked.id, |u| u.password_hash = "other-hash".into()).await;
+
+        let err = commit_password_change(store.write().await, &checked, "new-hash".into(), None)
+            .await
+            .expect_err("a stale check must not change the password");
+        assert_eq!(err.as_response_error().status_code(), StatusCode::CONFLICT);
+        let stored = store.read().await.get_user(checked.id).await.expect("get_user");
+        assert_eq!(stored.password_hash, "other-hash");
+    }
+
+    #[tokio::test]
+    async fn commit_password_change_keeps_a_change_made_after_the_check() {
+        let (store, checked) = sql_store_with_user(true).await;
+        let kept = UserLogin::new(24, None, None);
+        let kept_id = kept.id;
+        change_stored_user(&store, checked.id, |u| {
+            u.is_admin = false;
+            u.logins = vec![kept, UserLogin::new(24, None, None)];
+        })
+        .await;
+
+        commit_password_change(store.write().await, &checked, "new-hash".into(), Some(kept_id))
+            .await
+            .expect("commit_password_change");
+        let stored = store.read().await.get_user(checked.id).await.expect("get_user");
+        assert_eq!(stored.password_hash, "new-hash");
+        assert!(!stored.is_admin, "the demotion must survive the password change");
+        assert_eq!(stored.logins.iter().map(|l| l.id).collect::<Vec<_>>(), vec![kept_id]);
+    }
+
+    /// The full app over `store`, for tests that need the real store's behaviour.
+    async fn create_test_app_on_store(
+        store: SharedStore,
+    ) -> impl Service<actix_http::Request, Response = ServiceResponse, Error = Error> {
+        let app_config = AppConfig::default();
+        let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
+        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
+        test::init_service(
+            create_app(&app_config.security.password_hash, web::Data::new(store), web::Data::new(features), web::Data::new(connector), comms, ".".to_string())
+                .app_data(web::Data::new(app_config)),
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn over_long_username_is_bad_request_naming_the_limit() {
+        let (store, user) = sql_store_with_user(false).await;
+        let app = create_test_app_on_store(store).await;
+
+        let body = UpdateProfileRequest { username: "a".repeat(65), full_name: "Player".into() };
+        let req = create_test_put_request("/api/v1/users/me/profile", Some(user.api_key), None, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let text = String::from_utf8(test::read_body(resp).await.to_vec()).unwrap();
+        assert_eq!(text, "Username must be at most 64 characters");
+    }
+
+    #[tokio::test]
+    async fn store_failure_text_does_not_reach_the_response() {
+        // A score for a maze that does not exist fails the database's foreign
+        // key; the database's own error text must stay in the log.
+        let (store, user) = sql_store_with_user(false).await;
+        let app = create_test_app_on_store(store).await;
+
+        let body = RecordScoreRequest {
+            maze_id: Some("no-such-maze".to_string()),
+            challenge: None,
+            score: 1,
+            elapsed_ms: 1,
+        };
+        let req = create_test_post_request("/api/v1/scores", Some(user.api_key), None, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let text = String::from_utf8(test::read_body(resp).await.to_vec()).unwrap();
+        assert_eq!(text, "Failed to record score");
+    }
+
+    #[tokio::test]
+    async fn record_score_with_value_beyond_the_column_is_bad_request() {
+        // A real store, not the mock: the bound lives in the stores' shared
+        // validator, and this checks it reaches the client as a 400.
+        let (shared, user) = sql_store_with_user(false).await;
+        let app = create_test_app_on_store(shared).await;
+
+        for (score, elapsed_ms, expected) in [
+            (1, i64::MAX as u64, StatusCode::CREATED),
+            (1, i64::MAX as u64 + 1, StatusCode::BAD_REQUEST),
+            (i64::MAX as u64 + 1, 1, StatusCode::BAD_REQUEST),
+        ] {
+            let body = RecordScoreRequest {
+                maze_id: None,
+                challenge: Some("easy:1".to_string()),
+                score,
+                elapsed_ms,
+            };
+            let req = create_test_post_request("/api/v1/scores", Some(user.api_key), None, Some(&body));
+            let resp = test::call_service(&app, req).await;
+            assert_eq!(resp.status(), expected, "score={score} elapsed_ms={elapsed_ms}");
+        }
+    }
+
     #[tokio::test]
     async fn record_score_with_no_subject_is_bad_request() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
@@ -9408,6 +9801,46 @@ mod test_definitions {
         assert_eq!(
             test::call_service(&app, image_upload_request(&url, owner.api_key, &bad_boundary, bad)).await.status(),
             StatusCode::BAD_REQUEST
+        );
+    }
+
+    /// Pins the *order* of the two checks on an image upload. The body is not a
+    /// decodable image and the caller is not the owner, so the two failures
+    /// return different statuses: `404` can only come from the ownership check,
+    /// `400` only from the decode. Asserting `404` therefore proves the decode
+    /// — the expensive half — never ran for a caller with no claim on the
+    /// definition. Same reasoning for the collection case below.
+    #[actix_web::test]
+    async fn game_definition_image_upload_checks_ownership_before_decoding() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let def = seed_game_definition(&store, &owner, "Ordered", Visibility::Public, Rotation::Static).await;
+        let url = format!("/api/v1/game-definitions/{}/image", def.id);
+
+        let (body, boundary) = multipart_file_body("x.png", "image/png", b"not an image");
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, other.api_key, &boundary, body)).await.status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[actix_web::test]
+    async fn game_collection_image_upload_checks_ownership_before_decoding() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 2, MazeContent::Empty));
+        let (app, store, mock_users, _k, _l) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let owner = user_by_name(&mock_users, VALID_USERNAME_1);
+        let other = user_by_name(&mock_users, VALID_USERNAME_2);
+        let col = seed_game_collection(&store, &owner, "Ordered", Visibility::Public).await;
+        let url = format!("/api/v1/game-collections/{}/image", col.meta.id);
+
+        let (body, boundary) = multipart_file_body("x.png", "image/png", b"not an image");
+        assert_eq!(
+            test::call_service(&app, image_upload_request(&url, other.api_key, &boundary, body)).await.status(),
+            StatusCode::NOT_FOUND
         );
     }
 

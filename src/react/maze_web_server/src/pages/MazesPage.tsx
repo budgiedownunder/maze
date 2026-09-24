@@ -12,6 +12,7 @@ import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
 import { normalizeMazeGameSettings } from '../utils/mazeGameSettings'
 import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
+import { MAX_NAME_CHARS } from '../utils/validation'
 
 export function MazesPage() {
   const token = useToken()
@@ -142,6 +143,7 @@ export function MazesPage() {
       )}
       {mazeToDuplicate && (
         <PromptModal
+          maxLength={MAX_NAME_CHARS}
           title="Duplicate Maze"
           label="Name"
           initialValue={`Copy of ${mazeToDuplicate.name}`}
@@ -155,6 +157,7 @@ export function MazesPage() {
       )}
       {mazeToRename && (
         <PromptModal
+          maxLength={MAX_NAME_CHARS}
           title="Rename Maze"
           label="New name"
           initialValue={mazeToRename.name}
