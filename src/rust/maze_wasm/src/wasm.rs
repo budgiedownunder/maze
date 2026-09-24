@@ -510,7 +510,9 @@ pub extern "C" fn maze_wasm_from_json(maze_wasm: *mut MazeWasm, json_string_ptr:
     require_handle!(maze_wasm, "maze_wasm_from_json");
     let mut error_ptr: u32 = 0;
     let maze_wasm = unsafe { &mut *maze_wasm };
-    let json_str = ptr_to_string(json_string_ptr);
+    let Some(json_str) = ptr_to_string(json_string_ptr) else {
+        return create_maze_wasm_error_ptr("json string pointer is null or not UTF-8");
+    };
 
     if let Err(error) = maze_wasm.maze.from_json(&json_str) {
         error_ptr = create_maze_wasm_error_ptr(error.to_string().as_str());
@@ -724,7 +726,9 @@ pub extern "C" fn maze_wasm_set_cell_entity(
 ) -> u32 {
     require_handle!(maze_wasm, "maze_wasm_set_cell_entity");
     let maze_wasm = unsafe { &mut *maze_wasm };
-    let json_str = ptr_to_string(json_string_ptr);
+    let Some(json_str) = ptr_to_string(json_string_ptr) else {
+        return create_maze_wasm_error_ptr("json string pointer is null or not UTF-8");
+    };
     let entity: CellEntity = match serde_json::from_str(&json_str) {
         Ok(entity) => entity,
         Err(error) => return create_maze_wasm_error_ptr(error.to_string().as_str()),
@@ -800,8 +804,15 @@ pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut MazeSolution
     require_handle!(solution, "maze_wasm_solution_get_path_points");
     let solution = unsafe { &mut *solution };
     let num_points = solution.path.points.len();
-    let length = 4 + num_points * 8;
+    let length = num_points
+        .checked_mul(8)
+        .and_then(|points_bytes| points_bytes.checked_add(4))
+        .expect("maze_wasm_solution_get_path_points: path point count overflows the buffer size");
     let mem_ptr = allocate_sized_memory(length);
+    assert!(
+        !mem_ptr.is_null(),
+        "maze_wasm_solution_get_path_points: out of WebAssembly memory"
+    );
     unsafe {
         let mut points_data_ptr = mem_ptr.add(4);
         ptr::write(points_data_ptr as *mut u32, num_points as u32);
@@ -833,6 +844,10 @@ fn create_maze_wasm_error_ptr(error_str: &str) -> u32 {
 fn to_string_ptr(str: &str) -> u32 {
     let length = str.len();
     let string_ptr = allocate_sized_memory(length);
+    // The module has no way to report its own allocator running dry, and
+    // writing at offset 4 of a null block would corrupt low linear memory
+    // instead of failing.
+    assert!(!string_ptr.is_null(), "to_string_ptr: out of WebAssembly memory");
     unsafe {
         let string_data_ptr = string_ptr.add(4);
         ptr::copy_nonoverlapping(str.as_ptr(), string_data_ptr, length);
@@ -846,6 +861,7 @@ fn to_string_ptr(str: &str) -> u32 {
 /// Pointer to point
 fn to_point_ptr(point: &MazePoint) -> u32 {
     let point_ptr = allocate_sized_memory(8);
+    assert!(!point_ptr.is_null(), "to_point_ptr: out of WebAssembly memory");
     unsafe {
         let point_data_ptr = point_ptr.add(4);
         let _ = write_point(point_data_ptr, point);
@@ -911,17 +927,25 @@ fn ptr_length(ptr: *const u8) -> usize {
 ///
 /// String
 ///
-fn ptr_to_string(ptr: *const u8) -> String {
+/// Reads a string from a string memory pointer, or `None` when the pointer is
+/// null or the bytes behind it are not UTF-8.
+///
+/// The bytes are written by the host, which may mis-size them — that is a
+/// caller error rather than a reason to tear the module down, and every
+/// caller here has an error channel to report it through.
+fn ptr_to_string(ptr: *const u8) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
     // Read the length of the string from the first 4 bytes (u32)
     let length = ptr_length(ptr);
 
     // Convert the pointer to the string data (after the first 4 bytes)
-    let string_slice = unsafe {
+    let slice = unsafe {
         let data_ptr = ptr.add(4); // Skip the first 4 bytes (u32 for length)
-        let slice = std::slice::from_raw_parts(data_ptr, length);
-        std::str::from_utf8(slice).unwrap()
+        std::slice::from_raw_parts(data_ptr, length)
     };
-    string_slice.to_string()
+    std::str::from_utf8(slice).ok().map(|s| s.to_string())
 }
 
 /// Options controlling maze generation.
@@ -1230,7 +1254,9 @@ fn game_direction_to_i32(dir: maze::Direction) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn new_maze_game_wasm(json_string_ptr: *const u8) -> *mut MazeGameWasm {
-    let json_str = ptr_to_string(json_string_ptr);
+    let Some(json_str) = ptr_to_string(json_string_ptr) else {
+        return ptr::null_mut();
+    };
     match new_maze_game(&json_str) {
         Ok(maze_game_wasm) => {
             let boxed = Box::new(maze_game_wasm);
@@ -1707,6 +1733,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event_string_payload(
     maze_game_wasm: *mut MazeGameWasm,
     index: i32,
     out_buf: *mut u8,
+    out_buf_capacity: u32,
     out_len: *mut u32,
 ) -> i32 {
     if maze_game_wasm.is_null() {
@@ -1723,10 +1750,13 @@ pub extern "C" fn maze_game_wasm_get_tick_event_string_payload(
     let bytes = message.as_bytes();
     unsafe {
         if !out_len.is_null() {
+            // Always the full length, so a caller that passed a short buffer
+            // can tell, and one that passed none can size the next call.
             *out_len = bytes.len() as u32;
         }
         if !out_buf.is_null() {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+            let copy_len = bytes.len().min(out_buf_capacity as usize);
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, copy_len);
         }
     }
     0
@@ -2142,9 +2172,16 @@ pub extern "C" fn get_sized_memory_used() -> i64 {
 ///
 #[no_mangle]
 pub extern "C" fn allocate_sized_memory(size: usize) -> *mut u8 {
-    // Allocate enough memory for the length (u32) + string data
-    let total_size = size + 4;
-    let layout = Layout::from_size_align(total_size, 1).unwrap();
+    // Allocate enough memory for the length (u32) + string data. The caller
+    // supplies `size`, and `usize` is 32 bits on wasm32, so the header cannot
+    // be added blind: a wrapped total would under-allocate a block whose own
+    // length prefix then claims the original size.
+    let Some(total_size) = size.checked_add(4) else {
+        return std::ptr::null_mut();
+    };
+    let Ok(layout) = Layout::from_size_align(total_size, 1) else {
+        return std::ptr::null_mut();
+    };
     let ptr = unsafe { alloc(layout) };
     if ptr.is_null() {
         return std::ptr::null_mut();
@@ -2169,8 +2206,15 @@ pub extern "C" fn free_sized_memory(ptr: *mut u8) {
     if !ptr.is_null() {
         unsafe {
             let size = ptr::read(ptr as *const u32) as usize;
-            let total_size = size + 4;
-            let layout = Layout::from_size_align(total_size, 1).unwrap();
+            // Mirror the allocation arithmetic exactly. A prefix that cannot
+            // be turned back into a layout was never handed out by
+            // `allocate_sized_memory`, so there is nothing safe to free.
+            let Some(total_size) = size.checked_add(4) else {
+                return;
+            };
+            let Ok(layout) = Layout::from_size_align(total_size, 1) else {
+                return;
+            };
             dealloc(ptr, layout);
             TOTAL_SIZED_MEM_USED -= total_size as i64;
         }
@@ -2216,6 +2260,109 @@ fn decrement_num_objects_allocated() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The allocator adds a 4-byte length prefix to the caller's size. On
+    /// wasm32 that sum can wrap, which would under-allocate a block whose own
+    /// prefix still claims the original size.
+    #[test]
+    fn allocate_sized_memory_refuses_a_size_that_overflows_the_header() {
+        let ptr = allocate_sized_memory(usize::MAX);
+        assert!(ptr.is_null(), "an unrepresentable size must not allocate");
+        let ptr = allocate_sized_memory(usize::MAX - 3);
+        assert!(ptr.is_null(), "a size within 4 of the maximum must not allocate");
+    }
+
+    /// The host writes the bytes behind a string pointer and can mis-size
+    /// them. Invalid UTF-8 is a caller error for the exports to report, not a
+    /// reason to tear the module down, so the read yields `None` rather than
+    /// panicking.
+    ///
+    /// This exercises `ptr_to_string` directly: the exports report the failure
+    /// through `MazeWasmError` pointers, whose `u32` representation truncates
+    /// a real 64-bit heap pointer and so cannot be round-tripped in a native
+    /// test.
+    #[test]
+    fn ptr_to_string_returns_none_for_non_utf8_bytes() {
+        // A lone 0xC3 is a truncated two-byte sequence.
+        let bytes: &[u8] = &[b'{', 0xC3];
+        let block = allocate_sized_memory(bytes.len());
+        assert!(!block.is_null());
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), block.add(4), bytes.len());
+        }
+        assert!(
+            ptr_to_string(block).is_none(),
+            "invalid UTF-8 must be reported, not unwrapped"
+        );
+        free_sized_memory(block);
+    }
+
+    /// A null string pointer is the same class of caller error.
+    #[test]
+    fn ptr_to_string_returns_none_for_a_null_pointer() {
+        assert!(ptr_to_string(std::ptr::null()).is_none());
+    }
+
+    /// A well-formed block still reads back verbatim.
+    #[test]
+    fn ptr_to_string_reads_a_valid_block() {
+        let text = "caf\u{e9}";
+        let block = allocate_sized_memory(text.len());
+        assert!(!block.is_null());
+        unsafe {
+            std::ptr::copy_nonoverlapping(text.as_ptr(), block.add(4), text.len());
+        }
+        assert_eq!(ptr_to_string(block).as_deref(), Some(text));
+        free_sized_memory(block);
+    }
+
+    /// The string-payload getter writes at most the capacity it is given, and
+    /// reports the full length so the caller can tell it was truncated.
+    #[test]
+    fn tick_event_string_payload_truncates_to_the_buffer_capacity() {
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let block = allocate_sized_memory(json.len());
+        assert!(!block.is_null());
+        unsafe {
+            std::ptr::copy_nonoverlapping(json.as_ptr(), block.add(4), json.len());
+        }
+        let game = new_maze_game_wasm(block);
+        free_sized_memory(block);
+        assert!(!game.is_null(), "game must be created");
+
+        maze_game_wasm_move_player(game, 4); // Right, onto the 'H' at full HP
+        maze_game_wasm_tick(game, 0.0);
+
+        let mut len: u32 = 0;
+        let rc = maze_game_wasm_get_tick_event_string_payload(
+            game,
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut len,
+        );
+        assert_eq!(rc, 0);
+        assert!(len > 5, "the message must be longer than the small buffer");
+
+        // Slack past the capacity, so an overrun shows up as changed bytes
+        // rather than as a corrupted stack.
+        let mut buffer = vec![0xAAu8; 64];
+        let rc = maze_game_wasm_get_tick_event_string_payload(
+            game,
+            0,
+            buffer.as_mut_ptr(),
+            5,
+            &mut len,
+        );
+        assert_eq!(rc, 0);
+        assert_eq!(
+            &buffer[5..], &vec![0xAAu8; 59][..],
+            "bytes past the capacity must be untouched"
+        );
+        assert!(len > 5, "out_len must report the full length, not the copied length");
+
+        free_maze_game_wasm(game);
+    }
 
     /// A null handle must fail loudly rather than be read as a valid object.
     ///

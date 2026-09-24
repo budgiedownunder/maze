@@ -162,9 +162,13 @@ i32           maze_game_wasm_get_tick_event(MazeGameWasm* maze_game_wasm, i32 in
 i32           maze_game_wasm_get_tick_event_payload(MazeGameWasm* maze_game_wasm, i32 index,
                                                     u32* payload_out);        // enemy id / hp_after / reason / key id / treasure value; 0=ok, -1=error
 i32           maze_game_wasm_get_tick_event_string_payload(MazeGameWasm* maze_game_wasm, i32 index,
-                                                           u8* buf_out, u32* len_out);
+                                                           u8* buf_out, u32 buf_capacity,
+                                                           u32* len_out);
                                                                               // PlayerNotHealed message; two-call protocol
-                                                                              // (buf_out=null reads len_out, then re-call); 0=ok, -1=error
+                                                                              // (buf_out=null reads len_out, then re-call); 0=ok, -1=error.
+                                                                              // At most buf_capacity bytes are written; len_out is
+                                                                              // always the full length, so len_out > buf_capacity
+                                                                              // means the copy was truncated
 i32           maze_game_wasm_key_count(MazeGameWasm* maze_game_wasm);         // uncollected only
 i32           maze_game_wasm_get_key(MazeGameWasm* maze_game_wasm, i32 index,
                                      u32* row_out, u32* col_out, u32* id_out);

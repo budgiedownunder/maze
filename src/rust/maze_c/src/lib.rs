@@ -2963,8 +2963,12 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
 /// # Safety
 ///
 /// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
-/// `out_len` may be null. When `out_buf` is non-null it must point to a writable
-/// region of at least the byte length previously reported via `out_len`.
+/// `out_len` may be null, and always receives the message's full byte length so
+/// a caller can size a buffer for a second call. When `out_buf` is non-null it
+/// must point to a writable region of at least `out_buf_capacity` bytes; at most
+/// that many bytes are written, so a short buffer truncates rather than
+/// overruns. The caller detects truncation by comparing `out_len` with the
+/// capacity it passed.
 ///
 /// # Examples
 ///
@@ -2978,11 +2982,17 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
 /// maze_c_maze_game_move_player(ptr, 4); // Right onto 'H'
 /// maze_c_maze_game_tick(ptr, 0.0);      // flush the queued PlayerNotHealed
 /// let mut len: u32 = 0;
-/// let ok = unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), &mut len) };
+/// let ok = unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), 0, &mut len) };
 /// assert_eq!(ok, 1);
 /// let mut buf = vec![0u8; len as usize];
-/// unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), &mut len) };
+/// unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), buf.len() as u32, &mut len) };
 /// assert_eq!(String::from_utf8(buf).unwrap(), "Already at maximum health");
+///
+/// // A buffer shorter than the message truncates instead of overrunning.
+/// let mut small = vec![0u8; 5];
+/// unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, small.as_mut_ptr(), small.len() as u32, &mut len) };
+/// assert_eq!(&small, b"Alrea");
+/// assert_eq!(len, 25, "out_len reports the full length, not the copied length");
 /// maze_c_free_maze_game(ptr);
 /// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -2991,6 +3001,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_string_payload(
     ptr: *mut MazeGameC,
     index: i32,
     out_buf: *mut u8,
+    out_buf_capacity: u32,
     out_len: *mut u32,
 ) -> u8 {
     require_handle!(ptr, "maze_c_maze_game_get_tick_event_string_payload");
@@ -3005,10 +3016,13 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_string_payload(
     let bytes = message.as_bytes();
     unsafe {
         if !out_len.is_null() {
+            // Always the full length, so a caller that passed a short buffer
+            // can tell, and one that passed none can size the next call.
             *out_len = bytes.len() as u32;
         }
         if !out_buf.is_null() {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+            let copy_len = bytes.len().min(out_buf_capacity as usize);
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, copy_len);
         }
     }
     1
@@ -5187,12 +5201,12 @@ mod tests {
 
         let mut len: u32 = 0;
         let ok = unsafe {
-            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), &mut len)
+            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), 0, &mut len)
         };
         assert_eq!(ok, 1);
         let mut buf = vec![0u8; len as usize];
         unsafe {
-            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), &mut len)
+            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), buf.len() as u32, &mut len)
         };
         assert_eq!(String::from_utf8(buf).unwrap(), "Already at maximum health");
         // The pickup was spared — still present.

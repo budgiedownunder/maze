@@ -51,9 +51,13 @@ uint8_t maze_c_maze_game_get_tick_event_payload(MazeGameC* ptr, int32_t index,
                                                 uint32_t* payload_out);
                                                         // enemy id / hp_after / reason code; 0 for DoorOpened
 uint8_t maze_c_maze_game_get_tick_event_string_payload(MazeGameC* ptr, int32_t index,
-                                                       uint8_t* buf_out, uint32_t* len_out);
+                                                       uint8_t* buf_out, uint32_t buf_capacity,
+                                                       uint32_t* len_out);
                                                         // PlayerNotHealed message; two-call protocol
-                                                        // (buf_out=null reads len_out, then re-call to copy)
+                                                        // (buf_out=null reads len_out, then re-call to copy).
+                                                        // At most buf_capacity bytes are written; len_out is
+                                                        // always the full length, so len_out > buf_capacity
+                                                        // means the copy was truncated
 
 // HP / enemies / health pickups (valid pointer assumed; out parameters may be null)
 uint32_t maze_c_maze_game_hp(MazeGameC* ptr);
