@@ -149,6 +149,21 @@ fn decrement_num_objects_allocated() {
 // Error / string helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// Rejects a null handle at an FFI entry point.
+///
+/// The exports take raw handles the caller is trusted to have obtained from a
+/// matching constructor. A null one is a caller bug, and on `wasm32` it is a
+/// silent one: address 0 is ordinary linear memory holding zeros, which reads
+/// back as a perfectly valid *empty* maze — counts of zero, `is_empty` true, a
+/// well-formed JSON document — so a mistake surfaces as plausible data rather
+/// than as a failure. Failing here turns that into a trap on wasm and an abort
+/// with a message on native, both of which say which export was called.
+macro_rules! require_handle {
+    ($ptr:expr, $func:expr) => {
+        assert!(!$ptr.is_null(), concat!($func, ": null handle"));
+    };
+}
+
 /// Returns a pointer to the last error message set by a `maze_c_*` call,
 /// or `null` if no error has been set since the last successful call.
 ///
@@ -354,6 +369,7 @@ pub extern "C" fn maze_c_free_maze(ptr: *mut MazeC) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_is_empty(ptr: *mut MazeC) -> bool {
+    require_handle!(ptr, "maze_c_maze_is_empty");
     let mw = unsafe { &*ptr };
     mw.maze.definition.is_empty()
 }
@@ -377,6 +393,7 @@ pub extern "C" fn maze_c_maze_is_empty(ptr: *mut MazeC) -> bool {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_get_row_count(ptr: *mut MazeC) -> u32 {
+    require_handle!(ptr, "maze_c_maze_get_row_count");
     let mw = unsafe { &*ptr };
     mw.maze.definition.row_count() as u32
 }
@@ -400,6 +417,7 @@ pub extern "C" fn maze_c_maze_get_row_count(ptr: *mut MazeC) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_get_col_count(ptr: *mut MazeC) -> u32 {
+    require_handle!(ptr, "maze_c_maze_get_col_count");
     let mw = unsafe { &*ptr };
     mw.maze.definition.col_count() as u32
 }
@@ -443,6 +461,7 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
     col: u32,
     out_cell_type: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_get_cell_type");
     clear_last_error();
     let mw = &*ptr;
     let r = row as usize;
@@ -510,6 +529,7 @@ pub unsafe extern "C" fn maze_c_maze_set_start_cell(
     row: u32,
     col: u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_set_start_cell");
     clear_last_error();
     let mw = &mut *ptr;
     match mw.maze.definition.set_start(Some(MazePoint {
@@ -560,6 +580,7 @@ pub unsafe extern "C" fn maze_c_maze_get_start_cell(
     out_row: *mut u32,
     out_col: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_get_start_cell");
     clear_last_error();
     let mw = &*ptr;
     match mw.maze.definition.get_start() {
@@ -613,6 +634,7 @@ pub unsafe extern "C" fn maze_c_maze_set_finish_cell(
     row: u32,
     col: u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_set_finish_cell");
     clear_last_error();
     let mw = &mut *ptr;
     match mw.maze.definition.set_finish(Some(MazePoint {
@@ -663,6 +685,7 @@ pub unsafe extern "C" fn maze_c_maze_get_finish_cell(
     out_row: *mut u32,
     out_col: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_get_finish_cell");
     clear_last_error();
     let mw = &*ptr;
     match mw.maze.definition.get_finish() {
@@ -990,6 +1013,7 @@ pub extern "C" fn maze_c_maze_resize(
     new_row_count: u32,
     new_col_count: u32,
 ) {
+    require_handle!(ptr, "maze_c_maze_resize");
     let mw = unsafe { &mut *ptr };
     mw.maze
         .definition
@@ -1019,6 +1043,7 @@ pub extern "C" fn maze_c_maze_resize(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_reset(ptr: *mut MazeC) {
+    require_handle!(ptr, "maze_c_maze_reset");
     let mw = unsafe { &mut *ptr };
     mw.maze.definition.reset();
 }
@@ -1054,6 +1079,7 @@ pub extern "C" fn maze_c_maze_insert_rows(
     start_row: u32,
     count: u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_insert_rows");
     clear_last_error();
     let mw = unsafe { &mut *ptr };
     match mw
@@ -1096,6 +1122,7 @@ pub extern "C" fn maze_c_maze_delete_rows(
     start_row: u32,
     count: u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_delete_rows");
     clear_last_error();
     let mw = unsafe { &mut *ptr };
     match mw
@@ -1138,6 +1165,7 @@ pub extern "C" fn maze_c_maze_insert_cols(
     start_col: u32,
     count: u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_insert_cols");
     clear_last_error();
     let mw = unsafe { &mut *ptr };
     match mw
@@ -1180,6 +1208,7 @@ pub extern "C" fn maze_c_maze_delete_cols(
     start_col: u32,
     count: u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_delete_cols");
     clear_last_error();
     let mw = unsafe { &mut *ptr };
     match mw
@@ -1286,6 +1315,7 @@ pub unsafe extern "C" fn maze_c_maze_from_json(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_to_json(ptr: *mut MazeC) -> *mut c_char {
+    require_handle!(ptr, "maze_c_maze_to_json");
     clear_last_error();
     let mw = unsafe { &*ptr };
     match mw.maze.to_json() {
@@ -1321,6 +1351,7 @@ pub extern "C" fn maze_c_maze_to_json(ptr: *mut MazeC) -> *mut c_char {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_get_cell_entity(ptr: *mut MazeC, row: u32, col: u32) -> *mut c_char {
+    require_handle!(ptr, "maze_c_maze_get_cell_entity");
     clear_last_error();
     let mw = unsafe { &*ptr };
     let entity = mw
@@ -1380,6 +1411,7 @@ pub unsafe extern "C" fn maze_c_maze_set_cell_entity(
     col: u32,
     json: *const c_char,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_set_cell_entity");
     clear_last_error();
     if json.is_null() {
         set_last_error("json pointer is null");
@@ -1439,6 +1471,7 @@ pub unsafe extern "C" fn maze_c_maze_set_cell_entity(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_clear_cell_entity(ptr: *mut MazeC, row: u32, col: u32) -> u8 {
+    require_handle!(ptr, "maze_c_maze_clear_cell_entity");
     let mw = unsafe { &mut *ptr };
     mw.maze
         .definition
@@ -1479,6 +1512,7 @@ pub extern "C" fn maze_c_maze_clear_cell_entity(ptr: *mut MazeC, row: u32, col: 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_solve(ptr: *mut MazeC) -> *mut MazeSolution {
+    require_handle!(ptr, "maze_c_maze_solve");
     clear_last_error();
     let mw = unsafe { &*ptr };
     match mw.maze.solve() {
@@ -1753,6 +1787,7 @@ pub extern "C" fn maze_c_generator_options_set_start(
     row: u32,
     col: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_start");
     let opts = unsafe { &mut *ptr };
     opts.start_row = row;
     opts.start_col = col;
@@ -1783,6 +1818,7 @@ pub extern "C" fn maze_c_generator_options_set_finish(
     row: u32,
     col: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_finish");
     let opts = unsafe { &mut *ptr };
     opts.finish_row = row;
     opts.finish_col = col;
@@ -1808,6 +1844,7 @@ pub extern "C" fn maze_c_generator_options_set_min_spine_length(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_min_spine_length");
     let opts = unsafe { &mut *ptr };
     opts.min_spine_length = value;
 }
@@ -1832,6 +1869,7 @@ pub extern "C" fn maze_c_generator_options_set_max_retries(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_max_retries");
     let opts = unsafe { &mut *ptr };
     opts.max_retries = value;
 }
@@ -1856,6 +1894,7 @@ pub extern "C" fn maze_c_generator_options_set_branch_from_finish(
     ptr: *mut MazeCGeneratorOptions,
     value: u8,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_branch_from_finish");
     let opts = unsafe { &mut *ptr };
     opts.branch_from_finish = value;
 }
@@ -1885,6 +1924,7 @@ pub extern "C" fn maze_c_generator_options_set_door_count(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_door_count");
     let opts = unsafe { &mut *ptr };
     opts.door_count = value;
 }
@@ -1912,6 +1952,7 @@ pub extern "C" fn maze_c_generator_options_set_spare_doors(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_spare_doors");
     let opts = unsafe { &mut *ptr };
     opts.spare_doors = value;
 }
@@ -1939,6 +1980,7 @@ pub extern "C" fn maze_c_generator_options_set_spare_keys(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_spare_keys");
     let opts = unsafe { &mut *ptr };
     opts.spare_keys = value;
 }
@@ -1968,6 +2010,7 @@ pub extern "C" fn maze_c_generator_options_set_enemy_count(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_enemy_count");
     let opts = unsafe { &mut *ptr };
     opts.enemy_count = value;
 }
@@ -1996,6 +2039,7 @@ pub extern "C" fn maze_c_generator_options_set_health_count(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_health_count");
     let opts = unsafe { &mut *ptr };
     opts.health_count = value;
 }
@@ -2024,6 +2068,7 @@ pub extern "C" fn maze_c_generator_options_set_treasure_count(
     ptr: *mut MazeCGeneratorOptions,
     value: u32,
 ) {
+    require_handle!(ptr, "maze_c_generator_options_set_treasure_count");
     let opts = unsafe { &mut *ptr };
     opts.treasure_count = value;
 }
@@ -2290,6 +2335,7 @@ pub extern "C" fn maze_c_free_maze_game(ptr: *mut MazeGameC) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_move_player(ptr: *mut MazeGameC, dir: i32) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_move_player");
     let game = unsafe { &mut (*ptr).game };
     let direction = match game_direction_from_i32(dir) {
         Some(d) => d,
@@ -2327,6 +2373,7 @@ pub extern "C" fn maze_c_maze_game_move_player(ptr: *mut MazeGameC, dir: i32) ->
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_player_row(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_player_row");
     let game = unsafe { &(*ptr).game };
     game.player_row() as i32
 }
@@ -2347,6 +2394,7 @@ pub extern "C" fn maze_c_maze_game_player_row(ptr: *mut MazeGameC) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_player_col(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_player_col");
     let game = unsafe { &(*ptr).game };
     game.player_col() as i32
 }
@@ -2370,6 +2418,7 @@ pub extern "C" fn maze_c_maze_game_player_col(ptr: *mut MazeGameC) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_player_direction(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_player_direction");
     let game = unsafe { &(*ptr).game };
     game_direction_to_i32(game.player_direction())
 }
@@ -2393,6 +2442,7 @@ pub extern "C" fn maze_c_maze_game_player_direction(ptr: *mut MazeGameC) -> i32 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_is_complete(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_is_complete");
     let game = unsafe { &(*ptr).game };
     if game.is_complete() { 1 } else { 0 }
 }
@@ -2416,6 +2466,7 @@ pub extern "C" fn maze_c_maze_game_is_complete(ptr: *mut MazeGameC) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_is_lost(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_is_lost");
     let game = unsafe { &(*ptr).game };
     if game.is_lost() { 1 } else { 0 }
 }
@@ -2441,6 +2492,7 @@ pub extern "C" fn maze_c_maze_game_is_lost(ptr: *mut MazeGameC) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_lose_reason");
     let game = unsafe { &(*ptr).game };
     match game.lose_reason() {
         None => 0,
@@ -2503,6 +2555,7 @@ pub unsafe extern "C" fn maze_c_maze_game_pickup(
     out_kind: *mut u32,
     out_id: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_pickup");
     let game = unsafe { &mut (*ptr).game };
     match game.pickup() {
         Some(maze::BagItem::Key { id }) => {
@@ -2536,6 +2589,7 @@ pub unsafe extern "C" fn maze_c_maze_game_pickup(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_bag_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_bag_count");
     let game = unsafe { &(*ptr).game };
     game.bag().len() as i32
 }
@@ -2580,6 +2634,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_bag_item(
     out_kind: *mut u32,
     out_id: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_bag_item");
     let game = unsafe { &(*ptr).game };
     let bag = game.bag();
     if index < 0 || index as usize >= bag.len() {
@@ -2620,6 +2675,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_bag_item(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_door_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_door_count");
     let game = unsafe { &(*ptr).game };
     game.doors().len() as i32
 }
@@ -2665,6 +2721,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_door(
     out_col: *mut u32,
     out_state: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_door");
     let game = unsafe { &(*ptr).game };
     let doors = game.doors();
     if index < 0 || index as usize >= doors.len() {
@@ -2714,6 +2771,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_door(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_tick(ptr: *mut MazeGameC, dt_ms: f32) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_tick");
     let g = unsafe { &mut *ptr };
     g.tick_events = g.game.tick(dt_ms);
     g.tick_events.len() as i32
@@ -2736,6 +2794,7 @@ pub extern "C" fn maze_c_maze_game_tick(ptr: *mut MazeGameC, dt_ms: f32) -> i32 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_tick_event_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_tick_event_count");
     let g = unsafe { &(*ptr) };
     g.tick_events.len() as i32
 }
@@ -2795,6 +2854,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
     out_row: *mut u32,
     out_col: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_tick_event");
     let g = unsafe { &(*ptr) };
     if index < 0 || index as usize >= g.tick_events.len() {
         return 0;
@@ -2864,6 +2924,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
     index: i32,
     out_payload: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_tick_event_payload");
     let g = unsafe { &(*ptr) };
     if index < 0 || index as usize >= g.tick_events.len() {
         return 0;
@@ -2932,6 +2993,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_string_payload(
     out_buf: *mut u8,
     out_len: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_tick_event_string_payload");
     let g = unsafe { &(*ptr) };
     if index < 0 || index as usize >= g.tick_events.len() {
         return 0;
@@ -2975,6 +3037,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_string_payload(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_key_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_key_count");
     let game = unsafe { &(*ptr).game };
     game.keys().len() as i32
 }
@@ -3017,6 +3080,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_key(
     out_col: *mut u32,
     out_id: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_key");
     let game = unsafe { &(*ptr).game };
     let keys = game.keys();
     if index < 0 || index as usize >= keys.len() {
@@ -3057,6 +3121,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_key(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_hp(ptr: *mut MazeGameC) -> u32 {
+    require_handle!(ptr, "maze_c_maze_game_hp");
     let game = unsafe { &(*ptr).game };
     game.hp()
 }
@@ -3077,6 +3142,7 @@ pub extern "C" fn maze_c_maze_game_hp(ptr: *mut MazeGameC) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_max_hp(ptr: *mut MazeGameC) -> u32 {
+    require_handle!(ptr, "maze_c_maze_game_max_hp");
     let game = unsafe { &(*ptr).game };
     game.max_hp()
 }
@@ -3097,6 +3163,7 @@ pub extern "C" fn maze_c_maze_game_max_hp(ptr: *mut MazeGameC) -> u32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_enemy_count");
     let game = unsafe { &(*ptr).game };
     game.enemies().len() as i32
 }
@@ -3151,6 +3218,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
     out_move_period_ms: *mut f32,
     out_enemy_type: *mut i32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_enemy");
     let game = unsafe { &(*ptr).game };
     let enemies = game.enemies();
     if index < 0 || index as usize >= enemies.len() {
@@ -3207,6 +3275,7 @@ fn enemy_type_to_ffi(enemy_type: Option<maze::EnemyType>) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_treasure_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_treasure_count");
     let game = unsafe { &(*ptr).game };
     game.treasures().len() as i32
 }
@@ -3256,6 +3325,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_treasure(
     out_style: *mut i32,
     out_value: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_treasure");
     let game = unsafe { &(*ptr).game };
     let treasures = game.treasures();
     if index < 0 || index as usize >= treasures.len() {
@@ -3311,6 +3381,7 @@ fn treasure_style_to_ffi(style: maze::TreasureStyle) -> i32 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_collected_treasure_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_collected_treasure_count");
     let game = unsafe { &(*ptr).game };
     game.collected_treasure().len() as i32
 }
@@ -3356,6 +3427,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_collected_treasure(
     out_style: *mut i32,
     out_count: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_collected_treasure");
     let game = unsafe { &(*ptr).game };
     let collected = game.collected_treasure();
     if index < 0 || index as usize >= collected.len() {
@@ -3389,6 +3461,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_collected_treasure(
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_health_pickup_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_health_pickup_count");
     let game = unsafe { &(*ptr).game };
     health_pickup_cells(game).len() as i32
 }
@@ -3433,6 +3506,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_health_pickup(
     out_col: *mut u32,
     out_id: *mut u32,
 ) -> u8 {
+    require_handle!(ptr, "maze_c_maze_game_get_health_pickup");
     let game = unsafe { &(*ptr).game };
     let pickups = health_pickup_cells(game);
     if index < 0 || index as usize >= pickups.len() {
@@ -3488,6 +3562,7 @@ fn health_pickup_cells(game: &maze::MazeGame) -> Vec<(usize, usize)> {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_visited_cell_count(ptr: *mut MazeGameC) -> i32 {
+    require_handle!(ptr, "maze_c_maze_game_visited_cell_count");
     let game = unsafe { &(*ptr).game };
     game.visited_cells().len() as i32
 }
@@ -3550,6 +3625,40 @@ pub unsafe extern "C" fn maze_c_maze_game_get_visited_cell(
 #[allow(unused_unsafe)]
 mod tests {
     use super::*;
+    /// A null handle must fail loudly rather than be read as a valid object.
+    ///
+    /// The guard panics, and a panic crossing an `extern "C"` boundary aborts
+    /// the process, so the call is made in a child: the parent asserts the
+    /// child died *and* said which export it refused. An unguarded build dies
+    /// silently instead — on `wasm32` it would not die at all, since address 0
+    /// reads back as a valid empty maze.
+    #[test]
+    fn null_handle_fails_loudly_and_names_the_export() {
+        const CHILD_ENV: &str = "MAZE_NULL_HANDLE_CHILD";
+        if std::env::var(CHILD_ENV).is_ok() {
+            crate::maze_c_maze_is_empty(std::ptr::null_mut());
+            unreachable!("the guard must not let the call return");
+        }
+        // `module_path!` carries the crate name, which the test filter does not.
+        let module = module_path!().split_once("::").map_or("", |(_, rest)| rest);
+        let test_name = format!("{module}::null_handle_fails_loudly_and_names_the_export");
+        let exe = std::env::current_exe().expect("test binary path");
+        let output = std::process::Command::new(exe)
+            .args([test_name.as_str(), "--exact", "--nocapture"])
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("run the child test process");
+        assert!(
+            !output.status.success(),
+            "a null handle must not be accepted; child exited cleanly"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("maze_c_maze_is_empty: null handle"),
+            "the child must name the export it refused; stderr was: {stderr}"
+        );
+    }
+
     use pretty_assertions::assert_eq;
     use std::ffi::CString;
 

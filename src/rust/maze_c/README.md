@@ -156,7 +156,7 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 
-**Error handling:** `maze_c_new_maze_game` returns `null` on failure (invalid JSON or no start cell); call `maze_c_get_last_error()` to retrieve the message. Getter functions assume a valid (non-null) pointer, matching the existing `maze_c` convention.
+**Error handling:** `maze_c_new_maze_game` returns `null` on failure (invalid JSON or no start cell); call `maze_c_get_last_error()` to retrieve the message. Getter functions require a valid (non-null) handle: passing `null` aborts with a message naming the export. `free` functions remain null-safe, and out parameters may still be `null`.
 
 ## Error Handling
 

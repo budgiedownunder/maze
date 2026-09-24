@@ -126,6 +126,8 @@ const waitMs = game.time_until_next_event_ms();  // → number | null
 
 For non-JS WASM hosts (Wasmtime, .NET, native via P/Invoke).
 
+Handles must be non-null. The `maze_game_wasm_*` functions report a null handle with the `-1` return documented below; the `maze_wasm_*` maze functions have no spare return value to say it with, so they trap instead. `free_*` functions accept `null` and do nothing.
+
 ```c
 // Direction encoding: 0=None, 1=Up, 2=Down, 3=Left, 4=Right
 // MoveResult encoding: 0=None, 1=Moved, 2=Blocked, 3=Complete,
