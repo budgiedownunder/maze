@@ -574,8 +574,28 @@ fn default_storage_sql_acquire_timeout_secs() -> u64 { 30 }
 
 /// Application Configuration
 impl AppConfig {
-     pub fn load() -> Result<Self, config::ConfigError> {
-        let mut builder = Config::builder()
+    /// Loads the configuration from the defaults, `config.toml` (optional),
+    /// and the environment, in that precedence order.
+    ///
+    /// A `config.toml` that is present but unusable is a hard failure: the
+    /// `config` crate merges every source into one value tree, so a single
+    /// value it cannot coerce — a non-numeric string for a number, an unknown
+    /// enum variant — would otherwise discard the *whole* file and start the
+    /// server on defaults, which means the dev file store, public sign-up on,
+    /// and the operator's port ignored. An absent `config.toml` is a
+    /// supported case and still loads the defaults.
+    pub fn load() -> Result<Self, config::ConfigError> {
+        let builder = Self::builder_with_defaults()?
+            .add_source(File::with_name("config.toml").required(false));
+        let builder = set_env_overrides(builder)?;
+        Self::from_settings(builder.build()?)
+    }
+
+    /// Seeds a builder with every default `load` applies, with no file or
+    /// environment source attached. Split out so tests can deserialize
+    /// inline TOML against the same defaults the server uses.
+    fn builder_with_defaults() -> Result<ConfigBuilder<DefaultState>, config::ConfigError> {
+        let builder = Config::builder()
             .set_default("port", 8443)?
             .set_default("security.cert_file", default_security_cert_file())?
             .set_default("security.key_file", default_security_key_file())?
@@ -619,14 +639,14 @@ impl AppConfig {
             .set_default(
                 "comms.email.mailgun.region",
                 comms::default_comms_email_mailgun_region(),
-            )?
-            .add_source(File::with_name("config.toml").required(false));
+            )?;
+        Ok(builder)
+    }
 
-        builder = set_env_overrides(builder)?;
-        let settings = builder.build()?;
-        let mut cfg: AppConfig = settings
-            .try_deserialize()
-            .or_else(|_| Ok::<_, config::ConfigError>(AppConfig::default()))?;
+    /// Deserializes and validates a built settings tree. Deserialization
+    /// failures propagate — see [`AppConfig::load`].
+    fn from_settings(settings: Config) -> Result<Self, config::ConfigError> {
+        let mut cfg: AppConfig = settings.try_deserialize()?;
         cfg.oauth
             .resolve_and_validate()
             .map_err(config::ConfigError::Message)?;
@@ -1114,5 +1134,92 @@ mod tests {
         };
         let err = cfg.resolve_and_validate().unwrap_err();
         assert!(err.contains("client_id is empty"), "got: {err}");
+    }
+
+    /// Runs the real load pipeline — the same defaults, deserialization and
+    /// validation `AppConfig::load` uses — against inline TOML, so the
+    /// fail-closed behaviour can be asserted without touching the process
+    /// working directory or a real `config.toml`.
+    fn load_from_toml(toml: &str) -> Result<AppConfig, config::ConfigError> {
+        let builder = AppConfig::builder_with_defaults()
+            .expect("seed defaults")
+            .add_source(config::File::from_str(toml, config::FileFormat::Toml));
+        AppConfig::from_settings(builder.build()?)
+    }
+
+    #[test]
+    fn load_applies_values_from_a_valid_config() {
+        let cfg = load_from_toml(
+            r#"
+            port = 9443
+
+            [features]
+            allow_signup = false
+
+            [storage]
+            type = "sql"
+            "#,
+        )
+        .expect("a valid config must load");
+        assert_eq!(cfg.port, 9443);
+        assert!(!cfg.features.allow_signup);
+        assert_eq!(cfg.storage.kind, StorageKind::Sql);
+    }
+
+    #[test]
+    fn load_applies_defaults_when_the_config_file_is_absent() {
+        // `config.toml` is optional by design, so the defaults-only tree
+        // must still deserialize now that unusable values are hard failures.
+        let cfg = load_from_toml("").expect("an absent config must load defaults");
+        assert_eq!(cfg.port, 8443);
+        assert!(cfg.features.allow_signup);
+        assert_eq!(cfg.storage.kind, StorageKind::File);
+    }
+
+    #[test]
+    fn load_rejects_a_value_of_the_wrong_type() {
+        // Numeric strings coerce (`port = "8443"` is accepted), so the
+        // fail-closed case is a value the config crate cannot convert.
+        let err = load_from_toml(
+            r#"
+            [features]
+            allow_signup = "maybe"
+
+            [storage]
+            type = "sql"
+            "#,
+        )
+        .expect_err("an uncoercible value must refuse to start");
+        assert!(
+            err.to_string().contains("allow_signup"),
+            "the error must name the offending key: {err}"
+        );
+    }
+
+    #[test]
+    fn load_rejects_an_unknown_enum_value() {
+        let err = load_from_toml(
+            r#"
+            [storage]
+            type = "sqll"
+            "#,
+        )
+        .expect_err("an unknown storage type must refuse to start");
+        assert!(
+            err.to_string().contains("sqll"),
+            "the error must name the offending value: {err}"
+        );
+
+        let err = load_from_toml(
+            r#"
+            [comms.email]
+            provider = "mailgunn"
+            "#,
+        )
+        .expect_err("an unknown comms provider must refuse to start");
+        assert!(
+            err.to_string().contains("mailgunn"),
+            "the error must name the offending value: {err}"
+        );
     }
 }

@@ -5137,6 +5137,113 @@ mod test_definitions {
         );
     }
 
+    /// Seeds a token directly in the store and returns its id.
+    async fn seed_token(
+        shared_store: &SharedStore,
+        username: &str,
+        purpose: data_model::TokenPurpose,
+    ) -> Uuid {
+        let (user_id, email) = {
+            let store_lock = shared_store.read().await;
+            let user = store_lock.find_user_by_name(username).await.expect("seeded user");
+            (user.id, user.email().to_string())
+        };
+        let target_email = match purpose {
+            data_model::TokenPurpose::EmailVerification => Some(email),
+            _ => None,
+        };
+        let token = OneTimeToken::new(user_id, purpose, target_email, 1);
+        let mut store_lock = shared_store.write().await;
+        store_lock.create_token(&token).await.expect("create token");
+        token.id
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_leaves_a_verification_token_usable() {
+        // Posting a token to the wrong endpoint is a mis-pasted link or a
+        // client bug, so the rejection must not burn the user's token.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let token_id = seed_token(
+            &shared_store,
+            VALID_USERNAME_1,
+            data_model::TokenPurpose::EmailVerification,
+        )
+        .await;
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&PasswordResetConfirmRequest {
+                token: token_id.to_string(),
+                new_password: "NewPassword1!".to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST,
+            "a verification token must not be accepted as a reset token"
+        );
+
+        let req = create_test_post_request(
+            "/api/v1/email-verifications/confirm",
+            None,
+            None,
+            Some(&EmailVerificationConfirmRequest {
+                token: token_id.to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT,
+            "the token must survive the rejection and still work at its own endpoint"
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_confirm_leaves_a_reset_token_usable() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let token_id = seed_token(
+            &shared_store,
+            VALID_USERNAME_1,
+            data_model::TokenPurpose::PasswordReset,
+        )
+        .await;
+
+        let req = create_test_post_request(
+            "/api/v1/email-verifications/confirm",
+            None,
+            None,
+            Some(&EmailVerificationConfirmRequest {
+                token: token_id.to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST,
+            "a reset token must not be accepted as a verification token"
+        );
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&PasswordResetConfirmRequest {
+                token: token_id.to_string(),
+                new_password: "NewPassword1!".to_string(),
+            }),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT,
+            "the token must survive the rejection and still work at its own endpoint"
+        );
+    }
+
     // **************************************************************************************************
     // Tests: POST /api/v1/email-verifications/{request,confirm}
     // **************************************************************************************************

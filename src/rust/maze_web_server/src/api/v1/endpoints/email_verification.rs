@@ -269,6 +269,30 @@ pub async fn confirm_email_verification(
         .map_err(|_| ErrorBadRequest("Invalid or expired verification token"))?;
 
     let mut store_lock = store.write().await;
+    // Check the purpose before consuming: a reset token posted here is
+    // someone's own valid token, and burning it on the way to rejecting it
+    // would make them request a fresh link for no reason. Single use is
+    // still enforced atomically by `consume_token` below, under the same
+    // write lock this read runs under.
+    let token = store_lock
+        .find_token(token_id)
+        .await
+        .map_err(|err| match err {
+            StoreError::TokenIdNotFound(_)
+            | StoreError::TokenAlreadyConsumed()
+            | StoreError::TokenExpired() => {
+                ErrorBadRequest("Invalid or expired verification token")
+            }
+            other => {
+                warn!("email-verification confirm: find_token failed: {other}");
+                ErrorInternalServerError("Failed to consume verification token")
+            }
+        })?;
+
+    if token.purpose != TokenPurpose::EmailVerification || token.target_email.is_none() {
+        return Err(ErrorBadRequest("Invalid or expired verification token"));
+    }
+
     let consumed = store_lock
         .consume_token(token_id)
         .await
@@ -284,9 +308,6 @@ pub async fn confirm_email_verification(
             }
         })?;
 
-    if consumed.purpose != TokenPurpose::EmailVerification {
-        return Err(ErrorBadRequest("Invalid or expired verification token"));
-    }
     let Some(target) = consumed.target_email.as_deref() else {
         return Err(ErrorBadRequest("Invalid or expired verification token"));
     };
