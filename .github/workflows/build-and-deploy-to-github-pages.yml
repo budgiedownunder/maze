@@ -15,9 +15,8 @@ on:
       - '**.sln'
 
 permissions:
-  pages: write      # Allow writing to GitHub Pages
-  contents: write   # Allow modifying repository contents
-  id-token: write   # Allow requesting an ID token (needed for deploy-pages action)
+  # Read-only by default
+  contents: read
 
 defaults:
   run:
@@ -26,6 +25,10 @@ defaults:
 jobs:
   build:
     runs-on: windows-latest
+
+    permissions:
+      contents: read
+      pages: write      # Allow writing to GitHub Pages
 
     env:
       NET_BUILD_SOLUTION: 'Build-Windows.sln'
@@ -136,6 +139,9 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      pages: write      # deploy-pages
+      id-token: write   # OIDC token deploy-pages exchanges
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
