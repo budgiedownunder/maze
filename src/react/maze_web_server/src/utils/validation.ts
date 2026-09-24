@@ -56,11 +56,12 @@ export const MAX_SPARE_KEY_COUNT = MAX_TOTAL_FEATURES
 // Set above the largest shipped preset rather than at it, so a curated game is
 // not the ceiling an authored one is measured against.
 //
-// Deliberately has no Rust twin. `GameDefinition.config` is opaque to the server,
-// and clamping rows/cols at generation time would change what a given seed
-// produces, silently altering a shared game's layout and invalidating its
-// leaderboard — unlike `MAX_LEVEL_COUNT`, where clamping merely plays fewer
-// levels. Existing over-cap definitions therefore keep their size until edited.
+// `MAX_GAME_MAZE_DIMENSION` in `maze_game_bevy_wasm` mirrors this number and
+// refuses a game whose config exceeds it, because a definition reaches a player
+// from whoever authored it. It refuses rather than clamps: clamping rows/cols at
+// generation time would change what a given seed produces, silently altering a
+// shared game's layout and invalidating its leaderboard — unlike `MAX_LEVEL_COUNT`,
+// where clamping merely plays fewer levels.
 export const MAX_GAME_MAZE_DIMENSION = 30
 
 // The advanced HP pair, as raw input strings.

@@ -29,6 +29,22 @@ pub const MAX_HEALTH_COUNT: usize = 8;
 /// point light + sparkles) within a mobile GPU's budget.
 pub const MAX_TREASURE_COUNT: usize = 12;
 
+/// Maximum number of cells (`rows` x `cols`) a generated maze may contain.
+///
+/// The same number both clients already enforce: the React editor and the MAUI
+/// generate dialog each check `rows x cols` against the server-reported
+/// `AppFeatures.MaxMazeCells`, which is the configured store's cap. This is the
+/// looser of the two store caps, so it is the in-memory ceiling rather than the
+/// last word: generation never refuses a maze a file-backed deployment would
+/// happily save, and an attempt to save into a store with a lower cap still
+/// fails at save.
+///
+/// It bounds the memory one call can ask for, not how large a maze is worth
+/// playing — that judgement belongs to the clients. Dimensions are caller-supplied
+/// all the way from a shared game definition's config, so without a cap a config
+/// of a few bytes asks for a grid of billions of cells.
+pub const MAX_MAZE_CELLS: usize = 10_000;
+
 /// Maximum number of generation attempts a caller may request, and the default
 /// when none is given. Every attempt carves a whole maze and then solves it to
 /// measure the spine, so the attempt count multiplies the cost of one generate;

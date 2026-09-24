@@ -26,8 +26,8 @@ pub use generation_algorithm::GenerationAlgorithm;
 #[cfg(feature = "generation")]
 pub use generator::{Generator, GeneratorOptions, MAX_AUTO_DOORS};
 pub use limits::{
-    MAX_ENEMY_COUNT, MAX_GENERATION_RETRIES, MAX_HEALTH_COUNT, MAX_TOTAL_FEATURES,
-    MAX_TREASURE_COUNT,
+    MAX_ENEMY_COUNT, MAX_GENERATION_RETRIES, MAX_HEALTH_COUNT, MAX_MAZE_CELLS,
+    MAX_TOTAL_FEATURES, MAX_TREASURE_COUNT,
 };
 pub use maze::{MazePrinter, MazeSolver};
 pub use maze_path::MazePath;
